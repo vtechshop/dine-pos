@@ -63,7 +63,13 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       const hotelId = await getStoredHotelId();
       if (!hotelId || !mounted) return;
       const url = await getSocketUrl();
-      const socket = io(url, { transports: ['websocket'], reconnectionAttempts: 5 });
+      const socket = io(url, {
+        transports: ['websocket'],
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        timeout: 20000,
+      });
       socketRef.current = socket;
       socket.on('connect', () => socket.emit('join_hotel', hotelId));
       socket.on('new_order', (data: NewOrderAlert) => {

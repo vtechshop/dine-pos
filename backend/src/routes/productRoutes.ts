@@ -13,7 +13,10 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const filter: any = { hotelId: req.hotelId, isDeleted: false };
     if (req.query.available === 'true') filter.isAvailable = true;
     if (req.query.category) filter.category = req.query.category;
-    if (req.query.search) filter.name = { $regex: req.query.search, $options: 'i' };
+    if (req.query.search) {
+      const escaped = (req.query.search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.name = { $regex: escaped, $options: 'i' };
+    }
 
     const products = await Product.find(filter)
       .populate('category', 'name color')

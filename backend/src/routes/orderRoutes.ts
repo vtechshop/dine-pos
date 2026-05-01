@@ -119,8 +119,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     }
     if (req.query.status) filter.status = req.query.status;
 
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 50;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 50), 200);
     const skip = (page - 1) * limit;
 
     const [orders, total] = await Promise.all([
