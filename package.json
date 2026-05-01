@@ -1,0 +1,12 @@
+{
+  "name": "dine-pos",
+  "version": "1.0.0",
+  "description": "Dine POS - React Native + Node.js + MongoDB",
+  "scripts": {
+    "backend": "cd backend && npm run dev",
+    "mobile": "cd mobile && npx expo start",
+    "install:all": "cd backend && npm install && cd ../mobile && npm install",
+    "seed": "curl -X POST http://localhost:5000/api/seed"
+  }
+}
+ 

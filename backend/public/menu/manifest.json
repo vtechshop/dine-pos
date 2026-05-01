@@ -1,0 +1,22 @@
+{
+  "name": "Hotel Menu",
+  "short_name": "Menu",
+  "description": "Digital menu - scan QR to view",
+  "start_url": "/menu/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#FF6B35",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://via.placeholder.com/192x192/FF6B35/ffffff?text=Menu",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://via.placeholder.com/512x512/FF6B35/ffffff?text=Menu",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

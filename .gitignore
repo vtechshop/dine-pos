@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Environment files (NEVER commit these)
+.env
+.env.local
+.env.production
+backend/.env
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+*.pem
+
+# Expo
+.expo/
+web-build/
+
+# Google Play key (sensitive)
+mobile/google-play-key.json

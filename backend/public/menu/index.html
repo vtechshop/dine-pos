@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#FF6B35" />
+  <meta name="description" content="Digital Menu - Scan QR to view" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="/menu/manifest.json" />
+  <link rel="apple-touch-icon" href="https://via.placeholder.com/192x192/FF6B35/ffffff?text=Menu" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <title>Menu</title>
+  <link rel="stylesheet" href="/menu/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Rendered by app.js -->
+    <div class="loader">
+      <div class="spinner"></div>
+      <p>Loading menu...</p>
+    </div>
+  </div>
+
+  <script src="/menu/app.js"></script>
+</body>
+</html>
