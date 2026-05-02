@@ -30,8 +30,15 @@ const PAY_OPTIONS: { id: PayMethod; label: string; icon: any; color: string; bg:
   { id: 'split', label: 'Split', icon: 'call-split',   color: Colors.split,       bg: Colors.splitBg },
 ];
 
-// Order success modal state
-interface OrderSuccess { orderNumber: string; grandTotal: number; token: string }
+interface OrderSuccess {
+  orderNumber: string;
+  grandTotal: number;
+  token: string;
+  subtotal: number;
+  taxTotal: number;
+  discountAmount: number;
+  items: { name: string; qty: number; price: number }[];
+}
 
 const BillingScreen: React.FC = () => {
   const {
@@ -103,21 +110,25 @@ const BillingScreen: React.FC = () => {
 
   const sendWhatsApp = (order: OrderSuccess) => {
     if (!customerPhone.trim()) { showAlert('Phone Missing', 'Enter customer phone number first.'); return; }
-    const phone = customerPhone.replace(/\D/g, '');
-    const items = cart.items.map(i => `  ${i.product.name} x${i.quantity} — ${cur}${(i.product.price * i.quantity).toFixed(0)}`).join('\n');
+    // Normalize phone: strip non-digits, remove leading 0, ensure 10 digits
+    const digits = customerPhone.replace(/\D/g, '').replace(/^0+/, '');
+    const phone = digits.startsWith('91') && digits.length === 12 ? digits : `91${digits}`;
+
+    // Use items from order snapshot (cart is already cleared at this point)
+    const itemLines = order.items.map(i => `  ${i.name} x${i.qty} — ${cur}${(i.price * i.qty).toFixed(0)}`).join('\n');
     const msg =
 `*${settings.hotelName || 'Restaurant'} — Digital Bill*
 Order: ${order.orderNumber}
 Token: #${order.token}
 ---
-${items}
+${itemLines}
 ---
-Subtotal: ${cur}${cart.subtotal.toFixed(2)}
-Tax: ${cur}${cart.taxTotal.toFixed(2)}
-${cart.discountAmount > 0 ? `Discount: -${cur}${cart.discountAmount.toFixed(2)}\n` : ''}*Total: ${cur}${order.grandTotal.toFixed(2)}*
+Subtotal: ${cur}${order.subtotal.toFixed(2)}
+Tax: ${cur}${order.taxTotal.toFixed(2)}
+${order.discountAmount > 0 ? `Discount: -${cur}${order.discountAmount.toFixed(2)}\n` : ''}*Total: ${cur}${order.grandTotal.toFixed(2)}*
 ---
-Thank you for dining with us!`;
-    const url = `https://wa.me/91${phone}?text=${encodeURIComponent(msg)}`;
+Thank you for dining with us! 🍽️`;
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
     Linking.openURL(url).catch(() => showAlert('Error', 'Could not open WhatsApp'));
   };
 
@@ -151,17 +162,24 @@ Thank you for dining with us!`;
       notes:         cart.notes,
       isParcel:      cart.isParcel,
     };
+    // Snapshot cart before clearCart wipes it
+    const cartSnapshot = {
+      items:          cart.items.map(i => ({ name: i.product.name, qty: i.quantity, price: i.product.price })),
+      subtotal:       cart.subtotal,
+      taxTotal:       cart.taxTotal,
+      discountAmount: cart.discountAmount,
+      grandTotal:     cart.grandTotal,
+    };
     try {
       // Try server first; on network failure queue offline
       let order: any;
       try {
         order = await api.createOrder(orderData);
-        // Also flush any previously queued orders
         flushQueue(api.createOrder);
       } catch (netErr: any) {
         const offlineId = await enqueueOrder(orderData);
         const tokenNum = `Q${offlineId.slice(-3).toUpperCase()}`;
-        setShowSuccess({ orderNumber: `OFFLINE-${tokenNum}`, grandTotal: cart.grandTotal, token: tokenNum });
+        setShowSuccess({ orderNumber: `OFFLINE-${tokenNum}`, token: tokenNum, ...cartSnapshot });
         showAlert('Saved Offline', 'No server connection. Order queued and will sync when online.');
         clearCart();
         setDiscountInput('');
@@ -169,7 +187,7 @@ Thank you for dining with us!`;
         return;
       }
       const tokenNum = order.orderNumber.split('-').pop() || '1';
-      setShowSuccess({ orderNumber: order.orderNumber, grandTotal: order.grandTotal, token: tokenNum });
+      setShowSuccess({ orderNumber: order.orderNumber, token: tokenNum, ...cartSnapshot, grandTotal: order.grandTotal });
       clearCart();
       setDiscountInput('');
       setDiscount({ type: 'percent', value: 0 });
