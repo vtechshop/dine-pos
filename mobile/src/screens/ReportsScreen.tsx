@@ -95,7 +95,6 @@ const ReportsScreen: React.FC = () => {
       </View>
 
       {/* Tabs */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll}>
       <View style={styles.tabs}>
         {([
           { key: 'daily',    label: 'Daily',     icon: 'bar-chart' },
@@ -111,7 +110,7 @@ const ReportsScreen: React.FC = () => {
           >
             <MaterialIcons
               name={t.icon}
-              size={16}
+              size={15}
               color={tab === t.key ? Colors.primary : Colors.textSecondary}
             />
             <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>
@@ -125,7 +124,6 @@ const ReportsScreen: React.FC = () => {
           </TouchableOpacity>
         ))}
       </View>
-      </ScrollView>
 
       {/* Date selector (not shown on stock tab) */}
       {tab !== 'stock' && (
@@ -344,7 +342,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: FontSize.xxl, fontWeight: 'bold', color: Colors.text },
 
-  tabsScroll: { backgroundColor: Colors.surface },
   tabs: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,
@@ -353,16 +350,16 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.md,
-    gap: 4,
+    paddingVertical: Spacing.sm,
+    gap: 2,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   tabActive: { borderBottomColor: Colors.primary },
-  tabText: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600' },
+  tabText: { fontSize: FontSize.xs, color: Colors.textSecondary, fontWeight: '600' },
   tabTextActive: { color: Colors.primary },
   badge: {
     backgroundColor: Colors.danger,
