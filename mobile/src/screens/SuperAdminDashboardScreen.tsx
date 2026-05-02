@@ -7,12 +7,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, Hotel, SuperAdminStats } from '../types';
 import { showAlert } from '../utils/alert';
-import { getSuperAdminStats, getAllHotels, approveHotelWithCredentials, rejectHotel, suspendHotel, activateHotel, getAllTickets, adminReplyTicket, updateTicketStatus, Ticket } from '../services/api';
+import { getSuperAdminStats, getAllHotels, approveHotelWithCredentials, rejectHotel, suspendHotel, activateHotel, getAllTickets, adminReplyTicket, updateTicketStatus, getBranchRevenue, Ticket } from '../services/api';
 import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SuperAdminDashboard'>;
 
-type TabView = 'hotels' | 'tickets';
+type TabView = 'hotels' | 'tickets' | 'revenue';
 type StatusFilter = 'all' | 'pending' | 'active' | 'suspended' | 'rejected';
 type TicketFilter = 'all' | 'open' | 'in-progress' | 'resolved' | 'closed';
 
@@ -47,6 +47,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState<TabView>('hotels');
   const [stats, setStats] = useState<SuperAdminStats | null>(null);
   const [hotels, setHotels] = useState<Hotel[]>([]);
+  const [branchRevenue, setBranchRevenue] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filterStatus, setFilterStatus] = useState<StatusFilter>('all');
@@ -665,9 +666,55 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
             Tickets {tickets.filter(t => t.status === 'open').length > 0 ? `(${tickets.filter(t => t.status === 'open').length} open)` : ''}
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'revenue' && styles.tabBtnActive]}
+          onPress={async () => {
+            setActiveTab('revenue');
+            if (!branchRevenue) {
+              try { setBranchRevenue(await getBranchRevenue()); } catch {}
+            }
+          }}
+        >
+          <MaterialIcons name="bar-chart" size={18} color={activeTab === 'revenue' ? Colors.white : Colors.textSecondary} />
+          <Text style={[styles.tabBtnText, activeTab === 'revenue' && styles.tabBtnTextActive]}>Revenue</Text>
+        </TouchableOpacity>
       </View>
 
-      {activeTab === 'hotels' ? (
+      {activeTab === 'revenue' ? (
+        <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 60 }}>
+          {!branchRevenue ? (
+            <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+          ) : (
+            <>
+              <View style={{ flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.lg }}>
+                <View style={[styles.statCard, { borderTopColor: Colors.success, flex: 1 }]}>
+                  <Text style={[styles.statValue, { color: Colors.success }]}>₹{branchRevenue.totalRevenue.toLocaleString('en-IN')}</Text>
+                  <Text style={styles.statLabel}>Total Revenue</Text>
+                </View>
+                <View style={[styles.statCard, { borderTopColor: Colors.primary, flex: 1 }]}>
+                  <Text style={[styles.statValue, { color: Colors.primary }]}>{branchRevenue.totalOrders}</Text>
+                  <Text style={styles.statLabel}>Total Orders</Text>
+                </View>
+              </View>
+              {branchRevenue.branches.map((b: any, i: number) => (
+                <View key={b.hotelId} style={[styles.hotelCard, { marginBottom: Spacing.sm, flexDirection: 'column', alignItems: 'stretch' }]}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.hotelName}>#{i + 1}  {b.hotelName}</Text>
+                      {b.city ? <Text style={styles.hotelCity}>{b.city}</Text> : null}
+                    </View>
+                    <Text style={[styles.statValue, { color: Colors.success, fontSize: 18 }]}>₹{b.revenue.toLocaleString('en-IN')}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: Spacing.lg, marginTop: Spacing.sm }}>
+                    <Text style={styles.hotelOwner}>{b.orders} orders</Text>
+                    <Text style={styles.hotelOwner}>Avg ₹{b.avgOrder.toFixed(0)}</Text>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
+        </ScrollView>
+      ) : activeTab === 'hotels' ? (
         <>
           {/* Search */}
           <View style={styles.searchBar}>

@@ -30,6 +30,9 @@ import SuperAdminDashboardScreen from '../screens/SuperAdminDashboardScreen';
 import SupportScreen from '../screens/SupportScreen';
 import HotelStatusScreen from '../screens/HotelStatusScreen';
 import CategoriesScreen from '../screens/CategoriesScreen';
+import TableLayoutScreen from '../screens/TableLayoutScreen';
+import ReservationScreen from '../screens/ReservationScreen';
+import ExpenseScreen from '../screens/ExpenseScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<TabParamList>();
@@ -204,6 +207,21 @@ const AppNavigator = () => {
             <Stack.Screen
               name="Products"
               component={ProductsScreen}
+              options={{ headerShown: false, animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="TableLayout"
+              component={TableLayoutScreen}
+              options={{ headerShown: false, animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="Reservations"
+              component={ReservationScreen}
+              options={{ headerShown: false, animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="Expenses"
+              component={ExpenseScreen}
               options={{ headerShown: false, animation: 'slide_from_right' }}
             />
           </>

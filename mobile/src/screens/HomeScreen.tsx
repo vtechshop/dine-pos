@@ -10,7 +10,8 @@ import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { io, Socket } from 'socket.io-client';
 import { RootStackParamList, TabParamList, DailyReport } from '../types';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
-import { getDailyReport, getProducts, getCategories, getStoredHotelId, getSocketUrl } from '../services/api';
+import { getDailyReport, getProducts, getCategories, getStoredHotelId, getSocketUrl, getLowStockProducts, createOrder } from '../services/api';
+import { flushQueue, getQueue } from '../utils/offlineQueue';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -33,6 +34,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [error, setError]           = useState<string | null>(null);
   const [newOrderAlert, setNewOrderAlert] = useState<NewOrderAlert | null>(null);
   const [orderBadge, setOrderBadge] = useState(0);
+  const [lowStockCount, setLowStockCount] = useState(0);
+  const [offlineCount, setOfflineCount]   = useState(0);
   const socketRef = useRef<Socket | null>(null);
 
   const cur = settings.currencySymbol || '₹';
@@ -41,12 +44,22 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const fetchStats = useCallback(async () => {
     try {
       setError(null);
-      const [report, products, categories] = await Promise.all([
+      const [report, products, categories, lowStock, queue] = await Promise.all([
         getDailyReport().catch((): DailyReport => ({ date: '', totalSales: 0, totalTax: 0, totalOrders: 0, paymentBreakdown: { cash: 0, upi: 0, card: 0, split: 0 } })),
         getProducts().catch(() => []),
         getCategories().catch(() => []),
+        getLowStockProducts(5).catch(() => ({ products: [], threshold: 5 })),
+        getQueue().catch(() => []),
       ]);
       setStats({ todayOrders: report.totalOrders, todaySales: report.totalSales, totalProducts: products.length, totalCategories: categories.length });
+      setLowStockCount(lowStock.products.length);
+      setOfflineCount(queue.length);
+      // Flush queued offline orders on each load
+      if (queue.length > 0) {
+        flushQueue(createOrder, (synced) => {
+          if (synced > 0) setOfflineCount(0);
+        });
+      }
     } catch (e: any) {
       setError(e.message || 'Failed to load data');
     } finally {
@@ -142,6 +155,31 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         )}
 
+        {/* ── Low Stock Alert ── */}
+        {lowStockCount > 0 && (
+          <TouchableOpacity
+            style={[styles.alertBanner, { backgroundColor: Colors.warning }]}
+            onPress={() => navigation.navigate('Products' as any)}
+            activeOpacity={0.88}
+          >
+            <MaterialIcons name="warning" size={22} color={Colors.white} />
+            <Text style={[styles.alertTitle, { marginLeft: Spacing.md }]}>
+              {lowStockCount} item{lowStockCount > 1 ? 's' : ''} running low on stock
+            </Text>
+            <MaterialIcons name="arrow-forward-ios" size={16} color={Colors.white} />
+          </TouchableOpacity>
+        )}
+
+        {/* ── Offline Queue Alert ── */}
+        {offlineCount > 0 && (
+          <View style={[styles.alertBanner, { backgroundColor: Colors.info }]}>
+            <MaterialIcons name="cloud-off" size={22} color={Colors.white} />
+            <Text style={[styles.alertTitle, { marginLeft: Spacing.md, flex: 1 }]}>
+              {offlineCount} order{offlineCount > 1 ? 's' : ''} queued offline — will sync when connected
+            </Text>
+          </View>
+        )}
+
         {/* ── New Order Alert ── */}
         {newOrderAlert && (
           <TouchableOpacity
@@ -203,10 +241,14 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
           {[
-            { label: 'New Bill',  icon: 'receipt' as const,       color: Colors.primary, bg: Colors.primaryBg, nav: 'Billing' as const },
-            { label: 'Orders',    icon: 'receipt-long' as const,  color: Colors.success, bg: Colors.successBg, nav: 'Orders' as const },
-            { label: 'Products',  icon: 'inventory' as const,      color: Colors.warning, bg: Colors.warningBg, nav: 'Products' as const },
-            { label: 'Reports',   icon: 'bar-chart' as const,      color: Colors.info,    bg: Colors.infoBg,    nav: 'Reports' as const },
+            { label: 'New Bill',     icon: 'receipt' as const,          color: Colors.primary, bg: Colors.primaryBg, nav: 'Billing' },
+            { label: 'Orders',       icon: 'receipt-long' as const,     color: Colors.success, bg: Colors.successBg, nav: 'Orders' },
+            { label: 'Products',     icon: 'inventory' as const,         color: Colors.warning, bg: Colors.warningBg, nav: 'Products' },
+            { label: 'Reports',      icon: 'bar-chart' as const,         color: Colors.info,    bg: Colors.infoBg,    nav: 'Reports' },
+            { label: 'Floor Map',    icon: 'table-restaurant' as const,  color: Colors.accent,  bg: Colors.accentBg,  nav: 'TableLayout' },
+            { label: 'Bookings',     icon: 'event-available' as const,   color: '#6A1B9A',      bg: 'rgba(106,27,154,0.1)', nav: 'Reservations' },
+            { label: 'Expenses',     icon: 'account-balance-wallet' as const, color: Colors.danger, bg: Colors.dangerBg, nav: 'Expenses' },
+            { label: 'Settings',     icon: 'settings' as const,          color: Colors.textSecondary, bg: Colors.elevated, nav: 'Settings' },
           ].map((a, i) => (
             <TouchableOpacity
               key={i}

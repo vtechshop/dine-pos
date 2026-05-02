@@ -23,6 +23,11 @@ import verifyRoutes from './routes/verifyRoutes';
 import superAdminRoutes from './routes/superAdminRoutes';
 import ticketRoutes from './routes/ticketRoutes';
 import uploadRoutes from './routes/uploadRoutes';
+import tableRoutes from './routes/tableRoutes';
+import reservationRoutes from './routes/reservationRoutes';
+import expenseRoutes from './routes/expenseRoutes';
+import wasteRoutes from './routes/wasteRoutes';
+import aggregatorRoutes from './routes/aggregatorRoutes';
 
 dotenv.config();
 
@@ -78,6 +83,11 @@ app.use('/api/uploads', uploadRoutes);
 app.use('/api/seed', seedRoutes);
 app.use('/api/public/menu', menuRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/tables', tableRoutes);
+app.use('/api/reservations', reservationRoutes);
+app.use('/api/expenses', expenseRoutes);
+app.use('/api/waste', wasteRoutes);
+app.use('/api/aggregator', aggregatorRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

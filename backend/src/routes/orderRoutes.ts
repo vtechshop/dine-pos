@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import Order from '../models/Order';
+import Product from '../models/Product';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { io } from '../server';
 
@@ -144,14 +145,28 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST create order — also emits socket event for real-time alert
+// POST create order — deducts stock, emits socket alert
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const orderNumber = await generateOrderNumber(req.hotelId!);
     const order = new Order({ ...req.body, hotelId: req.hotelId, orderNumber });
     await order.save();
 
-    // Real-time alert to admin
+    // Auto-deduct stock for tracked products (stock > 0, -1 = unlimited)
+    const stockItems = order.items.filter(i => i.product);
+    if (stockItems.length > 0) {
+      const bulkOps = stockItems.map(item => ({
+        updateOne: {
+          filter: { _id: item.product, hotelId: req.hotelId, stock: { $gt: 0 } },
+          update: [
+            { $set: { stock: { $max: [{ $subtract: ['$stock', item.quantity] }, 0] } } },
+            { $set: { isAvailable: { $gt: ['$stock', 0] } } },
+          ],
+        },
+      }));
+      await Product.bulkWrite(bulkOps as any);
+    }
+
     io.to(`hotel_${req.hotelId}`).emit('new_order', {
       orderNumber: order.orderNumber,
       tableNumber: order.tableNumber,
@@ -174,20 +189,30 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     return res.status(400).json({ message: 'Invalid status' });
   }
   try {
-    const order = await Order.findOneAndUpdate(
-      { _id: req.params.id, hotelId: req.hotelId },
-      { status },
-      { new: true }
-    );
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    const existing = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId });
+    if (!existing) return res.status(404).json({ message: 'Order not found' });
+
+    // Restore stock when cancelling a non-cancelled order
+    if (status === 'cancelled' && existing.status !== 'cancelled') {
+      const bulkOps = existing.items.filter(i => i.product).map(item => ({
+        updateOne: {
+          filter: { _id: item.product, hotelId: req.hotelId, stock: { $gte: 0 } },
+          update: { $inc: { stock: item.quantity }, $set: { isAvailable: true } },
+        },
+      }));
+      if (bulkOps.length > 0) await Product.bulkWrite(bulkOps as any);
+    }
+
+    existing.status = status;
+    await existing.save();
 
     io.to(`hotel_${req.hotelId}`).emit('order_status_update', {
-      orderId: order._id,
-      orderNumber: order.orderNumber,
-      status: order.status,
+      orderId: existing._id,
+      orderNumber: existing.orderNumber,
+      status: existing.status,
     });
 
-    res.json(order);
+    res.json(existing);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }

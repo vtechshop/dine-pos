@@ -7,10 +7,10 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { DailyReport, Product } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
-import { getDailyReport, getProductSalesReport, getLowStockProducts } from '../services/api';
+import { getDailyReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
 
-type Tab = 'daily' | 'products' | 'stock';
+type Tab = 'daily' | 'products' | 'stock' | 'waste';
 
 interface ProductSale {
   productName: string;
@@ -30,6 +30,7 @@ const ReportsScreen: React.FC = () => {
   const [report, setReport] = useState<DailyReport | null>(null);
   const [productSales, setProductSales] = useState<ProductSale[]>([]);
   const [lowStock, setLowStock] = useState<Product[]>([]);
+  const [wasteData, setWasteData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const cur = settings.currencySymbol || '₹';
 
@@ -61,10 +62,21 @@ const ReportsScreen: React.FC = () => {
     }
   }, []);
 
+  const fetchWaste = useCallback(async (d: string) => {
+    setLoading(true);
+    try {
+      const data = await getWasteAnalytics(d);
+      setWasteData(data);
+    } catch (e: any) {
+      showAlert('Error', e.message || 'Failed to load waste data');
+    } finally { setLoading(false); }
+  }, []);
+
   useEffect(() => {
     if (tab === 'daily' || tab === 'products') fetchDaily(date);
-    else fetchLowStock();
-  }, [tab, date, fetchDaily, fetchLowStock]);
+    else if (tab === 'stock') fetchLowStock();
+    else fetchWaste(date);
+  }, [tab, date, fetchDaily, fetchLowStock, fetchWaste]);
 
   const navigateDate = (dir: -1 | 1) => {
     const d = new Date(date);
@@ -83,11 +95,13 @@ const ReportsScreen: React.FC = () => {
       </View>
 
       {/* Tabs */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll}>
       <View style={styles.tabs}>
         {([
-          { key: 'daily', label: 'Daily', icon: 'bar-chart' },
-          { key: 'products', label: 'Products', icon: 'restaurant-menu' },
-          { key: 'stock', label: 'Low Stock', icon: 'warning' },
+          { key: 'daily',    label: 'Daily',     icon: 'bar-chart' },
+          { key: 'products', label: 'Products',  icon: 'restaurant-menu' },
+          { key: 'stock',    label: 'Low Stock', icon: 'warning' },
+          { key: 'waste',    label: 'Waste',     icon: 'delete-sweep' },
         ] as { key: Tab; label: string; icon: any }[]).map(t => (
           <TouchableOpacity
             key={t.key}
@@ -111,6 +125,7 @@ const ReportsScreen: React.FC = () => {
           </TouchableOpacity>
         ))}
       </View>
+      </ScrollView>
 
       {/* Date selector (not shown on stock tab) */}
       {tab !== 'stock' && (
@@ -227,6 +242,60 @@ const ReportsScreen: React.FC = () => {
             </View>
           )}
 
+          {/* ── WASTE TAB ── */}
+          {tab === 'waste' && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Food Waste Analytics</Text>
+              {!wasteData || wasteData.totalEntries === 0 ? (
+                <View style={styles.emptyBox}>
+                  <MaterialIcons name="delete-sweep" size={40} color={Colors.textMuted} />
+                  <Text style={styles.emptyText}>No waste logged today</Text>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.statsRowDouble}>
+                    <View style={[styles.statCardHalf, { borderLeftColor: Colors.danger }]}>
+                      <Text style={styles.statLabel}>Total Loss</Text>
+                      <Text style={[styles.statValueMed, { color: Colors.danger }]}>{cur}{wasteData.totalLoss.toFixed(2)}</Text>
+                    </View>
+                    <View style={[styles.statCardHalf, { borderLeftColor: Colors.warning }]}>
+                      <Text style={styles.statLabel}>Entries</Text>
+                      <Text style={styles.statValueMed}>{wasteData.totalEntries}</Text>
+                    </View>
+                  </View>
+                  {wasteData.topItems.length > 0 && (
+                    <>
+                      <Text style={[styles.sectionTitle, { marginTop: Spacing.lg }]}>Top Wasted Items</Text>
+                      {wasteData.topItems.map((item: any, i: number) => (
+                        <View key={i} style={styles.stockRow}>
+                          <Text style={[styles.productName, { flex: 1 }]}>{item.productName}</Text>
+                          <Text style={styles.productSub}>Qty: {item.totalQty}</Text>
+                          <View style={[styles.stockBadge, { backgroundColor: Colors.danger + '22', marginLeft: 8 }]}>
+                            <Text style={[styles.stockCount, { color: Colors.danger }]}>{cur}{item.totalLoss.toFixed(0)}</Text>
+                          </View>
+                        </View>
+                      ))}
+                    </>
+                  )}
+                  {wasteData.byReason.length > 0 && (
+                    <>
+                      <Text style={[styles.sectionTitle, { marginTop: Spacing.lg }]}>By Reason</Text>
+                      {wasteData.byReason.map((r: any, i: number) => (
+                        <View key={i} style={styles.stockRow}>
+                          <Text style={[styles.productName, { flex: 1, textTransform: 'capitalize' }]}>{r._id}</Text>
+                          <Text style={styles.productSub}>{r.count}x</Text>
+                          <View style={[styles.stockBadge, { backgroundColor: Colors.warningBg, marginLeft: 8 }]}>
+                            <Text style={[styles.stockCount, { color: Colors.warning }]}>{cur}{r.totalLoss.toFixed(0)}</Text>
+                          </View>
+                        </View>
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
+            </View>
+          )}
+
           {/* ── LOW STOCK TAB ── */}
           {tab === 'stock' && (
             <View style={styles.section}>
@@ -275,6 +344,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: FontSize.xxl, fontWeight: 'bold', color: Colors.text },
 
+  tabsScroll: { backgroundColor: Colors.surface },
   tabs: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,

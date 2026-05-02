@@ -149,6 +149,70 @@ export interface SuperAdminStats {
   rejected: number;
 }
 
+// Table
+export interface Table {
+  _id: string;
+  number: number;
+  name: string;
+  capacity: number;
+  status: 'available' | 'occupied' | 'reserved' | 'inactive';
+  currentOrderId?: string;
+  x: number;
+  y: number;
+  shape: 'square' | 'round';
+}
+
+// Reservation
+export interface Reservation {
+  _id: string;
+  tableId?: string;
+  tableNumber?: number;
+  customerName: string;
+  phone: string;
+  partySize: number;
+  date: string;
+  time: string;
+  status: 'confirmed' | 'seated' | 'cancelled' | 'no-show';
+  notes: string;
+  createdAt: string;
+}
+
+// Expense
+export interface Expense {
+  _id: string;
+  description: string;
+  amount: number;
+  category: 'ingredients' | 'utilities' | 'staff' | 'maintenance' | 'rent' | 'other';
+  date: string;
+  notes: string;
+  createdAt: string;
+}
+
+// Waste Log
+export interface WasteLog {
+  _id: string;
+  productId?: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+  reason: 'expired' | 'damaged' | 'overcooked' | 'returned' | 'other';
+  estimatedLoss: number;
+  date: string;
+  notes: string;
+  createdAt: string;
+}
+
+// P&L Report
+export interface PnLReport {
+  date: string;
+  revenue: number;
+  orders: number;
+  expenses: number;
+  profit: number;
+  profitMargin: string;
+  breakdown: { _id: string; total: number; count: number }[];
+}
+
 export type RootStackParamList = {
   Splash: undefined;
   RoleSelect: undefined;
@@ -164,6 +228,9 @@ export type RootStackParamList = {
   AddProduct: { product?: Product };
   Categories: undefined;
   Products: undefined;
+  TableLayout: undefined;
+  Reservations: undefined;
+  Expenses: undefined;
 };
 
 export type TabParamList = {

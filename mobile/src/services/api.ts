@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../utils/constants';
-import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats } from '../types';
+import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport } from '../types';
 
 const API_URL_STORAGE_KEY = '@hotel_pos_api_base_url';
 const JWT_STORAGE_KEY = '@hotel_pos_jwt_token';
@@ -510,3 +510,94 @@ export const adminReplyTicket = (id: string, message: string): Promise<Ticket> =
 export const updateTicketStatus = (id: string, status: string): Promise<Ticket> => {
   return superAdminFetch(`/tickets/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
 };
+
+// ==================== MULTI-BRANCH DASHBOARD ====================
+
+export const getBranchRevenue = (date?: string): Promise<{
+  date: string;
+  totalRevenue: number;
+  totalOrders: number;
+  branches: { hotelId: string; hotelName: string; city: string; revenue: number; orders: number; avgOrder: number }[];
+}> => {
+  const q = date ? `?date=${date}` : '';
+  return superAdminFetch(`/superadmin/branch-revenue${q}`);
+};
+
+// ==================== TABLES ====================
+
+export const getTables = (): Promise<Table[]> =>
+  fetchAPI<Table[]>('/tables');
+
+export const createTable = (data: Partial<Table>): Promise<Table> =>
+  fetchAPI<Table>('/tables', { method: 'POST', body: JSON.stringify(data) });
+
+export const updateTable = (id: string, data: Partial<Table>): Promise<Table> =>
+  fetchAPI<Table>(`/tables/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const updateTableStatus = (id: string, status: Table['status'], currentOrderId?: string): Promise<Table> =>
+  fetchAPI<Table>(`/tables/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, currentOrderId }) });
+
+export const deleteTable = (id: string): Promise<void> =>
+  fetchAPI(`/tables/${id}`, { method: 'DELETE' });
+
+// ==================== RESERVATIONS ====================
+
+export const getReservations = (date?: string): Promise<Reservation[]> => {
+  const q = date ? `?date=${date}` : '';
+  return fetchAPI<Reservation[]>(`/reservations${q}`);
+};
+
+export const createReservation = (data: Partial<Reservation>): Promise<Reservation> =>
+  fetchAPI<Reservation>('/reservations', { method: 'POST', body: JSON.stringify(data) });
+
+export const updateReservation = (id: string, data: Partial<Reservation>): Promise<Reservation> =>
+  fetchAPI<Reservation>(`/reservations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const updateReservationStatus = (id: string, status: Reservation['status']): Promise<Reservation> =>
+  fetchAPI<Reservation>(`/reservations/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+
+export const deleteReservation = (id: string): Promise<void> =>
+  fetchAPI(`/reservations/${id}`, { method: 'DELETE' });
+
+// ==================== EXPENSES ====================
+
+export const getExpenses = (params?: { date?: string; from?: string; to?: string }): Promise<Expense[]> => {
+  const q = params ? '?' + new URLSearchParams(params as any).toString() : '';
+  return fetchAPI<Expense[]>(`/expenses${q}`);
+};
+
+export const getPnLReport = (date?: string): Promise<PnLReport> => {
+  const q = date ? `?date=${date}` : '';
+  return fetchAPI<PnLReport>(`/expenses/pnl${q}`);
+};
+
+export const createExpense = (data: Partial<Expense>): Promise<Expense> =>
+  fetchAPI<Expense>('/expenses', { method: 'POST', body: JSON.stringify(data) });
+
+export const updateExpense = (id: string, data: Partial<Expense>): Promise<Expense> =>
+  fetchAPI<Expense>(`/expenses/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const deleteExpense = (id: string): Promise<void> =>
+  fetchAPI(`/expenses/${id}`, { method: 'DELETE' });
+
+// ==================== WASTE LOGS ====================
+
+export const getWasteLogs = (date?: string): Promise<WasteLog[]> => {
+  const q = date ? `?date=${date}` : '';
+  return fetchAPI<WasteLog[]>(`/waste${q}`);
+};
+
+export const getWasteAnalytics = (date?: string): Promise<{
+  date: string; totalLoss: number; totalEntries: number;
+  topItems: { productName: string; totalQty: number; totalLoss: number }[];
+  byReason: { _id: string; count: number; totalLoss: number }[];
+}> => {
+  const q = date ? `?date=${date}` : '';
+  return fetchAPI(`/waste/analytics${q}`);
+};
+
+export const createWasteLog = (data: Partial<WasteLog>): Promise<WasteLog> =>
+  fetchAPI<WasteLog>('/waste', { method: 'POST', body: JSON.stringify(data) });
+
+export const deleteWasteLog = (id: string): Promise<void> =>
+  fetchAPI(`/waste/${id}`, { method: 'DELETE' });

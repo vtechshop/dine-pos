@@ -2,16 +2,18 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, TextInput, ActivityIndicator, Dimensions,
-  Modal, Image,
+  Modal, Image, Linking,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
+import QRCode from 'react-native-qrcode-svg';
 import { showAlert } from '../utils/alert';
 import { useCart, DiscountType } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
 import { Category, Product } from '../types';
-import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
+import { Colors, Spacing, FontSize, BorderRadius, Shadows, UPI_ID, UPI_NAME } from '../utils/constants';
+import { enqueueOrder, flushQueue } from '../utils/offlineQueue';
 
 const { width: SW } = Dimensions.get('window');
 const IS_TABLET = SW >= 768;
@@ -51,6 +53,8 @@ const BillingScreen: React.FC = () => {
   const [discountInput,     setDiscountInput]    = useState('');
   const [discountType,      setDiscountType]     = useState<DiscountType>('percent');
   const [showSuccess,       setShowSuccess]      = useState<OrderSuccess | null>(null);
+  const [showUpiQr,         setShowUpiQr]        = useState(false);
+  const [customerPhone,     setCustomerPhone]    = useState('');
 
   const cur = settings.currencySymbol || '₹';
   const fmt = (n: number) => `${cur}${n.toFixed(2)}`;
@@ -90,6 +94,33 @@ const BillingScreen: React.FC = () => {
     setDiscount({ type: discountType, value: val });
   };
 
+  const buildUpiUrl = (amount: number) => {
+    const upiId  = settings.upiId || UPI_ID;
+    const name   = encodeURIComponent(settings.hotelName || UPI_NAME);
+    const am     = amount.toFixed(2);
+    return `upi://pay?pa=${upiId}&pn=${name}&am=${am}&cu=INR`;
+  };
+
+  const sendWhatsApp = (order: OrderSuccess) => {
+    if (!customerPhone.trim()) { showAlert('Phone Missing', 'Enter customer phone number first.'); return; }
+    const phone = customerPhone.replace(/\D/g, '');
+    const items = cart.items.map(i => `  ${i.product.name} x${i.quantity} — ${cur}${(i.product.price * i.quantity).toFixed(0)}`).join('\n');
+    const msg =
+`*${settings.hotelName || 'Restaurant'} — Digital Bill*
+Order: ${order.orderNumber}
+Token: #${order.token}
+---
+${items}
+---
+Subtotal: ${cur}${cart.subtotal.toFixed(2)}
+Tax: ${cur}${cart.taxTotal.toFixed(2)}
+${cart.discountAmount > 0 ? `Discount: -${cur}${cart.discountAmount.toFixed(2)}\n` : ''}*Total: ${cur}${order.grandTotal.toFixed(2)}*
+---
+Thank you for dining with us!`;
+    const url = `https://wa.me/91${phone}?text=${encodeURIComponent(msg)}`;
+    Linking.openURL(url).catch(() => showAlert('Error', 'Could not open WhatsApp'));
+  };
+
   const handlePlaceOrder = () => {
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items first.'); return; }
     applyDiscount();
@@ -99,29 +130,44 @@ const BillingScreen: React.FC = () => {
   const confirmOrder = async () => {
     setShowPayModal(false);
     setPlacing(true);
+    const orderData = {
+      items: cart.items.map(item => ({
+        product: item.product._id,
+        productName: item.product.name,
+        quantity: item.quantity,
+        price: item.product.price,
+        taxPercent: item.product.taxPercent,
+        taxAmount: item.taxAmount,
+        total: item.total,
+      })),
+      subtotal:      cart.subtotal,
+      taxTotal:      cart.taxTotal,
+      grandTotal:    cart.grandTotal,
+      discountAmount:cart.discountAmount,
+      paymentMethod: payMethod,
+      status:        'pending' as const,
+      tableNumber:   cart.isParcel ? 'Parcel' : cart.tableNumber,
+      customerName:  cart.customerName,
+      notes:         cart.notes,
+      isParcel:      cart.isParcel,
+    };
     try {
-      const orderData = {
-        items: cart.items.map(item => ({
-          product: item.product._id,
-          productName: item.product.name,
-          quantity: item.quantity,
-          price: item.product.price,
-          taxPercent: item.product.taxPercent,
-          taxAmount: item.taxAmount,
-          total: item.total,
-        })),
-        subtotal:      cart.subtotal,
-        taxTotal:      cart.taxTotal,
-        grandTotal:    cart.grandTotal,
-        discountAmount:cart.discountAmount,
-        paymentMethod: payMethod,
-        status:        'pending' as const,
-        tableNumber:   cart.isParcel ? 'Parcel' : cart.tableNumber,
-        customerName:  cart.customerName,
-        notes:         cart.notes,
-        isParcel:      cart.isParcel,
-      };
-      const order = await api.createOrder(orderData);
+      // Try server first; on network failure queue offline
+      let order: any;
+      try {
+        order = await api.createOrder(orderData);
+        // Also flush any previously queued orders
+        flushQueue(api.createOrder);
+      } catch (netErr: any) {
+        const offlineId = await enqueueOrder(orderData);
+        const tokenNum = `Q${offlineId.slice(-3).toUpperCase()}`;
+        setShowSuccess({ orderNumber: `OFFLINE-${tokenNum}`, grandTotal: cart.grandTotal, token: tokenNum });
+        showAlert('Saved Offline', 'No server connection. Order queued and will sync when online.');
+        clearCart();
+        setDiscountInput('');
+        setDiscount({ type: 'percent', value: 0 });
+        return;
+      }
       const tokenNum = order.orderNumber.split('-').pop() || '1';
       setShowSuccess({ orderNumber: order.orderNumber, grandTotal: order.grandTotal, token: tokenNum });
       clearCart();
@@ -331,6 +377,20 @@ const BillingScreen: React.FC = () => {
                 </View>
               )}
             </View>
+            {/* Phone (for WhatsApp bill) */}
+            <View style={[styles.customerRow, { paddingTop: 0 }]}>
+              <View style={[styles.custInput, { flex: 1 }]}>
+                <MaterialIcons name="phone" size={16} color={Colors.textMuted} />
+                <TextInput
+                  style={styles.custInputText}
+                  placeholder="Phone (WhatsApp bill)"
+                  placeholderTextColor={Colors.textMuted}
+                  value={customerPhone}
+                  onChangeText={setCustomerPhone}
+                  keyboardType="phone-pad"
+                />
+              </View>
+            </View>
 
             {/* Cart items */}
             <FlatList
@@ -472,6 +532,35 @@ const BillingScreen: React.FC = () => {
         </View>
       </Modal>
 
+      {/* ── UPI QR Modal ── */}
+      <Modal visible={showUpiQr} transparent animationType="fade" onRequestClose={() => setShowUpiQr(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.successModal, { paddingVertical: Spacing.xxl }]}>
+            <Text style={styles.successTitle}>Scan & Pay</Text>
+            <Text style={[styles.successOrderNum, { marginBottom: Spacing.xl }]}>
+              {cur}{showSuccess?.grandTotal.toFixed(2) || cart.grandTotal.toFixed(2)}
+            </Text>
+            <View style={{ padding: Spacing.lg, backgroundColor: Colors.white, borderRadius: BorderRadius.xl }}>
+              <QRCode
+                value={buildUpiUrl(showSuccess?.grandTotal || cart.grandTotal)}
+                size={200}
+                color={Colors.text}
+                backgroundColor={Colors.white}
+              />
+            </View>
+            <Text style={[styles.successOrderNum, { marginTop: Spacing.lg }]}>
+              {settings.upiId || UPI_ID}
+            </Text>
+            <TouchableOpacity
+              style={[styles.successDoneBtn, { width: '100%', marginTop: Spacing.xl }]}
+              onPress={() => setShowUpiQr(false)}
+            >
+              <Text style={styles.successDoneText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Order Success / Token Modal ── */}
       <Modal visible={!!showSuccess} transparent animationType="fade" onRequestClose={() => setShowSuccess(null)}>
         <View style={styles.modalOverlay}>
@@ -487,22 +576,27 @@ const BillingScreen: React.FC = () => {
               <Text style={styles.tokenNumber}>#{showSuccess?.token}</Text>
             </View>
             <Text style={styles.successAmount}>{cur}{showSuccess?.grandTotal.toFixed(2)}</Text>
+            {/* WhatsApp + UPI QR row */}
             <View style={styles.successActions}>
               <TouchableOpacity
-                style={styles.successPrintBtn}
-                onPress={async () => {
-                  setShowSuccess(null);
-                  // User can print from Orders screen
-                }}
+                style={[styles.successPrintBtn, { flex: 1 }]}
+                onPress={() => { if (showSuccess) sendWhatsApp(showSuccess); }}
               >
-                <MaterialIcons name="print" size={18} color={Colors.primary} />
-                <Text style={styles.successPrintText}>Print Later</Text>
+                <MaterialIcons name="chat" size={18} color={Colors.success} />
+                <Text style={[styles.successPrintText, { color: Colors.success }]}>WhatsApp</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.successDoneBtn} onPress={() => setShowSuccess(null)}>
-                <Text style={styles.successDoneText}>New Order</Text>
-                <MaterialIcons name="add" size={18} color={Colors.white} />
+              <TouchableOpacity
+                style={[styles.successPrintBtn, { flex: 1 }]}
+                onPress={() => setShowUpiQr(true)}
+              >
+                <MaterialIcons name="qr-code" size={18} color={Colors.upi} />
+                <Text style={[styles.successPrintText, { color: Colors.upi }]}>UPI QR</Text>
               </TouchableOpacity>
             </View>
+            <TouchableOpacity style={[styles.successDoneBtn, { width: '100%', marginTop: 8 }]} onPress={() => { setShowSuccess(null); setCustomerPhone(''); }}>
+              <Text style={styles.successDoneText}>New Order</Text>
+              <MaterialIcons name="add" size={18} color={Colors.white} />
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

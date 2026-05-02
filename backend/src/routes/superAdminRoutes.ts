@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import Hotel from '../models/Hotel';
+import Order from '../models/Order';
+import mongoose from 'mongoose';
 
 const router = Router();
 
@@ -169,6 +171,49 @@ router.put('/hotels/:id/credentials', superAdminAuth, async (req: Request, res: 
     return res.json({ message: `${hotel.hotelName} approved and credentials set`, hotel });
   } catch (error) {
     return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// GET /api/superadmin/branch-revenue — multi-branch revenue comparison
+router.get('/branch-revenue', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+    const date  = new Date(dateStr);
+    const start = new Date(date); start.setHours(0, 0, 0, 0);
+    const end   = new Date(date); end.setHours(23, 59, 59, 999);
+
+    const activeHotels = await Hotel.find({ status: 'active' }).select('_id hotelName city').lean();
+
+    const revenueByHotel = await Order.aggregate([
+      { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: start, $lte: end } } },
+      { $group: {
+        _id:      '$hotelId',
+        revenue:  { $sum: '$grandTotal' },
+        orders:   { $sum: 1 },
+        avgOrder: { $avg: '$grandTotal' },
+      }},
+    ]);
+
+    const revenueMap = new Map(revenueByHotel.map((r: any) => [r._id.toString(), r]));
+
+    const branches = activeHotels.map((h: any) => {
+      const r = revenueMap.get(h._id.toString());
+      return {
+        hotelId:   h._id,
+        hotelName: h.hotelName,
+        city:      h.city || '',
+        revenue:   r?.revenue || 0,
+        orders:    r?.orders || 0,
+        avgOrder:  r?.avgOrder || 0,
+      };
+    }).sort((a: any, b: any) => b.revenue - a.revenue);
+
+    const totalRevenue = branches.reduce((s: number, b: any) => s + b.revenue, 0);
+    const totalOrders  = branches.reduce((s: number, b: any) => s + b.orders, 0);
+
+    res.json({ date: dateStr, totalRevenue, totalOrders, branches });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
   }
 });
 
