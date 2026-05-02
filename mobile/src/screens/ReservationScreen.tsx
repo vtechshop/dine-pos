@@ -184,7 +184,6 @@ const ReservationScreen: React.FC = () => {
                 { label: 'Customer Name *', key: 'customerName', placeholder: 'Ramesh Kumar' },
                 { label: 'Phone *', key: 'phone', placeholder: '98765 43210', kb: 'phone-pad' },
                 { label: 'Party Size', key: 'partySize', placeholder: '2', kb: 'number-pad' },
-                { label: 'Date (YYYY-MM-DD)', key: 'date', placeholder: todayStr() },
                 { label: 'Time (HH:MM)', key: 'time', placeholder: '19:00' },
                 { label: 'Table Number (optional)', key: 'tableNumber', placeholder: 'e.g. 5', kb: 'number-pad' },
                 { label: 'Notes', key: 'notes', placeholder: 'Anniversary, window seat...' },
@@ -201,6 +200,36 @@ const ReservationScreen: React.FC = () => {
                   />
                 </View>
               ))}
+
+              {/* Date picker — arrow navigation */}
+              <Text style={styles.label}>Date</Text>
+              <View style={styles.miniDateRow}>
+                <TouchableOpacity
+                  style={styles.miniArrow}
+                  onPress={() => {
+                    const d = new Date(form.date); d.setDate(d.getDate() - 1);
+                    setForm(p => ({ ...p, date: d.toISOString().slice(0, 10) }));
+                  }}
+                >
+                  <MaterialIcons name="chevron-left" size={22} color={Colors.text} />
+                </TouchableOpacity>
+                <Text style={styles.miniDateText}>{fmtDate(form.date)}</Text>
+                <TouchableOpacity
+                  style={styles.miniArrow}
+                  onPress={() => {
+                    const d = new Date(form.date); d.setDate(d.getDate() + 1);
+                    setForm(p => ({ ...p, date: d.toISOString().slice(0, 10) }));
+                  }}
+                >
+                  <MaterialIcons name="chevron-right" size={22} color={Colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.miniTodayBtn}
+                  onPress={() => setForm(p => ({ ...p, date: todayStr() }))}
+                >
+                  <Text style={styles.miniTodayTxt}>Today</Text>
+                </TouchableOpacity>
+              </View>
 
               <View style={styles.mActions}>
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowModal(false)}>
@@ -281,6 +310,20 @@ const styles = StyleSheet.create({
     borderColor: Colors.border, paddingHorizontal: Spacing.lg, paddingVertical: 12,
     fontSize: FontSize.md, color: Colors.text,
   },
+  miniDateRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.card, borderRadius: BorderRadius.lg,
+    borderWidth: 1, borderColor: Colors.border, paddingVertical: 4, paddingHorizontal: Spacing.sm,
+  },
+  miniArrow: { padding: 4 },
+  miniDateText: { flex: 1, fontSize: FontSize.md, color: Colors.text, fontWeight: '600', textAlign: 'center' },
+  miniTodayBtn: {
+    backgroundColor: Colors.primaryBg, borderRadius: BorderRadius.round,
+    paddingHorizontal: Spacing.sm, paddingVertical: 4,
+    borderWidth: 1, borderColor: Colors.primary + '40',
+  },
+  miniTodayTxt: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '700' },
+
   mActions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.xl },
   cancelBtn: {
     flex: 1, paddingVertical: 14, borderRadius: BorderRadius.lg,

@@ -283,13 +283,35 @@ const ExpenseScreen: React.FC = () => {
               </ScrollView>
 
               <Text style={styles.label}>Date</Text>
-              <TextInput
-                style={styles.input}
-                value={form.date}
-                onChangeText={v => setForm(p => ({ ...p, date: v }))}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={Colors.textMuted}
-              />
+              <View style={styles.miniDateRow}>
+                <TouchableOpacity
+                  style={styles.miniArrow}
+                  onPress={() => {
+                    const d = new Date(form.date); d.setDate(d.getDate() - 1);
+                    setForm(p => ({ ...p, date: d.toISOString().slice(0, 10) }));
+                  }}
+                >
+                  <MaterialIcons name="chevron-left" size={22} color={Colors.text} />
+                </TouchableOpacity>
+                <Text style={styles.miniDateText}>
+                  {new Date(form.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </Text>
+                <TouchableOpacity
+                  style={styles.miniArrow}
+                  onPress={() => {
+                    const d = new Date(form.date); d.setDate(d.getDate() + 1);
+                    setForm(p => ({ ...p, date: d.toISOString().slice(0, 10) }));
+                  }}
+                >
+                  <MaterialIcons name="chevron-right" size={22} color={Colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.miniTodayBtn}
+                  onPress={() => setForm(p => ({ ...p, date: todayStr() }))}
+                >
+                  <Text style={styles.miniTodayTxt}>Today</Text>
+                </TouchableOpacity>
+              </View>
 
               <Text style={styles.label}>Notes (optional)</Text>
               <TextInput
@@ -410,6 +432,20 @@ const styles = StyleSheet.create({
     borderColor: Colors.border, paddingHorizontal: Spacing.lg, paddingVertical: 12,
     fontSize: FontSize.md, color: Colors.text,
   },
+  miniDateRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.card, borderRadius: BorderRadius.lg,
+    borderWidth: 1, borderColor: Colors.border, paddingVertical: 4, paddingHorizontal: Spacing.sm,
+  },
+  miniArrow: { padding: 4 },
+  miniDateText: { flex: 1, fontSize: FontSize.md, color: Colors.text, fontWeight: '600', textAlign: 'center' },
+  miniTodayBtn: {
+    backgroundColor: Colors.primaryBg, borderRadius: BorderRadius.round,
+    paddingHorizontal: Spacing.sm, paddingVertical: 4,
+    borderWidth: 1, borderColor: Colors.primary + '40',
+  },
+  miniTodayTxt: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '700' },
+
   catRow:     { flexDirection: 'row', gap: Spacing.sm, paddingRight: Spacing.md },
   catChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

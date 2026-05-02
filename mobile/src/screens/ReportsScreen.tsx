@@ -2,12 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { showAlert } from '../utils/alert';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, StatusBar, TextInput,
+  ActivityIndicator, StatusBar, TextInput, Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { DailyReport, Product } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
-import { getDailyReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics } from '../services/api';
+import { getDailyReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics, createWasteLog } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
 
 type Tab = 'daily' | 'products' | 'stock' | 'waste';
@@ -17,6 +17,16 @@ interface ProductSale {
   totalQty: number;
   totalRevenue: number;
 }
+
+const WASTE_REASONS = [
+  { id: 'expired',     label: 'Expired',     color: '#C62828' },
+  { id: 'damaged',     label: 'Damaged',     color: '#E65100' },
+  { id: 'overcooked',  label: 'Overcooked',  color: '#F57F17' },
+  { id: 'returned',    label: 'Returned',    color: '#1565C0' },
+  { id: 'other',       label: 'Other',       color: '#616161' },
+] as const;
+
+type WasteReason = typeof WASTE_REASONS[number]['id'];
 
 const getTodayString = () => {
   const d = new Date();
@@ -32,6 +42,10 @@ const ReportsScreen: React.FC = () => {
   const [lowStock, setLowStock] = useState<Product[]>([]);
   const [wasteData, setWasteData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showWasteModal, setShowWasteModal] = useState(false);
+  const [wasteSaving, setWasteSaving] = useState(false);
+  const emptyWasteForm = { productName: '', quantity: '', unit: 'portion', reason: 'expired' as WasteReason, estimatedLoss: '', notes: '' };
+  const [wasteForm, setWasteForm] = useState(emptyWasteForm);
   const cur = settings.currencySymbol || '₹';
 
   const fetchDaily = useCallback(async (d: string) => {
@@ -85,6 +99,29 @@ const ReportsScreen: React.FC = () => {
     setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
   };
 
+  const saveWasteLog = async () => {
+    if (!wasteForm.productName.trim() || !wasteForm.quantity) {
+      showAlert('Error', 'Product name and quantity are required'); return;
+    }
+    setWasteSaving(true);
+    try {
+      await createWasteLog({
+        productName:   wasteForm.productName.trim(),
+        quantity:      parseFloat(wasteForm.quantity) || 1,
+        unit:          wasteForm.unit.trim() || 'portion',
+        reason:        wasteForm.reason,
+        estimatedLoss: parseFloat(wasteForm.estimatedLoss) || 0,
+        notes:         wasteForm.notes.trim(),
+        date:          date,
+      });
+      setShowWasteModal(false);
+      setWasteForm(emptyWasteForm);
+      fetchWaste(date);
+    } catch (e: any) {
+      showAlert('Error', e.message || 'Failed to save waste log');
+    } finally { setWasteSaving(false); }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
@@ -92,6 +129,15 @@ const ReportsScreen: React.FC = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Reports</Text>
+        {tab === 'waste' && (
+          <TouchableOpacity
+            style={styles.headerAddBtn}
+            onPress={() => { setWasteForm({ ...emptyWasteForm }); setShowWasteModal(true); }}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="add" size={22} color={Colors.white} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Tabs */}
@@ -326,6 +372,94 @@ const ReportsScreen: React.FC = () => {
 
         </ScrollView>
       )}
+      {/* ── Log Waste Modal ── */}
+      <Modal visible={showWasteModal} transparent animationType="slide" onRequestClose={() => setShowWasteModal(false)}>
+        <View style={styles.modalOverlay}>
+          <ScrollView keyboardShouldPersistTaps="handled">
+            <View style={styles.modal}>
+              <View style={styles.modalHandle} />
+              <Text style={styles.modalTitle}>Log Food Waste</Text>
+
+              <Text style={styles.modalLabel}>Item Name *</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={wasteForm.productName}
+                onChangeText={v => setWasteForm(p => ({ ...p, productName: v }))}
+                placeholder="e.g. Chicken Tikka"
+                placeholderTextColor={Colors.textMuted}
+              />
+
+              <View style={{ flexDirection: 'row', gap: Spacing.md }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>Quantity *</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={wasteForm.quantity}
+                    onChangeText={v => setWasteForm(p => ({ ...p, quantity: v }))}
+                    placeholder="1"
+                    placeholderTextColor={Colors.textMuted}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>Unit</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={wasteForm.unit}
+                    onChangeText={v => setWasteForm(p => ({ ...p, unit: v }))}
+                    placeholder="portion / kg / pcs"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.modalLabel}>Reason</Text>
+              <View style={styles.reasonRow}>
+                {WASTE_REASONS.map(r => (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={[styles.reasonChip, wasteForm.reason === r.id && { backgroundColor: r.color, borderColor: r.color }]}
+                    onPress={() => setWasteForm(p => ({ ...p, reason: r.id }))}
+                  >
+                    <Text style={[styles.reasonChipTxt, wasteForm.reason === r.id && { color: Colors.white }]}>{r.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.modalLabel}>Estimated Loss ({cur})</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={wasteForm.estimatedLoss}
+                onChangeText={v => setWasteForm(p => ({ ...p, estimatedLoss: v }))}
+                placeholder="0.00"
+                placeholderTextColor={Colors.textMuted}
+                keyboardType="decimal-pad"
+              />
+
+              <Text style={styles.modalLabel}>Notes (optional)</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={wasteForm.notes}
+                onChangeText={v => setWasteForm(p => ({ ...p, notes: v }))}
+                placeholder="Additional details..."
+                placeholderTextColor={Colors.textMuted}
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowWasteModal(false)}>
+                  <Text style={styles.modalCancelTxt}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalSaveBtn} onPress={saveWasteLog} disabled={wasteSaving}>
+                  {wasteSaving
+                    ? <ActivityIndicator size="small" color={Colors.white} />
+                    : <Text style={styles.modalSaveTxt}>Save Log</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -339,8 +473,15 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerTitle: { fontSize: FontSize.xxl, fontWeight: 'bold', color: Colors.text },
+  headerAddBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center',
+  },
 
   tabs: {
     flexDirection: 'row',
@@ -507,6 +648,41 @@ const styles = StyleSheet.create({
 
   emptyBox: { alignItems: 'center', paddingVertical: Spacing.xl },
   emptyText: { color: Colors.textSecondary, fontSize: FontSize.md, marginTop: Spacing.sm },
+
+  // Waste log modal
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay },
+  modal: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: BorderRadius.xxxl, borderTopRightRadius: BorderRadius.xxxl,
+    padding: Spacing.xxl, paddingBottom: 40, marginTop: 80,
+  },
+  modalHandle: { width: 44, height: 4, borderRadius: 2, backgroundColor: Colors.border, alignSelf: 'center', marginBottom: Spacing.lg },
+  modalTitle: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.text, textAlign: 'center', marginBottom: Spacing.lg },
+  modalLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600', marginBottom: 6, marginTop: Spacing.md },
+  modalInput: {
+    backgroundColor: Colors.card, borderRadius: BorderRadius.lg,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: Spacing.lg, paddingVertical: 12,
+    fontSize: FontSize.md, color: Colors.text,
+  },
+  reasonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.sm },
+  reasonChip: {
+    paddingHorizontal: Spacing.md, paddingVertical: 8,
+    borderRadius: BorderRadius.round, borderWidth: 1.5, borderColor: Colors.border,
+    backgroundColor: Colors.card,
+  },
+  reasonChipTxt: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary },
+  modalActions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.xl },
+  modalCancelBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: BorderRadius.lg,
+    borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center',
+  },
+  modalCancelTxt: { color: Colors.textSecondary, fontWeight: '600', fontSize: FontSize.lg },
+  modalSaveBtn: {
+    flex: 2, paddingVertical: 14, borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.primary, alignItems: 'center',
+  },
+  modalSaveTxt: { color: Colors.white, fontWeight: '800', fontSize: FontSize.lg },
 });
 
 export default ReportsScreen;

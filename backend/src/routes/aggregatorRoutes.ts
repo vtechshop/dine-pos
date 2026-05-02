@@ -22,9 +22,16 @@ const generateOrderNumber = async (hotelId: string): Promise<string> => {
   return `${prefix}-${String(seq).padStart(3, '0')}`;
 };
 
+const WEBHOOK_SECRET = process.env.AGGREGATOR_SECRET || 'agg-secret-changeme';
+
 // POST /api/aggregator/order — receive order from Swiggy/Zomato webhook
-// Secured by hotel-specific webhook secret in query param
+// Requires X-Webhook-Secret header matching AGGREGATOR_SECRET env var
 router.post('/order', async (req: Request, res: Response) => {
+  const incomingSecret = req.headers['x-webhook-secret'] as string | undefined;
+  if (!incomingSecret || incomingSecret !== WEBHOOK_SECRET) {
+    return res.status(401).json({ message: 'Unauthorized: invalid webhook secret' });
+  }
+
   try {
     const { hotelId, source = 'aggregator', items, total, customerName, address, notes } = req.body;
 
