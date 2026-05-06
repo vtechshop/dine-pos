@@ -1,5 +1,5 @@
 // API Base URL - change this to your backend server IP
-export const API_BASE_URL = 'http://192.168.1.37:5000/api';
+export const API_BASE_URL = 'https://dine-pos.onrender.com/api';
 export const UPI_ID = '7871469095@ybl';
 export const UPI_NAME = 'Dine POS';
 
