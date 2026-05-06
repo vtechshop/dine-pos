@@ -25,6 +25,7 @@
       "package": "com.jegatheswar.dinepos",
       "versionCode": 2,
       "predictiveBackGestureEnabled": false,
+      "newArchEnabled": false,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.CAMERA",
