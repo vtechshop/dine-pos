@@ -94,6 +94,48 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Privacy policy page
+app.get('/privacy-policy', (_req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy – Dine POS</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; line-height: 1.7; }
+    h1 { color: #E8380D; }
+    h2 { color: #1C0800; margin-top: 30px; }
+    p, li { font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy for Dine POS</h1>
+  <p><strong>Last updated: May 2026</strong></p>
+  <h2>Introduction</h2>
+  <p>Dine POS ("we", "our", or "us") is a Point of Sale application designed for restaurants and hotels. This privacy policy explains how we handle information.</p>
+  <h2>Information We Collect</h2>
+  <ul>
+    <li><strong>Camera:</strong> Used only for scanning product images. No images are stored on external servers.</li>
+    <li><strong>Storage:</strong> Used to save app data locally on your device.</li>
+    <li><strong>Internet:</strong> Used to connect to your hotel's backend server for order management.</li>
+  </ul>
+  <h2>How We Use Information</h2>
+  <ul>
+    <li>All data (orders, products, settings) is stored on your own private server.</li>
+    <li>We do not collect, share, or sell any personal data to third parties.</li>
+    <li>No analytics or tracking SDKs are used.</li>
+  </ul>
+  <h2>Data Storage</h2>
+  <p>All data is stored on the hotel's own MongoDB database. We have no access to your business data.</p>
+  <h2>Contact Us</h2>
+  <p>If you have any questions about this Privacy Policy, contact us at: <strong>ledvtech@gmail.com</strong></p>
+  <h2>Changes to This Policy</h2>
+  <p>We may update this policy. Changes will be posted on this page.</p>
+</body>
+</html>`);
+});
+
 // Fallback: /menu/* → index.html
 app.get('/menu/*', (_req, res) => {
   res.sendFile(path.join(__dirname, '../public/menu/index.html'));
