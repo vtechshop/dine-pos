@@ -24,9 +24,13 @@ const CustomerMenuScreen: React.FC = () => {
   const rootNav = useNavigation<NavProp>();
   const { width: screenWidth } = useWindowDimensions();
 
-  const COLS = screenWidth > 600 ? 3 : 2;
-  const CARD_M = Spacing.sm;
+  const isTablet = screenWidth >= 600;
+  const COLS = 2; // Always 2 columns — better card size on both phone and tablet
+  const CARD_M = isTablet ? Spacing.md : Spacing.sm;
   const CARD_W = (screenWidth - CARD_M * (COLS + 1)) / COLS;
+  const IMG_H = Math.round(CARD_W * 0.62); // Proportional image height based on card width
+  const CARD_FONT = isTablet ? FontSize.lg : FontSize.md;
+  const PRICE_FONT = isTablet ? FontSize.xxl : FontSize.xl;
 
   const [categories,    setCategories]   = useState<Category[]>([]);
   const [products,      setProducts]     = useState<Product[]>([]);
@@ -131,8 +135,8 @@ const CustomerMenuScreen: React.FC = () => {
         {/* Image */}
         <View style={styles.prodImgWrap}>
           {item.image
-            ? <Image source={{ uri: item.image }} style={styles.prodImg} resizeMode="cover" />
-            : <View style={styles.prodImgPlaceholder}><MaterialIcons name="fastfood" size={36} color={Colors.textMuted} /></View>
+            ? <Image source={{ uri: item.image }} style={[styles.prodImg, { height: IMG_H }]} resizeMode="cover" />
+            : <View style={[styles.prodImgPlaceholder, { height: IMG_H }]}><MaterialIcons name="fastfood" size={Math.round(IMG_H * 0.28)} color={Colors.textMuted} /></View>
           }
           {/* Veg/NonVeg badge (FSSAI style) */}
           <View style={[styles.vegBadge, { borderColor: item.isVeg ? Colors.veg : Colors.nonVeg }]}>
@@ -153,11 +157,11 @@ const CustomerMenuScreen: React.FC = () => {
 
         {/* Info */}
         <View style={styles.prodInfo}>
-          <Text style={styles.prodName} numberOfLines={2}>{item.name}</Text>
+          <Text style={[styles.prodName, { fontSize: CARD_FONT }]} numberOfLines={2}>{item.name}</Text>
           {item.description ? (
             <Text style={styles.prodDesc} numberOfLines={1}>{item.description}</Text>
           ) : null}
-          <Text style={styles.prodPrice}>{cur}{item.price.toFixed(0)}</Text>
+          <Text style={[styles.prodPrice, { fontSize: PRICE_FONT }]}>{cur}{item.price.toFixed(0)}</Text>
         </View>
 
         {/* Add / Qty controls */}
