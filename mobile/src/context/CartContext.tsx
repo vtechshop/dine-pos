@@ -12,6 +12,7 @@ interface CartState {
   grandTotal: number;
   tableNumber: string;
   customerName: string;
+  customerPhone: string;
   notes: string;
   isParcel: boolean;
   discount: { type: DiscountType; value: number };
@@ -24,6 +25,7 @@ type CartAction =
   | { type: 'REMOVE_ITEM'; payload: string }
   | { type: 'SET_TABLE';   payload: string }
   | { type: 'SET_CUSTOMER';payload: string }
+  | { type: 'SET_PHONE';   payload: string }
   | { type: 'SET_NOTES';   payload: string }
   | { type: 'SET_PARCEL';  payload: boolean }
   | { type: 'SET_DISCOUNT';payload: { type: DiscountType; value: number } }
@@ -37,6 +39,7 @@ const initialState: CartState = {
   grandTotal: 0,
   tableNumber: '',
   customerName: '',
+  customerPhone: '',
   notes: '',
   isParcel: false,
   discount: { type: 'percent', value: 0 },
@@ -122,6 +125,7 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
 
     case 'SET_TABLE':    return { ...state, tableNumber: action.payload };
     case 'SET_CUSTOMER': return { ...state, customerName: action.payload };
+    case 'SET_PHONE':    return { ...state, customerPhone: action.payload };
     case 'SET_NOTES':    return { ...state, notes: action.payload };
     case 'SET_PARCEL':   return { ...state, isParcel: action.payload };
     case 'CLEAR_CART':   return initialState;
@@ -137,6 +141,7 @@ interface CartContextType {
   decrement: (productId: string) => void;
   setTable: (table: string) => void;
   setCustomer: (name: string) => void;
+  setPhone: (phone: string) => void;
   setNotes: (notes: string) => void;
   setParcel: (val: boolean) => void;
   setDiscount: (d: { type: DiscountType; value: number }) => void;
@@ -159,6 +164,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     decrement:   (id)      => dispatch({ type: 'DECREMENT',   payload: id, defaultTax }),
     setTable:    (table)   => dispatch({ type: 'SET_TABLE',    payload: table }),
     setCustomer: (name)    => dispatch({ type: 'SET_CUSTOMER', payload: name }),
+    setPhone:    (phone)   => dispatch({ type: 'SET_PHONE',    payload: phone }),
     setNotes:    (notes)   => dispatch({ type: 'SET_NOTES',    payload: notes }),
     setParcel:   (val)     => dispatch({ type: 'SET_PARCEL',   payload: val }),
     setDiscount: (d)       => dispatch({ type: 'SET_DISCOUNT', payload: d }),

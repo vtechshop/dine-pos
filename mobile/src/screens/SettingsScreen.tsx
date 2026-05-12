@@ -630,6 +630,35 @@ const SettingsScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Restaurant Tools Section */}
+        <View style={styles.seedSection}>
+          <Text style={styles.sectionHeader}>Restaurant Tools</Text>
+          <View style={styles.section}>
+            {[
+              { label: 'Table Layout', sub: 'Manage floor map & table status', icon: 'table-restaurant' as const, nav: 'TableLayout' as const },
+              { label: 'Reservations', sub: 'View & manage table bookings', icon: 'event-available' as const, nav: 'Reservations' as const },
+              { label: 'Expenses & P&L', sub: 'Track costs and profit/loss', icon: 'account-balance-wallet' as const, nav: 'Expenses' as const },
+              { label: 'QR Ordering Menu', sub: 'Generate QR codes for tables', icon: 'qr-code' as const, nav: 'QRMenu' as const },
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.nav}
+                style={styles.toolRow}
+                onPress={() => navigation.navigate(item.nav as any)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.toolIconWrap}>
+                  <MaterialIcons name={item.icon} size={22} color={Colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.toolLabel}>{item.label}</Text>
+                  <Text style={styles.toolSub}>{item.sub}</Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={22} color={Colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {/* Platform Section */}
         <View style={styles.seedSection}>
           <Text style={styles.sectionHeader}>Platform</Text>
@@ -888,6 +917,32 @@ const styles = StyleSheet.create({
     color: Colors.info,
     fontSize: FontSize.md,
     fontWeight: '600',
+  },
+  toolRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+    gap: Spacing.md,
+  },
+  toolIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.primaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toolLabel: {
+    fontSize: FontSize.md,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  toolSub: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    marginTop: 2,
   },
 });
 

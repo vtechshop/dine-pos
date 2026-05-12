@@ -1,37 +1,55 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, Image, ScrollView, useWindowDimensions,
-  StatusBar, Modal,
+  StatusBar, Modal, Linking, Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import QRCode from 'react-native-qrcode-svg';
 import { showAlert } from '../utils/alert';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
 import { RootStackParamList, CartItem } from '../types';
-import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
+import { Colors, Spacing, FontSize, BorderRadius, Shadows, API_BASE_URL } from '../utils/constants';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
+const BACKEND_URL = API_BASE_URL.replace('/api', '');
+
+interface PlacedOrder {
+  _id: string;
+  orderNumber: string;
+  token: string;
+  items: CartItem[];
+  subtotal: number;
+  taxTotal: number;
+  grandTotal: number;
+  customerName: string;
+  customerPhone: string;
+  tableNumber: string;
+  notes: string;
+}
+
 const CustomerCartScreen: React.FC = () => {
-  const { cart, increment, decrement, removeItem, setCustomer, setTable, setNotes, clearCart, itemCount } = useCart();
+  const { cart, increment, decrement, removeItem, setCustomer, setPhone, setTable, setNotes, clearCart, itemCount } = useCart();
   const { settings } = useSettings();
   const navigation = useNavigation<NavProp>();
   const [placing, setPlacing] = useState(false);
-  const [tokenModal, setTokenModal] = useState<{ orderNumber: string; token: string } | null>(null);
+  const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
   const { width } = useWindowDimensions();
-  const isSmall = width < 360;
+  const isTablet = width >= 600;
 
   const cur = settings.currencySymbol || '₹';
   const fmt = (n: number) => `${cur}${n.toFixed(0)}`;
 
+  const billUrl = placedOrder ? `${BACKEND_URL}/bill/${placedOrder._id}` : '';
+
   const handlePlaceOrder = async () => {
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items from the menu first.'); return; }
-    if (!cart.customerName.trim()) { showAlert('Name Required', 'Please enter your name to continue.'); return; }
-    if (!cart.tableNumber.trim()) { showAlert('Table Required', 'Please enter your table number.'); return; }
+    if (!cart.customerName.trim()) { showAlert('Name Required', 'Please enter your name.'); return; }
 
     setPlacing(true);
     try {
@@ -51,15 +69,51 @@ const CustomerCartScreen: React.FC = () => {
         paymentMethod: 'cash' as const,
         tableNumber: cart.tableNumber,
         customerName: cart.customerName,
+        customerPhone: cart.customerPhone,
         notes: cart.notes,
         status: 'pending' as const,
       });
+
       const token = order.orderNumber.split('-').pop() || '1';
+      const snapshot = {
+        _id: order._id,
+        orderNumber: order.orderNumber,
+        token,
+        items: [...cart.items],
+        subtotal: cart.subtotal,
+        taxTotal: cart.taxTotal,
+        grandTotal: cart.grandTotal,
+        customerName: cart.customerName,
+        customerPhone: cart.customerPhone,
+        tableNumber: cart.tableNumber,
+        notes: cart.notes,
+      };
       clearCart();
-      setTokenModal({ orderNumber: order.orderNumber, token });
+      setPlacedOrder(snapshot);
     } catch (e: any) {
       showAlert('Error', e.message || 'Failed to place order. Try again.');
     } finally { setPlacing(false); }
+  };
+
+  const handleWhatsApp = () => {
+    if (!placedOrder) return;
+    const itemLines = placedOrder.items
+      .map(i => `• ${i.product.name} x${i.quantity} — ${cur}${i.total.toFixed(0)}`)
+      .join('\n');
+    const msg = `🍽 *Order Confirmed!*\n\n` +
+      `Order: ${placedOrder.orderNumber}\n` +
+      `Token: #${placedOrder.token}\n` +
+      (placedOrder.tableNumber ? `Table: ${placedOrder.tableNumber}\n` : '') +
+      `\n*Items:*\n${itemLines}\n\n` +
+      `Subtotal: ${cur}${placedOrder.subtotal.toFixed(0)}\n` +
+      `Tax: ${cur}${placedOrder.taxTotal.toFixed(0)}\n` +
+      `*Total: ${cur}${placedOrder.grandTotal.toFixed(0)}*\n\n` +
+      `View bill: ${billUrl}`;
+    const phone = placedOrder.customerPhone.replace(/\D/g, '');
+    const url = phone
+      ? `whatsapp://send?phone=91${phone}&text=${encodeURIComponent(msg)}`
+      : `whatsapp://send?text=${encodeURIComponent(msg)}`;
+    Linking.openURL(url).catch(() => showAlert('WhatsApp not installed', 'Please share the bill link manually.'));
   };
 
   const renderItem = (item: CartItem) => (
@@ -86,6 +140,82 @@ const CustomerCartScreen: React.FC = () => {
       </View>
     </View>
   );
+
+  // ── Bill modal after order placed ─────────────────────────────────────────
+  if (placedOrder) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
+        <ScrollView contentContainerStyle={styles.billScroll} showsVerticalScrollIndicator={false}>
+          {/* Success header */}
+          <View style={styles.billHeader}>
+            <MaterialIcons name="check-circle" size={60} color={Colors.success} />
+            <Text style={styles.billSuccess}>Order Placed!</Text>
+            <Text style={styles.billOrderNum}>{placedOrder.orderNumber}</Text>
+          </View>
+
+          {/* Token */}
+          <View style={styles.tokenBox}>
+            <Text style={styles.tokenLabel}>YOUR TOKEN</Text>
+            <Text style={styles.tokenNum}>#{placedOrder.token}</Text>
+            {placedOrder.tableNumber ? <Text style={styles.tokenTable}>Table {placedOrder.tableNumber}</Text> : null}
+          </View>
+
+          {/* Items */}
+          <View style={styles.billSection}>
+            <Text style={styles.billSectionTitle}>Order Summary</Text>
+            {placedOrder.items.map(item => (
+              <View key={item.product._id} style={styles.billItemRow}>
+                <Text style={styles.billItemName} numberOfLines={1}>{item.product.name}</Text>
+                <Text style={styles.billItemQty}>x{item.quantity}</Text>
+                <Text style={styles.billItemAmt}>{cur}{item.total.toFixed(0)}</Text>
+              </View>
+            ))}
+            <View style={styles.billDivider} />
+            <View style={styles.billTotalRow}>
+              <Text style={styles.billTotalLabel}>Subtotal</Text>
+              <Text style={styles.billTotalVal}>{fmt(placedOrder.subtotal)}</Text>
+            </View>
+            <View style={styles.billTotalRow}>
+              <Text style={styles.billTotalLabel}>Tax (GST)</Text>
+              <Text style={styles.billTotalVal}>{fmt(placedOrder.taxTotal)}</Text>
+            </View>
+            <View style={[styles.billTotalRow, styles.grandRow]}>
+              <Text style={styles.grandLabel}>Total to Pay</Text>
+              <Text style={styles.grandVal}>{fmt(placedOrder.grandTotal)}</Text>
+            </View>
+          </View>
+
+          {/* QR Code */}
+          <View style={styles.qrSection}>
+            <Text style={styles.qrTitle}>Scan to view your bill</Text>
+            <View style={styles.qrBox}>
+              <QRCode value={billUrl} size={160} color={Colors.text} backgroundColor={Colors.white} />
+            </View>
+            <Text style={styles.qrHint}>Show this to staff or scan later</Text>
+          </View>
+
+          {/* Action buttons */}
+          <View style={styles.billActions}>
+            <TouchableOpacity style={styles.whatsappBtn} onPress={handleWhatsApp}>
+              <MaterialIcons name="share" size={20} color={Colors.white} />
+              <Text style={styles.whatsappBtnText}>Share on WhatsApp</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuBtn}
+              onPress={() => { setPlacedOrder(null); navigation.reset({ index: 0, routes: [{ name: 'CustomerTabs' }] }); }}
+            >
+              <MaterialIcons name="restaurant-menu" size={20} color={Colors.primary} />
+              <Text style={styles.menuBtnText}>Back to Menu</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.payNote}>💵 Please pay {fmt(placedOrder.grandTotal)} at the counter</Text>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -130,6 +260,8 @@ const CustomerCartScreen: React.FC = () => {
             {/* Your Details */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Your Details</Text>
+
+              {/* Name — required */}
               <View style={styles.inputWrap}>
                 <MaterialIcons name="person-outline" size={18} color={Colors.textMuted} />
                 <TextInput
@@ -140,17 +272,34 @@ const CustomerCartScreen: React.FC = () => {
                   onChangeText={setCustomer}
                 />
               </View>
+
+              {/* Phone — optional */}
+              <View style={styles.inputWrap}>
+                <MaterialIcons name="phone" size={18} color={Colors.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Phone number (optional)"
+                  placeholderTextColor={Colors.textMuted}
+                  value={cart.customerPhone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              {/* Table — optional */}
               <View style={styles.inputWrap}>
                 <MaterialIcons name="grid-on" size={18} color={Colors.textMuted} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Table number *"
+                  placeholder="Table number (optional)"
                   placeholderTextColor={Colors.textMuted}
                   value={cart.tableNumber}
                   onChangeText={setTable}
                   keyboardType="number-pad"
                 />
               </View>
+
+              {/* Notes — optional */}
               <View style={styles.inputWrap}>
                 <MaterialIcons name="notes" size={18} color={Colors.textMuted} />
                 <TextInput
@@ -205,38 +354,6 @@ const CustomerCartScreen: React.FC = () => {
           </View>
         </>
       )}
-
-      {/* Token number modal */}
-      <Modal visible={!!tokenModal} transparent animationType="fade" onRequestClose={() => setTokenModal(null)}>
-        <View style={styles.overlay}>
-          <View style={styles.tokenModal}>
-            <View style={styles.tokenSuccessIcon}>
-              <MaterialIcons name="check-circle" size={56} color={Colors.success} />
-            </View>
-            <Text style={styles.tokenModalTitle}>Order Placed!</Text>
-            <Text style={styles.tokenModalSub}>Show this token to collect your order</Text>
-
-            <View style={styles.tokenDisplay}>
-              <Text style={styles.tokenDisplayLabel}>TOKEN</Text>
-              <Text style={styles.tokenDisplayNum}>#{tokenModal?.token}</Text>
-              <Text style={styles.tokenDisplayOrder}>{tokenModal?.orderNumber}</Text>
-            </View>
-
-            <Text style={styles.tokenWait}>Please wait at your table. Staff will serve you shortly.</Text>
-
-            <TouchableOpacity
-              style={styles.tokenDoneBtn}
-              onPress={() => {
-                setTokenModal(null);
-                navigation.reset({ index: 0, routes: [{ name: 'CustomerTabs' }] });
-              }}
-            >
-              <MaterialIcons name="restaurant-menu" size={20} color={Colors.white} />
-              <Text style={styles.tokenDoneText}>Back to Menu</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 };
@@ -289,7 +406,7 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, paddingVertical: 12, fontSize: FontSize.md, color: Colors.text },
 
-  // Bill
+  // Bill summary (pre-order)
   billRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   billLabel: { color: Colors.textSecondary, fontSize: FontSize.md },
   billVal: { color: Colors.text, fontSize: FontSize.md },
@@ -308,31 +425,60 @@ const styles = StyleSheet.create({
   placeBtnText: { color: Colors.white, fontSize: FontSize.xl, fontWeight: '800' },
   placeBtnSub: { color: 'rgba(255,255,255,0.75)', fontSize: FontSize.xs, marginTop: 2 },
 
-  // Overlay + token modal
-  overlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
-  tokenModal: {
-    backgroundColor: Colors.card, borderRadius: BorderRadius.xxxl, padding: Spacing.xxl,
-    width: '100%', alignItems: 'center', borderWidth: 1, borderColor: Colors.border, ...Shadows.lg,
+  // ── Bill screen (after order placed) ─────────────────────────────────────
+  billScroll: { padding: Spacing.lg, paddingBottom: 40 },
+  billHeader: { alignItems: 'center', paddingVertical: Spacing.xl },
+  billSuccess: { fontSize: FontSize.xxxl, fontWeight: '900', color: Colors.text, marginTop: Spacing.sm },
+  billOrderNum: { fontSize: FontSize.md, color: Colors.textSecondary, marginTop: 4 },
+
+  tokenBox: {
+    backgroundColor: Colors.primary, borderRadius: BorderRadius.xxl,
+    paddingVertical: Spacing.xxl, alignItems: 'center', marginBottom: Spacing.lg,
   },
-  tokenSuccessIcon: { marginBottom: Spacing.lg },
-  tokenModalTitle: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.text, marginBottom: 4 },
-  tokenModalSub: { fontSize: FontSize.md, color: Colors.textSecondary, marginBottom: Spacing.xl, textAlign: 'center' },
-  tokenDisplay: {
-    backgroundColor: Colors.successBg, borderRadius: BorderRadius.xxl,
-    paddingVertical: Spacing.xxl, paddingHorizontal: Spacing.xxxl + 8,
-    alignItems: 'center', marginBottom: Spacing.lg,
-    borderWidth: 2, borderColor: Colors.success + '40', width: '100%',
+  tokenLabel: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.75)', fontWeight: '800', letterSpacing: 3 },
+  tokenNum: { fontSize: 72, fontWeight: '900', color: Colors.white, lineHeight: 80 },
+  tokenTable: { fontSize: FontSize.md, color: 'rgba(255,255,255,0.85)', marginTop: 4, fontWeight: '600' },
+
+  billSection: {
+    backgroundColor: Colors.card, borderRadius: BorderRadius.xl,
+    padding: Spacing.lg, borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.md,
   },
-  tokenDisplayLabel: { fontSize: FontSize.xs, color: Colors.success, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 },
-  tokenDisplayNum: { fontSize: 72, fontWeight: '900', color: Colors.success, lineHeight: 80 },
-  tokenDisplayOrder: { fontSize: FontSize.sm, color: Colors.success + 'AA', marginTop: 4, fontWeight: '600' },
-  tokenWait: { fontSize: FontSize.sm, color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.xl, lineHeight: 20 },
-  tokenDoneBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: Colors.primary, paddingVertical: 14, paddingHorizontal: Spacing.xxxl,
-    borderRadius: BorderRadius.xl, width: '100%', ...Shadows.primary,
+  billSectionTitle: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.text, marginBottom: Spacing.md },
+  billItemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  billItemName: { flex: 1, fontSize: FontSize.md, color: Colors.text, fontWeight: '600' },
+  billItemQty: { fontSize: FontSize.md, color: Colors.textSecondary, marginHorizontal: Spacing.md, minWidth: 30, textAlign: 'center' },
+  billItemAmt: { fontSize: FontSize.md, color: Colors.primary, fontWeight: '800', minWidth: 60, textAlign: 'right' },
+  billDivider: { height: 1, backgroundColor: Colors.border, marginVertical: Spacing.sm },
+  billTotalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  billTotalLabel: { fontSize: FontSize.md, color: Colors.textSecondary },
+  billTotalVal: { fontSize: FontSize.md, color: Colors.text },
+
+  // QR section
+  qrSection: {
+    backgroundColor: Colors.card, borderRadius: BorderRadius.xl,
+    padding: Spacing.xl, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.md,
   },
-  tokenDoneText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '800' },
+  qrTitle: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.text, marginBottom: Spacing.lg },
+  qrBox: {
+    padding: Spacing.lg, backgroundColor: Colors.white,
+    borderRadius: BorderRadius.xl, borderWidth: 1, borderColor: Colors.border,
+  },
+  qrHint: { fontSize: FontSize.sm, color: Colors.textMuted, marginTop: Spacing.md, textAlign: 'center' },
+
+  // Action buttons
+  billActions: { gap: Spacing.md, marginBottom: Spacing.md },
+  whatsappBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+    backgroundColor: '#25D366', borderRadius: BorderRadius.xl, paddingVertical: Spacing.lg,
+    ...Shadows.sm,
+  },
+  whatsappBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '800' },
+  menuBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, paddingVertical: Spacing.lg,
+    borderWidth: 1.5, borderColor: Colors.primary,
+  },
+  menuBtnText: { color: Colors.primary, fontSize: FontSize.lg, fontWeight: '800' },
 });
 
 export default CustomerCartScreen;

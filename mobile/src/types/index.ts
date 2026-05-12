@@ -231,6 +231,7 @@ export type RootStackParamList = {
   TableLayout: undefined;
   Reservations: undefined;
   Expenses: undefined;
+  QRMenu: undefined;
 };
 
 export type TabParamList = {

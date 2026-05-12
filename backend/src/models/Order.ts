@@ -28,6 +28,7 @@ export interface IOrder extends Document {
   status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
   isParcel: boolean;
   customerName: string;
+  customerPhone: string;
   tableNumber: string;
   notes: string;
   createdAt: Date;
@@ -111,6 +112,10 @@ const OrderSchema: Schema = new Schema(
       default: 'pending',
     },
     customerName: {
+      type: String,
+      default: '',
+    },
+    customerPhone: {
       type: String,
       default: '',
     },
