@@ -10,11 +10,12 @@ import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { io, Socket } from 'socket.io-client';
 import { RootStackParamList, TabParamList, DailyReport } from '../types';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
-import { getDailyReport, getProducts, getCategories, getStoredHotelId, getSocketUrl, getLowStockProducts, createOrder } from '../services/api';
+import { getDailyReport, getProducts, getCategories, getStoredHotelId, getSocketUrl, getLowStockProducts, createOrder, getOrder } from '../services/api';
 import { flushQueue, getQueue } from '../utils/offlineQueue';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { printReceipt } from '../utils/receipt';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'Home'>,
@@ -22,7 +23,7 @@ type Props = CompositeScreenProps<
 >;
 
 interface Stats { todayOrders: number; todaySales: number; totalProducts: number; totalCategories: number }
-interface NewOrderAlert { orderNumber: string; tableNumber: string; customerName: string; grandTotal: number; itemCount: number }
+interface NewOrderAlert { _id?: string; orderNumber: string; tableNumber: string; customerName: string; grandTotal: number; itemCount: number }
 
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { settings } = useSettings();
@@ -37,6 +38,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [lowStockCount, setLowStockCount] = useState(0);
   const [offlineCount, setOfflineCount]   = useState(0);
   const socketRef = useRef<Socket | null>(null);
+  const settingsRef = useRef(settings);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   const cur = settings.currencySymbol || '₹';
   const fmt = (n: number) => `${cur}${n.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -85,11 +88,18 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       });
       socketRef.current = socket;
       socket.on('connect', () => socket.emit('join_hotel', hotelId));
-      socket.on('new_order', (data: NewOrderAlert) => {
+      socket.on('new_order', async (data: NewOrderAlert) => {
         if (!mounted) return;
         setNewOrderAlert(data);
         setOrderBadge(p => p + 1);
         fetchStats();
+        // Auto-print receipt when customer places order
+        try {
+          if (data._id) {
+            const order = await getOrder(data._id);
+            if (order) await printReceipt(order, settingsRef.current);
+          }
+        } catch { /* silent — print failure should not block order flow */ }
       });
     };
     connect();

@@ -168,6 +168,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     }
 
     io.to(`hotel_${req.hotelId}`).emit('new_order', {
+      _id: order._id,
       orderNumber: order.orderNumber,
       tableNumber: order.tableNumber,
       customerName: order.customerName,
