@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, Image, ScrollView, useWindowDimensions,
@@ -40,6 +40,8 @@ const CustomerCartScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const [placing, setPlacing] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
+  const [countdown, setCountdown] = useState(6);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
 
@@ -47,6 +49,23 @@ const CustomerCartScreen: React.FC = () => {
   const fmt = (n: number) => `${cur}${n.toFixed(0)}`;
 
   const billUrl = placedOrder ? `${BACKEND_URL}/bill/${placedOrder._id}` : '';
+
+  // Auto-navigate back to menu after order placed (KFC style)
+  useEffect(() => {
+    if (!placedOrder) return;
+    setCountdown(6);
+    let count = 6;
+    countdownRef.current = setInterval(() => {
+      count -= 1;
+      setCountdown(count);
+      if (count <= 0) {
+        clearInterval(countdownRef.current!);
+        setPlacedOrder(null);
+        navigation.reset({ index: 0, routes: [{ name: 'CustomerTabs' }] });
+      }
+    }, 1000);
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+  }, [placedOrder?._id]);
 
   const handlePlaceOrder = async () => {
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items from the menu first.'); return; }
@@ -207,10 +226,17 @@ const CustomerCartScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.menuBtn}
-              onPress={() => { setPlacedOrder(null); navigation.reset({ index: 0, routes: [{ name: 'CustomerTabs' }] }); }}
+              onPress={() => {
+                if (countdownRef.current) clearInterval(countdownRef.current);
+                setPlacedOrder(null);
+                navigation.reset({ index: 0, routes: [{ name: 'CustomerTabs' }] });
+              }}
             >
               <MaterialIcons name="restaurant-menu" size={20} color={Colors.primary} />
               <Text style={styles.menuBtnText}>Back to Menu</Text>
+              <View style={styles.countdownBadge}>
+                <Text style={styles.countdownText}>{countdown}</Text>
+              </View>
             </TouchableOpacity>
           </View>
 
@@ -482,6 +508,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: Colors.primary,
   },
   menuBtnText: { color: Colors.primary, fontSize: FontSize.lg, fontWeight: '800' },
+  countdownBadge: {
+    backgroundColor: Colors.primary, borderRadius: 14, width: 28, height: 28,
+    alignItems: 'center', justifyContent: 'center', marginLeft: 4,
+  },
+  countdownText: { color: Colors.white, fontSize: FontSize.sm, fontWeight: '900' },
 });
 
 export default CustomerCartScreen;
