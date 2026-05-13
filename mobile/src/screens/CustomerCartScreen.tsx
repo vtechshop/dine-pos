@@ -14,6 +14,7 @@ import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
 import { RootStackParamList, CartItem } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, API_BASE_URL } from '../utils/constants';
+import { printReceipt } from '../utils/receipt';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -90,6 +91,8 @@ const CustomerCartScreen: React.FC = () => {
       };
       clearCart();
       setPlacedOrder(snapshot);
+      // Auto-print receipt on customer's phone
+      printReceipt(order, settings).catch(() => {});
     } catch (e: any) {
       showAlert('Error', e.message || 'Failed to place order. Try again.');
     } finally { setPlacing(false); }
