@@ -8,6 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { io, Socket } from 'socket.io-client';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
 import { API_BASE_URL } from '../utils/constants';
+import { getToken, getStoredHotelId } from '../services/api';
 
 const SOCKET_URL = API_BASE_URL.replace('/api', '');
 
@@ -73,9 +74,15 @@ export default function ChatScreen() {
     fetchTables();
   }, []);
 
+  const authHeaders = async (): Promise<Record<string, string>> => {
+    const token = await getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchTables = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/chat`);
+      const headers = await authHeaders();
+      const res = await fetch(`${API_BASE_URL}/chat`, { headers });
       const data = await res.json();
       setTables(data);
     } catch (_) {}
@@ -86,19 +93,22 @@ export default function ChatScreen() {
     setSelectedTable(tableNumber);
     setMessages([]);
     try {
-      const res = await fetch(`${API_BASE_URL}/chat/${tableNumber}`);
+      const headers = await authHeaders();
+      const res = await fetch(`${API_BASE_URL}/chat/${tableNumber}`, { headers });
       const data = await res.json();
       setMessages(data);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
-      // Mark as read
-      await fetch(`${API_BASE_URL}/chat/${tableNumber}/read`, { method: 'PATCH' });
+      await fetch(`${API_BASE_URL}/chat/${tableNumber}/read`, { method: 'PATCH', headers });
       setTables(prev => prev.map(t => t._id === tableNumber ? { ...t, unread: 0 } : t));
     } catch (_) {}
   };
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!inputText.trim() || !selectedTable || !socketRef.current) return;
+    const hotelId = await getStoredHotelId();
+    if (!hotelId) return;
     socketRef.current.emit('admin_message', {
+      hotelId,
       tableNumber: selectedTable,
       message: inputText.trim(),
     });

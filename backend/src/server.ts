@@ -201,13 +201,14 @@ io.on('connection', (socket) => {
   });
 
   // Customer sends message
-  socket.on('customer_message', async (data: { tableNumber: string; message: string }) => {
+  socket.on('customer_message', async (data: { hotelId: string; tableNumber: string; message: string }) => {
     try {
-      if (!data?.tableNumber || !data?.message) return;
+      if (!data?.hotelId || !data?.tableNumber || !data?.message) return;
       const msg = await ChatMessage.create({
+        hotelId: data.hotelId,
         tableNumber: data.tableNumber,
         sender: 'customer',
-        message: String(data.message).substring(0, 500), // cap message length
+        message: String(data.message).substring(0, 500),
       });
       io.to(data.tableNumber).to('admin').emit('new_message', msg);
     } catch (err) {
@@ -216,10 +217,11 @@ io.on('connection', (socket) => {
   });
 
   // Admin replies to a table
-  socket.on('admin_message', async (data: { tableNumber: string; message: string }) => {
+  socket.on('admin_message', async (data: { hotelId: string; tableNumber: string; message: string }) => {
     try {
-      if (!data?.tableNumber || !data?.message) return;
+      if (!data?.hotelId || !data?.tableNumber || !data?.message) return;
       const msg = await ChatMessage.create({
+        hotelId: data.hotelId,
         tableNumber: data.tableNumber,
         sender: 'admin',
         message: String(data.message).substring(0, 500),

@@ -12,32 +12,50 @@ const fetchQRBase64 = async (upiId: string, amount: string, sizePx: number): Pro
   return await readAsStringAsync(uri, { encoding: EncodingType.Base64 });
 };
 
-// Request Android 12+ Bluetooth runtime permissions
+export const BT_PERMISSION_DENIED = 'BT_PERMISSION_DENIED';
+
+// Request Android Bluetooth runtime permissions.
+// Returns true only when both permissions are fully GRANTED.
+// Throws BT_PERMISSION_DENIED when denied or permanently denied so the
+// caller can open Settings instead of showing a confusing error.
 const requestBluetoothPermissions = async (): Promise<boolean> => {
   if (Platform.OS !== 'android') return true;
-  if (Platform.Version < 31) return true;
 
-  const granted = await PermissionsAndroid.requestMultiple([
-    PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-    PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-  ]);
+  const version = typeof Platform.Version === 'string'
+    ? parseInt(Platform.Version, 10)
+    : Platform.Version;
 
-  return (
-    granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED &&
-    granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED
-  );
+  if (version < 31) return true;
+
+  try {
+    const result = await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+    ]);
+
+    const connectGranted = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED;
+    const scanGranted    = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN]    === PermissionsAndroid.RESULTS.GRANTED;
+
+    if (!connectGranted || !scanGranted) {
+      throw new Error(BT_PERMISSION_DENIED);
+    }
+    return true;
+  } catch (e: any) {
+    throw e;
+  }
 };
 
-// Dynamically import to avoid crash if library not installed
+// Load native modules directly — bypasses library's index.js which crashes
+// if any of the three modules (BluetoothTscPrinter) is null
 let BluetoothEscposPrinter: any = null;
 let BluetoothManager: any = null;
 
 try {
-  const lib = require('react-native-bluetooth-escpos-printer');
-  BluetoothEscposPrinter = lib.BluetoothEscposPrinter;
-  BluetoothManager = lib.BluetoothManager;
+  const { NativeModules } = require('react-native');
+  if (NativeModules.BluetoothManager) BluetoothManager = NativeModules.BluetoothManager;
+  if (NativeModules.BluetoothEscposPrinter) BluetoothEscposPrinter = NativeModules.BluetoothEscposPrinter;
 } catch {
-  // library not available
+  // native modules not available
 }
 
 export interface BluetoothDevice {
@@ -50,7 +68,7 @@ export const getPairedDevices = async (): Promise<BluetoothDevice[]> => {
   if (!BluetoothManager) throw new Error('Bluetooth printing not available');
 
   const hasPermission = await requestBluetoothPermissions();
-  if (!hasPermission) throw new Error('Bluetooth permission denied. Please allow Bluetooth access and try again.');
+  if (!hasPermission) throw new Error('Bluetooth permission denied. Go to Settings → Apps → Dine POS → Permissions → Nearby devices → Allow. Then FORCE CLOSE this app and reopen it.');
 
   try {
     const paired = await BluetoothManager.enableBluetooth();

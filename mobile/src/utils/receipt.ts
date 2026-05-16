@@ -4,9 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { Order, Settings } from '../types';
 import { UPI_ID, UPI_NAME } from './constants';
-import { printReceiptBluetooth } from './bluetoothPrint';
+import { printReceiptBluetooth, connectPrinter } from './bluetoothPrint';
 
 const BT_PRINTER_KEY = '@hotel_pos_bt_printer';
+const BT_PRINTER_ADDRESS_KEY = '@hotel_pos_bt_printer_address';
 
 // mm to points (1pt = 0.3528mm)
 const mmToPt = (mm: number) => Math.round(mm / 0.3528);
@@ -238,9 +239,13 @@ export const printReceipt = async (
     return;
   }
 
-  // Bluetooth printer paired → use raw ESC/POS path
+  // Bluetooth printer paired → reconnect + print via ESC/POS
   const savedPrinter = await AsyncStorage.getItem(BT_PRINTER_KEY);
   if (savedPrinter) {
+    const savedAddress = await AsyncStorage.getItem(BT_PRINTER_ADDRESS_KEY);
+    if (savedAddress) {
+      await connectPrinter(savedAddress);
+    }
     await printReceiptBluetooth(order, settings);
     return;
   }

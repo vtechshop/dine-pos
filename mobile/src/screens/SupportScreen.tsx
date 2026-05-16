@@ -10,7 +10,7 @@ import { io, Socket } from 'socket.io-client';
 import { RootStackParamList } from '../types';
 import { showAlert } from '../utils/alert';
 import { useSettings } from '../context/SettingsContext';
-import { raiseTicket, getMyTickets, replyToTicket, Ticket } from '../services/api';
+import { raiseTicket, getMyTickets, replyToTicket, Ticket, getToken, getStoredHotelId } from '../services/api';
 import { Colors, FontSize, Spacing, BorderRadius, API_BASE_URL } from '../utils/constants';
 
 const SOCKET_URL = API_BASE_URL.replace('/api', '');
@@ -102,9 +102,15 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
     return () => { socket.disconnect(); };
   }, [selectedChatTable]);
 
+  const chatAuthHeaders = async (): Promise<Record<string, string>> => {
+    const token = await getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchChatTables = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/chat`);
+      const headers = await chatAuthHeaders();
+      const res = await fetch(`${API_BASE_URL}/chat`, { headers });
       const data = await res.json();
       setChatTables(data);
       const total = data.reduce((s: number, t: any) => s + (t.unread || 0), 0);
@@ -116,18 +122,21 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
     setSelectedChatTable(tableNum);
     setChatMessages([]);
     try {
-      const res = await fetch(`${API_BASE_URL}/chat/${tableNum}`);
+      const headers = await chatAuthHeaders();
+      const res = await fetch(`${API_BASE_URL}/chat/${tableNum}`, { headers });
       const data = await res.json();
       setChatMessages(data);
       setTimeout(() => chatListRef.current?.scrollToEnd({ animated: false }), 100);
-      await fetch(`${API_BASE_URL}/chat/${tableNum}/read`, { method: 'PATCH' });
+      await fetch(`${API_BASE_URL}/chat/${tableNum}/read`, { method: 'PATCH', headers });
       setChatTables(prev => prev.map((t: any) => t._id === tableNum ? { ...t, unread: 0 } : t));
     } catch (_) {}
   };
 
-  const sendChatReply = () => {
+  const sendChatReply = async () => {
     if (!chatInput.trim() || !selectedChatTable || !socketRef.current) return;
-    socketRef.current.emit('admin_message', { tableNumber: selectedChatTable, message: chatInput.trim() });
+    const hotelId = await getStoredHotelId();
+    if (!hotelId) return;
+    socketRef.current.emit('admin_message', { hotelId, tableNumber: selectedChatTable, message: chatInput.trim() });
     setChatInput('');
   };
 

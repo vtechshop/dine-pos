@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   StatusBar,
   Alert,
+  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -21,10 +22,11 @@ import { useCart } from '../context/CartContext';
 import { registerHotel, clearApiUrlCache, seedData } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../types';
-import { getPairedDevices, connectPrinter, BluetoothDevice } from '../utils/bluetoothPrint';
+import { getPairedDevices, connectPrinter, BluetoothDevice, BT_PERMISSION_DENIED } from '../utils/bluetoothPrint';
 
 const API_URL_STORAGE_KEY = '@hotel_pos_api_base_url';
 const BT_PRINTER_KEY = '@hotel_pos_bt_printer';
+const BT_PRINTER_ADDRESS_KEY = '@hotel_pos_bt_printer_address';
 
 const SettingsScreen: React.FC = () => {
   const { settings, saveSettings, loading } = useSettings();
@@ -103,7 +105,18 @@ const SettingsScreen: React.FC = () => {
       }
       setBtDevices(devices);
     } catch (e: any) {
-      showAlert('Bluetooth Error', e.message || 'Could not scan for printers');
+      if (e.message === BT_PERMISSION_DENIED) {
+        Alert.alert(
+          'Permission Required',
+          'Nearby devices permission is needed to scan for Bluetooth printers.\n\nTap "Open Settings" → Permissions → Nearby devices → Allow.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+      } else {
+        showAlert('Bluetooth Error', e.message || 'Could not scan for printers');
+      }
     } finally {
       setScanningBt(false);
     }
@@ -113,6 +126,7 @@ const SettingsScreen: React.FC = () => {
     try {
       await connectPrinter(device.address);
       await AsyncStorage.setItem(BT_PRINTER_KEY, device.name + ' (' + device.address + ')');
+      await AsyncStorage.setItem(BT_PRINTER_ADDRESS_KEY, device.address);
       setConnectedPrinter(device.name + ' (' + device.address + ')');
       setBtDevices([]);
       showAlert('Connected', device.name + ' is ready to print');
