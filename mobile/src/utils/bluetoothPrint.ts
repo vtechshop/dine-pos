@@ -95,6 +95,9 @@ export const printReceiptBluetooth = async (
   const divider  = '-'.repeat(W);
   const dividerH = '='.repeat(W);
 
+  // DEBUG LINE — remove after fixing tablet alignment
+  await P.printText(`W=${W} (${settings.printerWidth})\n`, {});
+
   // Use Rs. — ESC/POS printers use ASCII charset; ₹ renders as ?
   const cur = 'Rs.';
 
