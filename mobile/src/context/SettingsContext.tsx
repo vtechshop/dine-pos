@@ -27,7 +27,7 @@ const defaultSettings: Settings = {
   defaultTaxPercent: 5,
   currency: 'INR',
   currencySymbol: '₹',
-  printerWidth: '80mm',
+  printerWidth: '58mm',
   footerText: 'Thank you! Visit again!',
   isSetupComplete: false,
 };
