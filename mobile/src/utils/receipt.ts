@@ -59,22 +59,24 @@ export const generateReceiptHTML = (order: Order, settings: Settings): string =>
 <html>
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=${isWeb ? 220 : is58mm ? 164 : 227}, initial-scale=1, maximum-scale=1, user-scalable=no">
     <style>
       @page {
         size: ${isWeb ? '58mm auto' : `${settings.printerWidth} auto`};
         margin: 0;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
+      html { width: ${isWeb ? '100%' : is58mm ? '164px' : '227px'}; }
       body {
         font-family: 'Courier New', 'Lucida Console', monospace;
-        width: ${receiptWidth};
-        max-width: 100%;
-        margin: 0 auto;
-        padding: 6px;
+        width: ${isWeb ? '100%' : is58mm ? '164px' : '227px'};
+        max-width: ${isWeb ? '100%' : is58mm ? '164px' : '227px'};
+        margin: 0;
+        padding: 4px;
         font-size: ${fs.base}px;
         color: #000;
         background: #fff;
+        overflow: hidden;
       }
       .hotel-name {
         text-align: center;
@@ -257,7 +259,8 @@ export const printReceipt = async (
   // printToFileAsync respects width + @page CSS → creates a proper thermal-sized PDF.
   // Sharing via the native share sheet lets the user open it in any printer app
   // (RawBT, Mobile Receipt Printer, etc.) without the Android "Letter" override.
-  const { uri } = await Print.printToFileAsync({ html, width: pageWidth });
+  // Pass explicit width+height so tablet WebView renders at the same scale as phone.
+  const { uri } = await Print.printToFileAsync({ html, width: pageWidth, height: pageWidth * 10 });
 
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(uri, {
