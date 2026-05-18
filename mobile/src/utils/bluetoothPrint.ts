@@ -154,23 +154,26 @@ export const printReceiptBluetooth = async (
   await P.printText(divider + '\n', {});
 
   // ── ITEMS HEADER ─────────────────────────────────────────
-  // 2-column layout: Item name (left) | xN Rs.XXX (right)
-  await P.printText('Item' + 'Amt'.padStart(W - 4) + '\n', {});
+  // 3-column: name | qty | amt
+  // 58mm(W=32): nameCol=18, qtyCol=4, amtCol=10
+  // 80mm(W=42): nameCol=28, qtyCol=4, amtCol=10
+  const amtCol  = 10;
+  const qtyCol  = 4;
+  const nameCol = W - qtyCol - amtCol;
+  await P.printText(
+    'Item'.padEnd(nameCol) + 'Qty'.padStart(qtyCol) + 'Amt'.padStart(amtCol) + '\n', {}
+  );
   await P.printText(divider + '\n', {});
 
   // ── ITEMS ────────────────────────────────────────────────
   for (const item of order.items) {
     const rawName = clean(item.productName);
-    const amtStr  = `x${item.quantity}  ${cur}${(item.price * item.quantity).toFixed(2)}`;
-    const gap = W - rawName.length - amtStr.length;
-    if (gap >= 1) {
-      await P.printText(rawName + ' '.repeat(gap) + amtStr + '\n', {});
-    } else {
-      // Name too long — truncate and put amount on next line right-aligned
-      const maxName = W - amtStr.length - 1;
-      const name = rawName.length > maxName ? rawName.substring(0, maxName - 1) + '.' : rawName;
-      await P.printText(name.padEnd(maxName) + ' ' + amtStr + '\n', {});
-    }
+    const qty     = ('x' + item.quantity).padStart(qtyCol);
+    const amt     = (cur + (item.price * item.quantity).toFixed(2)).padStart(amtCol);
+    const name    = rawName.length > nameCol
+      ? rawName.substring(0, nameCol - 1) + '.'
+      : rawName.padEnd(nameCol);
+    await P.printText(name + qty + amt + '\n', {});
   }
   await P.printText(divider + '\n', {});
 
@@ -190,7 +193,6 @@ export const printReceiptBluetooth = async (
   // ── UPI QR ───────────────────────────────────────────────
   await P.printText('\n', {});
   await P.printText(cLine('=== Scan & Pay ===') + '\n', {});
-  await P.printText(cLine('UPI: ' + activeUpiId) + '\n', {});
   await P.printText('\n', {});
   try {
     // Fill paper width — left=0, width=full paper dot width minus tiny margin
@@ -203,7 +205,8 @@ export const printReceiptBluetooth = async (
   } catch {
     await P.printText(cLine(activeUpiId) + '\n', {});
   }
-  await P.printText(cLine('Thank you! Visit again!') + '\n', {});
+  // UPI ID — wrap if longer than W
+  await P.printText(cBlock('UPI: ' + activeUpiId), {});
   await P.printText(divider + '\n', {});
 
   // ── FOOTER ───────────────────────────────────────────────
