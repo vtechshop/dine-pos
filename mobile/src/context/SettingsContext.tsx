@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Settings } from '../types';
 import * as api from '../services/api';
+
+const SETTINGS_CACHE_KEY = '@hotel_pos_settings_cache';
 
 interface SettingsContextType {
   settings: Settings;
@@ -40,10 +43,18 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshSettings = async () => {
     try {
+      // Load cached settings first so UI is instant even if backend is sleeping
+      const cached = await AsyncStorage.getItem(SETTINGS_CACHE_KEY);
+      if (cached) setSettings({ ...defaultSettings, ...JSON.parse(cached) });
+    } catch {}
+
+    try {
       const data = await api.getSettings();
       setSettings(data);
-    } catch (error) {
-      console.log('Using default settings (server unavailable)');
+      // Update cache with latest from server
+      await AsyncStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(data));
+    } catch {
+      console.log('Using cached/default settings (server unavailable)');
     } finally {
       setLoading(false);
     }
@@ -53,6 +64,8 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
     try {
       const updated = await api.updateSettings(data);
       setSettings(updated);
+      // Keep cache in sync
+      await AsyncStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(updated));
     } catch (error) {
       throw error;
     }
