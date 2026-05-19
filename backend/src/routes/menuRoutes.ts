@@ -54,9 +54,14 @@ router.get('/menu', async (req: Request, res: Response) => {
 
     const settings = settingsDoc || { hotelName: 'My Hotel', address: '', phone: '', currencySymbol: '₹' };
 
+    // Resolve hotelId: prefer products (always have it), fall back to settings
+    const resolvedHotelId =
+      (products[0] as any)?.hotelId?.toString() ||
+      (settingsDoc as any)?.hotelId?.toString();
+
     res.json({
       hotel: {
-        id:       (settingsDoc as any)?.hotelId?.toString(),
+        id:       resolvedHotelId,
         name:     settings.hotelName,
         address:  settings.address,
         phone:    settings.phone,
@@ -77,13 +82,28 @@ router.post('/orders', async (req: Request, res: Response) => {
   try {
     const { hotel, ...body } = req.body;
 
-    // Resolve hotelId: from body.hotel, or fall back to the first hotel in DB
+    // Resolve hotelId using best available source (most reliable first)
     let hotelId: string | undefined;
+
+    // 1. From the payload (menu response included it)
     if (hotel && mongoose.Types.ObjectId.isValid(hotel)) {
       hotelId = hotel;
-    } else {
-      const settings = await Settings.findOne({});
-      hotelId = settings?.hotelId?.toString();
+    }
+
+    // 2. Look it up from the first ordered product (always correct)
+    if (!hotelId && body.items?.length > 0) {
+      const firstProductId = body.items[0].product;
+      if (firstProductId && mongoose.Types.ObjectId.isValid(firstProductId)) {
+        const prod = await Product.findById(firstProductId).select('hotelId').lean();
+        hotelId = (prod as any)?.hotelId?.toString();
+      }
+    }
+
+    // 3. Last resort — first hotel in DB (single-hotel setup)
+    if (!hotelId) {
+      const Hotel = (await import('../models/Hotel')).default;
+      const h = await Hotel.findOne({}).select('_id').lean();
+      hotelId = (h as any)?._id?.toString();
     }
 
     if (!hotelId) {
