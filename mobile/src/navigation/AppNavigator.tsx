@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList, TabParamList, CustomerTabParamList } from '../types';
 import { Colors } from '../utils/constants';
 import { useCart } from '../context/CartContext';
@@ -51,6 +52,7 @@ const TAB_ICONS: Record<string, keyof typeof MaterialIcons.glyphMap> = {
 // ── Admin Tab Navigator ───────────────────────────────────────────────────────
 const TabNavigator = () => {
   const { width } = useWindowDimensions();
+  const { bottom } = useSafeAreaInsets();
   const isSmall = width < 380;
 
   return (
@@ -70,8 +72,8 @@ const TabNavigator = () => {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
           borderTopWidth: 1.5,
-          height: isSmall ? 60 : 70,
-          paddingBottom: isSmall ? 8 : 12,
+          height: (isSmall ? 60 : 70) + bottom,
+          paddingBottom: (isSmall ? 8 : 12) + bottom,
           paddingTop: isSmall ? 4 : 6,
           shadowColor: '#8B3A1A',
           shadowOffset: { width: 0, height: -3 },
@@ -100,6 +102,7 @@ const TabNavigator = () => {
 const CustomerTabNavigator = () => {
   const { itemCount } = useCart();
   const { width } = useWindowDimensions();
+  const { bottom } = useSafeAreaInsets();
   const isSmall = width < 380;
 
   return (
@@ -112,8 +115,8 @@ const CustomerTabNavigator = () => {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
           borderTopWidth: 1,
-          height: isSmall ? 58 : 68,
-          paddingBottom: isSmall ? 6 : 10,
+          height: (isSmall ? 58 : 68) + bottom,
+          paddingBottom: (isSmall ? 6 : 10) + bottom,
           paddingTop: isSmall ? 4 : 6,
         },
         tabBarLabelStyle: {
@@ -159,6 +162,7 @@ const CustomerTabNavigator = () => {
 // ── Root Navigator ────────────────────────────────────────────────────────────
 const AppNavigator = () => {
   const { isLoggedIn, isAuthLoading } = useAuth();
+  const { top } = useSafeAreaInsets();
 
   if (isAuthLoading) {
     return (
@@ -171,7 +175,7 @@ const AppNavigator = () => {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: true, gestureDirection: 'horizontal' }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: true, gestureDirection: 'horizontal', contentStyle: { paddingTop: top, backgroundColor: Colors.background } }}>
         {!isLoggedIn ? (
           <>
             <Stack.Screen name="Splash"               component={SplashScreen} />
@@ -197,6 +201,7 @@ const AppNavigator = () => {
                 headerStyle: { backgroundColor: Colors.surface },
                 headerTintColor: Colors.text,
                 animation: 'slide_from_bottom',
+                contentStyle: { paddingTop: 0, backgroundColor: Colors.background },
               }}
             />
             <Stack.Screen

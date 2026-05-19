@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,54 +7,41 @@ import {
   TouchableOpacity,
   TextInput,
   Share,
-  FlatList,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSettings } from '../context/SettingsContext';
 import { Colors } from '../utils/constants';
+import { API_BASE_URL } from '../utils/constants';
 
-const STORAGE_KEY = 'qr_menu_ip';
+// Derive the menu base URL from the API URL: strip /api → /menu
+const DEFAULT_MENU_BASE = API_BASE_URL.replace(/\/api\/?$/, '/menu');
+
 const TABLE_COUNT_KEY = 'qr_table_count';
+const CUSTOM_URL_KEY  = 'qr_custom_menu_base';
 
 export default function QRMenuScreen() {
   const { settings } = useSettings();
-  const [serverIP, setServerIP] = useState('');
-  const [port, setPort] = useState('5000');
-  const [editingIP, setEditingIP] = useState(false);
-  const [tempIP, setTempIP] = useState('');
-  const [tableCount, setTableCount] = useState(5);
+  const [tableCount,     setTableCount]     = useState(5);
   const [tempTableCount, setTempTableCount] = useState('5');
-  const [selectedTable, setSelectedTable] = useState<number | null>(null);
+  const [selectedTable,  setSelectedTable]  = useState<number | null>(null);
+  const [customBase,     setCustomBase]     = useState('');
+  const [editingURL,     setEditingURL]     = useState(false);
+  const [tempURL,        setTempURL]        = useState('');
 
-  const menuBaseURL = serverIP ? `http://${serverIP}:${port}/menu` : '';
-  const tableURL = (t: number) => `${menuBaseURL}?table=${t}`;
+  const menuBase = customBase || DEFAULT_MENU_BASE;
+  const tableURL = (t: number) => `${menuBase}?table=${t}`;
 
   useEffect(() => {
     Promise.all([
-      AsyncStorage.getItem(STORAGE_KEY),
       AsyncStorage.getItem(TABLE_COUNT_KEY),
-    ]).then(([ip, tc]) => {
-      if (ip) {
-        const [i, p] = ip.split(':');
-        setServerIP(i);
-        if (p) setPort(p);
-      }
-      if (tc) {
-        setTableCount(parseInt(tc, 10));
-        setTempTableCount(tc);
-      }
+      AsyncStorage.getItem(CUSTOM_URL_KEY),
+    ]).then(([tc, cu]) => {
+      if (tc) { setTableCount(parseInt(tc, 10)); setTempTableCount(tc); }
+      if (cu) setCustomBase(cu);
     });
   }, []);
-
-  const saveIP = async () => {
-    const trimmed = tempIP.trim();
-    if (!trimmed) return;
-    setServerIP(trimmed);
-    setEditingIP(false);
-    await AsyncStorage.setItem(STORAGE_KEY, `${trimmed}:${port}`);
-  };
 
   const saveTableCount = async () => {
     const n = parseInt(tempTableCount, 10);
@@ -63,8 +50,25 @@ export default function QRMenuScreen() {
     await AsyncStorage.setItem(TABLE_COUNT_KEY, String(n));
   };
 
+  const saveURL = async () => {
+    const url = tempURL.trim().replace(/\/$/, '');
+    setCustomBase(url);
+    setEditingURL(false);
+    if (url) {
+      await AsyncStorage.setItem(CUSTOM_URL_KEY, url);
+    } else {
+      await AsyncStorage.removeItem(CUSTOM_URL_KEY);
+    }
+  };
+
+  const resetURL = async () => {
+    setCustomBase('');
+    setTempURL('');
+    setEditingURL(false);
+    await AsyncStorage.removeItem(CUSTOM_URL_KEY);
+  };
+
   const shareTable = async (tableNum: number) => {
-    if (!menuBaseURL) return;
     try {
       await Share.share({
         message: `Table ${tableNum} Menu: ${tableURL(tableNum)}`,
@@ -82,8 +86,7 @@ export default function QRMenuScreen() {
         <MaterialIcons name="qr-code-2" size={32} color={Colors.primary} />
         <Text style={styles.title}>Table QR Codes</Text>
         <Text style={styles.subtitle}>
-          One QR per table. Customers scan → view menu → place order.{'\n'}
-          Works offline after first scan!
+          Customers scan → view menu → place order instantly
         </Text>
       </View>
 
@@ -92,50 +95,55 @@ export default function QRMenuScreen() {
         <Text style={styles.infoTitle}>⚡ How It Works</Text>
         {[
           '1️⃣  Print QR code and place on each table',
-          '2️⃣  Customer scans with Google Lens (needs WiFi once)',
-          '3️⃣  Menu loads & is cached offline automatically',
-          '4️⃣  Customer adds items and places order',
-          '5️⃣  Order appears in your Admin → Orders tab instantly',
+          '2️⃣  Customer scans with camera (works over internet)',
+          '3️⃣  Menu opens in browser — add items & place order',
+          '4️⃣  Order appears instantly in Admin → Orders tab',
         ].map((step, i) => (
           <Text key={i} style={styles.infoStep}>{step}</Text>
         ))}
       </View>
 
-      {/* Server IP */}
+      {/* Menu URL */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Server IP Address</Text>
-        {editingIP ? (
-          <View style={styles.editRow}>
+        <Text style={styles.sectionTitle}>Menu URL</Text>
+        {editingURL ? (
+          <View>
             <TextInput
               style={styles.input}
-              value={tempIP}
-              onChangeText={setTempIP}
-              placeholder="192.168.1.5"
+              value={tempURL}
+              onChangeText={setTempURL}
+              placeholder={DEFAULT_MENU_BASE}
               placeholderTextColor={Colors.textMuted}
-              keyboardType="numeric"
+              autoCapitalize="none"
+              autoCorrect={false}
               autoFocus
             />
-            <TextInput
-              style={[styles.input, { width: 80, marginLeft: 8 }]}
-              value={port}
-              onChangeText={setPort}
-              placeholder="5000"
-              placeholderTextColor={Colors.textMuted}
-              keyboardType="numeric"
-            />
-            <TouchableOpacity style={styles.saveBtn} onPress={saveIP}>
-              <Text style={styles.saveBtnText}>Save</Text>
-            </TouchableOpacity>
+            <Text style={styles.hint}>Leave blank to use the default cloud URL</Text>
+            <View style={styles.btnRow}>
+              <TouchableOpacity style={styles.saveBtn} onPress={saveURL}>
+                <Text style={styles.saveBtnText}>Save</Text>
+              </TouchableOpacity>
+              {customBase ? (
+                <TouchableOpacity style={styles.resetBtn} onPress={resetURL}>
+                  <Text style={styles.resetBtnText}>Reset to default</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
         ) : (
           <TouchableOpacity
-            style={styles.ipDisplay}
-            onPress={() => { setTempIP(serverIP); setEditingIP(true); }}>
-            <MaterialIcons name="edit" size={16} color={Colors.primary} style={{ marginRight: 8 }} />
-            <Text style={[styles.ipText, !serverIP && { color: Colors.textMuted }]}>
-              {serverIP ? `${serverIP}:${port}` : 'Tap to set IP (run: ipconfig)'}
-            </Text>
+            style={styles.urlDisplay}
+            onPress={() => { setTempURL(customBase); setEditingURL(true); }}>
+            <MaterialIcons name="link" size={16} color={Colors.primary} style={{ marginRight: 8 }} />
+            <Text style={styles.urlText} numberOfLines={2}>{menuBase}</Text>
+            <MaterialIcons name="edit" size={14} color={Colors.textMuted} style={{ marginLeft: 8 }} />
           </TouchableOpacity>
+        )}
+        {!customBase && (
+          <View style={styles.autoTag}>
+            <MaterialIcons name="cloud-done" size={14} color={Colors.success} />
+            <Text style={styles.autoTagText}>Auto-detected from your server — no setup needed</Text>
+          </View>
         )}
       </View>
 
@@ -154,89 +162,67 @@ export default function QRMenuScreen() {
           <TouchableOpacity style={styles.saveBtn} onPress={saveTableCount}>
             <Text style={styles.saveBtnText}>Set</Text>
           </TouchableOpacity>
-          <Text style={styles.hint}>  (max 50 tables)</Text>
+          <Text style={[styles.hint, { marginLeft: 8 }]}>max 50 tables</Text>
         </View>
       </View>
 
       {/* Table QR grid */}
-      {menuBaseURL ? (
-        <View>
-          <Text style={styles.sectionTitle}>Table QR Codes</Text>
-          <Text style={[styles.hint, { marginBottom: 12 }]}>
-            Tap a table to expand QR. Long press to share link.
-          </Text>
+      <View>
+        <Text style={styles.sectionTitle}>Table QR Codes</Text>
+        <Text style={[styles.hint, { marginBottom: 12 }]}>
+          Tap to expand QR • Long press to share link
+        </Text>
 
-          {tables.map((t) => (
-            <TouchableOpacity
-              key={t}
-              style={[styles.tableCard, selectedTable === t && styles.tableCardActive]}
-              onPress={() => setSelectedTable(selectedTable === t ? null : t)}
-              onLongPress={() => shareTable(t)}>
+        {tables.map((t) => (
+          <TouchableOpacity
+            key={t}
+            style={[styles.tableCard, selectedTable === t && styles.tableCardActive]}
+            onPress={() => setSelectedTable(selectedTable === t ? null : t)}
+            onLongPress={() => shareTable(t)}>
 
-              {/* Table row header */}
-              <View style={styles.tableRow}>
-                <View style={styles.tableNumBadge}>
-                  <MaterialIcons name="table-restaurant" size={16} color={Colors.primary} />
-                  <Text style={styles.tableNumText}>Table {t}</Text>
-                </View>
-                <Text style={styles.tableURL} numberOfLines={1}>
-                  {tableURL(t)}
-                </Text>
-                <MaterialIcons
-                  name={selectedTable === t ? 'expand-less' : 'expand-more'}
-                  size={22}
-                  color={Colors.textMuted}
-                />
+            <View style={styles.tableRow}>
+              <View style={styles.tableNumBadge}>
+                <MaterialIcons name="table-restaurant" size={16} color={Colors.primary} />
+                <Text style={styles.tableNumText}>Table {t}</Text>
               </View>
+              <Text style={styles.tableURL} numberOfLines={1}>{tableURL(t)}</Text>
+              <MaterialIcons
+                name={selectedTable === t ? 'expand-less' : 'expand-more'}
+                size={22}
+                color={Colors.textMuted}
+              />
+            </View>
 
-              {/* Expanded QR */}
-              {selectedTable === t && (
-                <View style={styles.qrExpanded}>
-                  <View style={styles.qrWrapper}>
-                    <QRCode
-                      value={tableURL(t)}
-                      size={200}
-                      backgroundColor="#ffffff"
-                      color="#000000"
-                    />
-                  </View>
-                  <Text style={styles.qrLabel}>
-                    {settings.hotelName || 'Our Menu'} — Table {t}
-                  </Text>
-                  <Text style={styles.qrSub}>Scan to view menu & order</Text>
-                  <TouchableOpacity
-                    style={styles.shareBtn}
-                    onPress={() => shareTable(t)}>
-                    <MaterialIcons name="share" size={16} color="#fff" />
-                    <Text style={styles.shareBtnText}>Share Table {t} Link</Text>
-                  </TouchableOpacity>
+            {selectedTable === t && (
+              <View style={styles.qrExpanded}>
+                <View style={styles.qrWrapper}>
+                  <QRCode
+                    value={tableURL(t)}
+                    size={200}
+                    backgroundColor="#ffffff"
+                    color="#000000"
+                  />
                 </View>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-      ) : (
-        <View style={styles.emptyQR}>
-          <MaterialIcons name="wifi-find" size={48} color={Colors.textMuted} />
-          <Text style={styles.emptyText}>Set your server IP above{'\n'}to generate table QR codes</Text>
-          <View style={styles.hintBox}>
-            <Text style={styles.hintBoxText}>
-              Open terminal and run:{'\n'}
-              <Text style={{ color: Colors.primary }}>ipconfig</Text>{'\n'}
-              Copy the "IPv4 Address" value
-            </Text>
-          </View>
-        </View>
-      )}
+                <Text style={styles.qrLabel}>
+                  {settings.hotelName || 'Our Menu'} — Table {t}
+                </Text>
+                <Text style={styles.qrSub}>Scan to view menu & order</Text>
+                <TouchableOpacity style={styles.shareBtn} onPress={() => shareTable(t)}>
+                  <MaterialIcons name="share" size={16} color="#fff" />
+                  <Text style={styles.shareBtnText}>Share Table {t} Link</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
 
-      {menuBaseURL ? (
-        <View style={styles.printTip}>
-          <MaterialIcons name="print" size={16} color={Colors.textMuted} />
-          <Text style={styles.printText}>
-            Take a screenshot of each QR, print & laminate them. Place on tables.
-          </Text>
-        </View>
-      ) : null}
+      <View style={styles.printTip}>
+        <MaterialIcons name="print" size={16} color={Colors.textMuted} />
+        <Text style={styles.printText}>
+          Take a screenshot of each QR, print & laminate. Place on tables.
+        </Text>
+      </View>
     </ScrollView>
   );
 }
@@ -270,23 +256,34 @@ const styles = StyleSheet.create({
   input: {
     flex: 1, backgroundColor: Colors.card, color: Colors.text,
     borderRadius: 10, borderWidth: 1, borderColor: Colors.primary,
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 15,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
   },
+  hint: { fontSize: 12, color: Colors.textMuted, marginTop: 4 },
+
+  btnRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   saveBtn: {
     backgroundColor: Colors.primary, borderRadius: 10,
     paddingHorizontal: 16, paddingVertical: 10, marginLeft: 8,
   },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  hint: { fontSize: 12, color: Colors.textMuted, marginLeft: 8 },
+  resetBtn: {
+    borderRadius: 10, borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 16, paddingVertical: 10,
+  },
+  resetBtnText: { color: Colors.textMuted, fontSize: 14 },
 
-  ipDisplay: {
+  urlDisplay: {
     backgroundColor: Colors.card, borderRadius: 10,
     borderWidth: 1, borderColor: Colors.border,
     padding: 12, flexDirection: 'row', alignItems: 'center',
   },
-  ipText: { fontSize: 15, color: Colors.text },
+  urlText: { flex: 1, fontSize: 13, color: Colors.text },
 
-  // Table cards
+  autoTag: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6,
+  },
+  autoTagText: { fontSize: 12, color: Colors.success },
+
   tableCard: {
     backgroundColor: Colors.card,
     borderRadius: 12,
@@ -324,13 +321,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingVertical: 10,
   },
   shareBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-
-  emptyQR: { alignItems: 'center', paddingVertical: 40, gap: 12 },
-  emptyText: { fontSize: 14, color: Colors.textMuted, textAlign: 'center', lineHeight: 22 },
-  hintBox: {
-    backgroundColor: Colors.card, borderRadius: 10, padding: 14, marginTop: 4,
-  },
-  hintBoxText: { fontSize: 12, color: Colors.textMuted, textAlign: 'center', lineHeight: 20 },
 
   printTip: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 10,

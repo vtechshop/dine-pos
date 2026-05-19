@@ -2,28 +2,47 @@ import { Router, Request, Response } from 'express';
 import Product from '../models/Product';
 import Category from '../models/Category';
 import Settings from '../models/Settings';
+import Order from '../models/Order';
 import mongoose from 'mongoose';
 
 const router = Router();
 
+// ─── Helper: resolve hotelId from query param ─────────────────────────────────
+const resolveHotelId = async (hotelParam?: string): Promise<mongoose.Types.ObjectId | undefined> => {
+  if (hotelParam && mongoose.Types.ObjectId.isValid(hotelParam)) {
+    return new mongoose.Types.ObjectId(hotelParam);
+  }
+  return undefined;
+};
+
+// ─── Helper: generate order number ───────────────────────────────────────────
+const generateOrderNumber = async (hotelId: string): Promise<string> => {
+  const today = new Date();
+  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+  const prefix = `ORD-${dateStr}`;
+  const startOfDay = new Date(today); startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay   = new Date(today); endOfDay.setHours(23, 59, 59, 999);
+  const lastOrder = await Order.findOne({
+    hotelId, createdAt: { $gte: startOfDay, $lte: endOfDay },
+  }).sort({ createdAt: -1 });
+  let seq = 1;
+  if (lastOrder) seq = parseInt(lastOrder.orderNumber.split('-').pop() || '0') + 1;
+  return `${prefix}-${String(seq).padStart(3, '0')}`;
+};
+
 // GET /api/public/menu?hotel=<hotelId>
 // Public menu — no auth needed, used by customer kiosk / QR menu
-router.get('/', async (req: Request, res: Response) => {
+router.get('/menu', async (req: Request, res: Response) => {
   try {
-    const hotelIdParam = req.query.hotel as string | undefined;
+    const hotelId = await resolveHotelId(req.query.hotel as string | undefined);
 
-    let hotelId: mongoose.Types.ObjectId | undefined;
-    if (hotelIdParam && mongoose.Types.ObjectId.isValid(hotelIdParam)) {
-      hotelId = new mongoose.Types.ObjectId(hotelIdParam);
-    }
-
-    const catFilter: any = { isActive: true, isDeleted: false };
+    const catFilter:  any = { isActive: true, isDeleted: false };
     const prodFilter: any = { isAvailable: true, isDeleted: false };
     const settingsFilter: any = {};
 
     if (hotelId) {
-      catFilter.hotelId = hotelId;
-      prodFilter.hotelId = hotelId;
+      catFilter.hotelId    = hotelId;
+      prodFilter.hotelId   = hotelId;
       settingsFilter.hotelId = hotelId;
     }
 
@@ -37,9 +56,10 @@ router.get('/', async (req: Request, res: Response) => {
 
     res.json({
       hotel: {
-        name: settings.hotelName,
-        address: settings.address,
-        phone: settings.phone,
+        id:       (settingsDoc as any)?.hotelId?.toString(),
+        name:     settings.hotelName,
+        address:  settings.address,
+        phone:    settings.phone,
         currency: settings.currencySymbol,
       },
       categories,
@@ -48,6 +68,48 @@ router.get('/', async (req: Request, res: Response) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load menu' });
+  }
+});
+
+// POST /api/public/orders
+// Public order placement — no auth, used by QR menu customers
+router.post('/orders', async (req: Request, res: Response) => {
+  try {
+    const { hotel, ...body } = req.body;
+
+    // Resolve hotelId: from body.hotel, or fall back to the first hotel in DB
+    let hotelId: string | undefined;
+    if (hotel && mongoose.Types.ObjectId.isValid(hotel)) {
+      hotelId = hotel;
+    } else {
+      const settings = await Settings.findOne({});
+      hotelId = settings?.hotelId?.toString();
+    }
+
+    if (!hotelId) {
+      return res.status(400).json({ message: 'Hotel not found' });
+    }
+
+    const orderNumber = await generateOrderNumber(hotelId);
+    const order = new Order({ ...body, hotelId, orderNumber });
+    await order.save();
+
+    // Emit socket event so admin sees the order instantly
+    try {
+      const { io } = await import('../server');
+      io.to(`hotel_${hotelId}`).emit('new_order', {
+        _id:          order._id,
+        orderNumber:  order.orderNumber,
+        tableNumber:  order.tableNumber,
+        customerName: order.customerName,
+        grandTotal:   order.grandTotal,
+        itemCount:    order.items.length,
+      });
+    } catch (_) {}
+
+    res.status(201).json(order);
+  } catch (error) {
+    res.status(400).json({ message: 'Invalid order data', error });
   }
 });
 

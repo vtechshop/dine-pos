@@ -7,6 +7,7 @@
 
   // ─── State ────────────────────────────────────────────────
   let menuData = null;
+  let hotelId = null;
   let activeCategory = 'all';
   let searchQuery = '';
   let isOffline = !navigator.onLine;
@@ -79,6 +80,7 @@
       const res = await fetch('/api/public/menu');
       if (!res.ok) throw new Error();
       menuData = await res.json();
+      if (menuData.hotel?.id) hotelId = menuData.hotel.id;
       if (menuData.offline) isOffline = true;
       render();
     } catch {
@@ -106,6 +108,7 @@
     const grandTotal = subtotal + taxTotal;
 
     const payload = {
+      hotel: hotelId,
       items,
       subtotal,
       taxTotal,
@@ -117,7 +120,7 @@
       notes: `Order from Table ${tableNumber || 'Walk-in'} via QR Menu`,
     };
 
-    const res = await fetch('/api/orders', {
+    const res = await fetch('/api/public/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

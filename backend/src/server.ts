@@ -81,7 +81,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/seed', seedRoutes);
-app.use('/api/public/menu', menuRoutes);
+app.use('/api/public', menuRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/tables', tableRoutes);
 app.use('/api/reservations', reservationRoutes);

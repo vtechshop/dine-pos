@@ -7,9 +7,11 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "eas-build-post-install": "echo 'build hooks ok'"
+    "postinstall": "patch-package",
+    "eas-build-post-install": "patch-package"
   },
   "dependencies": {
+    "@expo/ngrok": "4.1.0",
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.15.5",
@@ -25,6 +27,7 @@
     "react": "19.2.0",
     "react-dom": "^19.2.0",
     "react-native": "0.83.2",
+    "react-native-bluetooth-escpos-printer": "^0.0.5",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-qrcode-svg": "^6.3.21",
     "react-native-reanimated": "^4.3.1",
