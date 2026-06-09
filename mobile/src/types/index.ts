@@ -58,8 +58,10 @@ export interface Order {
     card?: number;
   };
   status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
+  orderSource?: 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr';
   isParcel: boolean;
   customerName: string;
+  customerPhone: string;
   tableNumber: string;
   notes: string;
   createdAt: string;
@@ -89,6 +91,10 @@ export interface Settings {
   printerWidth: '58mm' | '80mm';
   footerText: string;
   isSetupComplete: boolean;
+  isPremium?: boolean;
+  premiumPlan?: string;
+  premiumExpiry?: string | null;
+  trialEndsAt?: string | null;
 }
 
 // Daily Report
@@ -97,11 +103,20 @@ export interface DailyReport {
   totalSales: number;
   totalTax: number;
   totalOrders: number;
+  parcelOrders?: number;
+  totalDiscount?: number;
   paymentBreakdown: {
     cash: number;
     upi: number;
     card: number;
     split: number;
+  };
+  sourceBreakdown?: {
+    'dine-in': { orders: number; revenue: number };
+    takeaway:  { orders: number; revenue: number };
+    swiggy:    { orders: number; revenue: number };
+    zomato:    { orders: number; revenue: number };
+    qr:        { orders: number; revenue: number };
   };
 }
 
@@ -138,6 +153,10 @@ export interface Hotel {
   resetRequested?: boolean;
   resetRequestedAt?: string | null;
   resetFulfilledAt?: string | null;
+  isPremium?: boolean;
+  premiumPlan?: string;
+  premiumExpiry?: string | null;
+  trialEndsAt?: string | null;
   createdAt: string;
 }
 

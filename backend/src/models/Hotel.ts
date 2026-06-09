@@ -44,6 +44,12 @@ export interface IHotel extends Document {
   resetRequestedAt: Date | null;
   resetFulfilledAt: Date | null;
 
+  // Premium / Subscription
+  isPremium: boolean;
+  premiumPlan: string;
+  premiumExpiry: Date | null;
+  trialEndsAt: Date | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -85,6 +91,11 @@ const HotelSchema: Schema = new Schema(
     resetRequested:     { type: Boolean, default: false },
     resetRequestedAt:   { type: Date, default: null },
     resetFulfilledAt:   { type: Date, default: null },
+
+    isPremium:          { type: Boolean, default: false },
+    premiumPlan:        { type: String, default: 'free' },
+    premiumExpiry:      { type: Date, default: null },
+    trialEndsAt:        { type: Date, default: null },
   },
   { timestamps: true }
 );

@@ -12,6 +12,7 @@ import { showAlert } from '../utils/alert';
 import { useSettings } from '../context/SettingsContext';
 import { raiseTicket, getMyTickets, replyToTicket, Ticket, getToken, getStoredHotelId } from '../services/api';
 import { Colors, FontSize, Spacing, BorderRadius, API_BASE_URL } from '../utils/constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const SOCKET_URL = API_BASE_URL.replace('/api', '');
 
@@ -39,6 +40,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 const SupportScreen: React.FC<Props> = ({ navigation }) => {
+  const { bottom } = useSafeAreaInsets();
   const { settings } = useSettings();
   const [activeTab, setActiveTab] = useState<'tickets' | 'chat' | 'contact'>('tickets');
 
@@ -253,7 +255,7 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
           </ScrollView>
 
           {selectedTicket.status !== 'resolved' && selectedTicket.status !== 'closed' && (
-            <View style={styles.replyBar}>
+            <View style={[styles.replyBar, { paddingBottom: Spacing.md + bottom }]}>
               <TextInput
                 style={styles.replyInput}
                 placeholder="Type your reply..."
@@ -607,7 +609,7 @@ const styles = StyleSheet.create({
   replyMsg: { color: Colors.text, fontSize: FontSize.md, lineHeight: 20 },
   replyTime: { fontSize: 10, color: Colors.textMuted, textAlign: 'right' },
 
-  replyBar: { flexDirection: 'row', padding: Spacing.md, backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border, gap: Spacing.sm, alignItems: 'flex-end' },
+  replyBar: { flexDirection: 'row', paddingTop: Spacing.md, paddingHorizontal: Spacing.md, backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border, gap: Spacing.sm, alignItems: 'flex-end' },
   replyInput: { flex: 1, backgroundColor: Colors.card, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, color: Colors.text, fontSize: FontSize.md, maxHeight: 100, borderWidth: 1, borderColor: Colors.border },
   sendBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.md, padding: Spacing.md, justifyContent: 'center', alignItems: 'center' },
 

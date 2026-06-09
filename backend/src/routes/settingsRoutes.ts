@@ -1,19 +1,36 @@
 import { Router, Response } from 'express';
 import Settings from '../models/Settings';
+import Hotel from '../models/Hotel';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 router.use(authMiddleware);
 
-// GET settings for this hotel
+// GET settings for this hotel — includes premium status from Hotel record
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     let settings = await Settings.findOne({ hotelId: req.hotelId });
     if (!settings) {
       settings = await Settings.create({ hotelId: req.hotelId });
     }
-    res.json(settings);
+    const hotel = await Hotel.findById(req.hotelId).select('isPremium premiumPlan premiumExpiry trialEndsAt');
+    const now = new Date();
+    const isPremiumActive =
+      hotel?.isPremium &&
+      (!hotel.premiumExpiry || hotel.premiumExpiry > now);
+    const isTrialActive =
+      !hotel?.isPremium &&
+      hotel?.trialEndsAt != null &&
+      hotel.trialEndsAt > now;
+
+    res.json({
+      ...settings.toObject(),
+      isPremium: isPremiumActive || isTrialActive || false,
+      premiumPlan: hotel?.premiumPlan || 'free',
+      premiumExpiry: hotel?.premiumExpiry || null,
+      trialEndsAt: hotel?.trialEndsAt || null,
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }

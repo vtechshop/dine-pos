@@ -5,9 +5,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { io, Socket } from 'socket.io-client';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
 import { API_BASE_URL } from '../utils/constants';
+import { PremiumGate } from '../components/PremiumGate';
 import { getToken, getStoredHotelId } from '../services/api';
 
 const SOCKET_URL = API_BASE_URL.replace('/api', '');
@@ -29,7 +31,8 @@ interface TableChat {
   unread: number;
 }
 
-export default function ChatScreen() {
+function ChatScreenInner() {
+  const { bottom } = useSafeAreaInsets();
   const [tables, setTables] = useState<TableChat[]>([]);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -210,7 +213,7 @@ export default function ChatScreen() {
         )}
       />
 
-      <View style={styles.inputRow}>
+      <View style={[styles.inputRow, { paddingBottom: 12 + bottom }]}>
         <TextInput
           style={styles.chatInput}
           value={inputText}
@@ -228,6 +231,14 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+export default function ChatScreen() {
+  return (
+    <PremiumGate feature="Customer Chat" description="Chat with customers at their tables in real time and improve their dining experience.">
+      <ChatScreenInner />
+    </PremiumGate>
   );
 }
 

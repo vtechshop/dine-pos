@@ -471,6 +471,19 @@ export const activateHotel = (id: string): Promise<{ message: string }> => {
   return superAdminFetch(`/superadmin/hotels/${id}/activate`, { method: 'PUT' });
 };
 
+export const setHotelPremium = (
+  id: string,
+  isPremium: boolean,
+  premiumPlan?: string,
+  premiumExpiry?: string | null,
+  trialDays?: number,
+): Promise<{ message: string }> => {
+  return superAdminFetch(`/superadmin/hotels/${id}/premium`, {
+    method: 'PUT',
+    body: JSON.stringify({ isPremium, premiumPlan, premiumExpiry, trialDays }),
+  });
+};
+
 // ==================== SUPPORT TICKETS ====================
 
 export interface Ticket {

@@ -4,10 +4,12 @@ import {
   Modal, TextInput, ActivityIndicator, Alert, ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
 import * as api from '../services/api';
 import { Reservation } from '../types';
+import { PremiumGate } from '../components/PremiumGate';
 
 const STATUS_COLORS: Record<Reservation['status'], { text: string; bg: string }> = {
   confirmed: { text: Colors.info,    bg: Colors.infoBg },
@@ -24,6 +26,7 @@ const fmtDate = (s: string) => {
 };
 
 const ReservationScreen: React.FC = () => {
+  const { bottom } = useSafeAreaInsets();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading]           = useState(true);
   const [date, setDate]                 = useState(todayStr());
@@ -176,7 +179,7 @@ const ReservationScreen: React.FC = () => {
       <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
         <View style={styles.overlay}>
           <ScrollView>
-            <View style={styles.modal}>
+            <View style={[styles.modal, { paddingBottom: 40 + bottom }]}>
               <View style={styles.handle} />
               <Text style={styles.modalTitle}>New Reservation</Text>
 
@@ -337,4 +340,10 @@ const styles = StyleSheet.create({
   saveTxt: { color: Colors.white, fontWeight: '800', fontSize: FontSize.lg },
 });
 
-export default ReservationScreen;
+const ReservationScreenGated: React.FC = () => (
+  <PremiumGate feature="Reservations" description="Accept table bookings in advance and manage your reservation calendar.">
+    <ReservationScreen />
+  </PremiumGate>
+);
+
+export default ReservationScreenGated;

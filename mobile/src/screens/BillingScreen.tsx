@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, TextInput, ActivityIndicator, Dimensions,
-  Modal, Image, Linking,
+  Modal, Image, Linking, Vibration,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
@@ -22,6 +23,15 @@ const CART_W = IS_TABLET ? 340 : SW;
 const COLS = IS_TABLET ? 3 : 2;
 
 type PayMethod = 'cash' | 'upi' | 'card' | 'split';
+type OrderSource = 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr';
+
+const SOURCE_OPTIONS: { id: OrderSource; label: string; emoji: string; color: string }[] = [
+  { id: 'dine-in',  label: 'Dine In',  emoji: '🍴', color: Colors.primary },
+  { id: 'takeaway', label: 'Takeaway', emoji: '🥡', color: Colors.warning },
+  { id: 'swiggy',   label: 'Swiggy',   emoji: '🛵', color: '#FC8019' },
+  { id: 'zomato',   label: 'Zomato',   emoji: '🍕', color: '#E23744' },
+  { id: 'qr',       label: 'QR Order', emoji: '📲', color: Colors.upi },
+];
 
 const PAY_OPTIONS: { id: PayMethod; label: string; icon: any; color: string; bg: string }[] = [
   { id: 'cash',  label: 'Cash',  icon: 'payments',     color: Colors.cash,        bg: Colors.cashBg },
@@ -46,6 +56,7 @@ const BillingScreen: React.FC = () => {
     itemCount, setCustomer, setTable, setNotes, setParcel, setDiscount,
   } = useCart();
   const { settings } = useSettings();
+  const { bottom } = useSafeAreaInsets();
 
   const [categories,        setCategories]       = useState<Category[]>([]);
   const [products,          setProducts]         = useState<Product[]>([]);
@@ -62,6 +73,12 @@ const BillingScreen: React.FC = () => {
   const [showSuccess,       setShowSuccess]      = useState<OrderSuccess | null>(null);
   const [showUpiQr,         setShowUpiQr]        = useState(false);
   const [customerPhone,     setCustomerPhone]    = useState('');
+  const [orderSource,       setOrderSource]      = useState<OrderSource>('dine-in');
+
+  const handleSourceChange = (src: OrderSource) => {
+    setOrderSource(src);
+    setParcel(['swiggy', 'zomato', 'takeaway'].includes(src));
+  };
 
   const cur = settings.currencySymbol || '₹';
   const fmt = (n: number) => `${cur}${n.toFixed(2)}`;
@@ -141,6 +158,13 @@ Thank you for dining with us! 🍽️`;
   const confirmOrder = async () => {
     setShowPayModal(false);
     setPlacing(true);
+    const isOrderParcel = ['swiggy', 'zomato', 'takeaway'].includes(orderSource);
+    const getTableNumber = () => {
+      if (orderSource === 'swiggy')   return 'Swiggy';
+      if (orderSource === 'zomato')   return 'Zomato';
+      if (orderSource === 'takeaway') return 'Takeaway';
+      return cart.tableNumber;
+    };
     const orderData = {
       items: cart.items.map(item => ({
         product: item.product._id,
@@ -157,10 +181,11 @@ Thank you for dining with us! 🍽️`;
       discountAmount:cart.discountAmount,
       paymentMethod: payMethod,
       status:        'pending' as const,
-      tableNumber:   cart.isParcel ? 'Parcel' : cart.tableNumber,
+      tableNumber:   getTableNumber(),
       customerName:  cart.customerName,
       notes:         cart.notes,
-      isParcel:      cart.isParcel,
+      isParcel:      isOrderParcel,
+      orderSource,
     };
     // Snapshot cart before clearCart wipes it
     const cartSnapshot = {
@@ -180,6 +205,7 @@ Thank you for dining with us! 🍽️`;
         const offlineId = await enqueueOrder(orderData);
         const tokenNum = `Q${offlineId.slice(-3).toUpperCase()}`;
         setShowSuccess({ orderNumber: `OFFLINE-${tokenNum}`, token: tokenNum, ...cartSnapshot });
+        Vibration.vibrate([0, 100, 80, 200]);
         showAlert('Saved Offline', 'No server connection. Order queued and will sync when online.');
         clearCart();
         setDiscountInput('');
@@ -188,6 +214,7 @@ Thank you for dining with us! 🍽️`;
       }
       const tokenNum = order.orderNumber.split('-').pop() || '1';
       setShowSuccess({ orderNumber: order.orderNumber, token: tokenNum, ...cartSnapshot, grandTotal: order.grandTotal });
+      Vibration.vibrate([0, 100, 80, 200]);
       clearCart();
       setDiscountInput('');
       setDiscount({ type: 'percent', value: 0 });
@@ -350,24 +377,27 @@ Thank you for dining with us! 🍽️`;
             {/* Cart header */}
             <View style={styles.cartHeader}>
               <Text style={styles.cartTitle}>Current Order</Text>
-              <View style={styles.cartHeaderRight}>
-                {/* Parcel toggle */}
-                <TouchableOpacity
-                  style={[styles.parcelToggle, cart.isParcel && styles.parcelToggleActive]}
-                  onPress={() => setParcel(!cart.isParcel)}
-                >
-                  <MaterialIcons name={cart.isParcel ? 'local-mall' : 'restaurant'} size={15} color={cart.isParcel ? Colors.white : Colors.textSecondary} />
-                  <Text style={[styles.parcelText, cart.isParcel && { color: Colors.white }]}>
-                    {cart.isParcel ? 'Parcel' : 'Dine In'}
-                  </Text>
+              {!IS_TABLET && (
+                <TouchableOpacity onPress={() => setShowCart(false)} style={{ padding: 4 }}>
+                  <MaterialIcons name="close" size={22} color={Colors.textSecondary} />
                 </TouchableOpacity>
-                {!IS_TABLET && (
-                  <TouchableOpacity onPress={() => setShowCart(false)} style={{ padding: 4 }}>
-                    <MaterialIcons name="close" size={22} color={Colors.textSecondary} />
-                  </TouchableOpacity>
-                )}
-              </View>
+              )}
             </View>
+
+            {/* Order source selector */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sourceScroll} contentContainerStyle={styles.sourceScrollContent}>
+              {SOURCE_OPTIONS.map(s => (
+                <TouchableOpacity
+                  key={s.id}
+                  style={[styles.sourceBtn, orderSource === s.id && { backgroundColor: s.color + '22', borderColor: s.color }]}
+                  onPress={() => handleSourceChange(s.id)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.sourceEmoji}>{s.emoji}</Text>
+                  <Text style={[styles.sourceLabel, orderSource === s.id && { color: s.color, fontWeight: '700' }]}>{s.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
             {/* Customer / Table */}
             <View style={styles.customerRow}>
@@ -513,7 +543,7 @@ Thank you for dining with us! 🍽️`;
       {/* ── Payment Modal ── */}
       <Modal visible={showPayModal} transparent animationType="slide" onRequestClose={() => setShowPayModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.payModal}>
+          <View style={[styles.payModal, { paddingBottom: 36 + bottom }]}>
             <View style={styles.payModalHandle} />
             <Text style={styles.payModalTitle}>Choose Payment</Text>
             <Text style={styles.payModalAmount}>{fmt(cart.grandTotal)}</Text>
@@ -611,7 +641,7 @@ Thank you for dining with us! 🍽️`;
                 <Text style={[styles.successPrintText, { color: Colors.upi }]}>UPI QR</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={[styles.successDoneBtn, { width: '100%', marginTop: 8 }]} onPress={() => { setShowSuccess(null); setCustomerPhone(''); }}>
+            <TouchableOpacity style={[styles.successDoneBtn, { width: '100%', marginTop: 8 }]} onPress={() => { setShowSuccess(null); setCustomerPhone(''); setOrderSource('dine-in'); setParcel(false); }}>
               <Text style={styles.successDoneText}>New Order</Text>
               <MaterialIcons name="add" size={18} color={Colors.white} />
             </TouchableOpacity>
@@ -691,15 +721,18 @@ const styles = StyleSheet.create({
   cartPanel: { width: CART_W, backgroundColor: Colors.surface, borderLeftWidth: 1, borderLeftColor: Colors.border },
   cartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
   cartTitle: { color: Colors.text, fontSize: FontSize.lg, fontWeight: '800' },
-  cartHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  parcelToggle: {
+
+  // Source selector
+  sourceScroll: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  sourceScrollContent: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: Spacing.sm },
+  sourceBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: BorderRadius.round, backgroundColor: Colors.card,
-    borderWidth: 1, borderColor: Colors.border,
+    borderWidth: 1.5, borderColor: Colors.border,
   },
-  parcelToggleActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  parcelText: { fontSize: FontSize.xs, color: Colors.textSecondary, fontWeight: '600' },
+  sourceEmoji: { fontSize: 13 },
+  sourceLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, fontWeight: '600' },
 
   customerRow: { flexDirection: 'row', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: 6 },
   custInput: {

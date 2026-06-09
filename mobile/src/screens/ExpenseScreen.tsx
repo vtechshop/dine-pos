@@ -4,11 +4,13 @@ import {
   Modal, TextInput, ActivityIndicator, Alert, ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
 import { Expense, PnLReport } from '../types';
+import { PremiumGate } from '../components/PremiumGate';
 
 type Tab = 'expenses' | 'pnl';
 
@@ -25,6 +27,7 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 
 const ExpenseScreen: React.FC = () => {
   const { settings } = useSettings();
+  const { bottom } = useSafeAreaInsets();
   const cur = settings.currencySymbol || '₹';
   const fmt = (n: number) => `${cur}${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
@@ -243,7 +246,7 @@ const ExpenseScreen: React.FC = () => {
       <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
         <View style={styles.overlay}>
           <ScrollView>
-            <View style={styles.modal}>
+            <View style={[styles.modal, { paddingBottom: 40 + bottom }]}>
               <View style={styles.handle} />
               <Text style={styles.modalTitle}>Log Expense</Text>
 
@@ -460,4 +463,10 @@ const styles = StyleSheet.create({
   saveTxt:   { color: Colors.white, fontWeight: '800', fontSize: FontSize.lg },
 });
 
-export default ExpenseScreen;
+const ExpenseScreenGated: React.FC = () => (
+  <PremiumGate feature="Expense & P&L" description="Track daily expenses, view profit & loss reports and manage your business finances.">
+    <ExpenseScreen />
+  </PremiumGate>
+);
+
+export default ExpenseScreenGated;

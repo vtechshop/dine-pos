@@ -14,6 +14,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSettings } from '../context/SettingsContext';
 import { Colors } from '../utils/constants';
 import { API_BASE_URL } from '../utils/constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PremiumGate } from '../components/PremiumGate';
 
 // Derive the menu base URL from the API URL: strip /api → /menu
 const DEFAULT_MENU_BASE = API_BASE_URL.replace(/\/api\/?$/, '/menu');
@@ -21,7 +23,8 @@ const DEFAULT_MENU_BASE = API_BASE_URL.replace(/\/api\/?$/, '/menu');
 const TABLE_COUNT_KEY = 'qr_table_count';
 const CUSTOM_URL_KEY  = 'qr_custom_menu_base';
 
-export default function QRMenuScreen() {
+function QRMenuScreenInner() {
+  const { bottom } = useSafeAreaInsets();
   const { settings } = useSettings();
   const [tableCount,     setTableCount]     = useState(5);
   const [tempTableCount, setTempTableCount] = useState('5');
@@ -80,7 +83,7 @@ export default function QRMenuScreen() {
   const tables = Array.from({ length: tableCount }, (_, i) => i + 1);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: 48 + bottom }]}>
       {/* Header */}
       <View style={styles.header}>
         <MaterialIcons name="qr-code-2" size={32} color={Colors.primary} />
@@ -224,6 +227,14 @@ export default function QRMenuScreen() {
         </Text>
       </View>
     </ScrollView>
+  );
+}
+
+export default function QRMenuScreen() {
+  return (
+    <PremiumGate feature="QR Ordering Menu" description="Let customers scan a QR code at their table to browse the menu and place orders instantly.">
+      <QRMenuScreenInner />
+    </PremiumGate>
   );
 }
 

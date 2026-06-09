@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons } from '@expo/vector-icons';
 import { RootStackParamList, Category } from '../types';
@@ -30,6 +31,7 @@ type AddProductRouteProp = RouteProp<RootStackParamList, 'AddProduct'>;
 
 const AddProductScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
+  const { bottom } = useSafeAreaInsets();
   const route = useRoute<AddProductRouteProp>();
   const { settings } = useSettings();
 
@@ -452,7 +454,7 @@ const AddProductScreen: React.FC = () => {
         onRequestClose={() => setCategoryModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
+          <View style={[styles.modalContainer, { paddingBottom: Spacing.xxl + bottom }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Category</Text>
               <TouchableOpacity

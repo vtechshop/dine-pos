@@ -11,18 +11,20 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HotelStatus'>;
 
 const HotelStatusScreen: React.FC<Props> = ({ navigation, route }) => {
   const { status, hotelName } = route.params;
   const isPending = status === 'pending';
+  const { bottom } = useSafeAreaInsets();
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Spacing.xxl + bottom }]} showsVerticalScrollIndicator={false}>
         {/* Icon */}
         <View style={[styles.iconCircle, isPending ? styles.iconPending : styles.iconSuspended]}>
           <MaterialIcons

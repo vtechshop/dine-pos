@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList, Product, Category } from '../types';
 import { MaterialIcons } from '@expo/vector-icons';
 import { getProducts, getCategories, deleteProduct, updateProduct } from '../services/api';
@@ -24,6 +25,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const ProductsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
+  const { bottom } = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const numColumns = screenWidth > 600 ? 3 : 2;
 
@@ -392,7 +394,7 @@ const ProductsScreen: React.FC = () => {
 
       {/* FAB */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: Spacing.xxl + bottom }]}
         onPress={handleAddProduct}
         activeOpacity={0.8}
       >

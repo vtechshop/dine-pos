@@ -4,10 +4,12 @@ import {
   Modal, TextInput, ActivityIndicator, Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
 import * as api from '../services/api';
 import { Table } from '../types';
+import { PremiumGate } from '../components/PremiumGate';
 
 const STATUS_COLORS: Record<Table['status'], string> = {
   available: Colors.success,
@@ -23,6 +25,7 @@ const STATUS_LABELS: Record<Table['status'], string> = {
 };
 
 const TableLayoutScreen: React.FC = () => {
+  const { bottom } = useSafeAreaInsets();
   const [tables,    setTables]    = useState<Table[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -187,7 +190,7 @@ const TableLayoutScreen: React.FC = () => {
       {/* Add/Edit Modal */}
       <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
         <View style={styles.overlay}>
-          <View style={styles.modal}>
+          <View style={[styles.modal, { paddingBottom: 36 + bottom }]}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>{editTable ? 'Edit Table' : 'Add Table'}</Text>
 
@@ -353,4 +356,10 @@ const styles = StyleSheet.create({
   saveTxt: { color: Colors.white, fontWeight: '800', fontSize: FontSize.lg },
 });
 
-export default TableLayoutScreen;
+const TableLayoutScreenGated: React.FC = () => (
+  <PremiumGate feature="Table Layout" description="Manage your floor plan, track table status and seat your customers efficiently.">
+    <TableLayoutScreen />
+  </PremiumGate>
+);
+
+export default TableLayoutScreenGated;

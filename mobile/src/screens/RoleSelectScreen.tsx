@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar, ScrollView, Animated, useWindowDimensions } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { useSettings } from '../context/SettingsContext';
@@ -12,6 +13,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'RoleSelect'>;
 const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
   const { settings } = useSettings();
   const { clearCart } = useCart();
+  const { bottom } = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
@@ -26,7 +28,7 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
   }, []);
 
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingBottom: bottom + Spacing.xl }]} showsVerticalScrollIndicator={false}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
       {/* Decorative header stripe */}

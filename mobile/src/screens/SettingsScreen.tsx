@@ -12,6 +12,7 @@ import {
   Alert,
   Linking,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -33,6 +34,7 @@ const SettingsScreen: React.FC = () => {
   const { logout } = useAuth();
   const { clearCart } = useCart();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { bottom } = useSafeAreaInsets();
 
   // Form state
   const [hotelName, setHotelName] = useState('');
@@ -268,7 +270,7 @@ const SettingsScreen: React.FC = () => {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Spacing.xxl * 3 + bottom }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Hotel Info Section */}
@@ -343,8 +345,11 @@ const SettingsScreen: React.FC = () => {
                   style={[styles.toggleOption, businessType === type && styles.toggleOptionActive]}
                   onPress={() => setBusinessType(type)}
                 >
+                  <Text style={styles.toggleEmoji}>
+                    {type === 'veg' ? '🌿' : type === 'non-veg' ? '🍗' : '🍽'}
+                  </Text>
                   <Text style={[styles.toggleText, businessType === type && styles.toggleTextActive]}>
-                    {type === 'veg' ? '🌿 Veg' : type === 'non-veg' ? '🍗 Non-Veg' : '🍽 Both'}
+                    {type === 'veg' ? 'Veg' : type === 'non-veg' ? 'Non-Veg' : 'Both'}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -769,7 +774,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Spacing.lg,
-    paddingBottom: Spacing.xxl * 3,
   },
   sectionHeader: {
     fontSize: FontSize.lg,
@@ -828,17 +832,24 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     paddingVertical: Spacing.md,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 2,
     borderColor: Colors.border,
+    minHeight: 68,
   },
   toggleOptionActive: {
     borderColor: Colors.primary,
     backgroundColor: Colors.primaryBg,
   },
+  toggleEmoji: {
+    fontSize: 22,
+    marginBottom: 3,
+  },
   toggleText: {
-    fontSize: FontSize.lg,
+    fontSize: FontSize.md,
     color: Colors.textSecondary,
     fontWeight: '600',
+    textAlign: 'center',
   },
   toggleTextActive: {
     color: Colors.primary,

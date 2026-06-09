@@ -7,8 +7,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, Hotel, SuperAdminStats } from '../types';
 import { showAlert } from '../utils/alert';
-import { getSuperAdminStats, getAllHotels, approveHotelWithCredentials, rejectHotel, suspendHotel, activateHotel, getAllTickets, adminReplyTicket, updateTicketStatus, getBranchRevenue, Ticket } from '../services/api';
+import { getSuperAdminStats, getAllHotels, approveHotelWithCredentials, rejectHotel, suspendHotel, activateHotel, getAllTickets, adminReplyTicket, updateTicketStatus, getBranchRevenue, setHotelPremium, Ticket } from '../services/api';
 import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SuperAdminDashboard'>;
 
@@ -44,6 +45,7 @@ const STATUS_ICONS: Record<string, keyof typeof MaterialIcons.glyphMap> = {
 };
 
 const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
+  const { bottom } = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabView>('hotels');
   const [stats, setStats] = useState<SuperAdminStats | null>(null);
   const [hotels, setHotels] = useState<Hotel[]>([]);
@@ -207,6 +209,36 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const handlePremiumToggle = async (hotel: Hotel) => {
+    const currentlyPremium = hotel.isPremium;
+    const action = currentlyPremium ? 'Remove Premium' : 'Set Premium';
+    showAlert(action, `${action} for ${hotel.hotelName}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: currentlyPremium ? 'Remove' : 'Activate',
+        onPress: async () => {
+          setActionLoading(true);
+          try {
+            if (currentlyPremium) {
+              await setHotelPremium(hotel._id, false);
+            } else {
+              const expiry = new Date();
+              expiry.setFullYear(expiry.getFullYear() + 1);
+              await setHotelPremium(hotel._id, true, 'pro', expiry.toISOString());
+            }
+            showAlert('Done', `${hotel.hotelName} plan updated!`);
+            setShowDetail(false);
+            loadData();
+          } catch (e: any) {
+            showAlert('Error', e.message);
+          } finally {
+            setActionLoading(false);
+          }
+        },
+      },
+    ]);
+  };
+
   const renderStatCard = (label: string, value: number, color: string, icon: keyof typeof MaterialIcons.glyphMap) => (
     <View style={[styles.statCard, { borderTopColor: color }]}>
       <MaterialIcons name={icon} size={24} color={color} />
@@ -337,8 +369,27 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
             </Text>
           </ScrollView>
 
+          {/* Premium Toggle */}
+          {hotel.status === 'active' && (
+            <TouchableOpacity
+              style={[styles.premiumToggleBtn, hotel.isPremium && styles.premiumToggleBtnActive]}
+              onPress={() => handlePremiumToggle(hotel)}
+              disabled={actionLoading}
+            >
+              <Text style={styles.premiumToggleEmoji}>👑</Text>
+              <Text style={[styles.premiumToggleText, hotel.isPremium && styles.premiumToggleTextActive]}>
+                {hotel.isPremium ? 'Premium Active — Tap to Remove' : 'Activate Premium Plan'}
+              </Text>
+              <MaterialIcons
+                name={hotel.isPremium ? 'toggle-on' : 'toggle-off'}
+                size={28}
+                color={hotel.isPremium ? Colors.white : Colors.textMuted}
+              />
+            </TouchableOpacity>
+          )}
+
           {/* Action Buttons */}
-          <View style={styles.detailActions}>
+          <View style={[styles.detailActions, { paddingBottom: Spacing.lg + bottom }]}>
             {hotel.status === 'pending' && (
               <>
                 <TouchableOpacity
@@ -595,7 +646,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
               )}
             </ScrollView>
 
-            <View style={{ flexDirection: 'row', padding: Spacing.md, backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border, gap: Spacing.sm, alignItems: 'flex-end' }}>
+            <View style={{ flexDirection: 'row', padding: Spacing.md, paddingBottom: Spacing.md + bottom, backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border, gap: Spacing.sm, alignItems: 'flex-end' }}>
               <TextInput
                 style={{ flex: 1, backgroundColor: Colors.card, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, color: Colors.text, fontSize: FontSize.md, maxHeight: 100, borderWidth: 1, borderColor: Colors.border }}
                 placeholder="Reply to hotel..."
@@ -807,7 +858,17 @@ const styles = StyleSheet.create({
   rejectBox: { flexDirection: 'row', backgroundColor: Colors.danger + '22', borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.md, gap: Spacing.sm, alignItems: 'flex-start', borderWidth: 1, borderColor: Colors.danger },
   rejectBoxText: { color: Colors.danger, fontSize: FontSize.sm, flex: 1 },
 
-  detailActions: { flexDirection: 'row', padding: Spacing.lg, gap: Spacing.md, backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border },
+  premiumToggleBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    marginHorizontal: Spacing.lg, marginBottom: Spacing.sm,
+    backgroundColor: Colors.card, borderRadius: BorderRadius.md,
+    padding: Spacing.md, borderWidth: 1.5, borderColor: Colors.border,
+  },
+  premiumToggleBtnActive: { backgroundColor: '#F59E0B', borderColor: '#D97706' },
+  premiumToggleEmoji: { fontSize: 20 },
+  premiumToggleText: { flex: 1, fontSize: FontSize.md, fontWeight: '700', color: Colors.textSecondary },
+  premiumToggleTextActive: { color: Colors.white },
+  detailActions: { flexDirection: 'row', paddingTop: Spacing.lg, paddingHorizontal: Spacing.lg, gap: Spacing.md, backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.md, borderRadius: BorderRadius.md, gap: Spacing.xs },
   actionBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: 'bold' },
   approveBtn: { backgroundColor: Colors.success },

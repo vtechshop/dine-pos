@@ -87,6 +87,27 @@
     }
   }
 
+  // ─── Success sound ───────────────────────────────────────────────────────
+  function playSuccessSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const notes = [523, 659, 784];
+      notes.forEach((freq, i) => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const t = ctx.currentTime + i * 0.12;
+        gain.gain.setValueAtTime(0.35, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+        osc.start(t);
+        osc.stop(t + 0.25);
+      });
+    } catch {}
+  }
+
   // ─── Place order ─────────────────────────────────────────────────────────
   async function placeOrder(customerName) {
     const items = Object.values(cart).map(({ product, qty }) => {
@@ -448,6 +469,7 @@
     try {
       const order = await placeOrder(name);
       clearCart();
+      playSuccessSound();
       view = 'menu';
       renderSuccess(order);
     } catch {

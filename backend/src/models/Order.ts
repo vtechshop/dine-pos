@@ -26,6 +26,7 @@ export interface IOrder extends Document {
     card?: number;
   };
   status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
+  orderSource: 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr';
   isParcel: boolean;
   customerName: string;
   customerPhone: string;
@@ -126,6 +127,11 @@ const OrderSchema: Schema = new Schema(
     notes: {
       type: String,
       default: '',
+    },
+    orderSource: {
+      type: String,
+      enum: ['dine-in', 'takeaway', 'swiggy', 'zomato', 'qr'],
+      default: 'dine-in',
     },
   },
   { timestamps: true }

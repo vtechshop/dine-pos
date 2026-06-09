@@ -41,19 +41,35 @@ router.get('/reports/daily', authMiddleware, async (req: AuthRequest, res: Respo
       { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
       { $group: {
         _id: null,
-        totalSales:    { $sum: '$grandTotal' },
-        totalTax:      { $sum: '$taxTotal' },
-        totalDiscount: { $sum: { $ifNull: ['$discountAmount', 0] } },
-        totalOrders:   { $sum: 1 },
-        parcelOrders:  { $sum: { $cond: ['$isParcel', 1, 0] } },
-        cashTotal:     { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash']  }, '$grandTotal', 0] } },
-        upiTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi']   }, '$grandTotal', 0] } },
-        cardTotal:     { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card']  }, '$grandTotal', 0] } },
-        splitTotal:    { $sum: { $cond: [{ $eq: ['$paymentMethod', 'split'] }, '$grandTotal', 0] } },
+        totalSales:     { $sum: '$grandTotal' },
+        totalTax:       { $sum: '$taxTotal' },
+        totalDiscount:  { $sum: { $ifNull: ['$discountAmount', 0] } },
+        totalOrders:    { $sum: 1 },
+        parcelOrders:   { $sum: { $cond: ['$isParcel', 1, 0] } },
+        cashTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash']  }, '$grandTotal', 0] } },
+        upiTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi']   }, '$grandTotal', 0] } },
+        cardTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card']  }, '$grandTotal', 0] } },
+        splitTotal:     { $sum: { $cond: [{ $eq: ['$paymentMethod', 'split'] }, '$grandTotal', 0] } },
+        dineInOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, 1, 0] } },
+        dineInTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, '$grandTotal', 0] } },
+        takeawayOrders: { $sum: { $cond: [{ $eq: ['$orderSource', 'takeaway'] }, 1, 0] } },
+        takeawayTotal:  { $sum: { $cond: [{ $eq: ['$orderSource', 'takeaway'] }, '$grandTotal', 0] } },
+        swiggyOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'swiggy']   }, 1, 0] } },
+        swiggyTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'swiggy']   }, '$grandTotal', 0] } },
+        zomatoOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'zomato']   }, 1, 0] } },
+        zomatoTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'zomato']   }, '$grandTotal', 0] } },
+        qrOrders:       { $sum: { $cond: [{ $eq: ['$orderSource', 'qr']       }, 1, 0] } },
+        qrTotal:        { $sum: { $cond: [{ $eq: ['$orderSource', 'qr']       }, '$grandTotal', 0] } },
       }},
     ]);
 
-    const empty = { totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, cashTotal: 0, upiTotal: 0, cardTotal: 0, splitTotal: 0 };
+    const empty = {
+      totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0,
+      cashTotal: 0, upiTotal: 0, cardTotal: 0, splitTotal: 0,
+      dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0,
+      swiggyOrders: 0, swiggyTotal: 0, zomatoOrders: 0, zomatoTotal: 0,
+      qrOrders: 0, qrTotal: 0,
+    };
     const r = result || empty;
 
     res.json({
@@ -64,6 +80,13 @@ router.get('/reports/daily', authMiddleware, async (req: AuthRequest, res: Respo
       totalOrders: r.totalOrders,
       parcelOrders: r.parcelOrders,
       paymentBreakdown: { cash: r.cashTotal, upi: r.upiTotal, card: r.cardTotal, split: r.splitTotal },
+      sourceBreakdown: {
+        'dine-in':  { orders: r.dineInOrders,    revenue: r.dineInTotal },
+        takeaway:   { orders: r.takeawayOrders,  revenue: r.takeawayTotal },
+        swiggy:     { orders: r.swiggyOrders,    revenue: r.swiggyTotal },
+        zomato:     { orders: r.zomatoOrders,    revenue: r.zomatoTotal },
+        qr:         { orders: r.qrOrders,        revenue: r.qrTotal },
+      },
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
@@ -119,6 +142,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       filter.createdAt = { $gte: from, $lte: to };
     }
     if (req.query.status) filter.status = req.query.status;
+    if (req.query.source) filter.orderSource = req.query.source;
 
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 50), 200);

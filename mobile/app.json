@@ -23,7 +23,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "com.jegatheswar.dinepos",
-      "versionCode": 4,
+      "versionCode": 11,
       "predictiveBackGestureEnabled": false,
       "newArchEnabled": false,
       "permissions": [

@@ -174,6 +174,30 @@ router.put('/hotels/:id/credentials', superAdminAuth, async (req: Request, res: 
   }
 });
 
+// PUT /api/superadmin/hotels/:id/premium — set/unset premium plan
+router.put('/hotels/:id/premium', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { isPremium, premiumPlan, premiumExpiry, trialDays } = req.body;
+    const update: any = {
+      isPremium: !!isPremium,
+      premiumPlan: isPremium ? (premiumPlan || 'pro') : 'free',
+      premiumExpiry: isPremium && premiumExpiry ? new Date(premiumExpiry) : null,
+    };
+    if (trialDays && trialDays > 0) {
+      const trial = new Date();
+      trial.setDate(trial.getDate() + trialDays);
+      update.trialEndsAt = trial;
+      update.isPremium = true;
+      update.premiumPlan = 'trial';
+    }
+    const hotel = await Hotel.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    return res.json({ message: `${hotel.hotelName} plan updated to ${update.premiumPlan}`, hotel });
+  } catch {
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // GET /api/superadmin/branch-revenue — multi-branch revenue comparison
 router.get('/branch-revenue', superAdminAuth, async (req: Request, res: Response) => {
   try {

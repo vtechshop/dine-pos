@@ -255,6 +255,32 @@ const ReportsScreen: React.FC = () => {
                   )}
                 </View>
               )}
+
+              {/* Order source breakdown */}
+              {report?.sourceBreakdown && Object.values(report.sourceBreakdown).some(s => s.revenue > 0) && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Order Source Breakdown</Text>
+                  {([
+                    { key: 'dine-in' as const,  label: '🍴 Dine-in',  color: Colors.primary },
+                    { key: 'takeaway' as const,  label: '🥡 Takeaway', color: Colors.warning },
+                    { key: 'swiggy' as const,    label: '🛵 Swiggy',   color: '#FC8019' },
+                    { key: 'zomato' as const,    label: '🍕 Zomato',   color: '#E23744' },
+                    { key: 'qr' as const,        label: '📲 QR Order', color: Colors.upi },
+                  ] as { key: keyof NonNullable<typeof report.sourceBreakdown>; label: string; color: string }[])
+                    .filter(s => report.sourceBreakdown![s.key]?.revenue > 0)
+                    .map(s => {
+                      const sd = report.sourceBreakdown![s.key];
+                      return (
+                        <View key={s.key} style={styles.payRow}>
+                          <View style={[styles.payDot, { backgroundColor: s.color }]} />
+                          <Text style={styles.payLabel}>{s.label}</Text>
+                          <Text style={[styles.payLabel, { color: Colors.textMuted, marginLeft: 4 }]}>{sd.orders} orders</Text>
+                          <Text style={[styles.payValue, { color: s.color }]}>{cur}{sd.revenue.toFixed(2)}</Text>
+                        </View>
+                      );
+                    })}
+                </View>
+              )}
             </>
           )}
 

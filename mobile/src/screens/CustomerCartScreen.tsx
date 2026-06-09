@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, Image, ScrollView, useWindowDimensions,
-  StatusBar, Modal, Linking, Platform,
+  StatusBar, Modal, Linking, Platform, Vibration,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -14,7 +15,6 @@ import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
 import { RootStackParamList, CartItem } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, API_BASE_URL } from '../utils/constants';
-import { printReceipt } from '../utils/receipt';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -35,6 +35,7 @@ interface PlacedOrder {
 }
 
 const CustomerCartScreen: React.FC = () => {
+  const { bottom } = useSafeAreaInsets();
   const { cart, increment, decrement, removeItem, setCustomer, setPhone, setTable, setNotes, clearCart, itemCount } = useCart();
   const { settings } = useSettings();
   const navigation = useNavigation<NavProp>();
@@ -109,9 +110,8 @@ const CustomerCartScreen: React.FC = () => {
         notes: cart.notes,
       };
       clearCart();
+      Vibration.vibrate([0, 100, 80, 300]);
       setPlacedOrder(snapshot);
-      // Auto-print receipt on customer's phone
-      printReceipt(order, settings).catch(() => {});
     } catch (e: any) {
       showAlert('Error', e.message || 'Failed to place order. Try again.');
     } finally { setPlacing(false); }
@@ -361,7 +361,7 @@ const CustomerCartScreen: React.FC = () => {
           </ScrollView>
 
           {/* Place order button */}
-          <View style={styles.bottomBar}>
+          <View style={[styles.bottomBar, { paddingBottom: Spacing.md + bottom }]}>
             <TouchableOpacity
               style={[styles.placeBtn, placing && { opacity: 0.7 }]}
               onPress={handlePlaceOrder}

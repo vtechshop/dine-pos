@@ -5,6 +5,7 @@ import {
   Modal, ActivityIndicator, StatusBar, ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Order } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
@@ -13,6 +14,24 @@ import { printReceipt } from '../utils/receipt';
 import { useSettings } from '../context/SettingsContext';
 
 type OrderStatus = Order['status'];
+type OrderSource = NonNullable<Order['orderSource']>;
+
+const SOURCE_CONFIG: Record<OrderSource, { label: string; emoji: string; color: string }> = {
+  'dine-in':  { label: 'Dine-in',  emoji: '🍴', color: Colors.primary },
+  takeaway:   { label: 'Takeaway', emoji: '🥡', color: Colors.warning },
+  swiggy:     { label: 'Swiggy',   emoji: '🛵', color: '#FC8019' },
+  zomato:     { label: 'Zomato',   emoji: '🍕', color: '#E23744' },
+  qr:         { label: 'QR',       emoji: '📲', color: Colors.upi },
+};
+
+const SOURCE_FILTER_OPTIONS = [
+  { key: 'all',       label: 'All Sources' },
+  { key: 'dine-in',   label: '🍴 Dine-in' },
+  { key: 'takeaway',  label: '🥡 Takeaway' },
+  { key: 'swiggy',    label: '🛵 Swiggy' },
+  { key: 'zomato',    label: '🍕 Zomato' },
+  { key: 'qr',        label: '📲 QR' },
+];
 
 const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bg: string; icon: string }> = {
   pending:   { label: 'Pending',   color: Colors.warning,       bg: Colors.warningBg,       icon: 'hourglass-empty' },
@@ -51,6 +70,7 @@ const fmt = (iso: string) => {
 
 const OrdersScreen: React.FC = () => {
   const { settings } = useSettings();
+  const { bottom } = useSafeAreaInsets();
   const cur = settings.currencySymbol || '₹';
 
   const [orders,       setOrders]       = useState<Order[]>([]);
@@ -59,11 +79,12 @@ const OrdersScreen: React.FC = () => {
   const [page,         setPage]         = useState(1);
   const [totalPages,   setTotalPages]   = useState(1);
   const [activeTab,    setActiveTab]    = useState('active');
+  const [activeSource, setActiveSource] = useState('all');
   const [selected,     setSelected]     = useState<Order | null>(null);
   const [updating,     setUpdating]     = useState(false);
   const [reprinting,   setReprinting]   = useState(false);
 
-  const fetchOrders = useCallback(async (pageNum: number, tab: string, append = false) => {
+  const fetchOrders = useCallback(async (pageNum: number, tab: string, append = false, source = 'all') => {
     try {
       append ? setLoadingMore(true) : setLoading(true);
       const params: Record<string, string> = {
@@ -72,14 +93,15 @@ const OrdersScreen: React.FC = () => {
         sort: '-createdAt',
       };
       if (tab !== 'all' && tab !== 'active') params.status = tab;
+      if (source !== 'all') params.source = source;
       const data = await getOrders(params);
 
-      let orders = data.orders;
+      let fetchedOrders = data.orders;
       if (tab === 'active') {
-        orders = orders.filter(o => o.status === 'pending');
+        fetchedOrders = fetchedOrders.filter(o => o.status === 'pending');
       }
 
-      setOrders(prev => append ? [...prev, ...orders] : orders);
+      setOrders(prev => append ? [...prev, ...fetchedOrders] : fetchedOrders);
       setPage(data.page);
       setTotalPages(data.pages);
     } catch (e: any) {
@@ -91,12 +113,17 @@ const OrdersScreen: React.FC = () => {
   }, []);
 
   useFocusEffect(useCallback(() => {
-    fetchOrders(1, activeTab);
-  }, [fetchOrders, activeTab]));
+    fetchOrders(1, activeTab, false, activeSource);
+  }, [fetchOrders, activeTab, activeSource]));
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
-    fetchOrders(1, tab);
+    fetchOrders(1, tab, false, activeSource);
+  };
+
+  const handleSourceFilter = (src: string) => {
+    setActiveSource(src);
+    fetchOrders(1, activeTab, false, src);
   };
 
   const handleStatusUpdate = async (order: Order, newStatus: OrderStatus) => {
@@ -153,10 +180,21 @@ const OrdersScreen: React.FC = () => {
             <Text style={styles.cardTime}>{date} {time}</Text>
           </View>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: cfg.bg, borderColor: cfg.color + '40' }]}>
-          <MaterialIcons name={cfg.icon as any} size={13} color={cfg.color} />
-          <Text style={[styles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
-          {item.isParcel && <Text style={styles.parcelTag}>📦 Parcel</Text>}
+        <View style={styles.cardBadgeRow}>
+          <View style={[styles.statusBadge, { backgroundColor: cfg.bg, borderColor: cfg.color + '40' }]}>
+            <MaterialIcons name={cfg.icon as any} size={13} color={cfg.color} />
+            <Text style={[styles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
+          </View>
+          {item.orderSource && item.orderSource !== 'dine-in' && (() => {
+            const src = SOURCE_CONFIG[item.orderSource];
+            return (
+              <View style={[styles.sourceBadge, { backgroundColor: src.color + '22', borderColor: src.color + '50' }]}>
+                <Text style={styles.sourceBadgeEmoji}>{src.emoji}</Text>
+                <Text style={[styles.sourceBadgeText, { color: src.color }]}>{src.label}</Text>
+              </View>
+            );
+          })()}
+          {item.isParcel && !item.orderSource && <Text style={styles.parcelTag}>📦 Parcel</Text>}
         </View>
       </TouchableOpacity>
     );
@@ -173,7 +211,7 @@ const OrdersScreen: React.FC = () => {
     return (
       <Modal visible animationType="slide" transparent onRequestClose={() => setSelected(null)}>
         <View style={styles.overlay}>
-          <View style={styles.modal}>
+          <View style={[styles.modal, { paddingBottom: Spacing.xxl + bottom }]}>
             <ScrollView showsVerticalScrollIndicator={false}>
 
               {/* Header */}
@@ -293,7 +331,7 @@ const OrdersScreen: React.FC = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Orders</Text>
-        <TouchableOpacity onPress={() => fetchOrders(1, activeTab)} style={styles.refreshBtn}>
+        <TouchableOpacity onPress={() => fetchOrders(1, activeTab, false, activeSource)} style={styles.refreshBtn}>
           <MaterialIcons name="refresh" size={22} color={Colors.primary} />
         </TouchableOpacity>
       </View>
@@ -308,6 +346,20 @@ const OrdersScreen: React.FC = () => {
             activeOpacity={0.75}
           >
             <Text style={[styles.tabText, activeTab === t.key && styles.tabTextActive]}>{t.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* Source Filter */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sourceTabs} contentContainerStyle={styles.sourceTabsContent}>
+        {SOURCE_FILTER_OPTIONS.map(s => (
+          <TouchableOpacity
+            key={s.key}
+            style={[styles.sourceFilterBtn, activeSource === s.key && styles.sourceFilterBtnActive]}
+            onPress={() => handleSourceFilter(s.key)}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.sourceFilterText, activeSource === s.key && styles.sourceFilterTextActive]}>{s.label}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -335,7 +387,7 @@ const OrdersScreen: React.FC = () => {
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           ListFooterComponent={page < totalPages ? (
-            <TouchableOpacity style={styles.loadMore} onPress={() => fetchOrders(page + 1, activeTab, true)} disabled={loadingMore}>
+            <TouchableOpacity style={styles.loadMore} onPress={() => fetchOrders(page + 1, activeTab, true, activeSource)} disabled={loadingMore}>
               {loadingMore ? <ActivityIndicator color={Colors.primary} /> : <Text style={styles.loadMoreText}>Load More</Text>}
             </TouchableOpacity>
           ) : null}
@@ -369,6 +421,17 @@ const styles = StyleSheet.create({
   tabText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary },
   tabTextActive: { color: Colors.white, fontWeight: '700' },
 
+  // Source filter row
+  sourceTabs: { backgroundColor: Colors.card, maxHeight: 44, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  sourceTabsContent: { paddingHorizontal: Spacing.lg, paddingVertical: 6, gap: Spacing.sm },
+  sourceFilterBtn: {
+    paddingHorizontal: Spacing.md, paddingVertical: 5, borderRadius: BorderRadius.round,
+    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
+  },
+  sourceFilterBtnActive: { backgroundColor: Colors.elevated, borderColor: Colors.textSecondary },
+  sourceFilterText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.textMuted },
+  sourceFilterTextActive: { color: Colors.text, fontWeight: '700' },
+
   // Card
   list: { padding: Spacing.lg, paddingBottom: 120 },
   card: {
@@ -385,6 +448,7 @@ const styles = StyleSheet.create({
   cardMeta: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   cardTotal: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.primary },
   cardTime: { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: 2 },
+  cardBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flexWrap: 'wrap' },
   statusBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: Spacing.md, paddingVertical: 5,
@@ -392,6 +456,13 @@ const styles = StyleSheet.create({
   },
   statusText: { fontSize: FontSize.sm, fontWeight: '700' },
   parcelTag: { fontSize: FontSize.xs, color: Colors.textSecondary, marginLeft: Spacing.sm },
+  sourceBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: Spacing.sm, paddingVertical: 4,
+    borderRadius: BorderRadius.round, borderWidth: 1,
+  },
+  sourceBadgeEmoji: { fontSize: 11 },
+  sourceBadgeText: { fontSize: FontSize.xs, fontWeight: '700' },
 
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: Spacing.sm },
   loadingText: { color: Colors.textSecondary, fontSize: FontSize.md },

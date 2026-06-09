@@ -17,6 +17,7 @@ import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { registerHotel, resubmitHotel, verifyPincode, verifyIFSC, verifyPAN, verifyGST, verifyFSSAI } from '../services/api';
 import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BusinessSetup'>;
 
@@ -41,6 +42,7 @@ const STEP_ICONS: Record<Step, keyof typeof MaterialIcons.glyphMap> = {
 const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
   const { login } = useAuth();
   const { saveSettings, settings } = useSettings();
+  const { bottom } = useSafeAreaInsets();
   const isResubmit = route.params?.resubmit ?? false;
   const rejectionReason = route.params?.rejectionReason ?? '';
   const resubmitPhone = route.params?.phone ?? '';
@@ -337,7 +339,7 @@ const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
           style={styles.input}
           value={hotelName}
           onChangeText={setHotelName}
-          placeholder="e.g. Jegatheswar Hotel"
+          placeholder="Enter restaurant name"
           placeholderTextColor={Colors.textMuted}
         />
       </View>
@@ -348,7 +350,7 @@ const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
           style={styles.input}
           value={ownerName}
           onChangeText={setOwnerName}
-          placeholder="e.g. K. Jegatheswar"
+          placeholder="Enter owner name"
           placeholderTextColor={Colors.textMuted}
         />
       </View>
@@ -362,8 +364,11 @@ const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
               style={[styles.typeBtn, businessType === type && styles.typeBtnActive]}
               onPress={() => setBusinessType(type)}
             >
+              <Text style={styles.typeEmoji}>
+                {type === 'veg' ? '🌿' : type === 'non-veg' ? '🍗' : '🍽'}
+              </Text>
               <Text style={[styles.typeBtnText, businessType === type && styles.typeBtnTextActive]}>
-                {type === 'veg' ? '🌿 Veg' : type === 'non-veg' ? '🍗 Non-Veg' : '🍽 Both'}
+                {type === 'veg' ? 'Veg' : type === 'non-veg' ? 'Non-Veg' : 'Both'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -386,7 +391,7 @@ const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
           style={styles.input}
           value={phone}
           onChangeText={setPhone}
-          placeholder="e.g. 9876543210"
+          placeholder="Enter phone number"
           placeholderTextColor={Colors.textMuted}
           keyboardType="phone-pad"
         />
@@ -398,7 +403,7 @@ const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
           style={styles.input}
           value={email}
           onChangeText={setEmail}
-          placeholder="e.g. hotel@gmail.com"
+          placeholder="Enter email address"
           placeholderTextColor={Colors.textMuted}
           keyboardType="email-address"
           autoCapitalize="none"
@@ -411,7 +416,7 @@ const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
           style={[styles.input, styles.multiline]}
           value={address}
           onChangeText={setAddress}
-          placeholder="Door No, Street Name"
+          placeholder="Enter full address"
           placeholderTextColor={Colors.textMuted}
           multiline
           numberOfLines={2}
@@ -426,7 +431,7 @@ const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
             value={pincode}
             onChangeText={setPincode}
             onBlur={handlePincodeBlur}
-            placeholder="6-digit pincode"
+            placeholder="Enter pincode"
             placeholderTextColor={Colors.textMuted}
             keyboardType="number-pad"
             maxLength={6}
@@ -439,11 +444,11 @@ const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
       <View style={styles.rowFields}>
         <View style={[styles.fieldGroup, { flex: 1 }]}>
           <Text style={styles.label}>City</Text>
-          <TextInput style={styles.input} value={city} onChangeText={setCity} placeholder="City" placeholderTextColor={Colors.textMuted} />
+          <TextInput style={styles.input} value={city} onChangeText={setCity} placeholder="Enter city" placeholderTextColor={Colors.textMuted} />
         </View>
         <View style={[styles.fieldGroup, { flex: 1 }]}>
           <Text style={styles.label}>State</Text>
-          <TextInput style={styles.input} value={state} onChangeText={setState} placeholder="State" placeholderTextColor={Colors.textMuted} />
+          <TextInput style={styles.input} value={state} onChangeText={setState} placeholder="Enter state" placeholderTextColor={Colors.textMuted} />
         </View>
       </View>
     </View>
@@ -507,12 +512,12 @@ const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
 
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>Account Holder Name</Text>
-        <TextInput style={styles.input} value={bankAccountHolder} onChangeText={setBankAccountHolder} placeholder="As per bank records" placeholderTextColor={Colors.textMuted} />
+        <TextInput style={styles.input} value={bankAccountHolder} onChangeText={setBankAccountHolder} placeholder="Enter account holder name" placeholderTextColor={Colors.textMuted} />
       </View>
 
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>Account Number</Text>
-        <TextInput style={styles.input} value={bankAccountNumber} onChangeText={setBankAccountNumber} placeholder="Bank account number" placeholderTextColor={Colors.textMuted} keyboardType="number-pad" />
+        <TextInput style={styles.input} value={bankAccountNumber} onChangeText={setBankAccountNumber} placeholder="Enter account number" placeholderTextColor={Colors.textMuted} keyboardType="number-pad" />
       </View>
 
       <View style={styles.fieldGroup}>
@@ -625,7 +630,7 @@ const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
       </ScrollView>
 
       {/* Navigation Buttons */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Spacing.lg + bottom }]}>
         {stepIndex > 0 ? (
           <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
             <MaterialIcons name="arrow-back" size={20} color={Colors.textSecondary} />
@@ -761,10 +766,13 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.border,
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: Colors.card,
+    minHeight: 68,
   },
   typeBtnActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryBg },
-  typeBtnText: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600' },
+  typeEmoji: { fontSize: 20, marginBottom: 3 },
+  typeBtnText: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600', textAlign: 'center' },
   typeBtnTextActive: { color: Colors.primary },
 
   // Info box
@@ -791,7 +799,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: Spacing.lg,
+    paddingTop: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
     backgroundColor: Colors.surface,
     borderTopWidth: 1,
     borderTopColor: Colors.border,

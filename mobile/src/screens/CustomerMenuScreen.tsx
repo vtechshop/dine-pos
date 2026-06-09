@@ -4,6 +4,7 @@ import {
   StyleSheet, TextInput, ActivityIndicator, Image,
   useWindowDimensions, StatusBar, Modal,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
@@ -23,6 +24,7 @@ const CustomerMenuScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const rootNav = useNavigation<NavProp>();
   const { width: screenWidth } = useWindowDimensions();
+  const { bottom } = useSafeAreaInsets();
 
   const isTablet = screenWidth >= 600;
   const COLS = 2; // Always 2 columns — better card size on both phone and tablet
@@ -38,7 +40,7 @@ const CustomerMenuScreen: React.FC = () => {
   const [selectedCat,   setSelectedCat]  = useState<string | null>(null);
   const [loading,       setLoading]      = useState(true);
   const [search,        setSearch]       = useState('');
-  const [vegOnly,       setVegOnly]      = useState(false);
+  const [foodFilter,    setFoodFilter]   = useState<'all' | 'veg' | 'non-veg'>('all');
   const [detailProduct, setDetailProduct]= useState<Product | null>(null);
   const tapCount = useRef(0);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,7 +69,7 @@ const CustomerMenuScreen: React.FC = () => {
     allProds: Product[],
     catId: string | null,
     searchStr: string,
-    veg: boolean,
+    filter: 'all' | 'veg' | 'non-veg',
   ) => {
     let result = allProds;
     if (catId) {
@@ -79,15 +81,14 @@ const CustomerMenuScreen: React.FC = () => {
     if (searchStr.trim()) {
       result = result.filter(p => p.name.toLowerCase().includes(searchStr.toLowerCase()));
     }
-    if (veg) {
-      result = result.filter(p => p.isVeg);
-    }
+    if (filter === 'veg') result = result.filter(p => p.isVeg);
+    if (filter === 'non-veg') result = result.filter(p => !p.isVeg);
     setFiltered(result);
   }, []);
 
   useEffect(() => {
-    applyFilters(products, selectedCat, search, vegOnly);
-  }, [products, selectedCat, search, vegOnly, applyFilters]);
+    applyFilters(products, selectedCat, search, foodFilter);
+  }, [products, selectedCat, search, foodFilter, applyFilters]);
 
   const selectCategory = useCallback((id: string | null) => {
     setSelectedCat(id);
@@ -211,7 +212,7 @@ const CustomerMenuScreen: React.FC = () => {
         onRequestClose={() => setDetailProduct(null)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: bottom }]}>
             {/* Close handle */}
             <View style={styles.modalHandle} />
 
@@ -330,19 +331,21 @@ const CustomerMenuScreen: React.FC = () => {
               {products.length} items · {categories.length} categories
             </Text>
           </TouchableOpacity>
-          {/* Veg-only toggle */}
-          {vegCount > 0 && (
-            <TouchableOpacity
-              style={[styles.vegToggle, vegOnly && styles.vegToggleActive]}
-              onPress={() => setVegOnly(!vegOnly)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.vegToggleDot, { backgroundColor: Colors.veg }]} />
-              <Text style={[styles.vegToggleText, vegOnly && styles.vegToggleTextActive]}>
-                Veg Only
-              </Text>
-            </TouchableOpacity>
-          )}
+          {/* Veg / Non-Veg filter */}
+          <View style={styles.foodFilterRow}>
+            {(['all', 'veg', 'non-veg'] as const).map((type) => (
+              <TouchableOpacity
+                key={type}
+                style={[styles.foodFilterBtn, foodFilter === type && styles.foodFilterBtnActive]}
+                onPress={() => setFoodFilter(type)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.foodFilterText, foodFilter === type && styles.foodFilterTextActive]}>
+                  {type === 'all' ? 'All' : type === 'veg' ? '🌿 Veg' : '🍗 Non-Veg'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
         {/* Search */}
         <View style={styles.searchBar}>
@@ -371,15 +374,15 @@ const CustomerMenuScreen: React.FC = () => {
       </View>
 
       {/* ── Active filters indicator ── */}
-      {(vegOnly || search.trim()) && (
+      {(foodFilter !== 'all' || search.trim()) && (
         <View style={styles.filterInfo}>
           <MaterialIcons name="filter-list" size={14} color={Colors.primary} />
           <Text style={styles.filterInfoText}>
             {filtered.length} result{filtered.length !== 1 ? 's' : ''}
-            {vegOnly ? ' · Veg only' : ''}
+            {foodFilter === 'veg' ? ' · Veg only' : foodFilter === 'non-veg' ? ' · Non-Veg only' : ''}
             {search.trim() ? ` · "${search}"` : ''}
           </Text>
-          <TouchableOpacity onPress={() => { setSearch(''); setVegOnly(false); }}>
+          <TouchableOpacity onPress={() => { setSearch(''); setFoodFilter('all'); }}>
             <Text style={styles.filterClearText}>Clear</Text>
           </TouchableOpacity>
         </View>
@@ -398,8 +401,8 @@ const CustomerMenuScreen: React.FC = () => {
           <View style={styles.emptyBox}>
             <MaterialIcons name="restaurant" size={60} color={Colors.textMuted} />
             <Text style={styles.emptyText}>No items found</Text>
-            {(vegOnly || search) && (
-              <TouchableOpacity style={styles.emptyResetBtn} onPress={() => { setSearch(''); setVegOnly(false); }}>
+            {(foodFilter !== 'all' || search) && (
+              <TouchableOpacity style={styles.emptyResetBtn} onPress={() => { setSearch(''); setFoodFilter('all'); }}>
                 <Text style={styles.emptyResetText}>Clear filters</Text>
               </TouchableOpacity>
             )}
@@ -457,17 +460,16 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, paddingVertical: 11, fontSize: FontSize.md, color: Colors.text },
 
-  // Veg toggle
-  vegToggle: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: Spacing.md, paddingVertical: 8,
+  // Food filter toggle (All / Veg / Non-Veg)
+  foodFilterRow: { flexDirection: 'row', gap: 4 },
+  foodFilterBtn: {
+    paddingHorizontal: 8, paddingVertical: 5,
     borderRadius: BorderRadius.round, borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.5)', backgroundColor: 'rgba(255,255,255,0.15)',
   },
-  vegToggleActive: { backgroundColor: Colors.white, borderColor: Colors.white },
-  vegToggleDot: { width: 10, height: 10, borderRadius: 2, borderWidth: 1.5, borderColor: Colors.veg },
-  vegToggleText: { fontSize: FontSize.xs, fontWeight: '700', color: 'rgba(255,255,255,0.9)' },
-  vegToggleTextActive: { color: Colors.veg },
+  foodFilterBtnActive: { backgroundColor: Colors.white, borderColor: Colors.white },
+  foodFilterText: { fontSize: FontSize.xs, fontWeight: '700', color: 'rgba(255,255,255,0.9)' },
+  foodFilterTextActive: { color: Colors.primary },
 
   // Category chips — Swiggy tab style
   catBar: { backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: '#EEEEEE' },

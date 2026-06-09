@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Category } from '../types';
 import { getCategories, createCategory, updateCategory, deleteCategory } from '../services/api';
 import { showAlert } from '../utils/alert';
@@ -23,6 +24,7 @@ const PRESET_ICONS = [
 ];
 
 const CategoriesScreen: React.FC = () => {
+  const { bottom } = useSafeAreaInsets();
   const navigation = useNavigation();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -182,7 +184,7 @@ const CategoriesScreen: React.FC = () => {
       {/* Add/Edit Modal */}
       <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: Spacing.xl + bottom }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{editing ? 'Edit Category' : 'New Category'}</Text>
               <TouchableOpacity onPress={() => setShowModal(false)}>

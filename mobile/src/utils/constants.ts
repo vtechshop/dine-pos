@@ -23,7 +23,7 @@ export const Colors = {
   background:    '#FFF6EE',   // warm cream
   surface:       '#FFFFFF',   // pure white card
   card:          '#FFFAF5',   // very light orange tint
-  cardHover:     '#FFF0E0',
+  cardHover:     '#1f1710',
   elevated:      '#FFE8CC',
   overlay:       'rgba(30,10,0,0.65)',
 

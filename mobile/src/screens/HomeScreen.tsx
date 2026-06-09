@@ -16,6 +16,11 @@ import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { printReceipt } from '../utils/receipt';
+import { setupNotifications, notifyNewOrder } from '../utils/notifications';
+import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const BT_PRINTER_ADDRESS_KEY = '@hotel_pos_bt_printer_address';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'Home'>,
@@ -74,6 +79,14 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
   useEffect(() => {
+    setupNotifications();
+    const sub = Notifications.addNotificationResponseReceivedListener(() => {
+      navigation.navigate('Orders');
+    });
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
     const connect = async () => {
       const hotelId = await getStoredHotelId();
@@ -93,9 +106,11 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         setNewOrderAlert(data);
         setOrderBadge(p => p + 1);
         fetchStats();
-        // Auto-print receipt when customer places order
+        notifyNewOrder(data.tableNumber, data.grandTotal, data.itemCount, settingsRef.current.currencySymbol || '₹');
+        // Auto-print receipt if a Bluetooth printer is paired
         try {
-          if (data._id) {
+          const btAddress = await AsyncStorage.getItem(BT_PRINTER_ADDRESS_KEY);
+          if (data._id && btAddress) {
             const order = await getOrder(data._id);
             if (order) await printReceipt(order, settingsRef.current);
           }
