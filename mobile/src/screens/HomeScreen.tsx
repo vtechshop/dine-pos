@@ -4,7 +4,7 @@ import {
   RefreshControl, ActivityIndicator, StatusBar,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { CompositeScreenProps } from '@react-navigation/native';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { io, Socket } from 'socket.io-client';
@@ -31,7 +31,7 @@ interface Stats { todayOrders: number; todaySales: number; totalProducts: number
 interface NewOrderAlert { _id?: string; orderNumber: string; tableNumber: string; customerName: string; grandTotal: number; itemCount: number }
 
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
-  const { settings } = useSettings();
+  const { settings, refreshSettings } = useSettings();
   const { logout } = useAuth();
   const { clearCart } = useCart();
   const [stats, setStats]           = useState<Stats>({ todayOrders: 0, todaySales: 0, totalProducts: 0, totalCategories: 0 });
@@ -77,6 +77,9 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   }, []);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  // Refresh settings (including isPremium) every time Home tab is visited
+  useFocusEffect(useCallback(() => { refreshSettings(); }, []));
 
   useEffect(() => {
     setupNotifications();

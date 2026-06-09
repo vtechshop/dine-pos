@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -14,10 +14,17 @@ interface Props {
 }
 
 export const PremiumGate: React.FC<Props> = ({ feature, description, children }) => {
-  const { settings } = useSettings();
+  const { settings, refreshSettings } = useSettings();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [checking, setChecking] = useState(false);
 
   if (settings.isPremium) return <>{children}</>;
+
+  const handleCheckStatus = async () => {
+    setChecking(true);
+    await refreshSettings();
+    setChecking(false);
+  };
 
   const isTrialExpired = settings.trialEndsAt && new Date(settings.trialEndsAt) < new Date();
   const isTrial = settings.trialEndsAt && new Date(settings.trialEndsAt) > new Date();
@@ -69,6 +76,19 @@ export const PremiumGate: React.FC<Props> = ({ feature, description, children })
           <Text style={styles.upgradeBtnText}>Upgrade to Premium</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={styles.refreshBtn}
+          onPress={handleCheckStatus}
+          activeOpacity={0.7}
+          disabled={checking}
+        >
+          {checking
+            ? <ActivityIndicator size="small" color={Colors.primary} />
+            : <MaterialIcons name="refresh" size={16} color={Colors.primary} />
+          }
+          <Text style={styles.refreshBtnText}>{checking ? 'Checking...' : 'Check Status'}</Text>
+        </TouchableOpacity>
+
         <Text style={styles.contactHint}>Contact support to activate your plan</Text>
       </View>
     </View>
@@ -117,5 +137,12 @@ const styles = StyleSheet.create({
     width: '100%', justifyContent: 'center', ...Shadows.primary,
   },
   upgradeBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '800' },
+  refreshBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: Spacing.md, paddingVertical: 10, paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.primary + '50',
+    backgroundColor: Colors.primaryBg,
+  },
+  refreshBtnText: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '700' },
   contactHint: { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: Spacing.md, textAlign: 'center' },
 });
