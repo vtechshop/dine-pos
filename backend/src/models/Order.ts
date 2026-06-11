@@ -138,8 +138,9 @@ const OrderSchema: Schema = new Schema(
 );
 
 // Compound indexes for common query patterns
-OrderSchema.index({ hotelId: 1, createdAt: -1 });          // order list per hotel
-OrderSchema.index({ hotelId: 1, status: 1, createdAt: -1 }); // filtered order list
-OrderSchema.index({ createdAt: -1 });                        // admin-wide report
+OrderSchema.index({ hotelId: 1, createdAt: -1 });                          // order list per hotel
+OrderSchema.index({ hotelId: 1, status: 1, createdAt: -1 });               // filtered order list
+OrderSchema.index({ hotelId: 1, orderSource: 1, createdAt: -1 });          // source filter (Swiggy/Zomato analytics)
+OrderSchema.index({ createdAt: -1 });                                       // admin-wide report
 
 export default mongoose.model<IOrder>('Order', OrderSchema);
