@@ -15,6 +15,8 @@ import * as api from '../services/api';
 import { Category, Product } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, UPI_ID, UPI_NAME } from '../utils/constants';
 import { enqueueOrder, flushQueue } from '../utils/offlineQueue';
+import { printKOT } from '../utils/receipt';
+import { KOTOrderInput } from '../types';
 
 const { width: SW } = Dimensions.get('window');
 const IS_TABLET = SW >= 768;
@@ -48,6 +50,7 @@ interface OrderSuccess {
   taxTotal: number;
   discountAmount: number;
   items: { name: string; qty: number; price: number }[];
+  kot: KOTOrderInput;
 }
 
 const BillingScreen: React.FC = () => {
@@ -74,6 +77,7 @@ const BillingScreen: React.FC = () => {
   const [showUpiQr,         setShowUpiQr]        = useState(false);
   const [customerPhone,     setCustomerPhone]    = useState('');
   const [orderSource,       setOrderSource]      = useState<OrderSource>('dine-in');
+  const [printingKot,       setPrintingKot]      = useState(false);
 
   const handleSourceChange = (src: OrderSource) => {
     setOrderSource(src);
@@ -149,6 +153,17 @@ Thank you for dining with us! 🍽️`;
     Linking.openURL(url).catch(() => showAlert('Error', 'Could not open WhatsApp'));
   };
 
+  const handlePrintKOT = async (order: OrderSuccess) => {
+    setPrintingKot(true);
+    try {
+      await printKOT(order.kot, settings);
+    } catch (e: any) {
+      showAlert('Print Error', e.message || 'Failed to print KOT');
+    } finally {
+      setPrintingKot(false);
+    }
+  };
+
   const handlePlaceOrder = () => {
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items first.'); return; }
     applyDiscount();
@@ -195,6 +210,12 @@ Thank you for dining with us! 🍽️`;
       discountAmount: cart.discountAmount,
       grandTotal:     cart.grandTotal,
     };
+    const kotSnapshot: Omit<KOTOrderInput, 'orderNumber'> = {
+      items:       cart.items.map(i => ({ productName: i.product.name, quantity: i.quantity })),
+      tableNumber: getTableNumber(),
+      notes:       cart.notes,
+      createdAt:   new Date().toISOString(),
+    };
     try {
       // Try server first; on network failure queue offline
       let order: any;
@@ -204,7 +225,8 @@ Thank you for dining with us! 🍽️`;
       } catch (netErr: any) {
         const offlineId = await enqueueOrder(orderData);
         const tokenNum = `Q${offlineId.slice(-3).toUpperCase()}`;
-        setShowSuccess({ orderNumber: `OFFLINE-${tokenNum}`, token: tokenNum, ...cartSnapshot });
+        const orderNumber = `OFFLINE-${tokenNum}`;
+        setShowSuccess({ orderNumber, token: tokenNum, ...cartSnapshot, kot: { orderNumber, ...kotSnapshot } });
         Vibration.vibrate([0, 100, 80, 200]);
         showAlert('Saved Offline', 'No server connection. Order queued and will sync when online.');
         clearCart();
@@ -213,7 +235,7 @@ Thank you for dining with us! 🍽️`;
         return;
       }
       const tokenNum = order.orderNumber.split('-').pop() || '1';
-      setShowSuccess({ orderNumber: order.orderNumber, token: tokenNum, ...cartSnapshot, grandTotal: order.grandTotal });
+      setShowSuccess({ orderNumber: order.orderNumber, token: tokenNum, ...cartSnapshot, grandTotal: order.grandTotal, kot: { orderNumber: order.orderNumber, ...kotSnapshot } });
       Vibration.vibrate([0, 100, 80, 200]);
       clearCart();
       setDiscountInput('');
@@ -639,6 +661,16 @@ Thank you for dining with us! 🍽️`;
               >
                 <MaterialIcons name="qr-code" size={18} color={Colors.upi} />
                 <Text style={[styles.successPrintText, { color: Colors.upi }]}>UPI QR</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.successPrintBtn, { flex: 1 }]}
+                onPress={() => { if (showSuccess) handlePrintKOT(showSuccess); }}
+                disabled={printingKot}
+              >
+                {printingKot
+                  ? <ActivityIndicator size="small" color={Colors.warning} />
+                  : <MaterialIcons name="receipt-long" size={18} color={Colors.warning} />}
+                <Text style={[styles.successPrintText, { color: Colors.warning }]}>Print KOT</Text>
               </TouchableOpacity>
             </View>
             <TouchableOpacity style={[styles.successDoneBtn, { width: '100%', marginTop: 8 }]} onPress={() => { setShowSuccess(null); setCustomerPhone(''); setOrderSource('dine-in'); setParcel(false); }}>

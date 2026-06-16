@@ -8,6 +8,12 @@ export interface Category {
   sortOrder: number;
 }
 
+// Recipe item (raw material consumed per unit of product sold)
+export interface RecipeItem {
+  ingredient: string; // Ingredient _id
+  quantity: number;
+}
+
 // Product
 export interface Product {
   _id: string;
@@ -21,6 +27,17 @@ export interface Product {
   shortCode: string;
   description: string;
   stock: number; // -1 = unlimited, 0 = out of stock, >0 = count
+  recipe?: RecipeItem[];
+}
+
+// Ingredient (raw material)
+export interface Ingredient {
+  _id: string;
+  name: string;
+  unit: string;
+  currentStock: number;
+  lowStockThreshold: number;
+  costPerUnit: number;
 }
 
 // Cart Item (product + quantity in current order)
@@ -118,6 +135,16 @@ export interface DailyReport {
     zomato:    { orders: number; revenue: number };
     qr:        { orders: number; revenue: number };
   };
+}
+
+// Minimal shape needed to print a kitchen ticket (KOT) — the full Order
+// satisfies this too, so the same print functions work for live and offline orders
+export interface KOTOrderInput {
+  orderNumber: string;
+  items: { productName: string; quantity: number }[];
+  tableNumber: string;
+  notes: string;
+  createdAt: string;
 }
 
 // Customer (aggregated from orders)
@@ -262,6 +289,7 @@ export type RootStackParamList = {
   Expenses: undefined;
   QRMenu: undefined;
   Customers: undefined;
+  Ingredients: undefined;
 };
 
 export type TabParamList = {

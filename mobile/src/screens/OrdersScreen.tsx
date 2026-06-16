@@ -10,7 +10,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Order } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
 import { getOrders, updateOrderStatus } from '../services/api';
-import { printReceipt } from '../utils/receipt';
+import { printReceipt, printKOT } from '../utils/receipt';
 import { useSettings } from '../context/SettingsContext';
 
 type OrderStatus = Order['status'];
@@ -83,6 +83,7 @@ const OrdersScreen: React.FC = () => {
   const [selected,     setSelected]     = useState<Order | null>(null);
   const [updating,     setUpdating]     = useState(false);
   const [reprinting,   setReprinting]   = useState(false);
+  const [printingKot,  setPrintingKot]  = useState(false);
 
   const fetchOrders = useCallback(async (pageNum: number, tab: string, append = false, source = 'all') => {
     try {
@@ -158,6 +159,17 @@ const OrdersScreen: React.FC = () => {
       showAlert('Print Error', e.message || 'Failed to print');
     } finally {
       setReprinting(false); }
+  };
+
+  const handlePrintKOT = async (order: Order) => {
+    try {
+      setPrintingKot(true);
+      await printKOT(order, settings);
+    } catch (e: any) {
+      showAlert('Print Error', e.message || 'Failed to print KOT');
+    } finally {
+      setPrintingKot(false);
+    }
   };
 
   // ── Order Card ──────────────────────────────────────────────────────────────
@@ -300,6 +312,18 @@ const OrdersScreen: React.FC = () => {
                     {reprinting
                       ? <ActivityIndicator size="small" color={Colors.primary} />
                       : <><MaterialIcons name="print" size={16} color={Colors.primary} /><Text style={styles.secondaryBtnText}>Reprint</Text></>
+                    }
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.secondaryBtn, { borderColor: Colors.warning }]}
+                    onPress={() => handlePrintKOT(selected)}
+                    disabled={printingKot}
+                    activeOpacity={0.75}
+                  >
+                    {printingKot
+                      ? <ActivityIndicator size="small" color={Colors.warning} />
+                      : <><MaterialIcons name="receipt-long" size={16} color={Colors.warning} /><Text style={[styles.secondaryBtnText, { color: Colors.warning }]}>KOT</Text></>
                     }
                   </TouchableOpacity>
 

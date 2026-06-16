@@ -1,0 +1,87 @@
+import { Router, Response } from 'express';
+import Ingredient from '../models/Ingredient';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
+
+const router = Router();
+router.use(authMiddleware);
+
+// GET all ingredients for this hotel
+router.get('/', async (req: AuthRequest, res: Response) => {
+  try {
+    const ingredients = await Ingredient.find({ hotelId: req.hotelId }).sort({ name: 1 });
+    res.json(ingredients);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+});
+
+// GET low stock ingredients (currentStock <= lowStockThreshold)
+router.get('/alerts/low-stock', async (req: AuthRequest, res: Response) => {
+  try {
+    const ingredients = await Ingredient.find({
+      hotelId: req.hotelId,
+      $expr: { $lte: ['$currentStock', '$lowStockThreshold'] },
+    }).sort({ currentStock: 1 });
+    res.json({ ingredients });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+});
+
+// POST create ingredient
+router.post('/', async (req: AuthRequest, res: Response) => {
+  try {
+    const ingredient = new Ingredient({ ...req.body, hotelId: req.hotelId });
+    await ingredient.save();
+    res.status(201).json(ingredient);
+  } catch (error) {
+    res.status(400).json({ message: 'Invalid data', error });
+  }
+});
+
+// PUT update ingredient (name, unit, threshold, cost)
+router.put('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const ingredient = await Ingredient.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId },
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+    res.json(ingredient);
+  } catch (error) {
+    res.status(400).json({ message: 'Invalid data', error });
+  }
+});
+
+// PATCH restock — add quantity to currentStock
+router.patch('/:id/restock', async (req: AuthRequest, res: Response) => {
+  try {
+    const { quantity } = req.body;
+    if (typeof quantity !== 'number' || quantity <= 0) {
+      return res.status(400).json({ message: 'Valid positive quantity required' });
+    }
+    const ingredient = await Ingredient.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId },
+      { $inc: { currentStock: quantity } },
+      { new: true }
+    );
+    if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+    res.json(ingredient);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+});
+
+// DELETE ingredient
+router.delete('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const ingredient = await Ingredient.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });
+    if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+    res.json({ message: 'Deleted' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+});
+
+export default router;

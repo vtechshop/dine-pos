@@ -35,6 +35,7 @@ import TableLayoutScreen from '../screens/TableLayoutScreen';
 import ReservationScreen from '../screens/ReservationScreen';
 import ExpenseScreen from '../screens/ExpenseScreen';
 import CustomersScreen from '../screens/CustomersScreen';
+import IngredientsScreen from '../screens/IngredientsScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<TabParamList>();
@@ -233,6 +234,11 @@ const AppNavigator = () => {
             <Stack.Screen
               name="Customers"
               component={CustomersScreen}
+              options={{ headerShown: false, animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="Ingredients"
+              component={IngredientsScreen}
               options={{ headerShown: false, animation: 'slide_from_right' }}
             />
             <Stack.Screen

@@ -13,6 +13,7 @@ export interface IProduct extends Document {
   description: string;
   stock: number;
   isDeleted: boolean;
+  recipe: { ingredient: mongoose.Types.ObjectId; quantity: number }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,6 +70,10 @@ const ProductSchema: Schema = new Schema(
       min: -1,
     },
     isDeleted: { type: Boolean, default: false },
+    recipe: [{
+      ingredient: { type: Schema.Types.ObjectId, ref: 'Ingredient' },
+      quantity: { type: Number, required: true, min: 0 },
+    }],
   },
   { timestamps: true }
 );

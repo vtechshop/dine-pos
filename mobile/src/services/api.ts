@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../utils/constants';
-import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer } from '../types';
+import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient } from '../types';
 
 const API_URL_STORAGE_KEY = '@hotel_pos_api_base_url';
 const JWT_STORAGE_KEY = '@hotel_pos_jwt_token';
@@ -621,3 +621,23 @@ export const createWasteLog = (data: Partial<WasteLog>): Promise<WasteLog> =>
 
 export const deleteWasteLog = (id: string): Promise<void> =>
   fetchAPI(`/waste/${id}`, { method: 'DELETE' });
+
+// ==================== INGREDIENTS (Raw Material Inventory) ====================
+
+export const getIngredients = (): Promise<Ingredient[]> =>
+  fetchAPI<Ingredient[]>('/ingredients');
+
+export const getLowStockIngredients = (): Promise<{ ingredients: Ingredient[] }> =>
+  fetchAPI('/ingredients/alerts/low-stock');
+
+export const createIngredient = (data: Partial<Ingredient>): Promise<Ingredient> =>
+  fetchAPI<Ingredient>('/ingredients', { method: 'POST', body: JSON.stringify(data) });
+
+export const updateIngredient = (id: string, data: Partial<Ingredient>): Promise<Ingredient> =>
+  fetchAPI<Ingredient>(`/ingredients/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const restockIngredient = (id: string, quantity: number): Promise<Ingredient> =>
+  fetchAPI<Ingredient>(`/ingredients/${id}/restock`, { method: 'PATCH', body: JSON.stringify({ quantity }) });
+
+export const deleteIngredient = (id: string): Promise<void> =>
+  fetchAPI(`/ingredients/${id}`, { method: 'DELETE' });

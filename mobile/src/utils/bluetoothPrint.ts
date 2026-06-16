@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { cacheDirectory, downloadAsync, readAsStringAsync, EncodingType } from 'expo-file-system/legacy';
-import { Order, Settings } from '../types';
+import { Order, Settings, KOTOrderInput } from '../types';
 import { UPI_ID } from './constants';
 
 // Download QR code image from API as base64 — works on all ESC/POS printers via printPic
@@ -215,5 +215,53 @@ export const printReceiptBluetooth = async (
   }
 
   // Paper feed and cut
+  await P.printText('\n\n\n', {});
+};
+
+// Print a kitchen ticket (KOT) via Bluetooth ESC/POS — item + qty only, no prices
+export const printKOTBluetooth = async (
+  order: KOTOrderInput,
+  settings: Settings
+): Promise<void> => {
+  if (!BluetoothEscposPrinter) throw new Error('Bluetooth printing not available');
+  const P = BluetoothEscposPrinter;
+
+  const date = new Date(order.createdAt);
+  const dateStr = date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  const hh = date.getHours();
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const hh12 = hh % 12 || 12;
+  const timeStr = `${hh12}:${mm} ${ampm}`;
+
+  const W = settings.printerWidth === '58mm' ? 32 : 42;
+  const divider  = '-'.repeat(W);
+  const dividerH = '='.repeat(W);
+  const clean = (s: string) => s.replace(/[^\x20-\x7E]/g, '');
+  const cLine = (text: string): string => {
+    const t = clean(text);
+    const pad = Math.max(0, Math.floor((W - t.length) / 2));
+    return ' '.repeat(pad) + t;
+  };
+
+  await P.printText(dividerH + '\n', {});
+  await P.printText(cLine('** KITCHEN ORDER **') + '\n', {});
+  await P.printText(dividerH + '\n', {});
+  await P.printText('Order : ' + clean(order.orderNumber) + '\n', {});
+  if (order.tableNumber) await P.printText('Table : ' + clean(order.tableNumber) + '\n', {});
+  await P.printText('Time  : ' + dateStr + ' ' + timeStr + '\n', {});
+  await P.printText(divider + '\n', {});
+
+  for (const item of order.items) {
+    await P.printText(clean(item.productName) + '\n', {});
+    await P.printText('     x' + item.quantity + '\n', {});
+  }
+  await P.printText(divider + '\n', {});
+
+  if (order.notes) {
+    await P.printText('NOTE: ' + clean(order.notes) + '\n', {});
+    await P.printText(divider + '\n', {});
+  }
+
   await P.printText('\n\n\n', {});
 };

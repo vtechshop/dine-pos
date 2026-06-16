@@ -20,9 +20,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons } from '@expo/vector-icons';
-import { RootStackParamList, Category } from '../types';
+import { RootStackParamList, Category, Ingredient, RecipeItem } from '../types';
 import { showAlert } from '../utils/alert';
-import { createProduct, updateProduct, getCategories, uploadImage } from '../services/api';
+import { createProduct, updateProduct, getCategories, uploadImage, getIngredients } from '../services/api';
 import { Colors, Spacing, FontSize, BorderRadius, API_BASE_URL } from '../utils/constants';
 import { useSettings } from '../context/SettingsContext';
 
@@ -51,6 +51,7 @@ const AddProductScreen: React.FC = () => {
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [stock, setStock] = useState('');
+  const [recipe, setRecipe] = useState<RecipeItem[]>([]);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
@@ -58,9 +59,22 @@ const AddProductScreen: React.FC = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(true);
 
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [ingredientModalVisible, setIngredientModalVisible] = useState(false);
+  const [pickedIngredientId, setPickedIngredientId] = useState('');
+  const [pickedQty, setPickedQty] = useState('');
+
   useEffect(() => {
     fetchCategories();
+    fetchIngredients();
   }, []);
+
+  const fetchIngredients = async () => {
+    try {
+      const data = await getIngredients();
+      setIngredients(data);
+    } catch { /* ingredients are optional — silent fail */ }
+  };
 
   useEffect(() => {
     if (editProduct) {
@@ -72,6 +86,7 @@ const AddProductScreen: React.FC = () => {
       setDescription(editProduct.description || '');
       setImageUrl(editProduct.image || '');
       setStock(editProduct.stock >= 0 ? editProduct.stock.toString() : '');
+      setRecipe(editProduct.recipe || []);
 
       if (typeof editProduct.category === 'string') {
         setCategoryId(editProduct.category);
@@ -137,6 +152,7 @@ const AddProductScreen: React.FC = () => {
         description: description.trim(),
         image: imageUrl.trim(),
         stock: isNaN(stockValue) ? -1 : stockValue,
+        recipe,
       };
 
       if (isEditMode && editProduct) {
@@ -209,6 +225,29 @@ const AddProductScreen: React.FC = () => {
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
+
+  const openIngredientPicker = () => {
+    setPickedIngredientId('');
+    setPickedQty('');
+    setIngredientModalVisible(true);
+  };
+
+  const addRecipeRow = () => {
+    if (!pickedIngredientId) { showAlert('Validation', 'Select an ingredient'); return; }
+    const qty = parseFloat(pickedQty);
+    if (!qty || qty <= 0) { showAlert('Validation', 'Enter a valid quantity'); return; }
+    setRecipe(prev => {
+      const without = prev.filter(r => r.ingredient !== pickedIngredientId);
+      return [...without, { ingredient: pickedIngredientId, quantity: qty }];
+    });
+    setIngredientModalVisible(false);
+  };
+
+  const removeRecipeRow = (ingredientId: string) => {
+    setRecipe(prev => prev.filter(r => r.ingredient !== ingredientId));
+  };
+
+  const getIngredientInfo = (id: string) => ingredients.find(i => i._id === id);
 
   const selectCategory = (category: Category) => {
     setCategoryId(category._id);
@@ -394,6 +433,32 @@ const AddProductScreen: React.FC = () => {
           />
         </View>
 
+        {/* Recipe (Raw Materials) */}
+        <View style={styles.fieldContainer}>
+          <Text style={styles.label}>Recipe (Raw Materials Used)</Text>
+          {recipe.length > 0 && (
+            <View style={{ marginBottom: Spacing.sm }}>
+              {recipe.map(r => {
+                const info = getIngredientInfo(r.ingredient);
+                return (
+                  <View key={r.ingredient} style={styles.recipeRow}>
+                    <Text style={styles.recipeRowText}>
+                      {info?.name || 'Unknown'} — {r.quantity} {info?.unit || ''}
+                    </Text>
+                    <TouchableOpacity onPress={() => removeRecipeRow(r.ingredient)} style={{ padding: 4 }}>
+                      <MaterialIcons name="close" size={18} color={Colors.danger} />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+          <TouchableOpacity style={styles.addRecipeBtn} onPress={openIngredientPicker} activeOpacity={0.8}>
+            <MaterialIcons name="add" size={18} color={Colors.primary} />
+            <Text style={styles.addRecipeBtnText}>Add Ingredient</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Veg/Non-Veg Toggle */}
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Food Type</Text>
@@ -495,6 +560,73 @@ const AddProductScreen: React.FC = () => {
                 contentContainerStyle={styles.categoryListContent}
                 showsVerticalScrollIndicator={false}
               />
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Ingredient Picker Modal */}
+      <Modal
+        visible={ingredientModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIngredientModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { paddingBottom: Spacing.xxl + bottom, maxHeight: '85%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Ingredient</Text>
+              <TouchableOpacity
+                onPress={() => setIngredientModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {ingredients.length === 0 ? (
+              <View style={styles.modalLoading}>
+                <MaterialIcons name="kitchen" size={48} color={Colors.textMuted} />
+                <Text style={styles.emptyText}>No ingredients yet</Text>
+                <Text style={[styles.emptyText, { fontSize: FontSize.sm, marginTop: Spacing.xs }]}>
+                  Add raw materials first from the Ingredients screen.
+                </Text>
+              </View>
+            ) : (
+              <>
+                <FlatList
+                  data={ingredients}
+                  keyExtractor={(item) => item._id}
+                  contentContainerStyle={styles.categoryListContent}
+                  showsVerticalScrollIndicator={false}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={[styles.categoryItem, item._id === pickedIngredientId && styles.categoryItemSelected]}
+                      onPress={() => setPickedIngredientId(item._id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.categoryItemText, item._id === pickedIngredientId && styles.categoryItemTextSelected]}>
+                        {item.name} ({item.unit})
+                      </Text>
+                      {item._id === pickedIngredientId && <Text style={styles.checkMark}>✓</Text>}
+                    </TouchableOpacity>
+                  )}
+                />
+                <View style={{ paddingHorizontal: Spacing.xl, paddingTop: Spacing.md }}>
+                  <Text style={styles.label}>Quantity used per unit sold</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={pickedQty}
+                    onChangeText={setPickedQty}
+                    placeholder="e.g. 0.2 (kg)"
+                    placeholderTextColor={Colors.textMuted}
+                    keyboardType="decimal-pad"
+                  />
+                  <TouchableOpacity style={[styles.saveButton, { marginTop: Spacing.lg }]} onPress={addRecipeRow}>
+                    <Text style={styles.saveButtonText}>Add to Recipe</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
             )}
           </View>
         </View>
@@ -631,6 +763,39 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.primary,
     fontWeight: '600',
+  },
+  recipeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Spacing.sm,
+  },
+  recipeRowText: {
+    fontSize: FontSize.md,
+    color: Colors.text,
+    flex: 1,
+  },
+  addRecipeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderStyle: 'dashed',
+  },
+  addRecipeBtnText: {
+    color: Colors.primary,
+    fontSize: FontSize.md,
+    fontWeight: '700',
   },
   saveButton: {
     backgroundColor: Colors.primary,

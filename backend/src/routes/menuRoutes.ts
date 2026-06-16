@@ -48,7 +48,7 @@ router.get('/menu', async (req: Request, res: Response) => {
 
     const [categories, products, settingsDoc] = await Promise.all([
       Category.find(catFilter).sort({ sortOrder: 1 }),
-      Product.find(prodFilter).populate('category', 'name icon color').sort({ name: 1 }),
+      Product.find(prodFilter).select('-recipe').populate('category', 'name icon color').sort({ name: 1 }),
       Settings.findOne(settingsFilter),
     ]);
 

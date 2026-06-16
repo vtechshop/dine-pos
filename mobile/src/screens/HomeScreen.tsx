@@ -10,7 +10,7 @@ import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { io, Socket } from 'socket.io-client';
 import { RootStackParamList, TabParamList, DailyReport } from '../types';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
-import { getDailyReport, getProducts, getCategories, getStoredHotelId, getSocketUrl, getLowStockProducts, createOrder, getOrder } from '../services/api';
+import { getDailyReport, getProducts, getCategories, getStoredHotelId, getSocketUrl, getLowStockProducts, getLowStockIngredients, createOrder, getOrder } from '../services/api';
 import { flushQueue, getQueue } from '../utils/offlineQueue';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
@@ -41,6 +41,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [newOrderAlert, setNewOrderAlert] = useState<NewOrderAlert | null>(null);
   const [orderBadge, setOrderBadge] = useState(0);
   const [lowStockCount, setLowStockCount] = useState(0);
+  const [lowIngredientCount, setLowIngredientCount] = useState(0);
   const [offlineCount, setOfflineCount]   = useState(0);
   const socketRef = useRef<Socket | null>(null);
   const settingsRef = useRef(settings);
@@ -52,15 +53,17 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const fetchStats = useCallback(async () => {
     try {
       setError(null);
-      const [report, products, categories, lowStock, queue] = await Promise.all([
+      const [report, products, categories, lowStock, lowIngredients, queue] = await Promise.all([
         getDailyReport().catch((): DailyReport => ({ date: '', totalSales: 0, totalTax: 0, totalOrders: 0, paymentBreakdown: { cash: 0, upi: 0, card: 0, split: 0 } })),
         getProducts().catch(() => []),
         getCategories().catch(() => []),
         getLowStockProducts(5).catch(() => ({ products: [], threshold: 5 })),
+        getLowStockIngredients().catch(() => ({ ingredients: [] })),
         getQueue().catch(() => []),
       ]);
       setStats({ todayOrders: report.totalOrders, todaySales: report.totalSales, totalProducts: products.length, totalCategories: categories.length });
       setLowStockCount(lowStock.products.length);
+      setLowIngredientCount(lowIngredients.ingredients.length);
       setOfflineCount(queue.length);
       // Flush queued offline orders on each load
       if (queue.length > 0) {
@@ -198,6 +201,21 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         )}
 
+        {/* ── Low Ingredient Stock Alert ── */}
+        {lowIngredientCount > 0 && (
+          <TouchableOpacity
+            style={[styles.alertBanner, { backgroundColor: '#8D6E63' }]}
+            onPress={() => navigation.navigate('Ingredients' as any)}
+            activeOpacity={0.88}
+          >
+            <MaterialIcons name="kitchen" size={22} color={Colors.white} />
+            <Text style={[styles.alertTitle, { marginLeft: Spacing.md }]}>
+              {lowIngredientCount} raw material{lowIngredientCount > 1 ? 's' : ''} running low
+            </Text>
+            <MaterialIcons name="arrow-forward-ios" size={16} color={Colors.white} />
+          </TouchableOpacity>
+        )}
+
         {/* ── Offline Queue Alert ── */}
         {offlineCount > 0 && (
           <View style={[styles.alertBanner, { backgroundColor: Colors.info }]}>
@@ -276,6 +294,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
             { label: 'Floor Map',    icon: 'table-restaurant' as const,  color: Colors.accent,  bg: Colors.accentBg,  nav: 'TableLayout' },
             { label: 'Bookings',     icon: 'event-available' as const,   color: '#6A1B9A',      bg: 'rgba(106,27,154,0.1)', nav: 'Reservations' },
             { label: 'Customers',    icon: 'people' as const,            color: '#25D366',      bg: 'rgba(37,211,102,0.1)', nav: 'Customers' },
+            { label: 'Ingredients',  icon: 'kitchen' as const,           color: '#8D6E63',      bg: 'rgba(141,110,99,0.1)', nav: 'Ingredients' },
             { label: 'Expenses',     icon: 'account-balance-wallet' as const, color: Colors.danger, bg: Colors.dangerBg, nav: 'Expenses' },
             { label: 'Settings',     icon: 'settings' as const,          color: Colors.textSecondary, bg: Colors.elevated, nav: 'Settings' },
           ].map((a, i) => (

@@ -2,9 +2,9 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { Order, Settings } from '../types';
+import { Order, Settings, KOTOrderInput } from '../types';
 import { UPI_ID, UPI_NAME } from './constants';
-import { printReceiptBluetooth, connectPrinter } from './bluetoothPrint';
+import { printReceiptBluetooth, printKOTBluetooth, connectPrinter } from './bluetoothPrint';
 
 const BT_PRINTER_KEY = '@hotel_pos_bt_printer';
 const BT_PRINTER_ADDRESS_KEY = '@hotel_pos_bt_printer_address';
@@ -270,6 +270,107 @@ export const printReceipt = async (
     });
   } else {
     // Fallback: open system print dialog with correct width
+    await Print.printAsync({ html, width: pageWidth });
+  }
+};
+
+// Generate kitchen ticket (KOT) HTML — item + qty only, no prices/tax
+export const generateKOTHTML = (order: KOTOrderInput, settings: Settings): string => {
+  const isWeb = Platform.OS === 'web';
+  const is58mm = settings.printerWidth === '58mm';
+
+  const fs = isWeb
+    ? { title: 22, info: 15, item: 20 }
+    : is58mm
+    ? { title: 14, info: 10, item: 13 }
+    : { title: 17, info: 12, item: 15 };
+
+  const itemRows = order.items
+    .map(
+      (item) => `
+      <tr>
+        <td style="text-align:left; padding:5px 2px; font-weight:bold;">${item.productName}</td>
+        <td style="text-align:right; padding:5px 2px; font-weight:bold;">x${item.quantity}</td>
+      </tr>`
+    )
+    .join('');
+
+  const date = new Date(order.createdAt);
+  const dateStr = date.toLocaleDateString('en-IN');
+  const timeStr = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+  return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      @page { size: ${isWeb ? '58mm auto' : `${settings.printerWidth} auto`}; margin: 0; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: 'Courier New', 'Lucida Console', monospace;
+        width: ${isWeb ? '100%' : is58mm ? '164px' : '227px'};
+        padding: 6px; color: #000; background: #fff;
+      }
+      .kot-title { text-align: center; font-weight: 900; font-size: ${fs.title}px; border: 2px solid #000; padding: 4px; margin-bottom: 6px; }
+      .info { font-size: ${fs.info}px; margin-bottom: 3px; font-weight: bold; }
+      .line { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+      table { width: 100%; border-collapse: collapse; }
+      td { font-size: ${fs.item}px; padding: 5px 2px; }
+      .notes { font-size: ${fs.info}px; margin-top: 6px; font-style: italic; border: 1px solid #000; padding: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="kot-title">KITCHEN ORDER</div>
+    <div class="info">Order: ${order.orderNumber}</div>
+    ${order.tableNumber ? `<div class="info">Table: ${order.tableNumber}</div>` : ''}
+    <div class="info">Time: ${dateStr} ${timeStr}</div>
+    <hr class="line">
+    <table><tbody>${itemRows}</tbody></table>
+    <hr class="line">
+    ${order.notes ? `<div class="notes">Note: ${order.notes}</div>` : ''}
+  </body>
+</html>`;
+};
+
+// Print KOT — uses Bluetooth if printer is paired, else generates a
+// thermal-sized PDF and opens the share sheet (can target a separate kitchen printer app)
+export const printKOT = async (
+  order: KOTOrderInput,
+  settings: Settings
+): Promise<void> => {
+  if (Platform.OS === 'web') {
+    const html = generateKOTHTML(order, settings);
+    const printWindow = window.open('', '_blank', 'width=450,height=700');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => { printWindow.print(); printWindow.close(); }, 300);
+    }
+    return;
+  }
+
+  const savedPrinter = await AsyncStorage.getItem(BT_PRINTER_KEY);
+  if (savedPrinter) {
+    const savedAddress = await AsyncStorage.getItem(BT_PRINTER_ADDRESS_KEY);
+    if (savedAddress) {
+      await connectPrinter(savedAddress);
+    }
+    await printKOTBluetooth(order, settings);
+    return;
+  }
+
+  const html = generateKOTHTML(order, settings);
+  const pageWidth = getThermalWidth(settings.printerWidth);
+  const { uri } = await Print.printToFileAsync({ html, width: pageWidth, height: pageWidth * 6 });
+
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(uri, {
+      mimeType: 'application/pdf',
+      UTI: 'com.adobe.pdf',
+      dialogTitle: 'Print KOT',
+    });
+  } else {
     await Print.printAsync({ html, width: pageWidth });
   }
 };

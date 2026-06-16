@@ -1,10 +1,44 @@
 import { Router, Response } from 'express';
 import Order from '../models/Order';
 import Product from '../models/Product';
+import Ingredient from '../models/Ingredient';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { io } from '../server';
 
 const router = Router();
+
+// Deduct (-1) or restore (+1) raw-material stock based on each product's recipe (BOM)
+const applyIngredientStockChange = async (orderItems: { product?: any; quantity: number }[], hotelId: string, sign: 1 | -1) => {
+  const productIds = orderItems.filter(i => i.product).map(i => i.product);
+  if (productIds.length === 0) return;
+
+  const productsWithRecipe = await Product.find({
+    _id: { $in: productIds }, hotelId, 'recipe.0': { $exists: true },
+  }).select('recipe');
+  if (productsWithRecipe.length === 0) return;
+
+  const deltas = new Map<string, number>();
+  for (const item of orderItems) {
+    if (!item.product) continue;
+    const product = productsWithRecipe.find(p => p._id.toString() === item.product.toString());
+    if (!product) continue;
+    for (const r of product.recipe) {
+      const key = r.ingredient.toString();
+      deltas.set(key, (deltas.get(key) || 0) + r.quantity * item.quantity);
+    }
+  }
+  if (deltas.size === 0) return;
+
+  const bulkOps = Array.from(deltas.entries()).map(([ingredientId, qty]) => ({
+    updateOne: {
+      filter: { _id: ingredientId, hotelId },
+      update: sign === -1
+        ? [{ $set: { currentStock: { $max: [{ $subtract: ['$currentStock', qty] }, 0] } } }]
+        : { $inc: { currentStock: qty } },
+    },
+  }));
+  await Ingredient.bulkWrite(bulkOps as any);
+};
 
 // Helper: Generate order number like ORD-20260310-001 (per hotel)
 const generateOrderNumber = async (hotelId: string): Promise<string> => {
@@ -227,6 +261,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       await Product.bulkWrite(bulkOps as any);
     }
 
+    // Deduct raw-material (ingredient) stock based on recipes
+    await applyIngredientStockChange(order.items, req.hotelId!, -1);
+
     io.to(`hotel_${req.hotelId}`).emit('new_order', {
       _id: order._id,
       orderNumber: order.orderNumber,
@@ -262,6 +299,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         },
       }));
       if (bulkOps.length > 0) await Product.bulkWrite(bulkOps as any);
+      await applyIngredientStockChange(existing.items, req.hotelId!, 1);
     }
 
     existing.status = status;
