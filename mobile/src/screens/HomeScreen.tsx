@@ -275,6 +275,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
             { label: 'Reports',      icon: 'bar-chart' as const,         color: Colors.info,    bg: Colors.infoBg,    nav: 'Reports' },
             { label: 'Floor Map',    icon: 'table-restaurant' as const,  color: Colors.accent,  bg: Colors.accentBg,  nav: 'TableLayout' },
             { label: 'Bookings',     icon: 'event-available' as const,   color: '#6A1B9A',      bg: 'rgba(106,27,154,0.1)', nav: 'Reservations' },
+            { label: 'Customers',    icon: 'people' as const,            color: '#25D366',      bg: 'rgba(37,211,102,0.1)', nav: 'Customers' },
             { label: 'Expenses',     icon: 'account-balance-wallet' as const, color: Colors.danger, bg: Colors.dangerBg, nav: 'Expenses' },
             { label: 'Settings',     icon: 'settings' as const,          color: Colors.textSecondary, bg: Colors.elevated, nav: 'Settings' },
           ].map((a, i) => (

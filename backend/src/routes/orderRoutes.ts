@@ -158,6 +158,42 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET customer list — aggregated from orders (name, phone, totalOrders, totalSpent, lastOrderDate)
+router.get('/customers', async (req: AuthRequest, res: Response) => {
+  try {
+    const match: any = {
+      hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId),
+      status: { $ne: 'cancelled' },
+      customerPhone: { $nin: ['', null] },
+    };
+    if (req.query.from && req.query.to) {
+      const from = new Date(req.query.from as string);
+      const to = new Date(req.query.to as string);
+      to.setHours(23, 59, 59, 999);
+      match.createdAt = { $gte: from, $lte: to };
+    }
+
+    const customers = await Order.aggregate([
+      { $match: match },
+      { $sort: { createdAt: -1 } },
+      { $group: {
+        _id: '$customerPhone',
+        customerName:   { $first: '$customerName' },
+        totalOrders:    { $sum: 1 },
+        totalSpent:     { $sum: '$grandTotal' },
+        lastOrderDate:  { $max: '$createdAt' },
+        firstOrderDate: { $min: '$createdAt' },
+      }},
+      { $sort: { lastOrderDate: -1 } },
+      { $project: { _id: 0, phone: '$_id', customerName: 1, totalOrders: 1, totalSpent: 1, lastOrderDate: 1, firstOrderDate: 1 } },
+    ]);
+
+    res.json({ customers, total: customers.length });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+});
+
 // GET single order
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {

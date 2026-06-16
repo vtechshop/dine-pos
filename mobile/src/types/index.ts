@@ -120,6 +120,16 @@ export interface DailyReport {
   };
 }
 
+// Customer (aggregated from orders)
+export interface Customer {
+  phone: string;
+  customerName: string;
+  totalOrders: number;
+  totalSpent: number;
+  lastOrderDate: string;
+  firstOrderDate: string;
+}
+
 // Navigation
 // Hotel (SaaS tenant)
 export interface Hotel {
@@ -251,6 +261,7 @@ export type RootStackParamList = {
   Reservations: undefined;
   Expenses: undefined;
   QRMenu: undefined;
+  Customers: undefined;
 };
 
 export type TabParamList = {

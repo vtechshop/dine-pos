@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../utils/constants';
-import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport } from '../types';
+import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer } from '../types';
 
 const API_URL_STORAGE_KEY = '@hotel_pos_api_base_url';
 const JWT_STORAGE_KEY = '@hotel_pos_jwt_token';
@@ -303,6 +303,13 @@ export const updateOrderStatus = (
     method: 'PATCH',
     body: JSON.stringify({ status }),
   });
+};
+
+// ==================== CUSTOMERS ====================
+
+export const getCustomers = (params?: { from?: string; to?: string }): Promise<{ customers: Customer[]; total: number }> => {
+  const query = params && params.from && params.to ? `?${new URLSearchParams(params).toString()}` : '';
+  return fetchAPI(`/orders/customers${query}`);
 };
 
 // ==================== REPORTS ====================
