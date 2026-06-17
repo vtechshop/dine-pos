@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../utils/constants';
-import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport } from '../types';
+import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport } from '../types';
 
 const API_URL_STORAGE_KEY = '@hotel_pos_api_base_url';
 const JWT_STORAGE_KEY = '@hotel_pos_jwt_token';
@@ -330,6 +330,10 @@ export const getDailyReport = (date?: string): Promise<DailyReport> => {
 
 export const getGSTReport = (from: string, to: string): Promise<GSTReport> => {
   return fetchAPI<GSTReport>(`/reports/gst?from=${from}&to=${to}`);
+};
+
+export const getTallyExport = (from: string, to: string): Promise<TallyReport> => {
+  return fetchAPI<TallyReport>(`/reports/tally?from=${from}&to=${to}`);
 };
 
 // ==================== SETTINGS ====================

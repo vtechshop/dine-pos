@@ -52,6 +52,21 @@ router.get('/menu', async (req: Request, res: Response) => {
       Settings.findOne(settingsFilter),
     ]);
 
+    // Top-5 bestselling product IDs by total quantity ordered (non-critical)
+    let bestsellerIds: string[] = [];
+    if (hotelId) {
+      try {
+        const bs = await Order.aggregate([
+          { $match: { hotelId, status: { $ne: 'cancelled' } } },
+          { $unwind: '$items' },
+          { $group: { _id: '$items.product', count: { $sum: '$items.quantity' } } },
+          { $sort: { count: -1 } },
+          { $limit: 5 },
+        ]);
+        bestsellerIds = bs.map((b: any) => b._id?.toString()).filter(Boolean);
+      } catch { /* non-critical */ }
+    }
+
     const settings = settingsDoc || { hotelName: 'My Hotel', address: '', phone: '', currencySymbol: '₹' };
 
     // Resolve hotelId: prefer products (always have it), fall back to settings
@@ -69,6 +84,7 @@ router.get('/menu', async (req: Request, res: Response) => {
       },
       categories,
       products,
+      bestsellerIds,
       cachedAt: new Date().toISOString(),
     });
   } catch (err) {

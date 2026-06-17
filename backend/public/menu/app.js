@@ -5,19 +5,21 @@
   'use strict';
 
   // ─── State ────────────────────────────────────────────────────────────────
-  let menuData      = null;
-  let hotelId       = null;
+  let menuData       = null;
+  let hotelId        = null;
   let activeCategory = 'all';
-  let vegOnly       = false;
-  let searchQuery   = '';
-  let isOffline     = !navigator.onLine;
-  let cart          = {};   // { productId: { product, qty } }
-  let view          = 'menu';
-  let chatMessages  = [];
-  let chatSocket    = null;
-  let chatUnread    = 0;
+  let vegOnly        = false;
+  let searchQuery    = '';
+  let isOffline      = !navigator.onLine;
+  let cart           = {};   // { productId: { product, qty } }
+  let view           = 'menu';
+  let chatMessages   = [];
+  let chatSocket     = null;
+  let chatUnread     = 0;
+  let selectedProduct = null;
+  let bestsellerIds   = [];
 
-  const urlParams  = new URLSearchParams(window.location.search);
+  const urlParams   = new URLSearchParams(window.location.search);
   const tableNumber = urlParams.get('table') || '';
 
   // ─── Service Worker ───────────────────────────────────────────────────────
@@ -55,7 +57,6 @@
   function clearCart() { cart = {}; updateCartBar(); }
 
   function updateCartBar() {
-    // Re-render just the cart bar without full re-render (avoids losing input focus)
     if (view !== 'menu') return;
     const existing = document.getElementById('cart-bar');
     const count = cartCount();
@@ -80,7 +81,8 @@
       const res = await fetch('/api/public/menu');
       if (!res.ok) throw new Error('non-ok');
       menuData = await res.json();
-      if (menuData.hotel?.id) hotelId = menuData.hotel.id;
+      if (menuData.hotel?.id)       hotelId      = menuData.hotel.id;
+      if (menuData.bestsellerIds)   bestsellerIds = menuData.bestsellerIds;
       render();
     } catch {
       if (!silent) renderError();
@@ -179,6 +181,8 @@
     else if (view === 'confirm') renderConfirm();
     else if (view === 'chat')    renderChat();
     else                         renderMenu();
+    // Restore detail overlay if it was open
+    if (selectedProduct && view === 'menu') renderDetailOverlay();
   }
 
   function renderLoader() {
@@ -208,7 +212,6 @@
     const currency  = hotel.currency || '₹';
     const count     = cartCount();
 
-    // Group by category when showing all
     let productHTML = '';
     if (products.length === 0) {
       productHTML = `<div class="empty-state">
@@ -298,40 +301,125 @@
     initChat();
   }
 
+  // ─── Product card (improved: description, bestseller badge, sold-out, tap to open detail) ──
   function productCard(p, currency) {
-    const qty     = cart[p._id]?.qty || 0;
-    const emoji   = getEmoji(p.name);
-    const hasImg  = p.image && p.image.trim();
-    const vegClass = p.isVeg ? 'veg' : 'nv';
-    const pJson   = escAttr(JSON.stringify(p));
+    const qty      = cart[p._id]?.qty || 0;
+    const emoji    = getEmoji(p.name);
+    const hasImg   = p.image && p.image.trim();
+    const soldOut  = !p.isAvailable || p.stock === 0;
+    const isBest   = bestsellerIds.includes(p._id);
+    const pJson    = escAttr(JSON.stringify(p));
+    const desc     = p.description
+      ? escHtml(p.description.substring(0, 52) + (p.description.length > 52 ? '…' : ''))
+      : '';
 
     return `
-      <div class="product-card">
+      <div class="product-card${soldOut ? ' sold-out' : ''}" onclick="openDetail('${pJson}')">
         <div class="product-img-wrap">
           ${hasImg
             ? `<img class="product-img" src="${p.image}" alt="${escHtml(p.name)}" loading="lazy"
                 onerror="this.parentElement.innerHTML='<div class=\\'product-emoji\\'>${emoji}</div>'">`
             : `<div class="product-emoji">${emoji}</div>`}
-          <div class="veg-indicator ${vegClass}"></div>
+          <div class="veg-indicator ${p.isVeg ? 'veg' : 'nv'}"></div>
+          ${isBest && !soldOut ? `<div class="bestseller-badge">⭐ Bestseller</div>` : ''}
+          ${soldOut ? `<div class="sold-out-overlay"><span class="sold-out-text">SOLD OUT</span></div>` : ''}
         </div>
         <div class="product-body">
           <div class="product-name">${escHtml(p.name)}</div>
-          ${p.category?.name ? `<div class="product-cat">${escHtml(p.category.name)}</div>` : ''}
+          ${desc ? `<div class="product-desc">${desc}</div>` : ''}
           <div class="product-footer-row">
             <div>
               <div class="product-price">${currency}${p.price.toFixed(0)}</div>
               ${p.taxPercent > 0 ? `<div class="product-tax">+${p.taxPercent}% GST</div>` : ''}
             </div>
-            <div class="qty-control">
-              ${qty > 0
-                ? `<button class="qty-btn" onclick="handleRemove('${p._id}')">−</button>
-                   <span class="qty-num">${qty}</span>
-                   <button class="qty-btn plus" onclick="handleAdd('${pJson}')">+</button>`
-                : `<button class="add-btn" onclick="handleAdd('${pJson}')">+ Add</button>`}
+            ${soldOut
+              ? `<span class="sold-out-tag">Sold Out</span>`
+              : qty > 0
+                ? `<div class="qty-control" onclick="event.stopPropagation()">
+                     <button class="qty-btn" onclick="handleRemove('${p._id}')">−</button>
+                     <span class="qty-num">${qty}</span>
+                     <button class="qty-btn plus" onclick="handleAdd('${pJson}')">+</button>
+                   </div>`
+                : `<button class="add-btn" onclick="event.stopPropagation(); handleAdd('${pJson}')">+ Add</button>`
+            }
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // ─── Item detail bottom-sheet ─────────────────────────────────────────────
+  function buildDetailHTML(p) {
+    const qty      = cart[p._id]?.qty || 0;
+    const emoji    = getEmoji(p.name);
+    const hasImg   = p.image && p.image.trim();
+    const soldOut  = !p.isAvailable || p.stock === 0;
+    const currency = menuData?.hotel?.currency || '₹';
+    const isBest   = bestsellerIds.includes(p._id);
+    const priceInclGST = p.taxPercent > 0
+      ? (p.price * (1 + p.taxPercent / 100)).toFixed(0)
+      : null;
+    const pJson = escAttr(JSON.stringify(p));
+
+    return `
+      <div id="detail-overlay" onclick="if(event.target===this)closeDetail()">
+        <div class="detail-sheet">
+          <div class="detail-handle"></div>
+          <button class="detail-close" onclick="closeDetail()">✕</button>
+
+          ${hasImg
+            ? `<img class="detail-img" src="${p.image}" alt="${escHtml(p.name)}" loading="lazy">`
+            : `<div class="detail-emoji-wrap">${emoji}</div>`}
+
+          <div class="detail-body">
+            <div class="detail-name-row">
+              <div class="veg-indicator ${p.isVeg ? 'veg' : 'nv'}" style="position:static;flex-shrink:0"></div>
+              <h2 class="detail-name">${escHtml(p.name)}</h2>
+            </div>
+
+            <div class="detail-tags">
+              <span class="detail-tag" style="color:${p.isVeg ? 'var(--veg)' : 'var(--non-veg)'}">
+                ${p.isVeg ? '🌿 Veg' : '🍗 Non-Veg'}
+              </span>
+              ${p.taxPercent > 0 ? `<span class="detail-tag">GST ${p.taxPercent}%</span>` : ''}
+              ${p.stock > 0 && p.stock !== -1 ? `<span class="detail-tag">📦 ${p.stock} left</span>` : ''}
+              ${isBest ? `<span class="detail-tag" style="color:#FF8F00">⭐ Bestseller</span>` : ''}
+            </div>
+
+            ${p.description ? `<p class="detail-desc">${escHtml(p.description)}</p>` : ''}
+
+            <div class="detail-price-row">
+              <div>
+                <div class="detail-price">${currency}${p.price.toFixed(0)}</div>
+                ${priceInclGST ? `<div class="detail-price-sub">${currency}${priceInclGST} incl. GST</div>` : ''}
+              </div>
+              ${soldOut
+                ? `<span class="sold-out-tag" style="font-size:13px;padding:8px 16px">Sold Out</span>`
+                : qty > 0
+                  ? `<div class="qty-control">
+                       <button class="qty-btn" onclick="handleRemoveDetail('${p._id}')">−</button>
+                       <span class="qty-num" style="font-size:18px;min-width:28px">${qty}</span>
+                       <button class="qty-btn plus" onclick="handleAddDetail('${pJson}')">+</button>
+                     </div>`
+                  : `<button class="add-btn add-btn-lg" onclick="handleAddDetail('${pJson}')">+ Add to Cart</button>`
+              }
             </div>
           </div>
         </div>
       </div>`;
+  }
+
+  function renderDetailOverlay() {
+    const existing = document.getElementById('detail-overlay');
+    if (!selectedProduct) {
+      if (existing) existing.remove();
+      return;
+    }
+    const html = buildDetailHTML(selectedProduct);
+    if (existing) {
+      existing.outerHTML = html;
+    } else {
+      document.getElementById('app').insertAdjacentHTML('beforeend', html);
+    }
   }
 
   // ─── Cart view ────────────────────────────────────────────────────────────
@@ -445,16 +533,52 @@
   }
 
   // ─── Global handlers (called from inline HTML) ─────────────────────────────
-  window.switchView = (v) => { view = v; render(); window.scrollTo(0, 0); };
+  window.switchView = (v) => {
+    view = v;
+    selectedProduct = null;
+    document.body.style.overflow = '';
+    render();
+    window.scrollTo(0, 0);
+  };
   window.switchViewChat = () => { view = 'chat'; chatUnread = 0; render(); };
   window.handleCategory = (id) => { activeCategory = id; render(); document.getElementById('products-area')?.scrollIntoView({ behavior: 'smooth' }); };
   window.handleSearch   = (val) => { searchQuery = val; render(); };
   window.toggleVeg      = () => { vegOnly = !vegOnly; render(); };
 
   window.handleAdd = (pJson) => {
-    try { addToCart(JSON.parse(pJson)); render(); } catch (e) { console.error(e); }
+    try { addToCart(JSON.parse(pJson)); } catch (e) { console.error(e); }
+    render();
   };
-  window.handleRemove = (id) => { removeFromCart(id); render(); };
+  window.handleRemove = (id) => {
+    removeFromCart(id);
+    render();
+  };
+
+  // Detail modal handlers
+  window.openDetail = (pJson) => {
+    try { selectedProduct = JSON.parse(pJson); } catch { return; }
+    document.body.style.overflow = 'hidden';
+    renderDetailOverlay();
+  };
+
+  window.closeDetail = () => {
+    selectedProduct = null;
+    document.body.style.overflow = '';
+    const overlay = document.getElementById('detail-overlay');
+    if (overlay) overlay.remove();
+  };
+
+  window.handleAddDetail = (pJson) => {
+    try { addToCart(JSON.parse(pJson)); } catch {}
+    if (selectedProduct) renderDetailOverlay();
+    updateCartBar();
+  };
+
+  window.handleRemoveDetail = (id) => {
+    removeFromCart(id);
+    if (selectedProduct) renderDetailOverlay();
+    updateCartBar();
+  };
 
   // Cart screen versions (re-render full cart on qty change)
   window.handleAddAndReRender = (pJson) => {

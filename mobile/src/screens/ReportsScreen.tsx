@@ -7,9 +7,9 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { DailyReport, GSTReport, Product } from '../types';
+import { DailyReport, GSTReport, TallyReport, Product } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
-import { getDailyReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics, createWasteLog, getGSTReport } from '../services/api';
+import { getDailyReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics, createWasteLog, getGSTReport, getTallyExport } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
 
 type Tab = 'daily' | 'products' | 'stock' | 'waste' | 'gst';
@@ -54,6 +54,7 @@ const ReportsScreen: React.FC = () => {
   const [gstReport, setGstReport] = useState<GSTReport | null>(null);
   const [gstLoading, setGstLoading] = useState(false);
   const [gstExporting, setGstExporting] = useState(false);
+  const [tallyExporting, setTallyExporting] = useState(false);
   const [gstFrom, setGstFrom] = useState(getMonthStart());
   const [gstTo, setGstTo] = useState(getTodayString());
   const emptyWasteForm = { productName: '', quantity: '', unit: 'portion', reason: 'expired' as WasteReason, estimatedLoss: '', notes: '' };
@@ -155,6 +156,30 @@ const ReportsScreen: React.FC = () => {
       showAlert('Export Error', e.message || 'Failed to export');
     } finally {
       setGstExporting(false);
+    }
+  };
+
+  const handleExportTally = async () => {
+    setTallyExporting(true);
+    try {
+      const data: TallyReport = await getTallyExport(gstFrom, gstTo);
+      if (data.rows.length === 0) {
+        showAlert('No Data', 'No orders in this period to export');
+        return;
+      }
+      const header = 'Date,Voucher No,Party Name,Payment Mode,Sales Amount,CGST (₹),SGST (₹),Discount (₹),Grand Total (₹),Narration';
+      const rows = data.rows.map(r =>
+        `${r.date},${r.voucherNo},"${r.party}",${r.paymentMode},${r.subtotal.toFixed(2)},${r.cgst.toFixed(2)},${r.sgst.toFixed(2)},${r.discount.toFixed(2)},${r.grandTotal.toFixed(2)},"${r.narration}"`
+      );
+      const csv = [header, ...rows].join('\n');
+      const filename = `Tally_Export_${gstFrom}_to_${gstTo}.csv`;
+      const fileUri = (FileSystem.documentDirectory || '') + filename;
+      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+      await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Tally Export' });
+    } catch (e: any) {
+      showAlert('Export Error', e.message || 'Failed to export Tally data');
+    } finally {
+      setTallyExporting(false);
     }
   };
 
@@ -545,6 +570,22 @@ const ReportsScreen: React.FC = () => {
                   }
                 </TouchableOpacity>
               )}
+
+              {/* Tally Export — order-level CSV for accountant */}
+              <TouchableOpacity
+                style={[styles.exportBtn, { backgroundColor: '#1565C0', marginTop: 10 }]}
+                onPress={handleExportTally}
+                disabled={tallyExporting}
+                activeOpacity={0.8}
+              >
+                {tallyExporting
+                  ? <ActivityIndicator size="small" color={Colors.white} />
+                  : <>
+                      <MaterialIcons name="account-balance" size={18} color={Colors.white} />
+                      <Text style={styles.exportBtnText}>Tally Export (Accountant)</Text>
+                    </>
+                }
+              </TouchableOpacity>
             </>
           )}
 

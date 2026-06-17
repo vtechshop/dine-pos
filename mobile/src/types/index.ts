@@ -281,6 +281,29 @@ export interface GSTReport {
   totalValue: number;
 }
 
+// Tally Export
+export interface TallyRow {
+  date: string;
+  voucherNo: string;
+  party: string;
+  paymentMode: string;
+  subtotal: number;
+  cgst: number;
+  sgst: number;
+  discount: number;
+  grandTotal: number;
+  narration: string;
+}
+
+export interface TallyReport {
+  from: string;
+  to: string;
+  rows: TallyRow[];
+  totalOrders: number;
+  totalRevenue: number;
+  totalTax: number;
+}
+
 // P&L Report
 export interface PnLReport {
   date: string;
