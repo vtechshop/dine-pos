@@ -2,15 +2,17 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { showAlert } from '../utils/alert';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, StatusBar, TextInput, Modal,
+  ActivityIndicator, StatusBar, TextInput, Modal, Linking,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { DailyReport, Product } from '../types';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import { DailyReport, GSTReport, Product } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
-import { getDailyReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics, createWasteLog } from '../services/api';
+import { getDailyReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics, createWasteLog, getGSTReport } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
 
-type Tab = 'daily' | 'products' | 'stock' | 'waste';
+type Tab = 'daily' | 'products' | 'stock' | 'waste' | 'gst';
 
 interface ProductSale {
   productName: string;
@@ -33,6 +35,11 @@ const getTodayString = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+const getMonthStart = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+};
+
 const ReportsScreen: React.FC = () => {
   const { settings } = useSettings();
   const [tab, setTab] = useState<Tab>('daily');
@@ -44,6 +51,11 @@ const ReportsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showWasteModal, setShowWasteModal] = useState(false);
   const [wasteSaving, setWasteSaving] = useState(false);
+  const [gstReport, setGstReport] = useState<GSTReport | null>(null);
+  const [gstLoading, setGstLoading] = useState(false);
+  const [gstExporting, setGstExporting] = useState(false);
+  const [gstFrom, setGstFrom] = useState(getMonthStart());
+  const [gstTo, setGstTo] = useState(getTodayString());
   const emptyWasteForm = { productName: '', quantity: '', unit: 'portion', reason: 'expired' as WasteReason, estimatedLoss: '', notes: '' };
   const [wasteForm, setWasteForm] = useState(emptyWasteForm);
   const cur = settings.currencySymbol || '₹';
@@ -86,11 +98,72 @@ const ReportsScreen: React.FC = () => {
     } finally { setLoading(false); }
   }, []);
 
+  const fetchGSTReport = useCallback(async (from: string, to: string) => {
+    setGstLoading(true);
+    try {
+      const data = await getGSTReport(from, to);
+      setGstReport(data);
+    } catch (e: any) {
+      showAlert('Error', e.message || 'Failed to load GST report');
+    } finally {
+      setGstLoading(false);
+    }
+  }, []);
+
+  const handleWhatsAppSummary = () => {
+    if (!report || report.totalOrders === 0) {
+      showAlert('No Data', 'No orders to report for this date');
+      return;
+    }
+    const avg = (report.totalSales / report.totalOrders).toFixed(2);
+    const msg =
+      `📊 *Daily Sales Summary*\n` +
+      `📅 Date: ${date}\n` +
+      `🏨 ${settings.hotelName}\n\n` +
+      `💰 Total Sales: ${cur}${report.totalSales.toFixed(2)}\n` +
+      `📋 Orders: ${report.totalOrders}\n` +
+      `💸 Tax Collected: ${cur}${report.totalTax.toFixed(2)}\n` +
+      `📊 Avg Order: ${cur}${avg}\n\n` +
+      `💳 *Payments:*\n` +
+      `• Cash: ${cur}${report.paymentBreakdown.cash.toFixed(2)}\n` +
+      `• UPI: ${cur}${report.paymentBreakdown.upi.toFixed(2)}\n` +
+      `• Card: ${cur}${report.paymentBreakdown.card.toFixed(2)}\n\n` +
+      `_Sent via Dine POS_`;
+    const raw = (settings.phone || '').replace(/\D/g, '');
+    const waPhone = raw.startsWith('91') ? raw : `91${raw}`;
+    Linking.openURL(`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`);
+  };
+
+  const handleExportGST = async () => {
+    if (!gstReport || gstReport.rows.length === 0) {
+      showAlert('No Data', 'No tax data for this period');
+      return;
+    }
+    setGstExporting(true);
+    try {
+      const header = 'Tax Rate (%),Taxable Value,CGST,SGST,Total Tax,Grand Total';
+      const rows = gstReport.rows.map(r =>
+        `${r.taxPercent}%,${r.taxableValue.toFixed(2)},${r.cgst.toFixed(2)},${r.sgst.toFixed(2)},${r.totalTax.toFixed(2)},${r.totalValue.toFixed(2)}`
+      );
+      rows.push(`TOTAL,${gstReport.totalTaxableValue.toFixed(2)},${gstReport.totalCGST.toFixed(2)},${gstReport.totalSGST.toFixed(2)},${gstReport.totalTax.toFixed(2)},${gstReport.totalValue.toFixed(2)}`);
+      const csv = [header, ...rows].join('\n');
+      const filename = `GST_Report_${gstFrom}_to_${gstTo}.csv`;
+      const fileUri = (FileSystem.documentDirectory || '') + filename;
+      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+      await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export GST Report' });
+    } catch (e: any) {
+      showAlert('Export Error', e.message || 'Failed to export');
+    } finally {
+      setGstExporting(false);
+    }
+  };
+
   useEffect(() => {
     if (tab === 'daily' || tab === 'products') fetchDaily(date);
     else if (tab === 'stock') fetchLowStock();
-    else fetchWaste(date);
-  }, [tab, date, fetchDaily, fetchLowStock, fetchWaste]);
+    else if (tab === 'waste') fetchWaste(date);
+    else if (tab === 'gst') fetchGSTReport(gstFrom, gstTo);
+  }, [tab, date, fetchDaily, fetchLowStock, fetchWaste, fetchGSTReport]);
 
   const navigateDate = (dir: -1 | 1) => {
     const d = new Date(date);
@@ -129,6 +202,15 @@ const ReportsScreen: React.FC = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Reports</Text>
+        {tab === 'daily' && report && report.totalOrders > 0 && (
+          <TouchableOpacity
+            style={[styles.headerAddBtn, { backgroundColor: '#25D366' }]}
+            onPress={handleWhatsAppSummary}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="send" size={20} color={Colors.white} />
+          </TouchableOpacity>
+        )}
         {tab === 'waste' && (
           <TouchableOpacity
             style={styles.headerAddBtn}
@@ -143,10 +225,11 @@ const ReportsScreen: React.FC = () => {
       {/* Tabs */}
       <View style={styles.tabs}>
         {([
-          { key: 'daily',    label: 'Daily',     icon: 'bar-chart' },
-          { key: 'products', label: 'Products',  icon: 'restaurant-menu' },
-          { key: 'stock',    label: 'Low Stock', icon: 'warning' },
-          { key: 'waste',    label: 'Waste',     icon: 'delete-sweep' },
+          { key: 'daily',    label: 'Daily',    icon: 'bar-chart' },
+          { key: 'products', label: 'Products', icon: 'restaurant-menu' },
+          { key: 'stock',    label: 'Stock',    icon: 'warning' },
+          { key: 'waste',    label: 'Waste',    icon: 'delete-sweep' },
+          { key: 'gst',      label: 'GST',      icon: 'receipt' },
         ] as { key: Tab; label: string; icon: any }[]).map(t => (
           <TouchableOpacity
             key={t.key}
@@ -171,8 +254,8 @@ const ReportsScreen: React.FC = () => {
         ))}
       </View>
 
-      {/* Date selector (not shown on stock tab) */}
-      {tab !== 'stock' && (
+      {/* Date selector (not shown on stock or gst tabs) */}
+      {tab !== 'stock' && tab !== 'gst' && (
         <View style={styles.dateRow}>
           <TouchableOpacity style={styles.dateArrow} onPress={() => navigateDate(-1)} activeOpacity={0.7}>
             <Text style={styles.dateArrowText}>{'<'}</Text>
@@ -364,6 +447,105 @@ const ReportsScreen: React.FC = () => {
                 </>
               )}
             </View>
+          )}
+
+          {/* ── GST TAB ── */}
+          {tab === 'gst' && (
+            <>
+              {/* Date Range Picker */}
+              <View style={styles.gstRangeRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.gstRangeLabel}>From</Text>
+                  <TextInput
+                    style={styles.gstRangeInput}
+                    value={gstFrom}
+                    onChangeText={setGstFrom}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
+                <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                  <Text style={styles.gstRangeLabel}>To</Text>
+                  <TextInput
+                    style={styles.gstRangeInput}
+                    value={gstTo}
+                    onChangeText={setGstTo}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={styles.gstFetchBtn}
+                  onPress={() => fetchGSTReport(gstFrom, gstTo)}
+                  activeOpacity={0.8}
+                >
+                  {gstLoading
+                    ? <ActivityIndicator size="small" color={Colors.white} />
+                    : <Text style={styles.gstFetchBtnText}>Fetch</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+
+              {gstReport && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Tax Breakup ({gstReport.from} → {gstReport.to})</Text>
+
+                  {/* Table Header */}
+                  <View style={[styles.gstRow, styles.gstHeaderRow]}>
+                    <Text style={[styles.gstCell, styles.gstCellHdr, { flex: 1 }]}>Tax%</Text>
+                    <Text style={[styles.gstCell, styles.gstCellHdr, { flex: 2 }]}>Taxable</Text>
+                    <Text style={[styles.gstCell, styles.gstCellHdr, { flex: 2 }]}>CGST</Text>
+                    <Text style={[styles.gstCell, styles.gstCellHdr, { flex: 2 }]}>SGST</Text>
+                    <Text style={[styles.gstCell, styles.gstCellHdr, { flex: 2 }]}>Total Tax</Text>
+                  </View>
+
+                  {gstReport.rows.length === 0 ? (
+                    <View style={styles.emptyBox}>
+                      <MaterialIcons name="receipt" size={40} color={Colors.textMuted} />
+                      <Text style={styles.emptyText}>No taxable orders in this period</Text>
+                    </View>
+                  ) : (
+                    <>
+                      {gstReport.rows.map(r => (
+                        <View key={r.taxPercent} style={styles.gstRow}>
+                          <Text style={[styles.gstCell, { flex: 1, color: Colors.primary, fontWeight: '700' }]}>{r.taxPercent}%</Text>
+                          <Text style={[styles.gstCell, { flex: 2 }]}>{cur}{r.taxableValue.toFixed(2)}</Text>
+                          <Text style={[styles.gstCell, { flex: 2 }]}>{cur}{r.cgst.toFixed(2)}</Text>
+                          <Text style={[styles.gstCell, { flex: 2 }]}>{cur}{r.sgst.toFixed(2)}</Text>
+                          <Text style={[styles.gstCell, { flex: 2, color: Colors.warning, fontWeight: '700' }]}>{cur}{r.totalTax.toFixed(2)}</Text>
+                        </View>
+                      ))}
+
+                      {/* Totals Row */}
+                      <View style={[styles.gstRow, styles.gstTotalRow]}>
+                        <Text style={[styles.gstCell, styles.gstTotalCell, { flex: 1 }]}>TOTAL</Text>
+                        <Text style={[styles.gstCell, styles.gstTotalCell, { flex: 2 }]}>{cur}{gstReport.totalTaxableValue.toFixed(2)}</Text>
+                        <Text style={[styles.gstCell, styles.gstTotalCell, { flex: 2 }]}>{cur}{gstReport.totalCGST.toFixed(2)}</Text>
+                        <Text style={[styles.gstCell, styles.gstTotalCell, { flex: 2 }]}>{cur}{gstReport.totalSGST.toFixed(2)}</Text>
+                        <Text style={[styles.gstCell, styles.gstTotalCell, { flex: 2, color: Colors.primary }]}>{cur}{gstReport.totalTax.toFixed(2)}</Text>
+                      </View>
+                    </>
+                  )}
+                </View>
+              )}
+
+              {gstReport && gstReport.rows.length > 0 && (
+                <TouchableOpacity
+                  style={styles.exportBtn}
+                  onPress={handleExportGST}
+                  disabled={gstExporting}
+                  activeOpacity={0.8}
+                >
+                  {gstExporting
+                    ? <ActivityIndicator size="small" color={Colors.white} />
+                    : <>
+                        <MaterialIcons name="download" size={18} color={Colors.white} />
+                        <Text style={styles.exportBtnText}>Export CSV (GSTR-1)</Text>
+                      </>
+                  }
+                </TouchableOpacity>
+              )}
+            </>
           )}
 
           {/* ── LOW STOCK TAB ── */}
@@ -674,6 +856,80 @@ const styles = StyleSheet.create({
 
   emptyBox: { alignItems: 'center', paddingVertical: Spacing.xl },
   emptyText: { color: Colors.textSecondary, fontSize: FontSize.md, marginTop: Spacing.sm },
+
+  // GST tab
+  gstRangeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    gap: Spacing.sm,
+  },
+  gstRangeLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  gstRangeInput: {
+    backgroundColor: Colors.card,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 8,
+    color: Colors.text,
+    fontSize: FontSize.sm,
+  },
+  gstFetchBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    alignSelf: 'flex-end',
+    minWidth: 56,
+    alignItems: 'center',
+  },
+  gstFetchBtnText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.sm },
+  gstRow: {
+    flexDirection: 'row',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  gstHeaderRow: { backgroundColor: Colors.card },
+  gstCell: {
+    fontSize: FontSize.sm,
+    color: Colors.text,
+    paddingHorizontal: 2,
+  },
+  gstCellHdr: {
+    fontWeight: '700',
+    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
+    textTransform: 'uppercase',
+  },
+  gstTotalRow: {
+    backgroundColor: Colors.card,
+    borderTopWidth: 2,
+    borderTopColor: Colors.primary + '40',
+  },
+  gstTotalCell: { fontWeight: '800', color: Colors.text },
+  exportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    paddingVertical: 14,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  exportBtnText: { color: Colors.white, fontWeight: '800', fontSize: FontSize.md },
 
   // Waste log modal
   modalOverlay: { flex: 1, backgroundColor: Colors.overlay },

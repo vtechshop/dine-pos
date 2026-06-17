@@ -21,6 +21,7 @@ export interface Product {
   price: number;
   category: Category | string;
   taxPercent: number;
+  hsnCode?: string;
   image: string;
   isAvailable: boolean;
   isVeg: boolean;
@@ -256,6 +257,28 @@ export interface WasteLog {
   date: string;
   notes: string;
   createdAt: string;
+}
+
+// GST Report
+export interface GSTReportRow {
+  taxPercent: number;
+  taxableValue: number;
+  cgst: number;
+  sgst: number;
+  totalTax: number;
+  totalValue: number;
+  totalItems: number;
+}
+
+export interface GSTReport {
+  from: string;
+  to: string;
+  rows: GSTReportRow[];
+  totalTaxableValue: number;
+  totalCGST: number;
+  totalSGST: number;
+  totalTax: number;
+  totalValue: number;
 }
 
 // P&L Report

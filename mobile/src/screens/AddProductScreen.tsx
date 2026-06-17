@@ -51,6 +51,7 @@ const AddProductScreen: React.FC = () => {
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [stock, setStock] = useState('');
+  const [hsnCode, setHsnCode] = useState('');
   const [recipe, setRecipe] = useState<RecipeItem[]>([]);
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -86,6 +87,7 @@ const AddProductScreen: React.FC = () => {
       setDescription(editProduct.description || '');
       setImageUrl(editProduct.image || '');
       setStock(editProduct.stock >= 0 ? editProduct.stock.toString() : '');
+      setHsnCode(editProduct.hsnCode || '');
       setRecipe(editProduct.recipe || []);
 
       if (typeof editProduct.category === 'string') {
@@ -149,6 +151,7 @@ const AddProductScreen: React.FC = () => {
         taxPercent: taxPercent.trim() ? parseFloat(taxPercent) : 0,
         isVeg,
         shortCode: shortCode.trim(),
+        hsnCode: hsnCode.trim(),
         description: description.trim(),
         image: imageUrl.trim(),
         stock: isNaN(stockValue) ? -1 : stockValue,
@@ -354,6 +357,19 @@ const AddProductScreen: React.FC = () => {
             placeholder="0"
             placeholderTextColor={Colors.textMuted}
             keyboardType="numeric"
+          />
+        </View>
+
+        {/* HSN / SAC Code */}
+        <View style={styles.fieldContainer}>
+          <Text style={styles.label}>HSN / SAC Code (GST)</Text>
+          <TextInput
+            style={styles.input}
+            value={hsnCode}
+            onChangeText={setHsnCode}
+            placeholder="e.g. 996331"
+            placeholderTextColor={Colors.textMuted}
+            keyboardType="default"
           />
         </View>
 

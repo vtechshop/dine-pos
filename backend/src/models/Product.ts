@@ -6,6 +6,7 @@ export interface IProduct extends Document {
   price: number;
   category: mongoose.Types.ObjectId;
   taxPercent: number;
+  hsnCode: string;
   image: string;
   isAvailable: boolean;
   isVeg: boolean;
@@ -41,6 +42,11 @@ const ProductSchema: Schema = new Schema(
       default: 5,
       min: 0,
       max: 100,
+    },
+    hsnCode: {
+      type: String,
+      default: '',
+      trim: true,
     },
     image: {
       type: String,

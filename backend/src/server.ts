@@ -29,6 +29,7 @@ import expenseRoutes from './routes/expenseRoutes';
 import wasteRoutes from './routes/wasteRoutes';
 import aggregatorRoutes from './routes/aggregatorRoutes';
 import ingredientRoutes from './routes/ingredientRoutes';
+import reportRoutes from './routes/reportRoutes';
 
 dotenv.config();
 
@@ -90,6 +91,7 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/waste', wasteRoutes);
 app.use('/api/aggregator', aggregatorRoutes);
 app.use('/api/ingredients', ingredientRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
