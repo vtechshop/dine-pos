@@ -99,7 +99,7 @@ router.get('/tally', authMiddleware, async (req: AuthRequest, res: Response) => 
       sgst:        +((o.taxTotal || 0) / 2).toFixed(2),
       discount:    +(o.discountAmount || 0).toFixed(2),
       grandTotal:  +(o.grandTotal || 0).toFixed(2),
-      narration:   `${o.orderSource || 'dine-in'} — Table ${o.tableNumber || 'Walk-in'}`.replace(/—\s*$/, '').trim(),
+      narration:   `${o.orderSource || 'dine-in'} - Table ${o.tableNumber || 'Walk-in'}`,
     }));
 
     res.json({
