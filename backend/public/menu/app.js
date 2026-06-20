@@ -204,11 +204,26 @@
   }
 
   function renderLoader() {
-    document.getElementById('app').innerHTML = `
-      <div class="loader">
-        <div class="spinner"></div>
-        <p>Loading menu…</p>
+    const skelCard = () => `
+      <div class="skel-card">
+        <div class="skel-img skel-pulse"></div>
+        <div class="skel-body">
+          <div class="skel-line skel-pulse" style="width:80%"></div>
+          <div class="skel-line skel-pulse" style="width:55%;height:8px"></div>
+          <div class="skel-footer">
+            <div class="skel-price skel-pulse"></div>
+            <div class="skel-btn skel-pulse"></div>
+          </div>
+        </div>
       </div>`;
+    document.getElementById('app').innerHTML = `
+      <div class="header">
+        <div class="header-top">
+          <div class="hotel-avatar">🍴</div>
+          <div><div class="hotel-name">Loading menu…</div></div>
+        </div>
+      </div>
+      <div class="skel-grid">${[1,2,3,4].map(skelCard).join('')}</div>`;
   }
 
   function renderError() {
@@ -223,12 +238,34 @@
       </div>`;
   }
 
+  // ─── Bottom navigation bar ────────────────────────────────────────────────
+  function renderBottomNav(activeTab) {
+    const count = cartCount();
+    const tabs = [
+      { id: 'menu', icon: '🍴', label: 'Menu', fn: "switchView('menu')" },
+      ...(tableNumber ? [{ id: 'bill', icon: '🧾', label: 'My Bill', fn: 'switchViewBill()' }] : []),
+      { id: 'cart', icon: '🛒', label: 'Cart', fn: "switchView('cart')", badge: count > 0 ? count : 0 },
+      ...(tableNumber ? [{ id: 'chat', icon: '💬', label: 'Chat', fn: 'switchViewChat()', badge: chatUnread > 0 ? chatUnread : 0 }] : []),
+    ];
+    return `<nav class="bottom-nav">${tabs.map(t => `
+      <button class="bnav-btn ${activeTab === t.id ? 'active' : ''}" onclick="${t.fn}">
+        <div class="bnav-indicator"></div>
+        <span class="bnav-icon" style="position:relative">
+          ${t.icon}
+          ${t.badge ? `<span class="bnav-badge">${t.badge}</span>` : ''}
+        </span>
+        <span class="bnav-label">${t.label}</span>
+      </button>`).join('')}
+    </nav>`;
+  }
+
   // ─── Menu view ────────────────────────────────────────────────────────────
   function renderMenu() {
     const { hotel, categories } = menuData;
     const products  = filteredProducts();
     const currency  = hotel.currency || '₹';
     const count     = cartCount();
+    const initial   = (hotel.name || 'M')[0].toUpperCase();
 
     let productHTML = '';
     if (products.length === 0) {
@@ -255,26 +292,20 @@
     document.getElementById('app').innerHTML = `
       <div class="header">
         <div class="header-top">
+          <div class="hotel-avatar">${initial}</div>
           <div style="flex:1;min-width:0">
             <div class="hotel-name">${hotel.name || 'Our Menu'}</div>
-            ${tableNumber ? `<div class="hotel-sub">🪑 Table ${tableNumber}</div>` : ''}
+            ${tableNumber ? `<div class="hotel-sub">🪑 Table ${tableNumber}</div>` : `<div class="hotel-sub">Tap an item to order</div>`}
           </div>
+          ${!tableNumber ? `
           <div class="header-actions">
-            ${tableNumber ? `
-              <button class="icon-btn" onclick="switchViewBill()" title="View Bill">
-                🧾
-              </button>
-              <button class="icon-btn" onclick="switchViewChat()">
-                💬
-                <span id="chat-badge" class="badge ${chatUnread > 0 ? 'show' : ''}">${chatUnread}</span>
-              </button>` : ''}
             <button class="icon-btn" onclick="switchView('cart')">
               🛒
               <span class="badge ${count > 0 ? 'show' : ''}">${count}</span>
             </button>
-          </div>
+          </div>` : ''}
         </div>
-        <div class="offline-badge ${isOffline ? 'show' : ''}">📵 Offline Mode</div>
+        ${isOffline ? `<div class="offline-badge show">📵 Offline Mode</div>` : ''}
       </div>
 
       <div class="search-row">
@@ -316,6 +347,7 @@
           <span class="cart-bar-right">${currency}${cartGrand().toFixed(0)}</span>
         </div>` : ''}
 
+      ${renderBottomNav('menu')}
       <div class="toast" id="toast"></div>
     `;
 
@@ -765,22 +797,28 @@
     }
 
     document.getElementById('app').innerHTML = `
-      <div class="cart-header">
-        <button class="back-btn" onclick="switchView('menu')">← Menu</button>
-        <span class="cart-title">My Bill</span>
-        <span class="cart-table">${tableNumber ? `Table ${tableNumber}` : ''}</span>
+      <div class="header">
+        <div class="header-top">
+          <div class="hotel-avatar">🧾</div>
+          <div style="flex:1">
+            <div class="hotel-name">My Bill</div>
+            ${tableNumber ? `<div class="hotel-sub">🪑 Table ${tableNumber}</div>` : ''}
+          </div>
+          <button onclick="fetchBill()" style="background:rgba(255,255,255,0.2);border:none;border-radius:50px;padding:6px 14px;font-size:12px;font-weight:700;color:#fff;cursor:pointer">
+            ↻ Refresh
+          </button>
+        </div>
       </div>
 
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 6px;background:var(--bg)">
-        <span style="font-size:12px;color:var(--text3)">Updated at ${now}</span>
-        <button onclick="fetchBill()" style="background:none;border:1.5px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer">
-          ↻ Refresh
-        </button>
+      <div style="padding:8px 14px 4px;background:var(--bg)">
+        <span style="font-size:11px;color:var(--text3);font-weight:500">Last updated: ${now}</span>
       </div>
 
       <div class="screen" style="padding-top:0">
         ${content}
       </div>
+
+      ${renderBottomNav('bill')}
       <div class="toast" id="toast"></div>
     `;
   }
