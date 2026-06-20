@@ -44,6 +44,16 @@ router.put('/', async (req: AuthRequest, res: Response) => {
       { ...req.body, hotelId: req.hotelId },
       { new: true, upsert: true, runValidators: true }
     );
+
+    // Keep Hotel record in sync so Super Admin dashboard shows the latest name/phone
+    const syncFields: Record<string, any> = {};
+    if (req.body.hotelName)  syncFields.hotelName  = req.body.hotelName;
+    if (req.body.phone)      syncFields.phone       = req.body.phone;
+    if (req.body.ownerName)  syncFields.ownerName   = req.body.ownerName;
+    if (Object.keys(syncFields).length > 0) {
+      await Hotel.findByIdAndUpdate(req.hotelId, syncFields);
+    }
+
     res.json(settings);
   } catch (error) {
     res.status(400).json({ message: 'Invalid data', error });
