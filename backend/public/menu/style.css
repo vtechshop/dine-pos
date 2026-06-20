@@ -756,3 +756,40 @@ body {
   color: var(--text3);
   margin-top: 2px;
 }
+
+/* ── BILL VIEW ───────────────────────────────────────────────────────────── */
+
+/* Receipt-style dashed separator between bill items and summary */
+.cart-summary {
+  position: relative;
+}
+.cart-summary::before {
+  content: '';
+  display: block;
+  border-top: 2px dashed var(--border);
+  margin: 0 16px 12px;
+}
+
+/* Grand total row emphasis */
+.summary-row.grand {
+  background: var(--primary-bg);
+  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--primary) !important;
+  margin-top: 8px;
+}
+.summary-row.grand span:first-child { color: var(--primary); font-size: 15px; }
+.summary-row.grand span:last-child  { font-size: 20px; }
+
+/* Bill pay-at-counter card */
+.bill-pay-card {
+  background: var(--primary-bg);
+  border: 1.5px solid var(--primary);
+  border-radius: 14px;
+  padding: 16px;
+  margin: 12px;
+  text-align: center;
+}
+.bill-pay-icon  { font-size: 24px; margin-bottom: 6px; }
+.bill-pay-title { font-size: 15px; font-weight: 800; color: var(--primary); }
+.bill-pay-sub   { font-size: 12px; color: var(--text2); margin-top: 3px; }

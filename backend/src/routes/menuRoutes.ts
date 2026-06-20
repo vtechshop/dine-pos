@@ -149,4 +149,64 @@ router.post('/orders', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/public/bill?table=<tableNumber>&hotel=<hotelId>
+// Returns running bill for a table (all today's non-cancelled orders)
+router.get('/bill', async (req: Request, res: Response) => {
+  try {
+    const { table, hotel } = req.query as { table?: string; hotel?: string };
+    if (!table) return res.status(400).json({ message: 'table param required' });
+
+    const hotelId = await resolveHotelId(hotel);
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const filter: any = {
+      tableNumber: table,
+      status: { $nin: ['cancelled'] },
+      createdAt: { $gte: startOfDay },
+    };
+    if (hotelId) filter.hotelId = hotelId;
+
+    const orders = await Order.find(filter).sort({ createdAt: 1 }).lean();
+
+    // Merge items across all orders by (name + price) key
+    const itemMap: Record<string, { productName: string; quantity: number; price: number; taxPercent: number; total: number }> = {};
+    let subtotal = 0;
+    let taxTotal = 0;
+
+    for (const order of orders as any[]) {
+      for (const item of order.items) {
+        const key = `${item.productName}__${item.price}`;
+        if (itemMap[key]) {
+          itemMap[key].quantity += item.quantity;
+          itemMap[key].total    += item.price * item.quantity;
+        } else {
+          itemMap[key] = {
+            productName: item.productName,
+            quantity:    item.quantity,
+            price:       item.price,
+            taxPercent:  item.taxPercent || 0,
+            total:       item.price * item.quantity,
+          };
+        }
+        subtotal += item.price * item.quantity;
+        taxTotal += item.taxAmount || 0;
+      }
+    }
+
+    res.json({
+      table,
+      orderCount: orders.length,
+      items:      Object.values(itemMap),
+      subtotal:   +subtotal.toFixed(2),
+      taxTotal:   +taxTotal.toFixed(2),
+      grandTotal: +(subtotal + taxTotal).toFixed(2),
+      fetchedAt:  new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load bill' });
+  }
+});
+
 export default router;

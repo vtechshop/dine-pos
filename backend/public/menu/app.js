@@ -18,6 +18,8 @@
   let chatUnread     = 0;
   let selectedProduct = null;
   let bestsellerIds   = [];
+  let billData        = null;
+  let billLoading     = false;
 
   const urlParams   = new URLSearchParams(window.location.search);
   const tableNumber = urlParams.get('table') || '';
@@ -175,11 +177,27 @@
     return list;
   }
 
+  // ─── Fetch bill for this table ────────────────────────────────────────────
+  async function fetchBill() {
+    if (!tableNumber) return;
+    billLoading = true;
+    render();
+    try {
+      const params = new URLSearchParams({ table: tableNumber });
+      if (hotelId) params.set('hotel', hotelId);
+      const res = await fetch(`/api/public/bill?${params}`);
+      billData = res.ok ? await res.json() : null;
+    } catch { billData = null; }
+    billLoading = false;
+    render();
+  }
+
   // ─── Main render ──────────────────────────────────────────────────────────
   function render() {
     if      (view === 'cart')    renderCart();
     else if (view === 'confirm') renderConfirm();
     else if (view === 'chat')    renderChat();
+    else if (view === 'bill')    renderBill();
     else                         renderMenu();
     // Restore detail overlay if it was open
     if (selectedProduct && view === 'menu') renderDetailOverlay();
@@ -243,6 +261,9 @@
           </div>
           <div class="header-actions">
             ${tableNumber ? `
+              <button class="icon-btn" onclick="switchViewBill()" title="View Bill">
+                🧾
+              </button>
               <button class="icon-btn" onclick="switchViewChat()">
                 💬
                 <span id="chat-badge" class="badge ${chatUnread > 0 ? 'show' : ''}">${chatUnread}</span>
@@ -541,6 +562,8 @@
     window.scrollTo(0, 0);
   };
   window.switchViewChat = () => { view = 'chat'; chatUnread = 0; render(); };
+  window.switchViewBill = () => { view = 'bill'; billData = null; fetchBill(); };
+  window.fetchBill = fetchBill;
   window.handleCategory = (id) => { activeCategory = id; render(); document.getElementById('products-area')?.scrollIntoView({ behavior: 'smooth' }); };
   window.handleSearch   = (val) => { searchQuery = val; render(); };
   window.toggleVeg      = () => { vegOnly = !vegOnly; render(); };
@@ -678,6 +701,85 @@
             style="margin:0;flex:1" onkeydown="if(event.key==='Enter') sendChat()" />
           <button onclick="sendChat()" class="add-btn" style="padding:10px 18px;border-radius:10px;white-space:nowrap">Send</button>
         </div>
+      </div>
+      <div class="toast" id="toast"></div>
+    `;
+  }
+
+  // ─── Bill view ────────────────────────────────────────────────────────────
+  function renderBill() {
+    const currency = menuData?.hotel?.currency || '₹';
+    const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+    let content = '';
+
+    if (billLoading) {
+      content = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 24px;gap:14px">
+        <div class="spinner"></div>
+        <p style="color:var(--text2);font-size:14px">Loading your bill…</p>
+      </div>`;
+    } else if (!billData || billData.items.length === 0) {
+      content = `<div class="empty-state" style="padding:60px 24px">
+        <div class="big">🧾</div>
+        <h3>No orders yet</h3>
+        <p>Place your first order from the menu!</p>
+        <button class="btn-primary" onclick="switchView('menu')" style="margin-top:20px;width:auto;padding:13px 32px">Browse Menu</button>
+      </div>`;
+    } else {
+      const itemRows = billData.items.map(item => `
+        <div class="cart-item">
+          <div class="cart-item-info">
+            <div class="cart-item-name">${escHtml(item.productName)}</div>
+            <div class="cart-item-price">${currency}${item.price.toFixed(0)} × ${item.quantity}</div>
+          </div>
+          <div class="cart-item-total">${currency}${item.total.toFixed(0)}</div>
+        </div>`).join('');
+
+      content = `
+        ${itemRows}
+
+        <div class="cart-summary">
+          <div class="summary-row">
+            <span>Subtotal (${billData.orderCount} order${billData.orderCount > 1 ? 's' : ''})</span>
+            <span>${currency}${billData.subtotal.toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Tax (GST)</span>
+            <span>${currency}${billData.taxTotal.toFixed(2)}</span>
+          </div>
+          <div class="summary-row grand">
+            <span>TOTAL DUE</span>
+            <span>${currency}${billData.grandTotal.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <div style="background:var(--primary-bg);border:1.5px solid var(--primary);border-radius:14px;padding:14px 16px;margin:12px;text-align:center">
+          <div style="font-size:20px;margin-bottom:6px">💳</div>
+          <div style="font-size:14px;font-weight:700;color:var(--primary)">Pay at the Counter</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:3px">Show this bill to our staff</div>
+        </div>
+
+        <button class="btn-primary" onclick="switchView('menu')">
+          + Order More Items
+        </button>`;
+    }
+
+    document.getElementById('app').innerHTML = `
+      <div class="cart-header">
+        <button class="back-btn" onclick="switchView('menu')">← Menu</button>
+        <span class="cart-title">My Bill</span>
+        <span class="cart-table">${tableNumber ? `Table ${tableNumber}` : ''}</span>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 6px;background:var(--bg)">
+        <span style="font-size:12px;color:var(--text3)">Updated at ${now}</span>
+        <button onclick="fetchBill()" style="background:none;border:1.5px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer">
+          ↻ Refresh
+        </button>
+      </div>
+
+      <div class="screen" style="padding-top:0">
+        ${content}
       </div>
       <div class="toast" id="toast"></div>
     `;
