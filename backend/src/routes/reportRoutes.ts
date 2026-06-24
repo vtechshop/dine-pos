@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import Order from '../models/Order';
+import Settings from '../models/Settings';
 import mongoose from 'mongoose';
 
 const router = Router();
@@ -113,6 +114,110 @@ router.get('/tally', authMiddleware, async (req: AuthRequest, res: Response) => 
   } catch (err) {
     console.error('Tally export error:', err);
     res.status(500).json({ error: 'Failed to generate Tally export' });
+  }
+});
+
+// GET /api/reports/gstr1-json?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Generates official GSTR-1 JSON in portal-upload format (GST3.1.7)
+// B2B is empty (no customer GSTIN stored); B2CS covers all walk-in / dine-in sales
+// HSN uses product.hsnCode; items without one fall under SAC 9963 (restaurant services)
+router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { from, to } = req.query as { from?: string; to?: string };
+    const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
+
+    const today = new Date();
+    const fromDate = from ? new Date(from) : new Date(today.getFullYear(), today.getMonth(), 1);
+    fromDate.setHours(0, 0, 0, 0);
+    const toDate = to ? new Date(to) : new Date();
+    toDate.setHours(23, 59, 59, 999);
+
+    const settings = await Settings.findOne({ hotelId: req.hotelId });
+    const gstin    = (settings?.gstNumber || '').toUpperCase().trim();
+    const stateCode = gstin.length >= 2 ? gstin.substring(0, 2) : '33';
+    const fp = `${String(fromDate.getMonth() + 1).padStart(2, '0')}${fromDate.getFullYear()}`;
+
+    const orders = await Order.find({
+      hotelId,
+      status: { $ne: 'cancelled' },
+      createdAt: { $gte: fromDate, $lte: toDate },
+    }).populate('items.product', 'hsnCode name').lean();
+
+    // Aggregate B2CS (all intra-state B2C sales) and HSN summary in one pass
+    const taxMap:  Record<number, { txval: number; camt: number; samt: number }> = {};
+    const hsnMap:  Record<string, { desc: string; qty: number; val: number; txval: number; camt: number; samt: number; rt: number }> = {};
+
+    for (const order of orders as any[]) {
+      for (const item of order.items) {
+        const rt      = +(item.taxPercent || 0);
+        const taxable = +(item.price * item.quantity).toFixed(2);
+        const taxAmt  = +(item.taxAmount || 0);
+        const total   = +(taxable + taxAmt).toFixed(2);
+        const half    = +(taxAmt / 2).toFixed(4);
+
+        // B2CS: group by tax rate (skip 0% items — not required in GSTR-1 B2CS)
+        if (rt > 0) {
+          if (!taxMap[rt]) taxMap[rt] = { txval: 0, camt: 0, samt: 0 };
+          taxMap[rt].txval += taxable;
+          taxMap[rt].camt  += half;
+          taxMap[rt].samt  += half;
+        }
+
+        // HSN: group by product hsnCode (SAC 9963 default)
+        const product  = item.product as any;
+        const hsnCode  = ((product?.hsnCode || '') as string).trim() || '9963';
+        const hsnDesc  = hsnCode === '9963' ? 'Restaurant Services' : (product?.name || 'Food & Beverages');
+        if (!hsnMap[hsnCode]) hsnMap[hsnCode] = { desc: hsnDesc, qty: 0, val: 0, txval: 0, camt: 0, samt: 0, rt };
+        hsnMap[hsnCode].qty   += item.quantity;
+        hsnMap[hsnCode].txval += taxable;
+        hsnMap[hsnCode].val   += total;
+        hsnMap[hsnCode].camt  += half;
+        hsnMap[hsnCode].samt  += half;
+      }
+    }
+
+    const b2cs = Object.entries(taxMap).map(([rateStr, v]) => ({
+      camt:    +v.camt.toFixed(2),
+      csamt:   0,
+      iamt:    0,
+      pos:     stateCode,
+      rt:      parseFloat(rateStr),
+      samt:    +v.samt.toFixed(2),
+      sply_ty: 'INTRA',
+      txval:   +v.txval.toFixed(2),
+      typ:     'OE',
+    }));
+
+    const hsnB2c = Object.entries(hsnMap).map(([hsn_sc, v], idx) => ({
+      num:    idx + 1,
+      hsn_sc,
+      desc:   v.desc,
+      uqc:    'OTH',
+      qty:    v.qty,
+      val:    +v.val.toFixed(2),
+      txval:  +v.txval.toFixed(2),
+      iamt:   0,
+      camt:   +v.camt.toFixed(2),
+      samt:   +v.samt.toFixed(2),
+      csamt:  0,
+      rt:     v.rt,
+    }));
+
+    res.json({
+      gstin,
+      fp,
+      version: 'GST3.1.7',
+      hash:    'hash',
+      b2b:     [],
+      b2cs,
+      hsn: {
+        hsn_b2b: [],
+        hsn_b2c: hsnB2c,
+      },
+    });
+  } catch (err) {
+    console.error('GSTR-1 JSON error:', err);
+    res.status(500).json({ error: 'Failed to generate GSTR-1 JSON' });
   }
 });
 

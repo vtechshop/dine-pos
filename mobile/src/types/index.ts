@@ -304,6 +304,27 @@ export interface TallyReport {
   totalTax: number;
 }
 
+// GSTR-1 JSON (portal upload format)
+export interface GSTR1B2CSEntry {
+  camt: number; csamt: number; iamt: number;
+  pos: string; rt: number; samt: number;
+  sply_ty: string; txval: number; typ: string;
+}
+export interface GSTR1HsnEntry {
+  num: number; hsn_sc: string; desc: string; uqc: string;
+  qty: number; val: number; txval: number;
+  iamt: number; camt: number; samt: number; csamt: number; rt: number;
+}
+export interface GSTR1Json {
+  gstin: string;
+  fp: string;
+  version: string;
+  hash: string;
+  b2b: any[];
+  b2cs: GSTR1B2CSEntry[];
+  hsn: { hsn_b2b: GSTR1HsnEntry[]; hsn_b2c: GSTR1HsnEntry[] };
+}
+
 // P&L Report
 export interface PnLReport {
   date: string;
