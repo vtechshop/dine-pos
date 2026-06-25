@@ -711,7 +711,7 @@
   window.sendWaiterRequest = (msg) => {
     document.getElementById('waiter-modal')?.remove();
     if (chatSocket) {
-      chatSocket.emit('customer_message', { tableNumber, message: `[Waiter Request] ${msg}` });
+      chatSocket.emit('customer_message', { hotelId, tableNumber, message: `[Waiter Request] ${msg}` });
       chatMessages.push({ sender: 'customer', message: `[Waiter Request] ${msg}`, createdAt: new Date().toISOString() });
     }
     showToast('✅ Waiter has been notified!');
@@ -880,7 +880,7 @@
     const inp = document.getElementById('chatMsg');
     const txt = inp?.value?.trim();
     if (!txt || !chatSocket) return;
-    chatSocket.emit('customer_message', { tableNumber, message: txt });
+    chatSocket.emit('customer_message', { hotelId, tableNumber, message: txt });
     chatMessages.push({ sender: 'customer', message: txt, createdAt: new Date().toISOString() });
     inp.value = '';
     renderChat();
