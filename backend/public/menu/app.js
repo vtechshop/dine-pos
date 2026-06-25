@@ -275,18 +275,35 @@
         <p>${searchQuery ? `No results for "${searchQuery}"` : vegOnly ? 'No veg items in this category' : 'Check back soon'}</p>
       </div>`;
     } else if (activeCategory === 'all' && !searchQuery) {
+      // Popular section at top
+      const popular = products.filter(p => bestsellerIds.includes(p._id) && p.isAvailable !== false);
+      let popularHTML = '';
+      if (popular.length > 0) {
+        popularHTML = `
+          <div class="cat-sec-hdr">
+            <span>⭐ Popular</span>
+            <span class="cat-sec-count">${popular.length} items</span>
+          </div>
+          <div class="products-list">${popular.map(p => productCard(p, currency)).join('')}</div>`;
+      }
+      // Category groups
       const grouped = {};
+      const catOrder = [];
       products.forEach(p => {
         const n = p.category?.name || 'Other';
-        if (!grouped[n]) grouped[n] = [];
+        if (!grouped[n]) { grouped[n] = []; catOrder.push(n); }
         grouped[n].push(p);
       });
-      productHTML = Object.entries(grouped).map(([name, items]) => `
-        <div class="section-header">${name}</div>
-        <div class="products-grid">${items.map(p => productCard(p, currency)).join('')}</div>
+      const groupedHTML = catOrder.map(name => `
+        <div class="cat-sec-hdr">
+          <span>${escHtml(name)}</span>
+          <span class="cat-sec-count">${grouped[name].length} items</span>
+        </div>
+        <div class="products-list">${grouped[name].map(p => productCard(p, currency)).join('')}</div>
       `).join('');
+      productHTML = popularHTML + groupedHTML;
     } else {
-      productHTML = `<div class="products-grid" style="padding-top:12px">${products.map(p => productCard(p, currency)).join('')}</div>`;
+      productHTML = `<div class="products-list">${products.map(p => productCard(p, currency)).join('')}</div>`;
     }
 
     document.getElementById('app').innerHTML = `
@@ -340,6 +357,8 @@
         </div>
       </div>
 
+      ${tableNumber ? `<button class="waiter-fab" onclick="callWaiter()">🔔 Call Waiter</button>` : ''}
+
       ${count > 0 ? `
         <div id="cart-bar" class="cart-bar" onclick="switchView('cart')">
           <span class="cart-bar-left">${count} item${count > 1 ? 's' : ''}</span>
@@ -354,48 +373,49 @@
     initChat();
   }
 
-  // ─── Product card (improved: description, bestseller badge, sold-out, tap to open detail) ──
+  // ─── Product card — Swiggy-style horizontal list card ─────────────────────
   function productCard(p, currency) {
-    const qty      = cart[p._id]?.qty || 0;
-    const emoji    = getEmoji(p.name);
-    const hasImg   = p.image && p.image.trim();
-    const soldOut  = !p.isAvailable || p.stock === 0;
-    const isBest   = bestsellerIds.includes(p._id);
-    const pJson    = escAttr(JSON.stringify(p));
-    const desc     = p.description
-      ? escHtml(p.description.substring(0, 52) + (p.description.length > 52 ? '…' : ''))
+    const qty     = cart[p._id]?.qty || 0;
+    const emoji   = getEmoji(p.name);
+    const hasImg  = p.image && p.image.trim();
+    const soldOut = !p.isAvailable || p.stock === 0;
+    const isBest  = bestsellerIds.includes(p._id);
+    const pJson   = escAttr(JSON.stringify(p));
+    const desc    = p.description
+      ? escHtml(p.description.substring(0, 72) + (p.description.length > 72 ? '…' : ''))
       : '';
 
+    const ctrl = soldOut
+      ? `<span class="sold-out-tag">Sold Out</span>`
+      : qty > 0
+        ? `<div class="plc-qty" onclick="event.stopPropagation()">
+             <button class="plc-qb" onclick="handleRemove('${p._id}')">−</button>
+             <span class="plc-qn">${qty}</span>
+             <button class="plc-qb" onclick="handleAdd('${pJson}')">+</button>
+           </div>`
+        : `<button class="plc-add" onclick="event.stopPropagation(); handleAdd('${pJson}')">ADD</button>`;
+
     return `
-      <div class="product-card${soldOut ? ' sold-out' : ''}" onclick="openDetail('${pJson}')">
-        <div class="product-img-wrap">
-          ${hasImg
-            ? `<img class="product-img" src="${p.image}" alt="${escHtml(p.name)}" loading="lazy"
-                onerror="this.parentElement.innerHTML='<div class=\\'product-emoji\\'>${emoji}</div>'">`
-            : `<div class="product-emoji">${emoji}</div>`}
-          <div class="veg-indicator ${p.isVeg ? 'veg' : 'nv'}"></div>
-          ${isBest && !soldOut ? `<div class="bestseller-badge">⭐ Bestseller</div>` : ''}
-          ${soldOut ? `<div class="sold-out-overlay"><span class="sold-out-text">SOLD OUT</span></div>` : ''}
-        </div>
-        <div class="product-body">
-          <div class="product-name">${escHtml(p.name)}</div>
-          ${desc ? `<div class="product-desc">${desc}</div>` : ''}
-          <div class="product-footer-row">
-            <div>
-              <div class="product-price">${currency}${p.price.toFixed(0)}</div>
-              ${p.taxPercent > 0 ? `<div class="product-tax">+${p.taxPercent}% GST</div>` : ''}
-            </div>
-            ${soldOut
-              ? `<span class="sold-out-tag">Sold Out</span>`
-              : qty > 0
-                ? `<div class="qty-control" onclick="event.stopPropagation()">
-                     <button class="qty-btn" onclick="handleRemove('${p._id}')">−</button>
-                     <span class="qty-num">${qty}</span>
-                     <button class="qty-btn plus" onclick="handleAdd('${pJson}')">+</button>
-                   </div>`
-                : `<button class="add-btn" onclick="event.stopPropagation(); handleAdd('${pJson}')">+ Add</button>`
-            }
+      <div class="plc${soldOut ? ' plc-out' : ''}" onclick="openDetail('${pJson}')">
+        <div class="plc-l">
+          <div class="veg-dot ${p.isVeg ? 'veg' : 'nv'}"></div>
+          ${isBest && !soldOut ? `<div class="plc-popular">⭐ Bestseller</div>` : ''}
+          <div class="plc-name">${escHtml(p.name)}</div>
+          ${desc ? `<div class="plc-desc">${desc}</div>` : ''}
+          <div class="plc-bottom">
+            <span class="plc-price">${currency}${p.price.toFixed(0)}</span>
+            ${p.taxPercent > 0 ? `<span class="plc-tax">+${p.taxPercent}% GST</span>` : ''}
           </div>
+        </div>
+        <div class="plc-r">
+          <div class="plc-img-box${soldOut ? ' dimmed' : ''}">
+            ${hasImg
+              ? `<img class="plc-img" src="${p.image}" alt="${escHtml(p.name)}" loading="lazy"
+                  onerror="this.parentElement.innerHTML='<div class=\\'plc-moji\\'>${emoji}</div>'">`
+              : `<div class="plc-moji">${emoji}</div>`}
+            ${soldOut ? `<div class="plc-sold"><span>SOLD OUT</span></div>` : ''}
+          </div>
+          ${ctrl}
         </div>
       </div>`;
   }
@@ -662,6 +682,39 @@
     activeCategory = 'all';
     searchQuery = '';
     render();
+  };
+
+  // ─── Call Waiter ──────────────────────────────────────────────────────────
+  window.callWaiter = () => {
+    const existing = document.getElementById('waiter-modal');
+    if (existing) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'waiter-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;display:flex;align-items:flex-end;justify-content:center';
+    overlay.innerHTML = `
+      <div style="background:var(--surface);border-radius:24px 24px 0 0;padding:24px 20px 36px;width:100%;max-width:540px;box-shadow:0 -4px 32px rgba(0,0,0,0.18)">
+        <div style="width:40px;height:4px;border-radius:4px;background:var(--border);margin:0 auto 20px"></div>
+        <div style="font-size:32px;text-align:center;margin-bottom:8px">🔔</div>
+        <div style="font-size:17px;font-weight:800;text-align:center;color:var(--text);margin-bottom:6px">Call Waiter</div>
+        <div style="font-size:13px;color:var(--text3);text-align:center;margin-bottom:20px">Table ${tableNumber} · What do you need?</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${['Water please 💧','Bill please 🧾','Napkins / Tissue 🧻','Extra cutlery 🍴','Need assistance 🙋'].map(r =>
+            `<button onclick="sendWaiterRequest('${r}')" style="background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:13px 16px;text-align:left;font-family:Poppins,sans-serif;font-size:14px;font-weight:600;color:var(--text);cursor:pointer">${r}</button>`
+          ).join('')}
+        </div>
+        <button onclick="document.getElementById('waiter-modal').remove()" style="margin-top:14px;width:100%;background:none;border:none;font-size:14px;color:var(--text3);font-family:Poppins,sans-serif;cursor:pointer;padding:8px">Dismiss</button>
+      </div>`;
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  };
+
+  window.sendWaiterRequest = (msg) => {
+    document.getElementById('waiter-modal')?.remove();
+    if (chatSocket) {
+      chatSocket.emit('customer_message', { tableNumber, message: `[Waiter Request] ${msg}` });
+      chatMessages.push({ sender: 'customer', message: `[Waiter Request] ${msg}`, createdAt: new Date().toISOString() });
+    }
+    showToast('✅ Waiter has been notified!');
   };
 
   // ─── Toast ────────────────────────────────────────────────────────────────
