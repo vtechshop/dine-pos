@@ -23,6 +23,31 @@ export const setupNotifications = async (): Promise<void> => {
       enableVibrate: true,
       sound: 'order_alert.wav',
     });
+    await Notifications.setNotificationChannelAsync('chat_alerts', {
+      name: 'Customer Chat',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 150, 80, 150],
+      lightColor: '#E8380D',
+      enableVibrate: true,
+    });
+  } catch {}
+};
+
+export const notifyChatMessage = async (
+  tableNumber: string,
+  message: string,
+): Promise<void> => {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `💬 Table ${tableNumber}`,
+        body: message.startsWith('[Waiter Request]')
+          ? message.replace('[Waiter Request] ', '🔔 ')
+          : message,
+        data: { type: 'chat', tableNumber },
+      },
+      trigger: { channelId: 'chat_alerts' } as any,
+    });
   } catch {}
 };
 

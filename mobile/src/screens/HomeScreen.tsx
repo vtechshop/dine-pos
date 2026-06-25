@@ -16,7 +16,7 @@ import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { printReceipt } from '../utils/receipt';
-import { setupNotifications, notifyNewOrder } from '../utils/notifications';
+import { setupNotifications, notifyNewOrder, notifyChatMessage } from '../utils/notifications';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -86,8 +86,13 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => {
     setupNotifications();
-    const sub = Notifications.addNotificationResponseReceivedListener(() => {
-      navigation.navigate('Orders');
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const type = response.notification.request.content.data?.type;
+      if (type === 'chat') {
+        navigation.navigate('Chat' as any);
+      } else {
+        navigation.navigate('Orders');
+      }
     });
     return () => sub.remove();
   }, []);
@@ -106,7 +111,14 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         timeout: 20000,
       });
       socketRef.current = socket;
-      socket.on('connect', () => socket.emit('join_hotel', hotelId));
+      socket.on('connect', () => {
+        socket.emit('join_hotel', hotelId);
+        socket.emit('join', 'admin');
+      });
+      socket.on('new_message', (msg: { sender: string; tableNumber: string; message: string }) => {
+        if (!mounted || msg.sender !== 'customer') return;
+        notifyChatMessage(msg.tableNumber, msg.message);
+      });
       socket.on('new_order', async (data: NewOrderAlert) => {
         if (!mounted) return;
         setNewOrderAlert(data);
