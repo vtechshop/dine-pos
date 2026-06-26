@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, Linking,
+  ActivityIndicator, Alert, Linking, Modal, TextInput,
+  ScrollView, Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Print from 'expo-print';
@@ -40,6 +41,13 @@ const toWhatsAppNumber = (phone: string): string => {
   return digits;
 };
 
+const TEMPLATES = [
+  { icon: '😊', label: 'Miss you', text: (h: string) => `Hi! 😊 We miss you at ${h}. Come back soon — we have some amazing dishes waiting for you! 🍽️` },
+  { icon: '🎉', label: 'Thank you', text: (h: string) => `Hi! 🎉 Thank you for being a valued customer at ${h}. Your support means the world to us! Hope to see you again soon.` },
+  { icon: '🍽️', label: 'New menu', text: (h: string) => `Hi! 🍽️ Exciting news — we have new dishes on the menu at ${h}! Come try them out and treat yourself today.` },
+  { icon: '🎁', label: 'Special offer', text: (h: string) => `Hi! 🎁 We have a special offer just for you at ${h}. Visit us today and enjoy a great meal. We'd love to serve you again!` },
+];
+
 const CustomersScreen: React.FC = () => {
   const { settings } = useSettings();
   const cur = settings.currencySymbol || '₹';
@@ -49,6 +57,14 @@ const CustomersScreen: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+
+  // Broadcast state
+  const [broadcastMode, setBroadcastMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [blastStep, setBlastStep] = useState<'compose' | 'sending' | null>(null);
+  const [blastMsg, setBlastMsg] = useState('');
+  const [blastQueue, setBlastQueue] = useState<Customer[]>([]);
+  const [blastIdx, setBlastIdx] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -70,6 +86,62 @@ const CustomersScreen: React.FC = () => {
     const number = toWhatsAppNumber(c.phone);
     const url = `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
     Linking.openURL(url).catch(() => Alert.alert('Error', 'WhatsApp is not installed or the number is invalid'));
+  };
+
+  const toggleSelect = (phone: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(phone) ? next.delete(phone) : next.add(phone);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedIds.size === customers.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(customers.map(c => c.phone)));
+    }
+  };
+
+  const exitBroadcast = () => {
+    setBroadcastMode(false);
+    setSelectedIds(new Set());
+    setBlastStep(null);
+    setBlastMsg('');
+  };
+
+  const startCompose = () => {
+    const queue = customers.filter(c => selectedIds.has(c.phone));
+    if (queue.length === 0) return;
+    setBlastQueue(queue);
+    setBlastMsg(TEMPLATES[0].text(settings.hotelName || 'our restaurant'));
+    setBlastStep('compose');
+  };
+
+  const startSending = () => {
+    setBlastIdx(0);
+    setBlastStep('sending');
+  };
+
+  const openCurrentWA = () => {
+    const c = blastQueue[blastIdx];
+    if (!c) return;
+    const url = `https://wa.me/${toWhatsAppNumber(c.phone)}?text=${encodeURIComponent(blastMsg)}`;
+    Linking.openURL(url).catch(() => {});
+    if (blastIdx + 1 >= blastQueue.length) {
+      setTimeout(() => { exitBroadcast(); Alert.alert('Done! 🎉', `Blast sent to ${blastQueue.length} customers.`); }, 400);
+    } else {
+      setBlastIdx(i => i + 1);
+    }
+  };
+
+  const skipCurrent = () => {
+    if (blastIdx + 1 >= blastQueue.length) {
+      exitBroadcast();
+    } else {
+      setBlastIdx(i => i + 1);
+    }
   };
 
   const exportPDF = async () => {
@@ -234,56 +306,107 @@ const CustomersScreen: React.FC = () => {
 
   const totalRevenue = customers.reduce((s, c) => s + c.totalSpent, 0);
 
-  const renderCustomer = ({ item }: { item: Customer }) => (
-    <View style={styles.card}>
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{(item.customerName || 'G').charAt(0).toUpperCase()}</Text>
-      </View>
-      <View style={{ flex: 1, marginLeft: Spacing.md }}>
-        <Text style={styles.custName}>{item.customerName || 'Guest'}</Text>
-        <Text style={styles.custPhone}>{item.phone}</Text>
-        <View style={styles.custMetaRow}>
-          <Text style={styles.custMeta}>{item.totalOrders} order{item.totalOrders !== 1 ? 's' : ''}</Text>
-          <Text style={styles.custMetaDot}>·</Text>
-          <Text style={styles.custMeta}>Last {new Date(item.lastOrderDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</Text>
+  const renderCustomer = ({ item }: { item: Customer }) => {
+    const selected = selectedIds.has(item.phone);
+    return (
+      <TouchableOpacity
+        activeOpacity={broadcastMode ? 0.7 : 1}
+        onPress={broadcastMode ? () => toggleSelect(item.phone) : undefined}
+        style={[styles.card, selected && styles.cardSelected]}
+      >
+        {broadcastMode && (
+          <View style={[styles.checkbox, selected && styles.checkboxSelected]}>
+            {selected && <MaterialIcons name="check" size={14} color="#fff" />}
+          </View>
+        )}
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{(item.customerName || 'G').charAt(0).toUpperCase()}</Text>
         </View>
-      </View>
-      <View style={{ alignItems: 'flex-end' }}>
-        <Text style={styles.custSpent}>{fmt(item.totalSpent)}</Text>
-        <TouchableOpacity style={styles.waBtn} onPress={() => sendWhatsApp(item)} activeOpacity={0.8}>
-          <MaterialIcons name="chat" size={16} color={Colors.white} />
-          <Text style={styles.waBtnText}>WhatsApp</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+        <View style={{ flex: 1, marginLeft: Spacing.md }}>
+          <Text style={styles.custName}>{item.customerName || 'Guest'}</Text>
+          <Text style={styles.custPhone}>{item.phone}</Text>
+          <View style={styles.custMetaRow}>
+            <Text style={styles.custMeta}>{item.totalOrders} order{item.totalOrders !== 1 ? 's' : ''}</Text>
+            <Text style={styles.custMetaDot}>·</Text>
+            <Text style={styles.custMeta}>Last {new Date(item.lastOrderDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</Text>
+          </View>
+        </View>
+        {!broadcastMode && (
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={styles.custSpent}>{fmt(item.totalSpent)}</Text>
+            <TouchableOpacity style={styles.waBtn} onPress={() => sendWhatsApp(item)} activeOpacity={0.8}>
+              <MaterialIcons name="chat" size={16} color={Colors.white} />
+              <Text style={styles.waBtnText}>WhatsApp</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {broadcastMode && (
+          <Text style={styles.custSpent}>{fmt(item.totalSpent)}</Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const blastCurrent = blastQueue[blastIdx];
+  const blastProgress = blastQueue.length > 0 ? (blastIdx / blastQueue.length) : 0;
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+
+      {/* ── Header ── */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Customers</Text>
-        <TouchableOpacity style={styles.exportBtn} onPress={exportPDF} disabled={exporting} activeOpacity={0.85}>
-          {exporting
-            ? <ActivityIndicator size="small" color={Colors.white} />
-            : <MaterialIcons name="file-download" size={18} color={Colors.white} />}
-          <Text style={styles.exportBtnText}>Export</Text>
-        </TouchableOpacity>
+        {broadcastMode ? (
+          <>
+            <TouchableOpacity onPress={exitBroadcast} style={{ padding: 4 }}>
+              <MaterialIcons name="close" size={22} color={Colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { flex: 1, marginLeft: 10 }]}>
+              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select customers'}
+            </Text>
+            <TouchableOpacity onPress={selectAll} activeOpacity={0.8}>
+              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 13 }}>
+                {selectedIds.size === customers.length ? 'Deselect All' : 'Select All'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={styles.headerTitle}>Customers</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                style={styles.blastBtn}
+                onPress={() => { setBroadcastMode(true); setSelectedIds(new Set()); }}
+                activeOpacity={0.85}
+              >
+                <MaterialIcons name="campaign" size={18} color={Colors.white} />
+                <Text style={styles.exportBtnText}>Blast</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.exportBtn} onPress={exportPDF} disabled={exporting} activeOpacity={0.85}>
+                {exporting
+                  ? <ActivityIndicator size="small" color={Colors.white} />
+                  : <MaterialIcons name="file-download" size={18} color={Colors.white} />}
+                <Text style={styles.exportBtnText}>Export</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </View>
 
-      {/* Range filter */}
-      <View style={styles.rangeRow}>
-        {RANGES.map(r => (
-          <TouchableOpacity
-            key={r.key}
-            style={[styles.rangeChip, range === r.key && styles.rangeChipActive]}
-            onPress={() => setRange(r.key)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.rangeChipText, range === r.key && styles.rangeChipTextActive]}>{r.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {/* ── Range filter ── */}
+      {!broadcastMode && (
+        <View style={styles.rangeRow}>
+          {RANGES.map(r => (
+            <TouchableOpacity
+              key={r.key}
+              style={[styles.rangeChip, range === r.key && styles.rangeChipActive]}
+              onPress={() => setRange(r.key)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.rangeChipText, range === r.key && styles.rangeChipTextActive]}>{r.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.loader}><ActivityIndicator size="large" color={Colors.primary} /></View>
@@ -292,9 +415,9 @@ const CustomersScreen: React.FC = () => {
           data={customers}
           renderItem={renderCustomer}
           keyExtractor={c => c.phone}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, broadcastMode && { paddingBottom: 120 }]}
           ListHeaderComponent={
-            customers.length > 0 ? (
+            customers.length > 0 && !broadcastMode ? (
               <View style={styles.summaryBar}>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryValue}>{customers.length}</Text>
@@ -317,6 +440,117 @@ const CustomersScreen: React.FC = () => {
           }
         />
       )}
+
+      {/* ── Broadcast bottom bar ── */}
+      {broadcastMode && selectedIds.size > 0 && (
+        <View style={styles.blastBar}>
+          <View>
+            <Text style={styles.blastBarCount}>{selectedIds.size} customer{selectedIds.size !== 1 ? 's' : ''} selected</Text>
+            <Text style={styles.blastBarSub}>Tap to compose your message</Text>
+          </View>
+          <TouchableOpacity style={styles.blastBarBtn} onPress={startCompose} activeOpacity={0.85}>
+            <MaterialIcons name="send" size={18} color="#fff" />
+            <Text style={styles.blastBarBtnText}>Compose →</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ── Compose Modal ── */}
+      <Modal visible={blastStep === 'compose'} transparent animationType="slide" onRequestClose={() => setBlastStep(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>📣 WhatsApp Blast</Text>
+            <Text style={styles.modalSub}>Sending to {blastQueue.length} customer{blastQueue.length !== 1 ? 's' : ''}</Text>
+
+            <Text style={styles.sectionLabel}>Quick Templates</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+              <View style={{ flexDirection: 'row', gap: 8, paddingRight: 16 }}>
+                {TEMPLATES.map((t, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={styles.templateChip}
+                    onPress={() => setBlastMsg(t.text(settings.hotelName || 'our restaurant'))}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.templateIcon}>{t.icon}</Text>
+                    <Text style={styles.templateLabel}>{t.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <Text style={styles.sectionLabel}>Your Message</Text>
+            <TextInput
+              style={styles.msgInput}
+              value={blastMsg}
+              onChangeText={setBlastMsg}
+              multiline
+              numberOfLines={5}
+              placeholder="Type your message here…"
+              placeholderTextColor={Colors.textMuted}
+              textAlignVertical="top"
+            />
+            <Text style={styles.msgChars}>{blastMsg.length} characters</Text>
+
+            <TouchableOpacity
+              style={[styles.blastSendBtn, !blastMsg.trim() && { opacity: 0.4 }]}
+              onPress={startSending}
+              disabled={!blastMsg.trim()}
+              activeOpacity={0.85}
+            >
+              <MaterialIcons name="send" size={18} color="#fff" />
+              <Text style={styles.blastSendBtnText}>Start Sending to {blastQueue.length} customers →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setBlastStep(null)} style={{ paddingVertical: 12, alignItems: 'center' }}>
+              <Text style={{ color: Colors.textMuted, fontSize: 13 }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Sending Modal ── */}
+      <Modal visible={blastStep === 'sending'} transparent animationType="slide" onRequestClose={exitBroadcast}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+
+            <View style={styles.sendingProgress}>
+              <Text style={styles.sendingCount}>{blastIdx + 1} of {blastQueue.length}</Text>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${blastProgress * 100}%` as any }]} />
+              </View>
+            </View>
+
+            <View style={styles.sendingCard}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{(blastCurrent?.customerName || 'G').charAt(0).toUpperCase()}</Text>
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.custName}>{blastCurrent?.customerName || 'Guest'}</Text>
+                <Text style={styles.custPhone}>{blastCurrent?.phone}</Text>
+              </View>
+            </View>
+
+            <View style={styles.msgPreview}>
+              <Text style={styles.msgPreviewText} numberOfLines={4}>{blastMsg}</Text>
+            </View>
+
+            <TouchableOpacity style={styles.blastSendBtn} onPress={openCurrentWA} activeOpacity={0.85}>
+              <Text style={{ fontSize: 18 }}>💬</Text>
+              <Text style={styles.blastSendBtnText}>
+                {blastIdx + 1 === blastQueue.length ? 'Open WhatsApp & Finish' : 'Open WhatsApp & Next →'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={skipCurrent} style={{ paddingVertical: 12, alignItems: 'center' }}>
+              <Text style={{ color: Colors.textMuted, fontSize: 13 }}>
+                {blastIdx + 1 === blastQueue.length ? 'Skip & Finish' : 'Skip this customer →'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 };
@@ -389,6 +623,94 @@ const styles = StyleSheet.create({
   empty:      { alignItems: 'center', paddingVertical: 80 },
   emptyTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.text, marginTop: Spacing.lg },
   emptyText:  { color: Colors.textSecondary, marginTop: Spacing.sm, textAlign: 'center', paddingHorizontal: Spacing.xl },
+
+  // Broadcast
+  blastBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#25D366', borderRadius: BorderRadius.round,
+    paddingHorizontal: Spacing.md, paddingVertical: 10,
+  },
+  cardSelected: { borderColor: Colors.primary, backgroundColor: Colors.primaryBg },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 11, borderWidth: 2,
+    borderColor: Colors.border, marginRight: 10,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.background,
+  },
+  checkboxSelected: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+
+  blastBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: Colors.surface, paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md, borderTopWidth: 1.5, borderTopColor: Colors.primary,
+    ...Shadows.lg,
+  },
+  blastBarCount: { fontSize: FontSize.md, fontWeight: '800', color: Colors.text },
+  blastBarSub:   { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: 2 },
+  blastBarBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.primary, borderRadius: BorderRadius.round,
+    paddingHorizontal: Spacing.lg, paddingVertical: 12, ...Shadows.primary,
+  },
+  blastBarBtnText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.sm },
+
+  // Modals
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: {
+    backgroundColor: Colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: Spacing.xl, paddingBottom: Platform.OS === 'ios' ? 40 : Spacing.xl,
+    maxHeight: '92%',
+  },
+  modalHandle: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.border,
+    alignSelf: 'center', marginBottom: 20,
+  },
+  modalTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.text, marginBottom: 4 },
+  modalSub:   { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: 20 },
+
+  sectionLabel: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+
+  templateChip: {
+    alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10,
+    backgroundColor: Colors.background, borderRadius: BorderRadius.lg,
+    borderWidth: 1.5, borderColor: Colors.border, minWidth: 76,
+  },
+  templateIcon:  { fontSize: 22, marginBottom: 4 },
+  templateLabel: { fontSize: 11, fontWeight: '700', color: Colors.textSecondary },
+
+  msgInput: {
+    backgroundColor: Colors.background, borderRadius: BorderRadius.lg,
+    borderWidth: 1.5, borderColor: Colors.border,
+    padding: Spacing.md, fontSize: FontSize.sm, color: Colors.text,
+    minHeight: 110, marginBottom: 4,
+  },
+  msgChars: { fontSize: 10, color: Colors.textMuted, textAlign: 'right', marginBottom: 16 },
+
+  blastSendBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#25D366', borderRadius: BorderRadius.lg,
+    paddingVertical: 14, marginBottom: 4,
+  },
+  blastSendBtnText: { color: '#fff', fontWeight: '800', fontSize: FontSize.md },
+
+  sendingProgress: { marginBottom: 20 },
+  sendingCount: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.text, marginBottom: 10, textAlign: 'center' },
+  progressBar: { height: 6, backgroundColor: Colors.border, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: 6, backgroundColor: Colors.primary, borderRadius: 3 },
+
+  sendingCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.background, borderRadius: BorderRadius.lg,
+    padding: Spacing.lg, marginBottom: 16,
+    borderWidth: 1.5, borderColor: Colors.border,
+  },
+  msgPreview: {
+    backgroundColor: Colors.primaryBg, borderRadius: BorderRadius.lg,
+    padding: Spacing.md, marginBottom: 20,
+    borderWidth: 1, borderColor: Colors.primary + '30',
+  },
+  msgPreviewText: { fontSize: FontSize.sm, color: Colors.text, lineHeight: 20 },
 });
 
 const CustomersScreenGated: React.FC = () => (
