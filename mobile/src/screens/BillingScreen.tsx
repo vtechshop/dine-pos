@@ -198,6 +198,7 @@ Thank you for dining with us! 🍽️`;
       status:        'pending' as const,
       tableNumber:   getTableNumber(),
       customerName:  cart.customerName,
+      customerPhone: customerPhone.replace(/\D/g, '').replace(/^0+/, '').slice(0, 12) || undefined,
       notes:         cart.notes,
       isParcel:      isOrderParcel,
       orderSource,
