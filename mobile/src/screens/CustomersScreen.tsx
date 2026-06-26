@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Alert, Linking,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
@@ -72,32 +72,161 @@ const CustomersScreen: React.FC = () => {
     Linking.openURL(url).catch(() => Alert.alert('Error', 'WhatsApp is not installed or the number is invalid'));
   };
 
-  const exportCSV = async () => {
+  const exportPDF = async () => {
     if (customers.length === 0) {
       Alert.alert('No Data', 'No customers to export for this range');
       return;
     }
     setExporting(true);
     try {
-      const header = 'Name,Phone,Total Orders,Total Spent,Last Order,First Order\n';
-      const rows = customers.map(c => {
-        const name = (c.customerName || 'Guest').replace(/"/g, '');
-        const last = new Date(c.lastOrderDate).toLocaleDateString('en-IN');
-        const first = new Date(c.firstOrderDate).toLocaleDateString('en-IN');
-        return `"${name}","${c.phone}",${c.totalOrders},${c.totalSpent},"${last}","${first}"`;
-      }).join('\n');
-      const csv = header + rows;
+      const hotelName = settings.hotelName || 'My Restaurant';
+      const phone     = settings.phone     || '';
+      const address   = settings.address   || '';
+      const rangeLabel = RANGES.find(r => r.key === range)?.label || range;
+      const now        = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const totalRevenue = customers.reduce((s, c) => s + c.totalSpent, 0);
+      const totalOrders  = customers.reduce((s, c) => s + c.totalOrders, 0);
 
-      const fileUri = `${FileSystem.cacheDirectory}customers_${range}_${Date.now()}.csv`;
-      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+      const fmtDate = (iso: string) =>
+        new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      const fmtAmt = (n: number) =>
+        `${cur}${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Customers' });
-      } else {
-        Alert.alert('Saved', `File saved to ${fileUri}`);
-      }
+      const rows = customers.map((c, i) => `
+        <tr class="${i % 2 === 0 ? 'even' : 'odd'}">
+          <td class="num">${i + 1}</td>
+          <td class="name">${(c.customerName || 'Guest').replace(/</g, '&lt;')}</td>
+          <td>${c.phone || '—'}</td>
+          <td class="center">${c.totalOrders}</td>
+          <td class="amt">${fmtAmt(c.totalSpent)}</td>
+          <td class="center">${fmtDate(c.firstOrderDate)}</td>
+          <td class="center">${fmtDate(c.lastOrderDate)}</td>
+        </tr>`).join('');
+
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; background:#fff; color:#1a1a1a; font-size:11px; }
+
+  .page { padding:28px 32px; max-width:800px; margin:0 auto; }
+
+  /* Header */
+  .header { display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:18px; border-bottom:2.5px solid #E8380D; margin-bottom:20px; }
+  .hotel-block .hotel-name { font-size:20px; font-weight:800; color:#1a1a1a; letter-spacing:-0.3px; }
+  .hotel-block .hotel-sub  { font-size:11px; color:#666; margin-top:3px; }
+  .report-block { text-align:right; }
+  .report-block .report-title { font-size:15px; font-weight:800; color:#E8380D; }
+  .report-block .report-meta  { font-size:10px; color:#888; margin-top:4px; line-height:1.6; }
+
+  /* Summary cards */
+  .summary { display:flex; gap:14px; margin-bottom:22px; }
+  .card { flex:1; background:#FFF6EE; border:1.5px solid #F0D9C8; border-radius:10px; padding:14px 16px; }
+  .card .val  { font-size:18px; font-weight:800; color:#E8380D; }
+  .card .lbl  { font-size:9px; font-weight:700; color:#999; text-transform:uppercase; letter-spacing:0.5px; margin-top:3px; }
+
+  /* Table */
+  table { width:100%; border-collapse:collapse; font-size:10.5px; }
+  thead tr { background:#E8380D; }
+  thead th { color:#fff; padding:9px 10px; text-align:left; font-weight:700; font-size:10px; text-transform:uppercase; letter-spacing:0.4px; }
+  thead th.center { text-align:center; }
+  thead th.amt    { text-align:right; }
+
+  tbody tr.even { background:#fff; }
+  tbody tr.odd  { background:#FFF9F6; }
+  tbody tr:hover { background:#FFF2EB; }
+  tbody td { padding:8px 10px; border-bottom:1px solid #F0E8E0; vertical-align:middle; }
+  tbody td.num    { color:#aaa; font-size:9px; width:28px; }
+  tbody td.name   { font-weight:600; color:#1a1a1a; }
+  tbody td.center { text-align:center; color:#555; }
+  tbody td.amt    { text-align:right; font-weight:700; color:#1a1a1a; }
+
+  /* Total row */
+  tfoot tr { background:#1a1a1a; }
+  tfoot td { padding:9px 10px; color:#fff; font-weight:700; font-size:10.5px; border:none; }
+  tfoot td.amt { text-align:right; }
+  tfoot td.center { text-align:center; }
+
+  /* Footer */
+  .footer { margin-top:24px; padding-top:12px; border-top:1px solid #eee; display:flex; justify-content:space-between; font-size:9px; color:#bbb; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="hotel-block">
+      <div class="hotel-name">${hotelName}</div>
+      <div class="hotel-sub">${[address, phone].filter(Boolean).join('  ·  ')}</div>
+    </div>
+    <div class="report-block">
+      <div class="report-title">Customer Report</div>
+      <div class="report-meta">
+        Period: ${rangeLabel}<br>
+        Generated: ${now}
+      </div>
+    </div>
+  </div>
+
+  <div class="summary">
+    <div class="card">
+      <div class="val">${customers.length}</div>
+      <div class="lbl">Total Customers</div>
+    </div>
+    <div class="card">
+      <div class="val">${totalOrders}</div>
+      <div class="lbl">Total Orders</div>
+    </div>
+    <div class="card">
+      <div class="val">${fmtAmt(totalRevenue)}</div>
+      <div class="lbl">Total Revenue</div>
+    </div>
+    <div class="card">
+      <div class="val">${customers.length > 0 ? fmtAmt(totalRevenue / customers.length) : cur + '0'}</div>
+      <div class="lbl">Avg. Spend / Customer</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Customer Name</th>
+        <th>Phone</th>
+        <th class="center">Orders</th>
+        <th class="amt">Total Spent</th>
+        <th class="center">First Order</th>
+        <th class="center">Last Order</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3" style="color:#aaa;font-weight:400;font-size:9px">— End of Report —</td>
+        <td class="center">${totalOrders}</td>
+        <td class="amt">${fmtAmt(totalRevenue)}</td>
+        <td colspan="2"></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="footer">
+    <span>${hotelName} · Customer Report · ${rangeLabel}</span>
+    <span>Generated by Dine POS</span>
+  </div>
+
+</div>
+</body>
+</html>`;
+
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Customer Report PDF' });
     } catch {
-      Alert.alert('Error', 'Failed to export customer data');
+      Alert.alert('Error', 'Failed to export customer report');
     } finally {
       setExporting(false);
     }
@@ -134,7 +263,7 @@ const CustomersScreen: React.FC = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Customers</Text>
-        <TouchableOpacity style={styles.exportBtn} onPress={exportCSV} disabled={exporting} activeOpacity={0.85}>
+        <TouchableOpacity style={styles.exportBtn} onPress={exportPDF} disabled={exporting} activeOpacity={0.85}>
           {exporting
             ? <ActivityIndicator size="small" color={Colors.white} />
             : <MaterialIcons name="file-download" size={18} color={Colors.white} />}
