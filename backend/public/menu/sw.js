@@ -1,5 +1,5 @@
 // Service Worker - Offline-first menu caching
-const CACHE_NAME = 'hotel-menu-v1';
+const CACHE_NAME = 'hotel-menu-v2';
 const MENU_API = '/api/public/menu';
 
 // Assets to cache on install
