@@ -16,6 +16,7 @@ import { Colors } from '../utils/constants';
 import { API_BASE_URL } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PremiumGate } from '../components/PremiumGate';
+import { getStoredHotelId } from '../services/api';
 
 // Derive the menu base URL from the API URL: strip /api → /menu
 const DEFAULT_MENU_BASE = API_BASE_URL.replace(/\/api\/?$/, '/menu');
@@ -32,17 +33,20 @@ function QRMenuScreenInner() {
   const [customBase,     setCustomBase]     = useState('');
   const [editingURL,     setEditingURL]     = useState(false);
   const [tempURL,        setTempURL]        = useState('');
+  const [hotelId,        setHotelId]        = useState('');
 
   const menuBase = customBase || DEFAULT_MENU_BASE;
-  const tableURL = (t: number) => `${menuBase}?table=${t}`;
+  const tableURL = (t: number) => `${menuBase}?table=${t}${hotelId ? `&hotel=${hotelId}` : ''}`;
 
   useEffect(() => {
     Promise.all([
       AsyncStorage.getItem(TABLE_COUNT_KEY),
       AsyncStorage.getItem(CUSTOM_URL_KEY),
-    ]).then(([tc, cu]) => {
+      getStoredHotelId(),
+    ]).then(([tc, cu, hid]) => {
       if (tc) { setTableCount(parseInt(tc, 10)); setTempTableCount(tc); }
       if (cu) setCustomBase(cu);
+      if (hid) setHotelId(hid);
     });
   }, []);
 
