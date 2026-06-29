@@ -40,37 +40,45 @@ function ChatScreenInner() {
   const [loading, setLoading] = useState(true);
   const socketRef = useRef<Socket | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const selectedTableRef = useRef<string | null>(null);
 
-  // Connect socket
+  // Keep ref in sync so socket listener always has the latest value without reconnecting
+  useEffect(() => { selectedTableRef.current = selectedTable; }, [selectedTable]);
+
+  // Connect socket ONCE on mount — never disconnect on tab/table change
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ['websocket'] });
     socketRef.current = socket;
 
-    socket.emit('join', 'admin');
+    socket.on('connect', () => socket.emit('join', 'admin'));
 
     socket.on('new_message', (msg: ChatMsg) => {
-      // Update table list unread count
+      const current = selectedTableRef.current;
+
       setTables(prev => {
         const exists = prev.find(t => t._id === msg.tableNumber);
         if (exists) {
           return prev.map(t => t._id === msg.tableNumber
-            ? { ...t, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt, unread: msg.sender === 'customer' && selectedTable !== msg.tableNumber ? t.unread + 1 : t.unread }
+            ? { ...t, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt,
+                unread: msg.sender === 'customer' && current !== msg.tableNumber ? t.unread + 1 : t.unread }
             : t
           );
-        } else {
-          return [{ _id: msg.tableNumber, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt, unread: msg.sender === 'customer' ? 1 : 0 }, ...prev];
         }
+        return [{ _id: msg.tableNumber, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt, unread: msg.sender === 'customer' ? 1 : 0 }, ...prev];
       });
 
-      // Add to current chat if open
-      if (msg.tableNumber === selectedTable) {
-        setMessages(prev => [...prev, msg]);
+      if (msg.tableNumber === current) {
+        setMessages(prev => {
+          // avoid duplicate if optimistic message already added
+          if (prev.some(m => m._id === msg._id)) return prev;
+          return [...prev, msg];
+        });
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       }
     });
 
     return () => { socket.disconnect(); };
-  }, [selectedTable]);
+  }, []);
 
   // Load table list
   useEffect(() => {
@@ -107,15 +115,27 @@ function ChatScreenInner() {
   };
 
   const sendMessage = async () => {
-    if (!inputText.trim() || !selectedTable || !socketRef.current) return;
+    const text = inputText.trim();
+    if (!text || !selectedTable || !socketRef.current) return;
     const hotelId = await getStoredHotelId();
-    if (!hotelId) return;
-    socketRef.current.emit('admin_message', {
-      hotelId,
+    if (!hotelId) {
+      alert('Session error. Please log out and log in again.');
+      return;
+    }
+    // Optimistic update — show message immediately without waiting for server echo
+    const optimistic: ChatMsg = {
+      _id: `opt_${Date.now()}`,
       tableNumber: selectedTable,
-      message: inputText.trim(),
-    });
+      sender: 'admin',
+      message: text,
+      createdAt: new Date().toISOString(),
+      read: true,
+    };
+    setMessages(prev => [...prev, optimistic]);
     setInputText('');
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
+
+    socketRef.current.emit('admin_message', { hotelId, tableNumber: selectedTable, message: text });
   };
 
   const formatTime = (iso: string) => {
