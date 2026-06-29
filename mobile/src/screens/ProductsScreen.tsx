@@ -317,7 +317,10 @@ const ProductsScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4, marginRight: 8 }}>
+          <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Menu Items</Text>
           <Text style={styles.headerSub}>{products.length} product{products.length !== 1 ? 's' : ''}</Text>
         </View>

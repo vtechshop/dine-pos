@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Alert, Linking, Modal, TextInput,
   ScrollView, Platform,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -49,6 +49,7 @@ const TEMPLATES = [
 ];
 
 const CustomersScreen: React.FC = () => {
+  const navigation = useNavigation();
   const { settings } = useSettings();
   const cur = settings.currencySymbol || '₹';
   const fmt = (n: number) => `${cur}${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -371,7 +372,10 @@ const CustomersScreen: React.FC = () => {
           </>
         ) : (
           <>
-            <Text style={styles.headerTitle}>Customers</Text>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4, marginRight: 4 }}>
+              <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { flex: 1 }]}>Customers</Text>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity
                 style={styles.blastBtn}

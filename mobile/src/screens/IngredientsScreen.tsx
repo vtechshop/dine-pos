@@ -142,7 +142,10 @@ const IngredientsScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Raw Materials</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4, marginRight: 8 }}>
+          <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { flex: 1 }]}>Raw Materials</Text>
         <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
           <MaterialIcons name="add" size={22} color={Colors.white} />
         </TouchableOpacity>

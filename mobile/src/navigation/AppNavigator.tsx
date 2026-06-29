@@ -177,7 +177,7 @@ const AppNavigator = () => {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: true, gestureDirection: 'horizontal', contentStyle: { paddingTop: top, backgroundColor: Colors.background } }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: true, gestureDirection: 'horizontal', contentStyle: { backgroundColor: Colors.background } }}>
         {!isLoggedIn ? (
           <>
             <Stack.Screen name="Splash"               component={SplashScreen} />
@@ -244,6 +244,11 @@ const AppNavigator = () => {
             <Stack.Screen
               name="QRMenu"
               component={QRMenuScreen}
+              options={{ headerShown: false, animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="Chat"
+              component={ChatScreen}
               options={{ headerShown: false, animation: 'slide_from_right' }}
             />
           </>

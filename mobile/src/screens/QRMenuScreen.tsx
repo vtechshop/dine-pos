@@ -17,6 +17,7 @@ import { API_BASE_URL } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PremiumGate } from '../components/PremiumGate';
 import { getStoredHotelId } from '../services/api';
+import { useNavigation } from '@react-navigation/native';
 
 // Derive the menu base URL from the API URL: strip /api → /menu
 const DEFAULT_MENU_BASE = API_BASE_URL.replace(/\/api\/?$/, '/menu');
@@ -27,6 +28,7 @@ const CUSTOM_URL_KEY  = 'qr_custom_menu_base';
 function QRMenuScreenInner() {
   const { bottom } = useSafeAreaInsets();
   const { settings } = useSettings();
+  const navigation = useNavigation();
   const [tableCount,     setTableCount]     = useState(5);
   const [tempTableCount, setTempTableCount] = useState('5');
   const [selectedTable,  setSelectedTable]  = useState<number | null>(null);
@@ -88,6 +90,10 @@ function QRMenuScreenInner() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: 48 + bottom }]}>
+      {/* Back button */}
+      <TouchableOpacity onPress={() => navigation.goBack()} style={{ alignSelf: 'flex-start', padding: 4, marginBottom: 4 }}>
+        <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+      </TouchableOpacity>
       {/* Header */}
       <View style={styles.header}>
         <MaterialIcons name="qr-code-2" size={32} color={Colors.primary} />

@@ -468,6 +468,9 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4, marginRight: 8 }}>
+          <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Support</Text>
         {activeTab === 'tickets' && (
           <TouchableOpacity style={styles.newBtn} onPress={() => setShowNewModal(true)}>

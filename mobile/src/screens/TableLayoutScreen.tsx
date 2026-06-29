@@ -124,7 +124,10 @@ const TableLayoutScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Floor Map</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4, marginRight: 8 }}>
+          <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { flex: 1 }]}>Floor Map</Text>
         <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
           <MaterialIcons name="add" size={22} color={Colors.white} />
           <Text style={styles.addBtnText}>Add Table</Text>

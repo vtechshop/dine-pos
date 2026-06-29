@@ -357,6 +357,7 @@ export type RootStackParamList = {
   QRMenu: undefined;
   Customers: undefined;
   Ingredients: undefined;
+  Chat: undefined;
 };
 
 export type TabParamList = {
@@ -364,7 +365,6 @@ export type TabParamList = {
   Billing: undefined;
   Orders: undefined;
   Reports: undefined;
-  Products: undefined;
   Settings: undefined;
 };
 
