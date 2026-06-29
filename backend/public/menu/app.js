@@ -201,6 +201,11 @@
     else                         renderMenu();
     // Restore detail overlay if it was open
     if (selectedProduct && view === 'menu') renderDetailOverlay();
+    // Keep scroll-padding-top in sync with sticky header height
+    requestAnimationFrame(() => {
+      const hdr = document.querySelector('.sticky-header-group');
+      if (hdr) document.documentElement.style.scrollPaddingTop = hdr.offsetHeight + 'px';
+    });
   }
 
   function renderLoader() {
@@ -618,7 +623,7 @@
   window.switchViewChat = () => { view = 'chat'; chatUnread = 0; render(); };
   window.switchViewBill = () => { view = 'bill'; billData = null; fetchBill(); };
   window.fetchBill = fetchBill;
-  window.handleCategory = (id) => { activeCategory = id; render(); document.getElementById('products-area')?.scrollIntoView({ behavior: 'smooth' }); };
+  window.handleCategory = (id) => { activeCategory = id; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   window.handleSearch   = (val) => { searchQuery = val; render(); };
   window.toggleVeg      = () => { vegOnly = !vegOnly; render(); };
 
