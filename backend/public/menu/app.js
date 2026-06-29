@@ -307,45 +307,47 @@
     }
 
     document.getElementById('app').innerHTML = `
-      <div class="header">
-        <div class="header-top">
-          <div class="hotel-avatar">${initial}</div>
-          <div style="flex:1;min-width:0">
-            <div class="hotel-name">${hotel.name || 'Our Menu'}</div>
-            ${tableNumber ? `<div class="hotel-sub">🪑 Table ${tableNumber}</div>` : `<div class="hotel-sub">Tap an item to order</div>`}
+      <div class="sticky-header-group">
+        <div class="header">
+          <div class="header-top">
+            <div class="hotel-avatar">${initial}</div>
+            <div style="flex:1;min-width:0">
+              <div class="hotel-name">${hotel.name || 'Our Menu'}</div>
+              ${tableNumber ? `<div class="hotel-sub">🪑 Table ${tableNumber}</div>` : `<div class="hotel-sub">Tap an item to order</div>`}
+            </div>
+            ${!tableNumber ? `
+            <div class="header-actions">
+              <button class="icon-btn" onclick="switchView('cart')">
+                🛒
+                <span class="badge ${count > 0 ? 'show' : ''}">${count}</span>
+              </button>
+            </div>` : ''}
           </div>
-          ${!tableNumber ? `
-          <div class="header-actions">
-            <button class="icon-btn" onclick="switchView('cart')">
-              🛒
-              <span class="badge ${count > 0 ? 'show' : ''}">${count}</span>
-            </button>
-          </div>` : ''}
+          ${isOffline ? `<div class="offline-badge show">📵 Offline Mode</div>` : ''}
         </div>
-        ${isOffline ? `<div class="offline-badge show">📵 Offline Mode</div>` : ''}
-      </div>
 
-      <div class="search-row">
-        <div class="search-wrap">
-          <span class="search-icon-abs">🔍</span>
-          <input class="search-input" type="text" placeholder="Search dishes…"
-            value="${escHtml(searchQuery)}" oninput="handleSearch(this.value)" />
-        </div>
-        <button class="veg-toggle ${vegOnly ? 'active' : ''}" onclick="toggleVeg()">
-          🥗 Veg
-        </button>
-      </div>
-
-      <div class="categories-wrap">
-        <div class="categories-inner">
-          <button class="cat-btn ${activeCategory === 'all' ? 'active' : ''}" onclick="handleCategory('all')">
-            🍴 All
+        <div class="search-row">
+          <div class="search-wrap">
+            <span class="search-icon-abs">🔍</span>
+            <input class="search-input" type="text" placeholder="Search dishes…"
+              value="${escHtml(searchQuery)}" oninput="handleSearch(this.value)" />
+          </div>
+          <button class="veg-toggle ${vegOnly ? 'active' : ''}" onclick="toggleVeg()">
+            🥗 Veg
           </button>
-          ${categories.map(cat => `
-            <button class="cat-btn ${activeCategory === cat._id ? 'active' : ''}" onclick="handleCategory('${cat._id}')">
-              <span class="cat-dot" style="background:${cat.color || '#E8380D'}"></span>
-              ${cat.name}
-            </button>`).join('')}
+        </div>
+
+        <div class="categories-wrap">
+          <div class="categories-inner">
+            <button class="cat-btn ${activeCategory === 'all' ? 'active' : ''}" onclick="handleCategory('all')">
+              🍴 All
+            </button>
+            ${categories.map(cat => `
+              <button class="cat-btn ${activeCategory === cat._id ? 'active' : ''}" onclick="handleCategory('${cat._id}')">
+                <span class="cat-dot" style="background:${cat.color || '#E8380D'}"></span>
+                ${cat.name}
+              </button>`).join('')}
+          </div>
         </div>
       </div>
 

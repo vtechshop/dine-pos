@@ -33,13 +33,17 @@ body {
   position: relative;
 }
 
+/* ── STICKY HEADER GROUP ────────────────────────────────────────────────── */
+.sticky-header-group {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
 /* ── HEADER ─────────────────────────────────────────────────────────────── */
 .header {
   background: linear-gradient(135deg, #E8380D 0%, #BF2D08 100%);
   padding: 14px 16px 12px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
   box-shadow: 0 2px 16px rgba(232,56,13,0.32);
 }
 .header-top {
@@ -111,9 +115,6 @@ body {
   gap: 8px;
   padding: 10px 14px;
   background: var(--surface);
-  position: sticky;
-  top: 68px;
-  z-index: 99;
   border-bottom: 1px solid var(--border);
 }
 .search-wrap { flex: 1; position: relative; }
@@ -169,9 +170,6 @@ body {
   white-space: nowrap;
   scrollbar-width: none;
   background: var(--surface);
-  position: sticky;
-  top: 117px;
-  z-index: 98;
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
 }
