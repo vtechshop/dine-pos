@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useReducer, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useRef, useMemo, ReactNode } from 'react';
 import { Product, CartItem } from '../types';
 import { useSettings } from './SettingsContext';
+import { saveCartSnapshot, getCartSnapshot, clearCartSnapshot } from '../database/cartDao';
 
 export type DiscountType = 'percent' | 'flat';
 
@@ -29,7 +30,8 @@ type CartAction =
   | { type: 'SET_NOTES';   payload: string }
   | { type: 'SET_PARCEL';  payload: boolean }
   | { type: 'SET_DISCOUNT';payload: { type: DiscountType; value: number } }
-  | { type: 'CLEAR_CART' };
+  | { type: 'CLEAR_CART' }
+  | { type: 'RESTORE_SNAPSHOT'; payload: CartState };
 
 const initialState: CartState = {
   items: [],
@@ -72,6 +74,8 @@ const calculateTotals = (
 
 const cartReducer = (state: CartState, action: CartAction): CartState => {
   switch (action.type) {
+    case 'RESTORE_SNAPSHOT': return action.payload;
+
     case 'ADD_ITEM': {
       const product = action.payload;
       const existingIndex = state.items.findIndex((i) => i.product._id === product._id);
@@ -155,8 +159,29 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const [cart, dispatch] = useReducer(cartReducer, initialState);
   const { settings } = useSettings();
   const defaultTax = settings.defaultTaxPercent || 0;
+  const isRestored = useRef(false);
 
-  const value: CartContextType = {
+  // On mount: restore cart from SQLite crash snapshot
+  useEffect(() => {
+    const snapshot = getCartSnapshot();
+    if (snapshot && (snapshot as CartState).items?.length > 0 && !isRestored.current) {
+      isRestored.current = true;
+      dispatch({ type: 'RESTORE_SNAPSHOT', payload: snapshot as CartState });
+    }
+  }, []);
+
+  // Persist cart to SQLite on every state change (crash protection)
+  useEffect(() => {
+    if (cart.items.length === 0) {
+      clearCartSnapshot();
+    } else {
+      saveCartSnapshot(cart);
+    }
+  }, [cart]);
+
+  const itemCount = useMemo(() => cart.items.reduce((sum, item) => sum + item.quantity, 0), [cart.items]);
+
+  const value: CartContextType = useMemo(() => ({
     cart,
     addItem:     (product) => dispatch({ type: 'ADD_ITEM',    payload: product, defaultTax }),
     removeItem:  (id)      => dispatch({ type: 'REMOVE_ITEM', payload: id }),
@@ -169,8 +194,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     setParcel:   (val)     => dispatch({ type: 'SET_PARCEL',   payload: val }),
     setDiscount: (d)       => dispatch({ type: 'SET_DISCOUNT', payload: d }),
     clearCart:   ()        => dispatch({ type: 'CLEAR_CART' }),
-    itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
-  };
+    itemCount,
+  }), [cart, defaultTax, itemCount]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 };

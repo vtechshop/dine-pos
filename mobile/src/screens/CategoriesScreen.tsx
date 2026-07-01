@@ -116,7 +116,10 @@ const CategoriesScreen: React.FC = () => {
     <View style={styles.categoryRow}>
       <View style={styles.categoryLeft}>
         <View style={[styles.colorDot, { backgroundColor: item.color || PRESET_COLORS[index % PRESET_COLORS.length] }]}>
-          <Text style={styles.colorDotIcon}>{item.icon || '🍽️'}</Text>
+          {/^[a-z0-9-_]+$/.test(item.icon || '')
+            ? <MaterialIcons name={item.icon as any} size={18} color="#fff" />
+            : <Text style={styles.colorDotIcon}>{item.icon || '🍽️'}</Text>
+          }
         </View>
         <View style={styles.categoryInfo}>
           <Text style={styles.categoryName}>{item.name}</Text>

@@ -29,7 +29,7 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingBottom: bottom + Spacing.xl }]} showsVerticalScrollIndicator={false}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} translucent={false} />
 
       {/* Decorative header stripe */}
       <View style={styles.headerStripe}>

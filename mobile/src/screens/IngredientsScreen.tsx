@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Modal, TextInput, ActivityIndicator,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { showAlert } from '../utils/alert';
@@ -17,6 +17,7 @@ const UNITS = ['kg', 'g', 'L', 'ml', 'pcs'];
 const emptyForm = { name: '', unit: 'kg', currentStock: '', lowStockThreshold: '5', costPerUnit: '' };
 
 const IngredientsScreen: React.FC = () => {
+  const navigation = useNavigation();
   const { bottom } = useSafeAreaInsets();
 
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);

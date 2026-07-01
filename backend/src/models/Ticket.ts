@@ -37,4 +37,7 @@ const TicketSchema: Schema = new Schema(
   { timestamps: true }
 );
 
+TicketSchema.index({ hotelPhone: 1, createdAt: -1 }); // hotel ticket lookup
+TicketSchema.index({ status: 1, createdAt: -1 });      // super admin ticket list
+
 export default mongoose.model<ITicket>('Ticket', TicketSchema);

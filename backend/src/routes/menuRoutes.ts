@@ -35,16 +35,11 @@ const generateOrderNumber = async (hotelId: string): Promise<string> => {
 router.get('/menu', async (req: Request, res: Response) => {
   try {
     const hotelId = await resolveHotelId(req.query.hotel as string | undefined);
+    if (!hotelId) return res.status(400).json({ error: 'hotel param required' });
 
-    const catFilter:  any = { isActive: true, isDeleted: false };
-    const prodFilter: any = { isAvailable: true, isDeleted: false };
-    const settingsFilter: any = {};
-
-    if (hotelId) {
-      catFilter.hotelId    = hotelId;
-      prodFilter.hotelId   = hotelId;
-      settingsFilter.hotelId = hotelId;
-    }
+    const catFilter:  any = { isActive: true, isDeleted: false, hotelId };
+    const prodFilter: any = { isAvailable: true, isDeleted: false, hotelId };
+    const settingsFilter: any = { hotelId };
 
     const [categories, products, settingsDoc] = await Promise.all([
       Category.find(catFilter).sort({ sortOrder: 1 }),
@@ -96,38 +91,74 @@ router.get('/menu', async (req: Request, res: Response) => {
 // Public order placement — no auth, used by QR menu customers
 router.post('/orders', async (req: Request, res: Response) => {
   try {
-    const { hotel, ...body } = req.body;
+    const { hotel, items: clientItems, tableNumber, customerName, notes, isParcel } = req.body;
 
-    // Resolve hotelId using best available source (most reliable first)
-    let hotelId: string | undefined;
-
-    // 1. From the payload (menu response included it)
-    if (hotel && mongoose.Types.ObjectId.isValid(hotel)) {
-      hotelId = hotel;
+    if (!hotel || !mongoose.Types.ObjectId.isValid(hotel)) {
+      return res.status(400).json({ message: 'hotel param required' });
+    }
+    if (!clientItems?.length) {
+      return res.status(400).json({ message: 'items required' });
     }
 
-    // 2. Look it up from the first ordered product (always correct)
-    if (!hotelId && body.items?.length > 0) {
-      const firstProductId = body.items[0].product;
-      if (firstProductId && mongoose.Types.ObjectId.isValid(firstProductId)) {
-        const prod = await Product.findById(firstProductId).select('hotelId').lean();
-        hotelId = (prod as any)?.hotelId?.toString();
-      }
+    const hotelId = String(hotel);
+
+    // Server-side price recalculation — never trust client-submitted totals
+    const productIds = clientItems
+      .map((i: any) => i.product)
+      .filter((id: any) => mongoose.Types.ObjectId.isValid(id));
+    const dbProducts = await Product.find({
+      _id: { $in: productIds },
+      hotelId,
+      isAvailable: true,
+      isDeleted: { $ne: true },
+    }).select('_id name price taxPercent').lean();
+    const productMap: Record<string, any> = {};
+    for (const p of dbProducts) productMap[(p._id as mongoose.Types.ObjectId).toString()] = p;
+
+    let subtotal = 0;
+    let taxTotal = 0;
+    const validatedItems: any[] = [];
+
+    for (const ci of clientItems) {
+      const prod = productMap[String(ci.product)];
+      if (!prod) continue; // skip unknown / unavailable products
+      const qty = Math.max(1, Math.floor(Number(ci.quantity) || 1));
+      const taxAmt = (prod.price * qty * (prod.taxPercent || 0)) / 100;
+      const total  = prod.price * qty + taxAmt;
+      validatedItems.push({
+        product:     prod._id,
+        productName: prod.name,
+        quantity:    qty,
+        price:       prod.price,
+        taxPercent:  prod.taxPercent || 0,
+        taxAmount:   +taxAmt.toFixed(2),
+        total:       +total.toFixed(2),
+      });
+      subtotal += prod.price * qty;
+      taxTotal += taxAmt;
     }
 
-    // 3. Last resort — first hotel in DB (single-hotel setup)
-    if (!hotelId) {
-      const Hotel = (await import('../models/Hotel')).default;
-      const h = await Hotel.findOne({}).select('_id').lean();
-      hotelId = (h as any)?._id?.toString();
+    if (validatedItems.length === 0) {
+      return res.status(400).json({ message: 'No valid items' });
     }
 
-    if (!hotelId) {
-      return res.status(400).json({ message: 'Hotel not found' });
-    }
-
+    const grandTotal = subtotal + taxTotal;
     const orderNumber = await generateOrderNumber(hotelId);
-    const order = new Order({ ...body, hotelId, orderNumber });
+    const order = new Order({
+      hotelId,
+      orderNumber,
+      items:        validatedItems,
+      subtotal:     +subtotal.toFixed(2),
+      taxTotal:     +taxTotal.toFixed(2),
+      discountAmount: 0,
+      grandTotal:   +grandTotal.toFixed(2),
+      tableNumber:  String(tableNumber || '').slice(0, 20),
+      customerName: String(customerName || '').slice(0, 60),
+      notes:        String(notes || '').slice(0, 200),
+      isParcel:     Boolean(isParcel),
+      orderSource:  'qr',
+      paymentMethod: 'cash',
+    });
     await order.save();
 
     // Emit socket event so admin sees the order instantly

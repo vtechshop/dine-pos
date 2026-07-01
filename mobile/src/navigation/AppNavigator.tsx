@@ -9,6 +9,7 @@ import { RootStackParamList, TabParamList, CustomerTabParamList } from '../types
 import { Colors } from '../utils/constants';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { SyncProvider } from '../context/SyncContext';
 
 import SplashScreen from '../screens/SplashScreen';
 import RoleSelectScreen from '../screens/RoleSelectScreen';
@@ -176,14 +177,16 @@ const AppNavigator = () => {
   }
 
   const safeTop = { paddingTop: top, backgroundColor: Colors.background };
+  const safeTopPrimary = { paddingTop: top, backgroundColor: Colors.primary };
 
   return (
+    <SyncProvider>
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: true, gestureDirection: 'horizontal', contentStyle: { backgroundColor: Colors.background } }}>
         {!isLoggedIn ? (
           <>
             <Stack.Screen name="Splash"               component={SplashScreen}               options={{ contentStyle: safeTop }} />
-            <Stack.Screen name="RoleSelect"           component={RoleSelectScreen}           options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="RoleSelect"           component={RoleSelectScreen}           options={{ contentStyle: safeTopPrimary }} />
             <Stack.Screen name="AdminLogin"           component={AdminLoginScreen}           options={{ contentStyle: safeTop }} />
             <Stack.Screen name="BusinessSetup"        component={BusinessSetupScreen}        options={{ contentStyle: safeTop }} />
             <Stack.Screen name="SuperAdminLogin"      component={SuperAdminLoginScreen}      options={{ contentStyle: safeTop }} />
@@ -221,6 +224,7 @@ const AppNavigator = () => {
         )}
       </Stack.Navigator>
     </NavigationContainer>
+    </SyncProvider>
   );
 };
 

@@ -62,7 +62,7 @@ const io = new Server(httpServer, {
   maxHttpBufferSize: 1e4, // 10KB max message size
 });
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
 
 // Serve customer digital menu PWA
@@ -98,6 +98,10 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+const escHtml = (s: unknown): string =>
+  String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+
 // Public bill view (customer scans QR to see their bill)
 app.get('/bill/:orderId', async (_req, res) => {
   try {
@@ -106,10 +110,10 @@ app.get('/bill/:orderId', async (_req, res) => {
     if (!order) return res.status(404).send('<h2>Bill not found</h2>');
     const cur = '₹';
     const rows = (order.items as any[]).map((i: any) =>
-      `<tr><td>${i.productName}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">${cur}${i.total.toFixed(0)}</td></tr>`
+      `<tr><td>${escHtml(i.productName)}</td><td style="text-align:center">${escHtml(i.quantity)}</td><td style="text-align:right">${cur}${Number(i.total).toFixed(0)}</td></tr>`
     ).join('');
     res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bill - ${order.orderNumber}</title>
+<title>Bill - ${escHtml(order.orderNumber)}</title>
 <style>body{font-family:Arial,sans-serif;max-width:420px;margin:20px auto;padding:0 16px;background:#FFF6EE}
 h2{color:#E8380D;text-align:center;margin-bottom:4px}.sub{text-align:center;color:#7A4F3A;font-size:14px;margin-bottom:16px}
 table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#E8380D;color:white;padding:8px;font-size:14px}
@@ -117,13 +121,13 @@ td{padding:8px 6px;border-bottom:1px solid #F0D9C8;font-size:14px}.total{font-si
 .token{background:#E8380D;color:white;border-radius:12px;padding:14px;text-align:center;margin-top:16px}
 .token-num{font-size:48px;font-weight:900;line-height:1}.thank{color:#7A4F3A;text-align:center;margin-top:12px;font-size:13px}</style></head>
 <body><h2>🍽 Dine POS</h2>
-<div class="sub">${order.orderNumber} · ${new Date(order.createdAt).toLocaleString('en-IN')}</div>
+<div class="sub">${escHtml(order.orderNumber)} · ${new Date(order.createdAt).toLocaleString('en-IN')}</div>
 <table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table>
 <div style="text-align:right;color:#7A4F3A;font-size:14px;padding:4px 6px">Subtotal: ${cur}${order.subtotal.toFixed(0)}</div>
 <div style="text-align:right;color:#7A4F3A;font-size:14px;padding:4px 6px">Tax: ${cur}${order.taxTotal.toFixed(0)}</div>
 <div class="total">Total: ${cur}${order.grandTotal.toFixed(0)}</div>
-${order.tableNumber ? `<div style="text-align:center;color:#7A4F3A;font-size:14px;margin-top:8px">Table: ${order.tableNumber}</div>` : ''}
-${(order as any).customerName ? `<div style="text-align:center;color:#7A4F3A;font-size:14px">Name: ${(order as any).customerName}</div>` : ''}
+${order.tableNumber ? `<div style="text-align:center;color:#7A4F3A;font-size:14px;margin-top:8px">Table: ${escHtml(order.tableNumber)}</div>` : ''}
+${(order as any).customerName ? `<div style="text-align:center;color:#7A4F3A;font-size:14px">Name: ${escHtml((order as any).customerName)}</div>` : ''}
 <div class="thank">Thank you for dining with us! 🙏</div></body></html>`);
   } catch { res.status(500).send('<h2>Error loading bill</h2>'); }
 });

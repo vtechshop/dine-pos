@@ -13,6 +13,7 @@ import { showAlert } from '../utils/alert';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
+import { getStoredHotelId } from '../services/api';
 import { RootStackParamList, CartItem } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, API_BASE_URL } from '../utils/constants';
 
@@ -72,9 +73,13 @@ const CustomerCartScreen: React.FC = () => {
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items from the menu first.'); return; }
     if (!cart.customerName.trim()) { showAlert('Name Required', 'Please enter your name.'); return; }
 
+    const hotelId = await getStoredHotelId();
+    if (!hotelId) { showAlert('Error', 'Hotel not found. Please scan the QR code again.'); return; }
+
     setPlacing(true);
     try {
-      const order = await api.createOrder({
+      const order = await api.createPublicOrder({
+        hotel: hotelId,
         items: cart.items.map(item => ({
           product: item.product._id,
           productName: item.product.name,
@@ -84,15 +89,9 @@ const CustomerCartScreen: React.FC = () => {
           taxAmount: item.taxAmount,
           total: item.total,
         })),
-        subtotal: cart.subtotal,
-        taxTotal: cart.taxTotal,
-        grandTotal: cart.grandTotal,
-        paymentMethod: 'cash' as const,
         tableNumber: cart.tableNumber,
         customerName: cart.customerName,
-        customerPhone: cart.customerPhone,
         notes: cart.notes,
-        status: 'pending' as const,
       });
 
       const token = order.orderNumber.split('-').pop() || '1';

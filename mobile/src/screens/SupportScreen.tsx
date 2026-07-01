@@ -63,8 +63,10 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
   const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatUnread, setChatUnread] = useState(0);
-  const socketRef = useRef<Socket | null>(null);
-  const chatListRef = useRef<FlatList>(null);
+  const socketRef         = useRef<Socket | null>(null);
+  const chatListRef       = useRef<FlatList>(null);
+  const selectedTableRef  = useRef<string | null>(null);
+  const scrollTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const phone = settings.phone || '';
 
@@ -82,7 +84,7 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => { loadTickets(); }, [loadTickets]);
 
-  // ── Chat socket ──
+  // ── Chat socket — connect once, never reconnect on table change ──
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ['websocket'] });
     socketRef.current = socket;
@@ -93,16 +95,21 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
         if (exists) return prev.map((t: any) => t._id === msg.tableNumber ? { ...t, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt, unread: msg.sender === 'customer' ? t.unread + 1 : t.unread } : t);
         return [{ _id: msg.tableNumber, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt, unread: msg.sender === 'customer' ? 1 : 0 }, ...prev];
       });
-      if (msg.tableNumber === selectedChatTable) {
+      // Use ref to check the currently open table (avoids stale closure)
+      if (msg.tableNumber === selectedTableRef.current) {
         setChatMessages(prev => [...prev, msg]);
-        setTimeout(() => chatListRef.current?.scrollToEnd({ animated: true }), 100);
+        if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+        scrollTimerRef.current = setTimeout(() => chatListRef.current?.scrollToEnd({ animated: true }), 100);
       } else if (msg.sender === 'customer') {
         setChatUnread(n => n + 1);
       }
     });
     fetchChatTables();
-    return () => { socket.disconnect(); };
-  }, [selectedChatTable]);
+    return () => {
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      socket.disconnect();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const chatAuthHeaders = async (): Promise<Record<string, string>> => {
     const token = await getToken();
@@ -121,6 +128,7 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const openChatTable = async (tableNum: string) => {
+    selectedTableRef.current = tableNum;
     setSelectedChatTable(tableNum);
     setChatMessages([]);
     try {
@@ -128,7 +136,8 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
       const res = await fetch(`${API_BASE_URL}/chat/${tableNum}`, { headers });
       const data = await res.json();
       setChatMessages(data);
-      setTimeout(() => chatListRef.current?.scrollToEnd({ animated: false }), 100);
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = setTimeout(() => chatListRef.current?.scrollToEnd({ animated: false }), 100);
       await fetch(`${API_BASE_URL}/chat/${tableNum}/read`, { method: 'PATCH', headers });
       setChatTables(prev => prev.map((t: any) => t._id === tableNum ? { ...t, unread: 0 } : t));
     } catch (_) {}
@@ -349,7 +358,7 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
       return (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={120}>
           <View style={styles.chatTableHeader}>
-            <TouchableOpacity onPress={() => setSelectedChatTable(null)}>
+            <TouchableOpacity onPress={() => { selectedTableRef.current = null; setSelectedChatTable(null); }}>
               <MaterialIcons name="arrow-back" size={22} color={Colors.text} />
             </TouchableOpacity>
             <MaterialIcons name="table-restaurant" size={18} color={Colors.primary} style={{ marginLeft: 8 }} />

@@ -31,7 +31,10 @@ const generateOrderNumber = async (hotelId: string): Promise<string> => {
   return `${prefix}-${String(seq).padStart(3, '0')}`;
 };
 
-const WEBHOOK_SECRET = process.env.AGGREGATOR_SECRET || 'agg-secret-changeme';
+const WEBHOOK_SECRET = process.env.AGGREGATOR_SECRET;
+if (!WEBHOOK_SECRET || WEBHOOK_SECRET === 'agg-secret-changeme') {
+  console.warn('⚠️  WARNING: AGGREGATOR_SECRET is not set or is using the default value. Set a strong secret in .env to prevent fake webhook orders.');
+}
 
 // Shared order creation logic used by all source webhooks
 const createAggregatorOrder = async (
@@ -99,7 +102,7 @@ const createAggregatorOrder = async (
 // Header: X-Webhook-Secret must match AGGREGATOR_SECRET env var
 router.post('/order', async (req: Request, res: Response) => {
   const incomingSecret = req.headers['x-webhook-secret'] as string | undefined;
-  if (!incomingSecret || incomingSecret !== WEBHOOK_SECRET) {
+  if (!WEBHOOK_SECRET || !incomingSecret || incomingSecret !== WEBHOOK_SECRET) {
     return res.status(401).json({ message: 'Unauthorized: invalid webhook secret' });
   }
 

@@ -1,36 +1,55 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import rateLimit from 'express-rate-limit';
+import { timingSafeEqual } from 'crypto';
 import Hotel from '../models/Hotel';
 import Order from '../models/Order';
 import mongoose from 'mongoose';
 
 const router = Router();
 
+const adminLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { message: 'Too many login attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const safeEqual = (a: string, b: string): boolean => {
+  try {
+    return a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  } catch {
+    return false;
+  }
+};
+
 // Middleware: validate super admin credentials via header
 const superAdminAuth = (req: Request, res: Response, next: Function) => {
-  const id = req.headers['x-super-admin-id'] as string;
-  const pass = req.headers['x-super-admin-pass'] as string;
+  const id   = req.headers['x-super-admin-id']   as string || '';
+  const pass = req.headers['x-super-admin-pass']  as string || '';
+  const expectedId   = process.env.SUPER_ADMIN_ID   || 'superadmin';
+  const expectedPass = process.env.SUPER_ADMIN_PASS || 'super1234';
 
-  if (
-    id === (process.env.SUPER_ADMIN_ID || 'superadmin') &&
-    pass === (process.env.SUPER_ADMIN_PASS || 'super1234')
-  ) {
+  if (safeEqual(id, expectedId) && safeEqual(pass, expectedPass)) {
     return next();
   }
   return res.status(401).json({ message: 'Unauthorized' });
 };
 
+const escapeRegex = (str: string): string => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // POST /api/superadmin/login
-router.post('/login', (req: Request, res: Response) => {
+router.post('/login', adminLoginLimiter, (req: Request, res: Response) => {
   const { userId, password } = req.body;
-  const adminId = process.env.SUPER_ADMIN_ID || 'superadmin';
-  const adminPass = process.env.SUPER_ADMIN_PASS || 'super1234';
+  const adminId   = process.env.SUPER_ADMIN_ID   || 'superadmin';
+  const adminPass = process.env.SUPER_ADMIN_PASS  || 'super1234';
 
   if (!userId || !password) {
     return res.status(400).json({ message: 'Credentials required' });
   }
 
-  if (userId === adminId && password === adminPass) {
+  if (safeEqual(String(userId), adminId) && safeEqual(String(password), adminPass)) {
     return res.json({ success: true, role: 'superadmin' });
   }
   return res.status(401).json({ message: 'Invalid super admin credentials' });
@@ -44,15 +63,16 @@ router.get('/hotels', superAdminAuth, async (req: Request, res: Response) => {
 
     if (status && status !== 'all') filter.status = status;
     if (search) {
+      const safeSearch = escapeRegex(String(search));
       filter.$or = [
-        { hotelName: { $regex: search, $options: 'i' } },
-        { ownerName: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { fssaiNumber: { $regex: search, $options: 'i' } },
+        { hotelName:    { $regex: safeSearch, $options: 'i' } },
+        { ownerName:    { $regex: safeSearch, $options: 'i' } },
+        { phone:        { $regex: safeSearch, $options: 'i' } },
+        { fssaiNumber:  { $regex: safeSearch, $options: 'i' } },
       ];
     }
 
-    const hotels = await Hotel.find(filter).sort({ createdAt: -1 });
+    const hotels = await Hotel.find(filter).select('-adminPasswordHash').sort({ createdAt: -1 });
     return res.json(hotels);
   } catch (error) {
     return res.status(500).json({ message: 'Server error' });
@@ -62,7 +82,7 @@ router.get('/hotels', superAdminAuth, async (req: Request, res: Response) => {
 // GET /api/superadmin/hotels/:id — hotel detail
 router.get('/hotels/:id', superAdminAuth, async (req: Request, res: Response) => {
   try {
-    const hotel = await Hotel.findById(req.params.id);
+    const hotel = await Hotel.findById(req.params.id).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     return res.json(hotel);
   } catch (error) {

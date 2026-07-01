@@ -41,10 +41,11 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation }) => {
     if (!userId.trim() || !password.trim()) { showAlert('Missing', 'Enter User ID and Password'); return; }
     setLoading(true);
     try {
-      await adminLogin(userId.trim(), password.trim());
+      const result = await adminLogin(userId.trim(), password.trim());
       const s = await getSettings();
       if (!s.isSetupComplete) { navigation.replace('BusinessSetup', undefined); return; }
-      await login();
+      // Cache JWT + hotelId + hotelName in SQLite for offline login
+      await login(result.token, result.hotelId, result.hotelName);
     } catch (error: any) {
       const msg = error.message || '';
       if (msg.toLowerCase().includes('suspended')) { navigation.replace('HotelStatus', { status: 'suspended', hotelName: '' }); return; }

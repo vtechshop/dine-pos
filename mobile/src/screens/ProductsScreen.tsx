@@ -176,8 +176,12 @@ const ProductsScreen: React.FC = () => {
     return Colors.success;
   };
 
+  const isMaterialIcon = (name?: string) => !!name && /^[a-z0-9-_]+$/.test(name);
+
   const renderCategoryChip = ({ item }: { item: Category | { _id: null; name: string } }) => {
     const isSelected = item._id === selectedCategory;
+    const iconName = 'icon' in item ? item.icon : undefined;
+    const iconColor = isSelected ? '#fff' : Colors.textSecondary;
     return (
       <TouchableOpacity
         style={[styles.categoryChip, isSelected && styles.categoryChipSelected]}
@@ -186,9 +190,12 @@ const ProductsScreen: React.FC = () => {
         }
         activeOpacity={0.7}
       >
-        {'icon' in item && item.icon ? (
-          <Text style={{ fontSize: 13 }}>{item.icon}</Text>
-        ) : null}
+        {isMaterialIcon(iconName)
+          ? <MaterialIcons name={iconName as any} size={15} color={iconColor} />
+          : iconName
+            ? <Text style={{ fontSize: 13, lineHeight: 17 }}>{iconName}</Text>
+            : null
+        }
         <Text
           style={[
             styles.categoryChipText,
@@ -459,7 +466,7 @@ const styles = StyleSheet.create({
   // Header
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, paddingTop: Spacing.xxl, paddingBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.md,
     backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   headerTitle: { color: Colors.text, fontSize: FontSize.xxl, fontWeight: '800', letterSpacing: -0.5 },
@@ -493,7 +500,7 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: Spacing.lg, marginBottom: Spacing.sm,
+    marginHorizontal: Spacing.lg, marginTop: Spacing.sm, marginBottom: Spacing.sm,
     backgroundColor: Colors.surface, borderRadius: BorderRadius.lg,
     paddingHorizontal: Spacing.md, borderWidth: 1, borderColor: Colors.border,
   },
@@ -511,8 +518,8 @@ const styles = StyleSheet.create({
     fontSize: FontSize.lg,
   },
   categoryListContainer: {
-    maxHeight: 50,
-    minHeight: 50,
+    maxHeight: 58,
+    minHeight: 58,
   },
   categoryList: {
     paddingHorizontal: Spacing.lg,
@@ -521,6 +528,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: Spacing.lg,
     paddingVertical: 6,
     borderRadius: BorderRadius.round,

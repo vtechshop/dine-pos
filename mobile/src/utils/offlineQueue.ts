@@ -1,6 +1,10 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const QUEUE_KEY = '@hotel_pos_offline_queue';
+/**
+ * Legacy offline queue — now backed by SQLite via orderQueueDao.
+ * AsyncStorage-based implementation has been replaced.
+ * This file is kept for import compatibility; new code should use
+ * orderQueueDao or SyncContext directly.
+ */
+import { enqueueOrder as sqliteEnqueue } from '../database/orderQueueDao';
 
 export interface QueuedOrder {
   id: string;
@@ -10,59 +14,17 @@ export interface QueuedOrder {
 }
 
 export const enqueueOrder = async (payload: object): Promise<string> => {
-  const id = `offline_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const item: QueuedOrder = { id, payload, createdAt: new Date().toISOString(), retries: 0 };
-  const existing = await getQueue();
-  existing.push(item);
-  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(existing));
-  return id;
+  return sqliteEnqueue(payload);
 };
 
-export const getQueue = async (): Promise<QueuedOrder[]> => {
-  try {
-    const raw = await AsyncStorage.getItem(QUEUE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-};
-
-export const removeFromQueue = async (id: string): Promise<void> => {
-  const existing = await getQueue();
-  const filtered = existing.filter(i => i.id !== id);
-  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(filtered));
-};
-
-export const incrementRetry = async (id: string): Promise<void> => {
-  const existing = await getQueue();
-  const updated = existing.map(i => i.id === id ? { ...i, retries: i.retries + 1 } : i);
-  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(updated));
-};
-
-export const clearQueue = async (): Promise<void> => {
-  await AsyncStorage.removeItem(QUEUE_KEY);
-};
-
-// Flush queued orders when network comes back
+// Deprecated — sync is handled automatically by syncEngine via SyncContext
 export const flushQueue = async (
-  createOrderFn: (payload: object) => Promise<any>,
-  onSync?: (synced: number, failed: number) => void
-): Promise<void> => {
-  const queue = await getQueue();
-  if (queue.length === 0) return;
+  _createOrderFn: (payload: object) => Promise<any>,
+  _onSync?: (synced: number, failed: number) => void
+): Promise<void> => {};
 
-  let synced = 0;
-  let failed = 0;
-
-  for (const item of queue) {
-    if (item.retries >= 3) { failed++; await removeFromQueue(item.id); continue; }
-    try {
-      await createOrderFn(item.payload);
-      await removeFromQueue(item.id);
-      synced++;
-    } catch {
-      await incrementRetry(item.id);
-      failed++;
-    }
-  }
-
-  onSync?.(synced, failed);
-};
+// Deprecated stubs kept for any remaining callers
+export const getQueue    = async (): Promise<QueuedOrder[]> => [];
+export const clearQueue  = async (): Promise<void> => {};
+export const removeFromQueue = async (_id: string): Promise<void> => {};
+export const incrementRetry  = async (_id: string): Promise<void> => {};

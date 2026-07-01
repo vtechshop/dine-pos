@@ -51,7 +51,8 @@
           "photosPermission": "Allow Dine POS to access your photos for product images.",
           "cameraPermission": "Allow Dine POS to use your camera for product images."
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "extra": {
       "eas": {

@@ -14,6 +14,7 @@ export interface IOrderItem {
 export interface IOrder extends Document {
   hotelId: mongoose.Types.ObjectId;
   orderNumber: string;
+  offlineId: string | null;
   items: IOrderItem[];
   subtotal: number;
   taxTotal: number;
@@ -75,6 +76,10 @@ const OrderSchema: Schema = new Schema(
       type: String,
       required: true,
       unique: true,
+    },
+    offlineId: {
+      type: String,
+      default: null,
     },
     items: [OrderItemSchema],
     subtotal: {
@@ -138,9 +143,12 @@ const OrderSchema: Schema = new Schema(
 );
 
 // Compound indexes for common query patterns
-OrderSchema.index({ hotelId: 1, createdAt: -1 });                          // order list per hotel
-OrderSchema.index({ hotelId: 1, status: 1, createdAt: -1 });               // filtered order list
-OrderSchema.index({ hotelId: 1, orderSource: 1, createdAt: -1 });          // source filter (Swiggy/Zomato analytics)
-OrderSchema.index({ createdAt: -1 });                                       // admin-wide report
+OrderSchema.index({ hotelId: 1, createdAt: -1 });                           // order list per hotel
+OrderSchema.index({ hotelId: 1, status: 1, createdAt: -1 });                // filtered order list
+OrderSchema.index({ hotelId: 1, orderSource: 1, createdAt: -1 });           // source filter (Swiggy/Zomato analytics)
+OrderSchema.index({ createdAt: -1 });                                        // admin-wide report
+// Sparse unique index: null values are excluded, non-null offlineIds must be globally unique.
+// This is the idempotency guard — a retry with the same offlineId is a no-op.
+OrderSchema.index({ offlineId: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model<IOrder>('Order', OrderSchema);

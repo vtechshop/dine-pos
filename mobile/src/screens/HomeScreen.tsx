@@ -10,9 +10,10 @@ import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { io, Socket } from 'socket.io-client';
 import { RootStackParamList, TabParamList, DailyReport } from '../types';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
-import { getDailyReport, getProducts, getCategories, getStoredHotelId, getSocketUrl, getLowStockProducts, getLowStockIngredients, createOrder, getOrder } from '../services/api';
-import { flushQueue, getQueue } from '../utils/offlineQueue';
+import { getDailyReport, getProducts, getCategories, getStoredHotelId, getSocketUrl, getLowStockProducts, getLowStockIngredients, getOrder } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
+import { useSync } from '../context/SyncContext';
+import { SyncStatusBar } from '../components/SyncStatusBar';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { printReceipt } from '../utils/receipt';
@@ -42,7 +43,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [orderBadge, setOrderBadge] = useState(0);
   const [lowStockCount, setLowStockCount] = useState(0);
   const [lowIngredientCount, setLowIngredientCount] = useState(0);
-  const [offlineCount, setOfflineCount]   = useState(0);
+  const { pendingCount } = useSync();
   const socketRef = useRef<Socket | null>(null);
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -53,24 +54,16 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const fetchStats = useCallback(async () => {
     try {
       setError(null);
-      const [report, products, categories, lowStock, lowIngredients, queue] = await Promise.all([
+      const [report, products, categories, lowStock, lowIngredients] = await Promise.all([
         getDailyReport().catch((): DailyReport => ({ date: '', totalSales: 0, totalTax: 0, totalOrders: 0, paymentBreakdown: { cash: 0, upi: 0, card: 0, split: 0 } })),
         getProducts().catch(() => []),
         getCategories().catch(() => []),
         getLowStockProducts(5).catch(() => ({ products: [], threshold: 5 })),
         getLowStockIngredients().catch(() => ({ ingredients: [] })),
-        getQueue().catch(() => []),
       ]);
       setStats({ todayOrders: report.totalOrders, todaySales: report.totalSales, totalProducts: products.length, totalCategories: categories.length });
       setLowStockCount(lowStock.products.length);
       setLowIngredientCount(lowIngredients.ingredients.length);
-      setOfflineCount(queue.length);
-      // Flush queued offline orders on each load
-      if (queue.length > 0) {
-        flushQueue(createOrder, (synced) => {
-          if (synced > 0) setOfflineCount(0);
-        });
-      }
     } catch (e: any) {
       setError(e.message || 'Failed to load data');
     } finally {
@@ -228,13 +221,10 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         )}
 
-        {/* ── Offline Queue Alert ── */}
-        {offlineCount > 0 && (
-          <View style={[styles.alertBanner, { backgroundColor: Colors.info }]}>
-            <MaterialIcons name="cloud-off" size={22} color={Colors.white} />
-            <Text style={[styles.alertTitle, { marginLeft: Spacing.md, flex: 1 }]}>
-              {offlineCount} order{offlineCount > 1 ? 's' : ''} queued offline — will sync when connected
-            </Text>
+        {/* ── Sync Status Bar ── */}
+        {pendingCount > 0 && (
+          <View style={{ marginBottom: Spacing.lg, borderRadius: BorderRadius.lg, overflow: 'hidden' }}>
+            <SyncStatusBar />
           </View>
         )}
 

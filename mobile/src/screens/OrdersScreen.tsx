@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { showAlert } from '../utils/alert';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
@@ -93,16 +93,13 @@ const OrdersScreen: React.FC = () => {
         limit: PAGE_SIZE.toString(),
         sort: '-createdAt',
       };
-      if (tab !== 'all' && tab !== 'active') params.status = tab;
+      // 'active' maps to pending on server — avoids broken client-side pagination
+      if (tab === 'active') params.status = 'pending';
+      else if (tab !== 'all') params.status = tab;
       if (source !== 'all') params.source = source;
       const data = await getOrders(params);
 
-      let fetchedOrders = data.orders;
-      if (tab === 'active') {
-        fetchedOrders = fetchedOrders.filter(o => o.status === 'pending');
-      }
-
-      setOrders(prev => append ? [...prev, ...fetchedOrders] : fetchedOrders);
+      setOrders(prev => append ? [...prev, ...data.orders] : data.orders);
       setPage(data.page);
       setTotalPages(data.pages);
     } catch (e: any) {
@@ -113,19 +110,29 @@ const OrdersScreen: React.FC = () => {
     }
   }, []);
 
+  // Refs let useFocusEffect always read the current filter without being a dep
+  const activeTabRef    = useRef(activeTab);
+  const activeSourceRef = useRef(activeSource);
+  activeTabRef.current    = activeTab;
+  activeSourceRef.current = activeSource;
+
+  // Tracks whether initial focus-fetch has already run (skip first useEffect call)
+  const filterMountedRef = useRef(false);
+
+  // Runs on screen focus / return from other screen (never fires on filter change)
   useFocusEffect(useCallback(() => {
+    fetchOrders(1, activeTabRef.current, false, activeSourceRef.current);
+  }, [fetchOrders])); // fetchOrders is stable (empty deps in useCallback above)
+
+  // Runs when tab or source filter changes, but NOT on the initial mount
+  // (useFocusEffect already handles that, avoiding a double fetch)
+  useEffect(() => {
+    if (!filterMountedRef.current) { filterMountedRef.current = true; return; }
     fetchOrders(1, activeTab, false, activeSource);
-  }, [fetchOrders, activeTab, activeSource]));
+  }, [activeTab, activeSource, fetchOrders]);
 
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-    fetchOrders(1, tab, false, activeSource);
-  };
-
-  const handleSourceFilter = (src: string) => {
-    setActiveSource(src);
-    fetchOrders(1, activeTab, false, src);
-  };
+  const handleTabChange    = (tab: string) => setActiveTab(tab);
+  const handleSourceFilter = (src: string) => setActiveSource(src);
 
   const handleStatusUpdate = async (order: Order, newStatus: OrderStatus) => {
     setUpdating(true);
@@ -173,7 +180,7 @@ const OrdersScreen: React.FC = () => {
   };
 
   // ── Order Card ──────────────────────────────────────────────────────────────
-  const renderCard = ({ item }: { item: Order }) => {
+  const renderCard = useCallback(({ item }: { item: Order }) => {
     const { date, time } = fmt(item.createdAt);
     const cfg = STATUS_CONFIG[item.status];
     return (
@@ -210,7 +217,7 @@ const OrdersScreen: React.FC = () => {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [cur, setSelected]);
 
   // ── Detail Modal ────────────────────────────────────────────────────────────
   const renderModal = () => {

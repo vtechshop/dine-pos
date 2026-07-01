@@ -1,9 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { Settings } from '../types';
 import * as api from '../services/api';
-
-const SETTINGS_CACHE_KEY = '@hotel_pos_settings_cache';
+import { getLocalSettings, saveLocalSettings } from '../database/localCacheDao';
 
 interface SettingsContextType {
   settings: Settings;
@@ -39,54 +37,42 @@ const SettingsContext = createContext<SettingsContextType | null>(null);
 
 export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]   = useState(true);
 
-  const refreshSettings = async () => {
-    try {
-      // Load cached settings first so UI is instant even if backend is sleeping
-      const cached = await AsyncStorage.getItem(SETTINGS_CACHE_KEY);
-      if (cached) setSettings({ ...defaultSettings, ...JSON.parse(cached) });
-    } catch {}
+  const refreshSettings = useCallback(async () => {
+    // 1. Load SQLite cache first (instant, works offline)
+    const cached = getLocalSettings();
+    if (cached) setSettings({ ...defaultSettings, ...cached });
 
+    // 2. Try to fetch fresh data from MongoDB via API
     try {
       const data = await api.getSettings();
       setSettings(data);
-      // Update cache with latest from server
-      await AsyncStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(data));
+      saveLocalSettings(data);
     } catch {
-      console.log('Using cached/default settings (server unavailable)');
+      // Offline — keep SQLite cache; already set above
     } finally {
       setLoading(false);
     }
-  };
-
-  const saveSettings = async (data: Partial<Settings>) => {
-    try {
-      const updated = await api.updateSettings(data);
-      setSettings(updated);
-      // Keep cache in sync
-      await AsyncStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(updated));
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  useEffect(() => {
-    refreshSettings();
   }, []);
 
+  const saveSettings = useCallback(async (data: Partial<Settings>) => {
+    const updated = await api.updateSettings(data);
+    setSettings(updated);
+    saveLocalSettings(updated);
+  }, []);
+
+  useEffect(() => { refreshSettings(); }, [refreshSettings]);
+
   return (
-    <SettingsContext.Provider
-      value={{ settings, loading, refreshSettings, saveSettings }}
-    >
+    <SettingsContext.Provider value={{ settings, loading, refreshSettings, saveSettings }}>
       {children}
     </SettingsContext.Provider>
   );
 };
 
 export const useSettings = (): SettingsContextType => {
-  const context = useContext(SettingsContext);
-  if (!context)
-    throw new Error('useSettings must be used within SettingsProvider');
-  return context;
+  const ctx = useContext(SettingsContext);
+  if (!ctx) throw new Error('useSettings must be used within SettingsProvider');
+  return ctx;
 };

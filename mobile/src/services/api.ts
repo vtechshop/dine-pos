@@ -285,6 +285,29 @@ export const createOrder = (data: Partial<Order>): Promise<Order> => {
   });
 };
 
+// Public order placement — no auth, used by customer QR menu kiosk
+export const createPublicOrder = async (data: {
+  hotel: string;
+  items: Array<{
+    product: string;
+    productName: string;
+    quantity: number;
+    price: number;
+    taxPercent: number;
+    taxAmount: number;
+    total: number;
+  }>;
+  tableNumber?: string;
+  customerName?: string;
+  notes?: string;
+  isParcel?: boolean;
+}): Promise<Order> => {
+  return fetchAPI<Order>('/public/orders', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, true); // skipAuth — public endpoint, no JWT needed
+};
+
 export const updateOrder = (
   id: string,
   data: Partial<Order>

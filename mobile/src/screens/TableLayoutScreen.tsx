@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Modal, TextInput, ActivityIndicator, Alert,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
@@ -25,6 +25,7 @@ const STATUS_LABELS: Record<Table['status'], string> = {
 };
 
 const TableLayoutScreen: React.FC = () => {
+  const navigation = useNavigation();
   const { bottom } = useSafeAreaInsets();
   const [tables,    setTables]    = useState<Table[]>([]);
   const [loading,   setLoading]   = useState(true);

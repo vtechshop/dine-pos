@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import mongoose from 'mongoose';
 import Order from '../models/Order';
 import Product from '../models/Product';
 import Ingredient from '../models/Ingredient';
@@ -239,14 +240,26 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST create order — deducts stock, emits socket alert
+// POST create order — idempotent, deducts stock, emits socket alert
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
+    // ── Idempotency guard ────────────────────────────────────────────────────
+    // offlineId is the client-generated queue item id. If the network dropped
+    // after the server saved but before the client received the 201, the client
+    // will retry. We return the already-saved order instead of duplicating it.
+    if (req.body.offlineId) {
+      const existing = await Order.findOne({
+        offlineId: req.body.offlineId,
+        hotelId: req.hotelId,
+      });
+      if (existing) return res.status(200).json(existing);
+    }
+
     const orderNumber = await generateOrderNumber(req.hotelId!);
     const order = new Order({ ...req.body, hotelId: req.hotelId, orderNumber });
     await order.save();
 
-    // Auto-deduct stock for tracked products (stock > 0, -1 = unlimited)
+    // ── Stock deduction ──────────────────────────────────────────────────────
     const stockItems = order.items.filter(i => i.product);
     if (stockItems.length > 0) {
       const bulkOps = stockItems.map(item => ({
@@ -261,8 +274,22 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       await Product.bulkWrite(bulkOps as any);
     }
 
-    // Deduct raw-material (ingredient) stock based on recipes
+    // Deduct raw-material (ingredient) stock based on product recipes
     await applyIngredientStockChange(order.items, req.hotelId!, -1);
+
+    // ── Return stock updates to client ───────────────────────────────────────
+    // Client applies these immediately so local cache reflects server truth
+    // without waiting for the next full cache refresh.
+    let stockUpdates: { productId: string; newStock: number }[] = [];
+    if (stockItems.length > 0) {
+      const updatedProducts = await Product.find({
+        _id: { $in: stockItems.map(i => i.product) },
+      }).select('_id stock');
+      stockUpdates = updatedProducts.map(p => ({
+        productId: (p._id as mongoose.Types.ObjectId).toString(),
+        newStock:  (p as any).stock ?? 0,
+      }));
+    }
 
     io.to(`hotel_${req.hotelId}`).emit('new_order', {
       _id: order._id,
@@ -273,8 +300,19 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       itemCount: order.items.length,
     });
 
-    res.status(201).json(order);
-  } catch (error) {
+    res.status(201).json({ ...order.toObject(), stockUpdates });
+
+  } catch (error: any) {
+    // Race condition: two concurrent syncs of the same offlineId both pass the
+    // findOne check before either inserts. The unique index rejects one of them
+    // with code 11000. Return the already-saved order rather than a 400 error.
+    if (error.code === 11000 && error.keyPattern?.offlineId) {
+      const existing = await Order.findOne({
+        offlineId: req.body.offlineId,
+        hotelId: req.hotelId,
+      });
+      if (existing) return res.status(200).json(existing);
+    }
     res.status(400).json({ message: 'Invalid data', error });
   }
 });

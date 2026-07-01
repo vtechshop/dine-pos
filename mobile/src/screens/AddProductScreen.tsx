@@ -258,6 +258,8 @@ const AddProductScreen: React.FC = () => {
     setCategoryModalVisible(false);
   };
 
+  const isMaterialIcon = (name?: string) => !!name && /^[a-z0-9-_]+$/.test(name);
+
   const renderCategoryItem = ({ item }: { item: Category }) => (
     <TouchableOpacity
       style={[
@@ -268,9 +270,12 @@ const AddProductScreen: React.FC = () => {
       activeOpacity={0.7}
     >
       <View style={styles.categoryItemLeft}>
-        {item.icon ? (
-          <Text style={styles.categoryIcon}>{item.icon}</Text>
-        ) : null}
+        {isMaterialIcon(item.icon)
+          ? <MaterialIcons name={item.icon as any} size={18} color={item._id === categoryId ? '#fff' : Colors.textSecondary} />
+          : item.icon
+            ? <Text style={styles.categoryIcon}>{item.icon}</Text>
+            : null
+        }
         <Text
           style={[
             styles.categoryItemText,

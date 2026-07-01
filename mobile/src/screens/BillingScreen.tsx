@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, TextInput, ActivityIndicator, Dimensions,
-  Modal, Image, Linking, Vibration,
+  Modal, Linking, Vibration,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,15 +14,16 @@ import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
 import { Category, Product } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, UPI_ID, UPI_NAME } from '../utils/constants';
-import { enqueueOrder, flushQueue } from '../utils/offlineQueue';
+import { enqueueOrder } from '../utils/offlineQueue';
+import { getLocalCategories, getLocalProducts, saveCategories, saveProducts } from '../database/localCacheDao';
 import { printKOT } from '../utils/receipt';
 import { KOTOrderInput } from '../types';
 
 const { width: SW } = Dimensions.get('window');
 const IS_TABLET = SW >= 768;
-const CAT_W = IS_TABLET ? 100 : 76;
+const CAT_W  = IS_TABLET ? 100 : 80;
 const CART_W = IS_TABLET ? 340 : SW;
-const COLS = IS_TABLET ? 3 : 2;
+const COLS   = IS_TABLET ? 4 : 2;
 
 type PayMethod = 'cash' | 'upi' | 'card' | 'split';
 type OrderSource = 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr';
@@ -89,15 +90,27 @@ const BillingScreen: React.FC = () => {
   const isMaterialIcon = (name?: string) => !!name && /^[a-z0-9-_]+$/.test(name);
 
   const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const [cats, prods] = await Promise.all([api.getCategories(), api.getProducts()]);
       setCategories(cats);
       setProducts(prods);
       setFiltered(prods);
       setSelectedCat(null);
+      saveCategories(cats);
+      saveProducts(prods);
     } catch {
-      showAlert('Error', 'Failed to load menu. Check server connection.');
+      // Offline: load from SQLite cache
+      const cachedCats  = getLocalCategories();
+      const cachedProds = getLocalProducts();
+      if (cachedProds.length > 0) {
+        setCategories(cachedCats);
+        setProducts(cachedProds);
+        setFiltered(cachedProds);
+        setSelectedCat(null);
+      } else {
+        showAlert('Offline', 'No cached menu data. Connect to the internet to load products.');
+      }
     } finally { setLoading(false); }
   }, []);
 
@@ -222,7 +235,6 @@ Thank you for dining with us! 🍽️`;
       let order: any;
       try {
         order = await api.createOrder(orderData);
-        flushQueue(api.createOrder);
       } catch (netErr: any) {
         const offlineId = await enqueueOrder(orderData);
         const tokenNum = `Q${offlineId.slice(-3).toUpperCase()}`;
@@ -268,35 +280,59 @@ Thank you for dining with us! 🍽️`;
     );
   };
 
-  // ── Product card ──────────────────────────────────────────────────────────
+  // ── Product tile — compact POS style ─────────────────────────────────────
   const renderProduct = ({ item }: { item: Product }) => {
     const qty = cart.items.find(i => i.product._id === item._id)?.quantity || 0;
+    const accentColor = item.isVeg ? Colors.veg : Colors.nonVeg;
     return (
-      <TouchableOpacity style={styles.prodCard} onPress={() => addItem(item)} activeOpacity={0.75}>
-        {/* Veg/NonVeg indicator */}
-        <View style={[styles.vegBox, { borderColor: item.isVeg ? Colors.veg : Colors.nonVeg }]}>
-          <View style={[styles.vegDot, { backgroundColor: item.isVeg ? Colors.veg : Colors.nonVeg }]} />
-        </View>
+      <TouchableOpacity
+        style={[styles.prodTile, qty > 0 && styles.prodTileActive]}
+        onPress={() => addItem(item)}
+        activeOpacity={0.75}
+      >
+        {/* Left accent bar */}
+        <View style={[styles.prodTileBar, { backgroundColor: accentColor }]} />
 
-        {item.image
-          ? <Image source={{ uri: item.image }} style={styles.prodImg} resizeMode="cover" />
-          : <View style={styles.prodImgPlaceholder}><MaterialIcons name="fastfood" size={28} color={Colors.textMuted} /></View>
-        }
-
-        <View style={styles.prodInfo}>
-          <Text style={styles.prodName} numberOfLines={2}>{item.name}</Text>
-          <View style={styles.prodPriceRow}>
-            <Text style={styles.prodPrice}>{cur}{item.price.toFixed(0)}</Text>
-            {item.taxPercent > 0 && <Text style={styles.prodGst}>{item.taxPercent}%</Text>}
+        <View style={styles.prodTileInner}>
+          {/* Veg dot + qty badge */}
+          <View style={styles.prodTileTopRow}>
+            <View style={[styles.vegBox, { borderColor: accentColor }]}>
+              <View style={[styles.vegDot, { backgroundColor: accentColor }]} />
+            </View>
+            {qty > 0 && (
+              <View style={styles.qtyBadge}>
+                <Text style={styles.qtyBadgeText}>{qty}</Text>
+              </View>
+            )}
           </View>
-        </View>
 
-        {/* Qty badge */}
-        {qty > 0 && (
-          <View style={styles.qtyBadge}>
-            <Text style={styles.qtyBadgeText}>{qty}</Text>
+          {/* Name */}
+          <Text style={styles.prodTileName} numberOfLines={2}>{item.name}</Text>
+
+          {/* Price */}
+          <View style={styles.prodTilePriceRow}>
+            <Text style={styles.prodTilePrice}>{cur}{item.price.toFixed(0)}</Text>
+            {item.taxPercent > 0 && <Text style={styles.prodTileTax}> +{item.taxPercent}%</Text>}
           </View>
-        )}
+
+          {/* Controls */}
+          {qty > 0 ? (
+            <View style={styles.prodTileQtyRow}>
+              <TouchableOpacity style={styles.prodTileQtyBtn} onPress={() => decrement(item._id)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 3 }}>
+                <MaterialIcons name="remove" size={12} color={Colors.white} />
+              </TouchableOpacity>
+              <Text style={styles.prodTileQtyNum}>{qty}</Text>
+              <TouchableOpacity style={styles.prodTileQtyBtn} onPress={() => addItem(item)} hitSlop={{ top: 6, bottom: 6, left: 3, right: 6 }}>
+                <MaterialIcons name="add" size={12} color={Colors.white} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.prodTileAddRow}>
+              <MaterialIcons name="add" size={13} color={Colors.primary} />
+              <Text style={styles.prodTileAddText}>ADD</Text>
+            </View>
+          )}
+        </View>
       </TouchableOpacity>
     );
   };
@@ -317,11 +353,11 @@ Thank you for dining with us! 🍽️`;
         <Text style={styles.cartItemTotal}>{cur}{(item.product.price * item.quantity).toFixed(0)}</Text>
         <View style={styles.qtyRow}>
           <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item.product._id)}>
-            <MaterialIcons name="remove" size={15} color={Colors.white} />
+            <MaterialIcons name="remove" size={15} color={Colors.primary} />
           </TouchableOpacity>
           <Text style={styles.qtyNum}>{item.quantity}</Text>
           <TouchableOpacity style={styles.qtyBtn} onPress={() => increment(item.product._id)}>
-            <MaterialIcons name="add" size={15} color={Colors.white} />
+            <MaterialIcons name="add" size={15} color={Colors.primary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.removeBtn} onPress={() => removeItem(item.product._id)}>
             <MaterialIcons name="close" size={14} color={Colors.danger} />
@@ -342,30 +378,32 @@ Thank you for dining with us! 🍽️`;
 
   return (
     <View style={styles.container}>
-      {/* ── Header / Search ── */}
-      <View style={styles.header}>
-        <View style={styles.searchWrap}>
-          <MaterialIcons name="search" size={20} color={Colors.textMuted} style={{ marginRight: 8 }} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search items..."
-            placeholderTextColor={Colors.textMuted}
-            value={search}
-            onChangeText={setSearch}
-          />
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')}>
-              <MaterialIcons name="close" size={18} color={Colors.textMuted} />
+      {/* ── Header / Search — hidden when cart is open on mobile ── */}
+      {(!showCart || IS_TABLET) && (
+        <View style={styles.header}>
+          <View style={styles.searchWrap}>
+            <MaterialIcons name="search" size={20} color={Colors.textMuted} style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search items..."
+              placeholderTextColor={Colors.textMuted}
+              value={search}
+              onChangeText={setSearch}
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')}>
+                <MaterialIcons name="close" size={18} color={Colors.textMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
+          {!IS_TABLET && (
+            <TouchableOpacity style={[styles.cartToggle, itemCount > 0 && styles.cartToggleActive]} onPress={() => setShowCart(!showCart)}>
+              <MaterialIcons name="shopping-cart" size={22} color={itemCount > 0 ? Colors.white : Colors.textSecondary} />
+              {itemCount > 0 && <View style={styles.cartBadge}><Text style={styles.cartBadgeText}>{itemCount}</Text></View>}
             </TouchableOpacity>
           )}
         </View>
-        {!IS_TABLET && (
-          <TouchableOpacity style={[styles.cartToggle, itemCount > 0 && styles.cartToggleActive]} onPress={() => setShowCart(!showCart)}>
-            <MaterialIcons name="shopping-cart" size={22} color={itemCount > 0 ? Colors.white : Colors.textSecondary} />
-            {itemCount > 0 && <View style={styles.cartBadge}><Text style={styles.cartBadgeText}>{itemCount}</Text></View>}
-          </TouchableOpacity>
-        )}
-      </View>
+      )}
 
       <View style={styles.body}>
         {/* ── Categories ── */}
@@ -543,7 +581,7 @@ Thank you for dining with us! 🍽️`;
             </View>
 
             {/* Actions */}
-            <View style={styles.cartActions}>
+            <View style={[styles.cartActions, { paddingBottom: (bottom || 0) + Spacing.sm }]}>
               <TouchableOpacity style={styles.clearBtn} onPress={() => { if (cart.items.length) showAlert('Clear?', 'Remove all items?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: clearCart }]); }}>
                 <MaterialIcons name="delete-outline" size={20} color={Colors.danger} />
               </TouchableOpacity>
@@ -724,28 +762,41 @@ const styles = StyleSheet.create({
   catText: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 4, textAlign: 'center', lineHeight: 13 },
   catTextActive: { color: Colors.primary, fontWeight: '700' },
 
-  // Product grid
-  prodGrid: { padding: Spacing.sm, paddingBottom: 20 },
-  prodCard: {
-    flex: 1, backgroundColor: Colors.card, borderRadius: BorderRadius.lg,
-    margin: Spacing.xs, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border,
-    maxWidth: IS_TABLET ? '31%' : '48%',
+  // Product grid — 2-column POS tiles (readable names)
+  prodGrid: { padding: 6, paddingBottom: 20 },
+  prodTile: {
+    flex: 1, flexDirection: 'row',
+    backgroundColor: Colors.surface, borderRadius: BorderRadius.lg,
+    margin: 4, overflow: 'hidden',
+    borderWidth: 1, borderColor: Colors.border,
+    minHeight: 110,
   },
-  vegBox: { position: 'absolute', top: 6, right: 6, zIndex: 10, width: 14, height: 14, borderRadius: 3, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  prodTileActive: { borderColor: Colors.primary, borderWidth: 1.5 },
+  prodTileBar: { width: 5, borderRadius: 0 },
+  prodTileInner: { flex: 1, padding: 10, justifyContent: 'space-between' },
+  prodTileTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
+  vegBox: { width: 14, height: 14, borderRadius: 2, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   vegDot: { width: 7, height: 7, borderRadius: 3.5 },
-  prodImg: { width: '100%', height: 80 },
-  prodImgPlaceholder: { width: '100%', height: 80, backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center' },
-  prodInfo: { padding: Spacing.sm, paddingBottom: Spacing.md },
-  prodName: { color: Colors.text, fontSize: FontSize.sm, fontWeight: '600', marginBottom: 4, lineHeight: 16 },
-  prodPriceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  prodPrice: { color: Colors.primary, fontSize: FontSize.lg, fontWeight: '800' },
-  prodGst: { color: Colors.textMuted, fontSize: FontSize.xs },
   qtyBadge: {
-    position: 'absolute', top: 6, left: 6,
     backgroundColor: Colors.primary, borderRadius: 10, minWidth: 20, height: 20,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
   },
   qtyBadgeText: { color: Colors.white, fontSize: 10, fontWeight: '800' },
+  prodTileName: { fontSize: 13, fontWeight: '700', color: Colors.text, lineHeight: 18, marginBottom: 4, flex: 1 },
+  prodTilePriceRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 6 },
+  prodTilePrice: { fontSize: 15, fontWeight: '800', color: Colors.primary },
+  prodTileTax: { fontSize: 10, color: Colors.textMuted, fontWeight: '500' },
+  prodTileQtyRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.primary, borderRadius: 7, overflow: 'hidden',
+  },
+  prodTileQtyBtn: { paddingVertical: 6, paddingHorizontal: 10 },
+  prodTileQtyNum: { flex: 1, textAlign: 'center', color: Colors.white, fontWeight: '800', fontSize: 13 },
+  prodTileAddRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3,
+    borderWidth: 1.5, borderColor: Colors.primary, borderRadius: 7, paddingVertical: 6,
+  },
+  prodTileAddText: { fontSize: 12, fontWeight: '800', color: Colors.primary },
 
   emptyState: { alignItems: 'center', paddingVertical: 60 },
   emptyText: { color: Colors.textMuted, fontSize: FontSize.md, marginTop: Spacing.md },
@@ -757,15 +808,15 @@ const styles = StyleSheet.create({
 
   // Source selector
   sourceScroll: { borderBottomWidth: 1, borderBottomColor: Colors.border },
-  sourceScrollContent: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: Spacing.sm },
+  sourceScrollContent: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, flexDirection: 'row', alignItems: 'center' },
   sourceBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 6,
+    paddingHorizontal: 12, paddingVertical: 8,
     borderRadius: BorderRadius.round, backgroundColor: Colors.card,
-    borderWidth: 1.5, borderColor: Colors.border,
+    borderWidth: 1.5, borderColor: Colors.border, marginRight: Spacing.sm,
   },
-  sourceEmoji: { fontSize: 13 },
-  sourceLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, fontWeight: '600' },
+  sourceEmoji: { fontSize: 14 },
+  sourceLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600' },
 
   customerRow: { flexDirection: 'row', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: 6 },
   custInput: {
@@ -784,8 +835,8 @@ const styles = StyleSheet.create({
   cartItemRight: { alignItems: 'flex-end' },
   cartItemTotal: { color: Colors.primary, fontSize: FontSize.md, fontWeight: '700', marginBottom: 4 },
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  qtyBtn: { backgroundColor: Colors.elevated, borderRadius: 6, width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
-  qtyNum: { color: Colors.text, fontSize: FontSize.md, fontWeight: '700', minWidth: 20, textAlign: 'center' },
+  qtyBtn: { backgroundColor: Colors.primaryBg, borderRadius: 7, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.primary + '40' },
+  qtyNum: { color: Colors.text, fontSize: FontSize.md, fontWeight: '700', minWidth: 22, textAlign: 'center' },
   removeBtn: { padding: 4 },
   emptyCart: { alignItems: 'center', paddingVertical: 32 },
   emptyCartText: { color: Colors.textMuted, fontSize: FontSize.sm, marginTop: 8 },
