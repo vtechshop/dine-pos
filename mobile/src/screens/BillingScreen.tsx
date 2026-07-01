@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, TextInput, ActivityIndicator, Dimensions,
-  Modal, Linking, Vibration,
+  Modal, Linking, Vibration, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -280,7 +280,31 @@ Thank you for dining with us! 🍽️`;
     );
   };
 
-  // ── Product tile — compact POS style ─────────────────────────────────────
+  // ── Horizontal category chip (phones only) ───────────────────────────────
+  const renderCatChip = (cat: Category | null) => {
+    const active = cat ? selectedCat === cat._id : selectedCat === null;
+    const iconName = cat?.icon;
+    return (
+      <TouchableOpacity
+        key={cat?._id || 'all'}
+        style={[styles.catChip, active && styles.catChipActive]}
+        onPress={() => handleCategorySelect(cat?._id || null)}
+        activeOpacity={0.75}
+      >
+        {isMaterialIcon(iconName)
+          ? <MaterialIcons name={iconName as any} size={15} color={active ? Colors.white : Colors.textSecondary} />
+          : iconName
+            ? <Text style={{ fontSize: 13 }}>{iconName}</Text>
+            : <MaterialIcons name="apps" size={15} color={active ? Colors.white : Colors.textSecondary} />
+        }
+        <Text style={[styles.catChipText, active && styles.catChipTextActive]}>
+          {cat?.name || 'All'}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  // ── Product tile — card style with image ──────────────────────────────────
   const renderProduct = ({ item }: { item: Product }) => {
     const qty = cart.items.find(i => i.product._id === item._id)?.quantity || 0;
     const accentColor = item.isVeg ? Colors.veg : Colors.nonVeg;
@@ -290,47 +314,48 @@ Thank you for dining with us! 🍽️`;
         onPress={() => addItem(item)}
         activeOpacity={0.75}
       >
-        {/* Left accent bar */}
-        <View style={[styles.prodTileBar, { backgroundColor: accentColor }]} />
-
-        <View style={styles.prodTileInner}>
-          {/* Veg dot + qty badge */}
-          <View style={styles.prodTileTopRow}>
-            <View style={[styles.vegBox, { borderColor: accentColor }]}>
-              <View style={[styles.vegDot, { backgroundColor: accentColor }]} />
-            </View>
-            {qty > 0 && (
-              <View style={styles.qtyBadge}>
-                <Text style={styles.qtyBadgeText}>{qty}</Text>
+        {/* Image / placeholder */}
+        <View style={styles.prodTileImgWrap}>
+          {item.image
+            ? <Image source={{ uri: item.image }} style={styles.prodTileImg} resizeMode="cover" />
+            : <View style={[styles.prodTileImgPlaceholder, { backgroundColor: accentColor + '18' }]}>
+                <MaterialIcons name="restaurant" size={22} color={accentColor} />
               </View>
-            )}
+          }
+          {/* Veg indicator — pinned top-left */}
+          <View style={[styles.vegPill, { borderColor: accentColor }]}>
+            <View style={[styles.vegDot, { backgroundColor: accentColor }]} />
           </View>
+          {/* Qty badge — pinned top-right */}
+          {qty > 0 && (
+            <View style={styles.qtyBadge}>
+              <Text style={styles.qtyBadgeText}>{qty}</Text>
+            </View>
+          )}
+        </View>
 
-          {/* Name */}
+        {/* Content */}
+        <View style={styles.prodTileInner}>
           <Text style={styles.prodTileName} numberOfLines={2}>{item.name}</Text>
-
-          {/* Price */}
           <View style={styles.prodTilePriceRow}>
             <Text style={styles.prodTilePrice}>{cur}{item.price.toFixed(0)}</Text>
             {item.taxPercent > 0 && <Text style={styles.prodTileTax}> +{item.taxPercent}%</Text>}
           </View>
-
-          {/* Controls */}
           {qty > 0 ? (
             <View style={styles.prodTileQtyRow}>
-              <TouchableOpacity style={styles.prodTileQtyBtn} onPress={() => decrement(item._id)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 3 }}>
-                <MaterialIcons name="remove" size={12} color={Colors.white} />
+              <TouchableOpacity style={styles.prodTileQtyBtn} onPress={() => decrement(item._id)} hitSlop={{ top: 6, bottom: 6, left: 8, right: 4 }}>
+                <MaterialIcons name="remove" size={13} color={Colors.white} />
               </TouchableOpacity>
               <Text style={styles.prodTileQtyNum}>{qty}</Text>
-              <TouchableOpacity style={styles.prodTileQtyBtn} onPress={() => addItem(item)} hitSlop={{ top: 6, bottom: 6, left: 3, right: 6 }}>
-                <MaterialIcons name="add" size={12} color={Colors.white} />
+              <TouchableOpacity style={styles.prodTileQtyBtn} onPress={() => addItem(item)} hitSlop={{ top: 6, bottom: 6, left: 4, right: 8 }}>
+                <MaterialIcons name="add" size={13} color={Colors.white} />
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.prodTileAddRow}>
-              <MaterialIcons name="add" size={13} color={Colors.primary} />
+            <TouchableOpacity style={styles.prodTileAddRow} onPress={() => addItem(item)} activeOpacity={0.7}>
+              <MaterialIcons name="add" size={14} color={Colors.white} />
               <Text style={styles.prodTileAddText}>ADD</Text>
-            </View>
+            </TouchableOpacity>
           )}
         </View>
       </TouchableOpacity>
@@ -405,9 +430,22 @@ Thank you for dining with us! 🍽️`;
         </View>
       )}
 
+      {/* ── Category chips — horizontal scroll (phones only) ── */}
+      {!IS_TABLET && !showCart && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.catChipScroll}
+          contentContainerStyle={styles.catChipContent}
+        >
+          {renderCatChip(null)}
+          {categories.map(c => renderCatChip(c))}
+        </ScrollView>
+      )}
+
       <View style={styles.body}>
-        {/* ── Categories ── */}
-        {(IS_TABLET || !showCart) && (
+        {/* ── Categories — vertical list (tablets only) ── */}
+        {IS_TABLET && (
           <ScrollView style={styles.catList} showsVerticalScrollIndicator={false}>
             {renderCat(null)}
             {categories.map(c => renderCat(c))}
@@ -421,6 +459,7 @@ Thank you for dining with us! 🍽️`;
             renderItem={renderProduct}
             keyExtractor={i => i._id}
             numColumns={COLS}
+            key={COLS}
             style={{ flex: 1 }}
             contentContainerStyle={styles.prodGrid}
             ListEmptyComponent={
@@ -755,48 +794,77 @@ const styles = StyleSheet.create({
 
   body: { flex: 1, flexDirection: 'row' },
 
-  // Categories
+  // Categories — vertical list (tablets only)
   catList: { width: CAT_W, backgroundColor: Colors.surface, borderRightWidth: 1, borderRightColor: Colors.border },
   catBtn: { alignItems: 'center', paddingVertical: 14, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: Colors.border },
   catBtnActive: { backgroundColor: Colors.primaryBg, borderLeftWidth: 3, borderLeftColor: Colors.primary },
   catText: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 4, textAlign: 'center', lineHeight: 13 },
   catTextActive: { color: Colors.primary, fontWeight: '700' },
 
-  // Product grid — 2-column POS tiles (readable names)
-  prodGrid: { padding: 6, paddingBottom: 20 },
+  // Category chips — horizontal scroll (phones only)
+  catChipScroll: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  catChipContent: { paddingHorizontal: 10, paddingVertical: 8, gap: 7, flexDirection: 'row', alignItems: 'center' },
+  catChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderRadius: BorderRadius.round,
+    backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border,
+  },
+  catChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  catChipText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary },
+  catChipTextActive: { color: Colors.white, fontWeight: '700' },
+
+  // Product grid — card tiles with image
+  prodGrid: { padding: 5, paddingBottom: 24 },
   prodTile: {
-    flex: 1, flexDirection: 'row',
+    flex: 1, flexDirection: 'column',
     backgroundColor: Colors.surface, borderRadius: BorderRadius.lg,
     margin: 4, overflow: 'hidden',
     borderWidth: 1, borderColor: Colors.border,
-    minHeight: 110,
   },
   prodTileActive: { borderColor: Colors.primary, borderWidth: 1.5 },
-  prodTileBar: { width: 5, borderRadius: 0 },
-  prodTileInner: { flex: 1, padding: 10, justifyContent: 'space-between' },
-  prodTileTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
-  vegBox: { width: 14, height: 14, borderRadius: 2, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  vegDot: { width: 7, height: 7, borderRadius: 3.5 },
+
+  // Image section
+  prodTileImgWrap: { width: '100%', height: 90, position: 'relative' },
+  prodTileImg: { width: '100%', height: '100%' },
+  prodTileImgPlaceholder: {
+    width: '100%', height: '100%',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  vegPill: {
+    position: 'absolute', top: 5, left: 5,
+    width: 16, height: 16, borderRadius: 3, borderWidth: 1.5,
+    backgroundColor: Colors.surface,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  vegDot: { width: 8, height: 8, borderRadius: 4 },
   qtyBadge: {
-    backgroundColor: Colors.primary, borderRadius: 10, minWidth: 20, height: 20,
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
+    position: 'absolute', top: 5, right: 5,
+    backgroundColor: Colors.primary, borderRadius: 10,
+    minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
   },
   qtyBadgeText: { color: Colors.white, fontSize: 10, fontWeight: '800' },
-  prodTileName: { fontSize: 13, fontWeight: '700', color: Colors.text, lineHeight: 18, marginBottom: 4, flex: 1 },
-  prodTilePriceRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 6 },
-  prodTilePrice: { fontSize: 15, fontWeight: '800', color: Colors.primary },
+
+  // Content below image
+  prodTileInner: { padding: 8 },
+  prodTileName: { fontSize: 13, fontWeight: '700', color: Colors.text, lineHeight: 18, marginBottom: 4 },
+  prodTilePriceRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 7 },
+  prodTilePrice: { fontSize: 14, fontWeight: '800', color: Colors.primary },
   prodTileTax: { fontSize: 10, color: Colors.textMuted, fontWeight: '500' },
   prodTileQtyRow: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.primary, borderRadius: 7, overflow: 'hidden',
+    backgroundColor: Colors.primary, borderRadius: 8, overflow: 'hidden',
   },
-  prodTileQtyBtn: { paddingVertical: 6, paddingHorizontal: 10 },
+  prodTileQtyBtn: { paddingVertical: 7, paddingHorizontal: 12 },
   prodTileQtyNum: { flex: 1, textAlign: 'center', color: Colors.white, fontWeight: '800', fontSize: 13 },
   prodTileAddRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3,
-    borderWidth: 1.5, borderColor: Colors.primary, borderRadius: 7, paddingVertical: 6,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    backgroundColor: Colors.primary, borderRadius: 8, paddingVertical: 7,
   },
-  prodTileAddText: { fontSize: 12, fontWeight: '800', color: Colors.primary },
+  prodTileAddText: { fontSize: 12, fontWeight: '800', color: Colors.white },
+
+  // Keep vegBox for cart items
+  vegBox: { width: 14, height: 14, borderRadius: 2, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
 
   emptyState: { alignItems: 'center', paddingVertical: 60 },
   emptyText: { color: Colors.textMuted, fontSize: FontSize.md, marginTop: Spacing.md },

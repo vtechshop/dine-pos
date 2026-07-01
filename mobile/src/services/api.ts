@@ -288,6 +288,7 @@ export const createOrder = (data: Partial<Order>): Promise<Order> => {
 // Public order placement — no auth, used by customer QR menu kiosk
 export const createPublicOrder = async (data: {
   hotel: string;
+  source?: 'dine-in' | 'qr';
   items: Array<{
     product: string;
     productName: string;

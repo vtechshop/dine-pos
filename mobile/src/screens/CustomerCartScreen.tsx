@@ -80,6 +80,7 @@ const CustomerCartScreen: React.FC = () => {
     try {
       const order = await api.createPublicOrder({
         hotel: hotelId,
+        source: 'dine-in',
         items: cart.items.map(item => ({
           product: item.product._id,
           productName: item.product.name,

@@ -91,7 +91,7 @@ router.get('/menu', async (req: Request, res: Response) => {
 // Public order placement — no auth, used by QR menu customers
 router.post('/orders', async (req: Request, res: Response) => {
   try {
-    const { hotel, items: clientItems, tableNumber, customerName, notes, isParcel } = req.body;
+    const { hotel, items: clientItems, tableNumber, customerName, notes, isParcel, source } = req.body;
 
     if (!hotel || !mongoose.Types.ObjectId.isValid(hotel)) {
       return res.status(400).json({ message: 'hotel param required' });
@@ -156,7 +156,7 @@ router.post('/orders', async (req: Request, res: Response) => {
       customerName: String(customerName || '').slice(0, 60),
       notes:        String(notes || '').slice(0, 200),
       isParcel:     Boolean(isParcel),
-      orderSource:  'qr',
+      orderSource:  source === 'dine-in' ? 'dine-in' : 'qr',
       paymentMethod: 'cash',
     });
     await order.save();
