@@ -175,25 +175,36 @@ const AppNavigator = () => {
     );
   }
 
+  const safeTop = { paddingTop: top, backgroundColor: Colors.background };
+
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: true, gestureDirection: 'horizontal', contentStyle: { backgroundColor: Colors.background } }}>
         {!isLoggedIn ? (
           <>
-            <Stack.Screen name="Splash"               component={SplashScreen} />
-            <Stack.Screen name="RoleSelect"           component={RoleSelectScreen} />
-            <Stack.Screen name="AdminLogin"           component={AdminLoginScreen} />
-            <Stack.Screen name="BusinessSetup"        component={BusinessSetupScreen} />
-            <Stack.Screen name="SuperAdminLogin"      component={SuperAdminLoginScreen} />
-            <Stack.Screen name="SuperAdminDashboard"  component={SuperAdminDashboardScreen} />
-            <Stack.Screen name="HotelStatus"          component={HotelStatusScreen} />
-            <Stack.Screen name="CustomerTabs"         component={CustomerTabNavigator} />
-            <Stack.Screen name="CustomerOrderConfirm" component={CustomerOrderConfirmScreen} />
+            <Stack.Screen name="Splash"               component={SplashScreen}               options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="RoleSelect"           component={RoleSelectScreen}           options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="AdminLogin"           component={AdminLoginScreen}           options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="BusinessSetup"        component={BusinessSetupScreen}        options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="SuperAdminLogin"      component={SuperAdminLoginScreen}      options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="SuperAdminDashboard"  component={SuperAdminDashboardScreen}  options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="HotelStatus"          component={HotelStatusScreen}          options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="CustomerTabs"         component={CustomerTabNavigator}       options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="CustomerOrderConfirm" component={CustomerOrderConfirmScreen} options={{ contentStyle: safeTop }} />
           </>
         ) : (
           <>
-            <Stack.Screen name="MainTabs" component={TabNavigator} />
-            <Stack.Screen name="Support"  component={SupportScreen} />
+            <Stack.Screen name="MainTabs"   component={TabNavigator}      options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="Support"    component={SupportScreen}     options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="Categories" component={CategoriesScreen}  options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="Products"   component={ProductsScreen}    options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="TableLayout"  component={TableLayoutScreen}  options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="Reservations" component={ReservationScreen}  options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="Expenses"     component={ExpenseScreen}      options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="Customers"    component={CustomersScreen}    options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="Ingredients"  component={IngredientsScreen}  options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="QRMenu"       component={QRMenuScreen}       options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="Chat"         component={ChatScreen}         options={{ contentStyle: safeTop }} />
             <Stack.Screen
               name="AddProduct"
               component={AddProductScreen}
@@ -205,51 +216,6 @@ const AppNavigator = () => {
                 animation: 'slide_from_bottom',
                 contentStyle: { paddingTop: 0, backgroundColor: Colors.background },
               }}
-            />
-            <Stack.Screen
-              name="Categories"
-              component={CategoriesScreen}
-              options={{ headerShown: false, animation: 'slide_from_right' }}
-            />
-            <Stack.Screen
-              name="Products"
-              component={ProductsScreen}
-              options={{ headerShown: false, animation: 'slide_from_right' }}
-            />
-            <Stack.Screen
-              name="TableLayout"
-              component={TableLayoutScreen}
-              options={{ headerShown: false, animation: 'slide_from_right' }}
-            />
-            <Stack.Screen
-              name="Reservations"
-              component={ReservationScreen}
-              options={{ headerShown: false, animation: 'slide_from_right' }}
-            />
-            <Stack.Screen
-              name="Expenses"
-              component={ExpenseScreen}
-              options={{ headerShown: false, animation: 'slide_from_right' }}
-            />
-            <Stack.Screen
-              name="Customers"
-              component={CustomersScreen}
-              options={{ headerShown: false, animation: 'slide_from_right' }}
-            />
-            <Stack.Screen
-              name="Ingredients"
-              component={IngredientsScreen}
-              options={{ headerShown: false, animation: 'slide_from_right' }}
-            />
-            <Stack.Screen
-              name="QRMenu"
-              component={QRMenuScreen}
-              options={{ headerShown: false, animation: 'slide_from_right' }}
-            />
-            <Stack.Screen
-              name="Chat"
-              component={ChatScreen}
-              options={{ headerShown: false, animation: 'slide_from_right' }}
             />
           </>
         )}
