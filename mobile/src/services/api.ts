@@ -302,6 +302,14 @@ export const createPublicOrder = async (data: {
   customerName?: string;
   notes?: string;
   isParcel?: boolean;
+  // Required by legacy backend handler which trusts client totals;
+  // new backend recalculates server-side and ignores these.
+  subtotal?: number;
+  taxTotal?: number;
+  grandTotal?: number;
+  orderSource?: string;
+  paymentMethod?: string;
+  status?: string;
 }): Promise<Order> => {
   return fetchAPI<Order>('/public/orders', {
     method: 'POST',

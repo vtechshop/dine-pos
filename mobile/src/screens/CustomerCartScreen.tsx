@@ -81,6 +81,7 @@ const CustomerCartScreen: React.FC = () => {
       const order = await api.createPublicOrder({
         hotel: hotelId,
         source: 'dine-in',
+        orderSource: 'dine-in',
         items: cart.items.map(item => ({
           product: item.product._id,
           productName: item.product.name,
@@ -93,6 +94,11 @@ const CustomerCartScreen: React.FC = () => {
         tableNumber: cart.tableNumber,
         customerName: cart.customerName,
         notes: cart.notes,
+        subtotal: cart.subtotal,
+        taxTotal: cart.taxTotal,
+        grandTotal: cart.grandTotal,
+        paymentMethod: 'cash',
+        status: 'pending',
       });
 
       const token = order.orderNumber.split('-').pop() || '1';

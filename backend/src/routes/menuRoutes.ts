@@ -175,8 +175,9 @@ router.post('/orders', async (req: Request, res: Response) => {
     } catch (_) {}
 
     res.status(201).json(order);
-  } catch (error) {
-    res.status(400).json({ message: 'Invalid order data', error });
+  } catch (error: any) {
+    console.error('Public order error:', error?.message || error);
+    res.status(400).json({ message: error?.message || 'Invalid order data', error });
   }
 });
 
