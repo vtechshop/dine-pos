@@ -430,19 +430,6 @@ Thank you for dining with us! 🍽️`;
         </View>
       )}
 
-      {/* ── Category chips — horizontal scroll (phones only) ── */}
-      {!IS_TABLET && !showCart && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.catChipScroll}
-          contentContainerStyle={styles.catChipContent}
-        >
-          {renderCatChip(null)}
-          {categories.map(c => renderCatChip(c))}
-        </ScrollView>
-      )}
-
       <View style={styles.body}>
         {/* ── Categories — vertical list (tablets only) ── */}
         {IS_TABLET && (
@@ -452,23 +439,37 @@ Thank you for dining with us! 🍽️`;
           </ScrollView>
         )}
 
-        {/* ── Product Grid ── */}
+        {/* ── Center column: chips (phone) + product grid ── */}
         {(IS_TABLET || !showCart) && (
-          <FlatList
-            data={filtered}
-            renderItem={renderProduct}
-            keyExtractor={i => i._id}
-            numColumns={COLS}
-            key={COLS}
-            style={{ flex: 1 }}
-            contentContainerStyle={styles.prodGrid}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <MaterialIcons name="restaurant" size={48} color={Colors.textMuted} />
-                <Text style={styles.emptyText}>No items found</Text>
-              </View>
-            }
-          />
+          <View style={{ flex: 1 }}>
+            {/* Category chips — horizontal scroll (phones only) */}
+            {!IS_TABLET && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.catChipScroll}
+                contentContainerStyle={styles.catChipContent}
+              >
+                {renderCatChip(null)}
+                {categories.map(c => renderCatChip(c))}
+              </ScrollView>
+            )}
+            <FlatList
+              data={filtered}
+              renderItem={renderProduct}
+              keyExtractor={i => i._id}
+              numColumns={COLS}
+              key={COLS}
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.prodGrid}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <MaterialIcons name="restaurant" size={48} color={Colors.textMuted} />
+                  <Text style={styles.emptyText}>No items found</Text>
+                </View>
+              }
+            />
+          </View>
         )}
 
         {/* ── Cart Panel ── */}
