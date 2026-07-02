@@ -23,6 +23,8 @@
 
   const urlParams   = new URLSearchParams(window.location.search);
   const tableNumber = urlParams.get('table') || '';
+  // Read hotelId from QR code URL immediately so fetchMenu and placeOrder have it
+  if (urlParams.get('hotel')) hotelId = urlParams.get('hotel');
 
   // ─── Service Worker ───────────────────────────────────────────────────────
   if ('serviceWorker' in navigator) {
@@ -80,7 +82,8 @@
   async function fetchMenu(silent = false) {
     if (!silent) renderLoader();
     try {
-      const res = await fetch('/api/public/menu');
+      const menuUrl = hotelId ? `/api/public/menu?hotel=${hotelId}` : '/api/public/menu';
+      const res = await fetch(menuUrl);
       if (!res.ok) throw new Error('non-ok');
       menuData = await res.json();
       if (menuData.hotel?.id)       hotelId      = menuData.hotel.id;
