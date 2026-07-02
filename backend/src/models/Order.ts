@@ -79,7 +79,6 @@ const OrderSchema: Schema = new Schema(
     },
     offlineId: {
       type: String,
-      default: null,
     },
     items: [OrderItemSchema],
     subtotal: {
