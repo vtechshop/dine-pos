@@ -441,18 +441,19 @@ Thank you for dining with us! 🍽️`;
 
         {/* ── Center column: chips (phone) + product grid ── */}
         {(IS_TABLET || !showCart) && (
-          <View style={{ flex: 1 }}>
-            {/* Category chips — horizontal scroll (phones only) */}
+          <View style={{ flex: 1, flexDirection: 'column' }}>
+            {/* Category chips — explicit-height wrapper fixes Android Yoga ambiguity */}
             {!IS_TABLET && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.catChipScroll}
-                contentContainerStyle={styles.catChipContent}
-              >
-                {renderCatChip(null)}
-                {categories.map(c => renderCatChip(c))}
-              </ScrollView>
+              <View style={styles.catChipWrap}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.catChipContent}
+                >
+                  {renderCatChip(null)}
+                  {categories.map(c => renderCatChip(c))}
+                </ScrollView>
+              </View>
             )}
             <FlatList
               data={filtered}
@@ -803,8 +804,13 @@ const styles = StyleSheet.create({
   catTextActive: { color: Colors.primary, fontWeight: '700' },
 
   // Category chips — horizontal scroll (phones only)
-  catChipScroll: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  catChipContent: { paddingHorizontal: 10, paddingVertical: 8, gap: 7, flexDirection: 'row', alignItems: 'center' },
+  catChipWrap: {
+    height: 48,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  catChipContent: { paddingHorizontal: 10, paddingVertical: 7, gap: 7, flexDirection: 'row', alignItems: 'center' },
   catChip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 12, paddingVertical: 7,
