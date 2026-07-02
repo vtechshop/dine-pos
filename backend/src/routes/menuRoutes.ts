@@ -4,6 +4,7 @@ import Category from '../models/Category';
 import Settings from '../models/Settings';
 import Order from '../models/Order';
 import mongoose from 'mongoose';
+import { io } from '../server';
 
 const router = Router();
 
@@ -163,7 +164,6 @@ router.post('/orders', async (req: Request, res: Response) => {
 
     // Emit socket event so admin sees the order instantly
     try {
-      const { io } = await import('../server');
       io.to(`hotel_${hotelId}`).emit('new_order', {
         _id:          order._id,
         orderNumber:  order.orderNumber,
