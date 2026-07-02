@@ -164,15 +164,24 @@ router.post('/orders', async (req: Request, res: Response) => {
 
     // Emit socket event so admin sees the order instantly
     try {
-      io.to(`hotel_${hotelId}`).emit('new_order', {
-        _id:          order._id,
-        orderNumber:  order.orderNumber,
-        tableNumber:  order.tableNumber,
-        customerName: order.customerName,
-        grandTotal:   order.grandTotal,
-        itemCount:    order.items.length,
-      });
-    } catch (_) {}
+      if (!io) {
+        console.error('[menuRoutes] io is undefined — circular import issue');
+      } else {
+        const room = `hotel_${hotelId}`;
+        const sockets = await io.in(room).allSockets();
+        console.log(`[menuRoutes] emitting new_order to ${room}, clients in room: ${sockets.size}`);
+        io.to(room).emit('new_order', {
+          _id:          order._id.toString(),
+          orderNumber:  order.orderNumber,
+          tableNumber:  order.tableNumber,
+          customerName: order.customerName,
+          grandTotal:   order.grandTotal,
+          itemCount:    order.items.length,
+        });
+      }
+    } catch (emitErr: any) {
+      console.error('[menuRoutes] socket emit error:', emitErr?.message || emitErr);
+    }
 
     res.status(201).json(order);
   } catch (error: any) {
