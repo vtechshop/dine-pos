@@ -1,12 +1,26 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, Animated, StatusBar, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
-import { Colors, FontSize, Spacing } from '../utils/constants';
+import { Colors, FontSize, Spacing, APP_VERSION } from '../utils/constants';
+import { useRemoteConfig } from '../context/RemoteConfigContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Splash'>;
 
+// Returns true when target > installed (e.g. "1.2.0" > "1.1.8")
+const isVersionBehind = (installed: string, target: string): boolean => {
+  const parse = (v: string) => v.split('.').map((n) => parseInt(n, 10) || 0);
+  const [ia, ib, ic] = parse(installed);
+  const [ta, tb, tc] = parse(target);
+  if (ta !== ia) return ta > ia;
+  if (tb !== ib) return tb > ib;
+  return tc > ic;
+};
+
 const SplashScreen: React.FC<Props> = ({ navigation }) => {
+  const { config } = useRemoteConfig();
+  const configRef = useRef(config);
+  useEffect(() => { configRef.current = config; }, [config]);
   const ring1     = useRef(new Animated.Value(0.5)).current;
   const ring2     = useRef(new Animated.Value(0.8)).current;
   const logoScale = useRef(new Animated.Value(0)).current;
@@ -50,7 +64,27 @@ const SplashScreen: React.FC<Props> = ({ navigation }) => {
       ]).start();
     }, 650);
 
-    const t = setTimeout(() => { pulse.stop(); navigation.replace('RoleSelect'); }, 2600);
+    const navigate = () => {
+      pulse.stop();
+      const cfg = configRef.current;
+      if (cfg.maintenanceMode) {
+        navigation.replace('MaintenanceMode', { message: cfg.maintenanceMessage });
+        return;
+      }
+      const minVersion = Platform.OS === 'ios'
+        ? cfg.minimumAppVersionIos
+        : cfg.minimumAppVersion;
+      if (isVersionBehind(APP_VERSION, minVersion)) {
+        navigation.replace('ForceUpdate', {
+          minimumVersion: minVersion,
+          message: cfg.forceUpdateMessage,
+        });
+        return;
+      }
+      navigation.replace('RoleSelect');
+    };
+
+    const t = setTimeout(navigate, 2600);
     return () => { clearTimeout(t); pulse.stop(); };
   }, []);
 

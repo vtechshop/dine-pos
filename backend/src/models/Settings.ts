@@ -25,6 +25,7 @@ export interface ISettings extends Document {
   printerWidth: '58mm' | '80mm';
   footerText: string;
   isSetupComplete: boolean;
+  kitchenPin: string;
   updatedAt: Date;
 }
 
@@ -112,6 +113,10 @@ const SettingsSchema: Schema = new Schema(
     footerText: {
       type: String,
       default: 'Thank you! Visit again!',
+    },
+    kitchenPin: {
+      type: String,
+      default: '',
     },
   },
   { timestamps: true }

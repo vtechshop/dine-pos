@@ -90,6 +90,24 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
               <MaterialIcons name="arrow-forward" size={18} color={Colors.white} />
             </View>
           </TouchableOpacity>
+
+          {/* Kitchen */}
+          <TouchableOpacity
+            style={[styles.roleCard, styles.roleCardKitchen]}
+            onPress={() => navigation.navigate('KitchenLogin')}
+            activeOpacity={0.88}
+          >
+            <View style={[styles.roleCardBg, { backgroundColor: Colors.success + '15' }]} />
+            <View style={[styles.roleEmojiBubble, { backgroundColor: Colors.successBg ?? '#E6F9EE' }]}>
+              <Text style={{ fontSize: 42 }}>👨‍🍳</Text>
+            </View>
+            <Text style={styles.roleCardTitle}>Kitchen Display</Text>
+            <Text style={styles.roleCardDesc}>View & manage incoming orders in real-time</Text>
+            <View style={[styles.roleCardCTA, { backgroundColor: Colors.success }]}>
+              <Text style={styles.roleCardCTAText}>Open KDS</Text>
+              <MaterialIcons name="arrow-forward" size={18} color={Colors.white} />
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Super admin */}
@@ -129,6 +147,7 @@ const styles = StyleSheet.create({
   },
   roleCardCustomer: { backgroundColor: Colors.primaryBg, borderColor: Colors.primary + '40' },
   roleCardAdmin:    { backgroundColor: Colors.infoBg,    borderColor: Colors.info + '40' },
+  roleCardKitchen:  { backgroundColor: '#E6F9EE',        borderColor: Colors.success + '40' },
   roleCardBg: {
     position: 'absolute', top: -30, right: -30,
     width: 120, height: 120, borderRadius: 60,

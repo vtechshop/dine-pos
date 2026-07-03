@@ -1,12 +1,18 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import path from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
 import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import connectDB from './config/database';
+import { connectRedis, getRedisClient, closeRedis, redisHealthCheck } from './config/redis';
+import { logger } from './utils/logger';
 import ChatMessage from './models/ChatMessage';
 
 // Route imports
@@ -30,6 +36,9 @@ import wasteRoutes from './routes/wasteRoutes';
 import aggregatorRoutes from './routes/aggregatorRoutes';
 import ingredientRoutes from './routes/ingredientRoutes';
 import reportRoutes from './routes/reportRoutes';
+import remoteConfigRoutes from './routes/remoteConfigRoutes';
+import deviceRoutes from './routes/deviceRoutes';
+import notificationRoutes from './routes/notificationRoutes';
 
 dotenv.config();
 
@@ -56,20 +65,53 @@ app.use(cors({
   credentials: true,
 }));
 
-// Socket.io setup
+// Socket.io setup — same origin allowlist as HTTP CORS
 const io = new Server(httpServer, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
+  cors: {
+    origin: (origin, cb) => {
+      // Allow requests with no origin (mobile apps, native clients)
+      if (!origin || allowedOrigins.length === 0) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      cb(new Error(`Socket.io CORS: origin ${origin} not allowed`));
+    },
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
   maxHttpBufferSize: 1e4, // 10KB max message size
 });
 
+app.use(compression()); // gzip responses — reduces JSON payload by ~85%
 app.use(express.json({ limit: '1mb' }));
-app.use(morgan('dev'));
+app.use(morgan('combined'));
 
 // Serve customer digital menu PWA
 app.use('/menu', express.static(path.join(__dirname, '../public/menu')));
 
 // Serve uploaded product images
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+// All limits are per IP. A restaurant's tablets share one public IP, so
+// per-IP limits effectively protect per-hotel without needing the auth middleware
+// to run before the limiter.
+const _rl = (max: number, windowMs: number) => rateLimit({
+  windowMs,
+  max,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => res.status(429).json({ message: 'Too many requests. Please slow down.' }),
+});
+
+// POST /api/orders — 120/min (2 orders/sec burst, generous for any restaurant)
+app.use('/api/orders', _rl(120, 60_000));
+// Sync endpoints called by every device on cache refresh — 60/min per IP
+app.use('/api/products',    _rl(60, 60_000));
+app.use('/api/categories',  _rl(60, 60_000));
+app.use('/api/settings',    _rl(60, 60_000));
+// Device heartbeat — expected every 5 min per device; 12/min handles 6 devices with headroom
+app.use('/api/devices/heartbeat', _rl(12, 60_000));
+// Public remote-config — 30/min per IP; prevents crash-loop hammering
+app.use('/api/remote-config', _rl(30, 60_000));
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -92,10 +134,36 @@ app.use('/api/waste', wasteRoutes);
 app.use('/api/aggregator', aggregatorRoutes);
 app.use('/api/ingredients', ingredientRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/remote-config', remoteConfigRoutes);
+app.use('/api/devices', deviceRoutes);
+app.use('/api/notifications', notificationRoutes);
 
-// Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+// Enhanced health check — covers MongoDB, Redis, memory, uptime, version
+app.get('/api/health', async (_req, res) => {
+  const mem = process.memoryUsage();
+  const toMB = (b: number) => +(b / 1024 / 1024).toFixed(1);
+  const mongoState = mongoose.connection.readyState; // 0=disconnected,1=connected,2=connecting
+  const mongoLabel = ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoState] ?? 'unknown';
+  const redisStatus = await redisHealthCheck();
+
+  const status = mongoState === 1 ? 'OK' : 'DEGRADED';
+
+  res.status(mongoState === 1 ? 200 : 503).json({
+    status,
+    version: process.env.npm_package_version || '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    uptime: +process.uptime().toFixed(1),
+    timestamp: new Date().toISOString(),
+    memory: {
+      heapUsedMB: toMB(mem.heapUsed),
+      heapTotalMB: toMB(mem.heapTotal),
+      rssMB: toMB(mem.rss),
+    },
+    services: {
+      mongodb: mongoLabel,
+      redis: redisStatus,
+    },
+  });
 });
 
 const escHtml = (s: unknown): string =>
@@ -193,22 +261,55 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   });
 });
 
+// ─── Socket.io authentication middleware ─────────────────────────────────────
+// Admin app passes JWT in handshake.auth.token.
+// Customer-facing menu connects without a token — allowed but gets no admin privileges.
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token as string | undefined;
+  if (!token) return next(); // unauthenticated = customer menu connection
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { hotelId: string };
+    socket.data.hotelId = decoded.hotelId;
+    socket.data.authenticated = true;
+    next();
+  } catch {
+    next(new Error('Socket authentication failed'));
+  }
+});
+
 // ─── Socket.io ────────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
-  // Hotel admin joins their hotel room (for order alerts)
+  // Auto-join authenticated admin sockets to their hotel rooms immediately
+  if (socket.data.authenticated && socket.data.hotelId) {
+    socket.join(`hotel_${socket.data.hotelId}`);
+    socket.join(`admin_${socket.data.hotelId}`);
+  }
+
+  // join_hotel: admin app calls this on connect (backward-compat + unauthenticated fallback)
   socket.on('join_hotel', (hotelId: string) => {
-    if (typeof hotelId === 'string' && hotelId.length > 0) {
-      socket.join(`hotel_${hotelId}`);
+    if (typeof hotelId !== 'string' || !hotelId) return;
+    if (socket.data.authenticated) {
+      // Authenticated: reject if hotelId doesn't match JWT claim
+      if (socket.data.hotelId !== hotelId) {
+        socket.disconnect(true);
+        return;
+      }
+    } else {
+      // Unauthenticated: accept claimed hotelId (customer-side fallback)
+      socket.data.hotelId = hotelId;
     }
+    socket.join(`hotel_${hotelId}`);
+    socket.join(`admin_${hotelId}`);
   });
 
-  // Join a room by table number or 'admin' (legacy chat)
+  // join: customer table room (e.g. socket.emit('join', 'table_5'))
+  // No longer adds sockets to a global 'admin' room — scoped rooms only.
   socket.on('join', (room: string) => {
+    if (typeof room !== 'string' || !room) return;
     socket.join(room);
-    socket.join('admin');
   });
 
-  // Customer sends message
+  // Customer sends message from the table-side PWA
   socket.on('customer_message', async (data: { hotelId: string; tableNumber: string; message: string }) => {
     try {
       if (!data?.hotelId || !data?.tableNumber || !data?.message) return;
@@ -218,9 +319,10 @@ io.on('connection', (socket) => {
         sender: 'customer',
         message: String(data.message).substring(0, 500),
       });
-      io.to(data.tableNumber).to('admin').emit('new_message', msg);
+      // Emit only to this hotel's admin room — never to other hotels
+      io.to(data.tableNumber).to(`admin_${data.hotelId}`).emit('new_message', msg);
     } catch (err) {
-      console.error('Chat error:', err);
+      logger.error('Socket customer_message error', { err: String(err) });
     }
   });
 
@@ -228,6 +330,8 @@ io.on('connection', (socket) => {
   socket.on('admin_message', async (data: { hotelId: string; tableNumber: string; message: string }) => {
     try {
       if (!data?.hotelId || !data?.tableNumber || !data?.message) return;
+      // Prevent cross-hotel spoofing: authenticated socket must match claimed hotelId
+      if (socket.data.authenticated && socket.data.hotelId !== data.hotelId) return;
       const msg = await ChatMessage.create({
         hotelId: data.hotelId,
         tableNumber: data.tableNumber,
@@ -235,14 +339,14 @@ io.on('connection', (socket) => {
         message: String(data.message).substring(0, 500),
         read: true,
       });
-      io.to(data.tableNumber).to('admin').emit('new_message', msg);
+      io.to(data.tableNumber).to(`admin_${data.hotelId}`).emit('new_message', msg);
     } catch (err) {
-      console.error('Chat error:', err);
+      logger.error('Socket admin_message error', { err: String(err) });
     }
   });
 
   socket.on('error', (err) => {
-    console.error('Socket error:', err);
+    logger.error('Socket error', { err: String(err) });
   });
 });
 
@@ -251,44 +355,71 @@ export { io };
 
 // ── Process-level crash guards ────────────────────────────────────────────────
 process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Promise Rejection:', reason);
+  logger.error('Unhandled Promise Rejection', { reason: String(reason) });
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
+  logger.error('Uncaught Exception', { err: String(err) });
   setTimeout(() => process.exit(1), 1000);
 });
 
 // ── Graceful shutdown (Render/Docker SIGTERM) ─────────────────────────────────
 const shutdown = () => {
-  console.log('⚠️  Shutting down gracefully...');
+  logger.info('Graceful shutdown initiated');
+
+  // Stop accepting new connections; in-flight requests drain normally
   httpServer.close(async () => {
     try {
+      // 1. Close Socket.IO (gracefully disconnects all clients)
+      await new Promise<void>(resolve => io.close(() => resolve()));
+      // 2. Close Redis
+      await closeRedis();
+      // 3. Close MongoDB
       await mongoose.connection.close();
-      console.log('✅ MongoDB connection closed');
+      logger.info('Shutdown complete');
     } catch (e) {
-      console.error('Error closing MongoDB:', e);
+      logger.error('Error during shutdown', { err: String(e) });
     }
     process.exit(0);
   });
+
   // Force exit after 30s if graceful close hangs
-  setTimeout(() => { console.error('⛔ Force shutdown after timeout'); process.exit(1); }, 30000);
+  setTimeout(() => {
+    logger.error('Force shutdown after 30s timeout');
+    process.exit(1);
+  }, 30000);
 };
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
-// Connect to MongoDB and start server
-connectDB().then(() => {
-  httpServer.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📡 API Base: http://localhost:${PORT}/api`);
-    console.log(`📱 Customer Menu: http://localhost:${PORT}/menu`);
-    console.log(`💬 Chat: Socket.io ready`);
-  });
-}).catch((err) => {
-  console.error('Failed to connect to MongoDB:', err);
-  process.exit(1);
-});
+// Connect to MongoDB + Redis, then start server
+(async () => {
+  try {
+    await connectDB();
+    await connectRedis();
+
+    // Attach Redis adapter to Socket.IO if Redis is available
+    const redisClient = getRedisClient();
+    if (redisClient) {
+      const pubClient = redisClient;
+      const subClient = pubClient.duplicate();
+      io.adapter(createAdapter(pubClient, subClient));
+      logger.info('Socket.IO using Redis adapter');
+    } else {
+      logger.info('Socket.IO using in-memory adapter');
+    }
+
+    httpServer.listen(Number(PORT), '0.0.0.0', () => {
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+      console.log(`📡 API Base: http://localhost:${PORT}/api`);
+      console.log(`📱 Customer Menu: http://localhost:${PORT}/menu`);
+      console.log(`💬 Chat: Socket.io ready`);
+    });
+  } catch (err) {
+    logger.error('Failed to start server', { err: String(err) });
+    process.exit(1);
+  }
+})();
 
 export default app;

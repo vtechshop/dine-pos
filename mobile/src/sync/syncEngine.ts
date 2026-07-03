@@ -178,7 +178,12 @@ export const startSyncEngine = (): void => {
     _isConnected = !!(state.isConnected && state.isInternetReachable !== false);
 
     if (!wasConnected && _isConnected) {
-      syncNow(); // just came online — flush queue immediately
+      // Random jitter 0–30 s before syncing on reconnect.
+      // Prevents all ~1 000 devices across 500 hotels from hammering the server
+      // simultaneously after a shared network outage (thundering herd).
+      // Orders remain safely queued in SQLite — max 30 s delay is acceptable.
+      const jitterMs = Math.floor(Math.random() * 30_000);
+      setTimeout(() => syncNow(), jitterMs);
     } else if (!_isConnected) {
       _lastError = null;
       notifyListeners('offline');

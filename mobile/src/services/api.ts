@@ -1,13 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../utils/constants';
-import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport, GSTR1Json } from '../types';
+import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport, GSTR1Json, RemoteConfig, Device, AppNotification, FeatureFlags } from '../types';
 
 const API_URL_STORAGE_KEY = '@hotel_pos_api_base_url';
 const JWT_STORAGE_KEY = '@hotel_pos_jwt_token';
+const REFRESH_TOKEN_STORAGE_KEY = '@hotel_pos_refresh_token';
 const HOTEL_ID_STORAGE_KEY = '@hotel_pos_hotel_id';
 
 let _cachedBaseUrl: string | null = null;
 let _cachedToken: string | null = null;
+let _cachedRefreshToken: string | null = null;
 
 const getBaseUrl = async (): Promise<string> => {
   if (_cachedBaseUrl) return _cachedBaseUrl;
@@ -51,6 +53,28 @@ export const clearToken = async (): Promise<void> => {
   // hotelId is kept after logout so the customer kiosk menu still works
 };
 
+// ── Refresh token helpers ────────────────────────────────────────────────────
+
+export const saveRefreshToken = async (token: string): Promise<void> => {
+  _cachedRefreshToken = token;
+  await AsyncStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, token);
+};
+
+export const getRefreshToken = async (): Promise<string | null> => {
+  if (_cachedRefreshToken) return _cachedRefreshToken;
+  try {
+    _cachedRefreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_STORAGE_KEY);
+  } catch {
+    _cachedRefreshToken = null;
+  }
+  return _cachedRefreshToken;
+};
+
+export const clearRefreshToken = async (): Promise<void> => {
+  _cachedRefreshToken = null;
+  await AsyncStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
+};
+
 export const getStoredHotelId = async (): Promise<string | null> => {
   try {
     return await AsyncStorage.getItem(HOTEL_ID_STORAGE_KEY);
@@ -66,13 +90,43 @@ export const setSuperAdminCredentials = (id: string, pass: string) => {
   superAdminCredentials = { id, pass };
 };
 
+// ── Token refresh singleton ──────────────────────────────────────────────────
+// Prevents concurrent 401s from firing multiple parallel refresh attempts.
+
+let _refreshing: Promise<boolean> | null = null;
+
+const _doRefresh = async (): Promise<boolean> => {
+  const refreshToken = await getRefreshToken();
+  if (!refreshToken) return false;
+  try {
+    const result = await fetchAPI<{ token: string; refreshToken: string }>(
+      '/auth/refresh',
+      { method: 'POST', body: JSON.stringify({ refreshToken }) },
+      true, // skipAuth — no Bearer header needed
+      0,    // no retries on the refresh call itself
+    );
+    await Promise.all([saveToken(result.token), saveRefreshToken(result.refreshToken)]);
+    return true;
+  } catch {
+    await Promise.all([clearToken(), clearRefreshToken()]);
+    return false;
+  }
+};
+
+const tryRefreshTokens = (): Promise<boolean> => {
+  if (_refreshing) return _refreshing;
+  _refreshing = _doRefresh().finally(() => { _refreshing = null; });
+  return _refreshing;
+};
+
 // ── Generic fetch wrapper ────────────────────────────────────────────────────
 
 const fetchAPI = async <T>(
   endpoint: string,
   options?: RequestInit,
   skipAuth = false,
-  retries = 2
+  retries = 2,
+  _isTokenRetry = false,
 ): Promise<T> => {
   const baseUrl = await getBaseUrl();
 
@@ -102,8 +156,24 @@ const fetchAPI = async <T>(
 
       if (!response.ok) {
         const errBody = await response.json().catch(() => ({}));
-        // Don't retry client errors (4xx)
-        if (response.status < 500) throw new Error(errBody.message || 'Request failed');
+
+        // 401: try refreshing tokens once (never on the refresh endpoint itself)
+        if (response.status === 401 && !skipAuth && !_isTokenRetry && endpoint !== '/auth/refresh') {
+          const refreshed = await tryRefreshTokens();
+          if (refreshed) {
+            return fetchAPI<T>(endpoint, options, skipAuth, retries, true);
+          }
+          const err: any = new Error('Session expired. Please login again.');
+          err.code = 'SESSION_EXPIRED';
+          throw err;
+        }
+
+        // Don't retry other client errors (4xx)
+        if (response.status < 500) {
+          const err: any = new Error(errBody.message || 'Request failed');
+          if (errBody.code) err.code = errBody.code;
+          throw err;
+        }
         // Retry server errors (5xx) after backoff
         lastError = new Error(errBody.message || `Server error (${response.status})`);
         if (attempt < retries) {
@@ -143,23 +213,50 @@ const fetchAPI = async <T>(
 export const adminLogin = async (
   userId: string,
   password: string
-): Promise<{ success: boolean; token: string; hotelId: string; hotelName: string }> => {
-  const result = await fetchAPI<{ success: boolean; token: string; hotelId: string; hotelName: string }>(
+): Promise<{
+  success: boolean;
+  token: string;
+  refreshToken?: string;
+  hotelId: string;
+  hotelName: string;
+  status?: string;
+  trialDaysRemaining?: number;
+  trialEndDate?: string;
+  subscriptionPlan?: string;
+  features?: FeatureFlags;
+}> => {
+  const result = await fetchAPI<{
+    success: boolean;
+    token: string;
+    refreshToken?: string;
+    hotelId: string;
+    hotelName: string;
+    status?: string;
+    trialDaysRemaining?: number;
+    trialEndDate?: string;
+    subscriptionPlan?: string;
+    features?: FeatureFlags;
+  }>(
     '/auth/login',
     { method: 'POST', body: JSON.stringify({ userId, password }) },
     true // skip auth header on login
   );
-  if (result.token) {
-    await saveToken(result.token);
-  }
-  if (result.hotelId) {
-    await AsyncStorage.setItem(HOTEL_ID_STORAGE_KEY, result.hotelId);
-  }
+  if (result.token) await saveToken(result.token);
+  if (result.refreshToken) await saveRefreshToken(result.refreshToken);
+  if (result.hotelId) await AsyncStorage.setItem(HOTEL_ID_STORAGE_KEY, result.hotelId);
   return result;
 };
 
 export const logout = async (): Promise<void> => {
-  await clearToken();
+  const refreshToken = await getRefreshToken();
+  // Fire-and-forget server-side revocation — don't block or crash on failure
+  if (refreshToken) {
+    fetchAPI('/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    }, true, 0).catch(() => {});
+  }
+  await Promise.all([clearToken(), clearRefreshToken()]);
 };
 
 // ==================== CATEGORIES ====================
@@ -483,12 +580,18 @@ export const getSuperAdminStats = (): Promise<SuperAdminStats> => {
   return superAdminFetch('/superadmin/stats');
 };
 
-export const getAllHotels = (status?: string, search?: string): Promise<Hotel[]> => {
+export const getAllHotels = (
+  status?: string,
+  search?: string,
+  page: number = 1,
+  limit: number = 50,
+): Promise<{ hotels: Hotel[]; total: number; page: number; pages: number }> => {
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   if (search) params.set('search', search);
-  const query = params.toString() ? `?${params.toString()}` : '';
-  return superAdminFetch(`/superadmin/hotels${query}`);
+  params.set('page', String(page));
+  params.set('limit', String(limit));
+  return superAdminFetch(`/superadmin/hotels?${params.toString()}`);
 };
 
 export const getHotelDetail = (id: string): Promise<Hotel> => {
@@ -685,3 +788,166 @@ export const restockIngredient = (id: string, quantity: number): Promise<Ingredi
 
 export const deleteIngredient = (id: string): Promise<void> =>
   fetchAPI(`/ingredients/${id}`, { method: 'DELETE' });
+
+// ==================== REMOTE CONFIG ====================
+
+export const getRemoteConfig = (): Promise<RemoteConfig> =>
+  fetchAPI<RemoteConfig>('/remote-config', undefined, true);
+
+// ==================== DEVICES ====================
+
+export const registerDevice = (data: {
+  deviceId: string;
+  deviceName: string;
+  platform: 'android' | 'ios' | 'web';
+  appVersion: string;
+  osVersion: string;
+  pushToken?: string;
+}): Promise<{ message: string; device: Device }> =>
+  fetchAPI('/devices/register', { method: 'POST', body: JSON.stringify(data) });
+
+export const deviceHeartbeat = (deviceId: string, appVersion?: string): Promise<{ ok: boolean }> =>
+  fetchAPI('/devices/heartbeat', { method: 'POST', body: JSON.stringify({ deviceId, appVersion }) });
+
+export const getMyDevices = (): Promise<Device[]> =>
+  fetchAPI<Device[]>('/devices');
+
+// ==================== NOTIFICATIONS ====================
+
+export const getNotifications = (): Promise<{ notifications: AppNotification[]; unreadCount: number }> =>
+  fetchAPI('/notifications');
+
+export const markNotificationRead = (id: string): Promise<{ ok: boolean }> =>
+  fetchAPI(`/notifications/${id}/read`, { method: 'PUT' });
+
+export const markAllNotificationsRead = (): Promise<{ ok: boolean }> =>
+  fetchAPI('/notifications/read-all', { method: 'PUT' });
+
+// ==================== SUPER ADMIN — SAAS FEATURES ====================
+
+export const expireHotel = (id: string): Promise<{ message: string }> =>
+  superAdminFetch(`/superadmin/hotels/${id}/expire`, { method: 'PUT' });
+
+export const startHotelTrial = (id: string, days?: number): Promise<{ message: string; hotel: Hotel }> =>
+  superAdminFetch(`/superadmin/hotels/${id}/trial`, { method: 'PUT', body: JSON.stringify({ days }) });
+
+export const extendHotelTrial = (id: string, days: number): Promise<{ message: string; hotel: Hotel }> =>
+  superAdminFetch(`/superadmin/hotels/${id}/trial`, { method: 'PUT', body: JSON.stringify({ days, extend: true }) });
+
+export const updateHotelFeatures = (id: string, features: Partial<FeatureFlags>): Promise<{ message: string; features: FeatureFlags }> =>
+  superAdminFetch(`/superadmin/hotels/${id}/features`, { method: 'PUT', body: JSON.stringify({ features }) });
+
+export const getUsageAnalytics = (): Promise<{
+  hotels: {
+    hotelId: string;
+    hotelName: string;
+    ordersToday: number;
+    revenueToday: number;
+    deviceCount: number;
+    appVersions: string[];
+    lastActivity: string | null;
+  }[];
+}> => superAdminFetch('/superadmin/analytics');
+
+export const getAllDevices = (hotelId?: string): Promise<Device[]> => {
+  const q = hotelId ? `?hotelId=${hotelId}` : '';
+  return superAdminFetch(`/superadmin/devices${q}`);
+};
+
+export const getBroadcastNotifications = (): Promise<AppNotification[]> =>
+  superAdminFetch('/superadmin/notifications');
+
+export const createBroadcastNotification = (data: {
+  title: string;
+  message: string;
+  type?: AppNotification['type'];
+  targetHotels?: string[];
+  expiresAt?: string | null;
+}): Promise<{ message: string; notification: AppNotification }> =>
+  superAdminFetch('/superadmin/notifications', { method: 'POST', body: JSON.stringify(data) });
+
+export const deleteBroadcastNotification = (id: string): Promise<{ message: string }> =>
+  superAdminFetch(`/superadmin/notifications/${id}`, { method: 'DELETE' });
+
+export const getRemoteConfigAdmin = (): Promise<RemoteConfig> =>
+  superAdminFetch('/superadmin/remote-config');
+
+export const updateRemoteConfig = (data: Partial<RemoteConfig>): Promise<{ message: string; config: RemoteConfig }> =>
+  superAdminFetch('/superadmin/remote-config', { method: 'PUT', body: JSON.stringify(data) });
+
+export const getSystemHealth = (): Promise<{
+  mongo: { state: number; stateLabel: string };
+  totalDevices: number;
+  onlineDevices: number;
+  timestamp: string;
+}> => superAdminFetch('/superadmin/health');
+
+// ==================== KITCHEN DISPLAY ====================
+
+const KITCHEN_TOKEN_KEY = '@hotel_pos_kitchen_token';
+let _cachedKitchenToken: string | null = null;
+
+export const saveKitchenToken = async (token: string): Promise<void> => {
+  _cachedKitchenToken = token;
+  await AsyncStorage.setItem(KITCHEN_TOKEN_KEY, token);
+};
+
+export const getKitchenToken = async (): Promise<string | null> => {
+  if (_cachedKitchenToken) return _cachedKitchenToken;
+  try { _cachedKitchenToken = await AsyncStorage.getItem(KITCHEN_TOKEN_KEY); } catch { _cachedKitchenToken = null; }
+  return _cachedKitchenToken;
+};
+
+export const clearKitchenToken = async (): Promise<void> => {
+  _cachedKitchenToken = null;
+  await AsyncStorage.removeItem(KITCHEN_TOKEN_KEY);
+};
+
+export const kitchenLogin = async (hotelId: string, pin: string): Promise<string> => {
+  const base = await getBaseUrl();
+  const res = await fetch(`${base}/auth/kitchen`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hotelId, pin }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Login failed');
+  return data.token;
+};
+
+export interface KitchenOrderItem { productName: string; quantity: number }
+export interface KitchenOrder {
+  _id: string;
+  orderNumber: string;
+  tableNumber: string;
+  customerName: string;
+  notes: string;
+  status: 'pending' | 'preparing';
+  createdAt: string;
+  items: KitchenOrderItem[];
+}
+
+export const getKitchenOrders = async (): Promise<KitchenOrder[]> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getKitchenToken()]);
+  const res = await fetch(`${base}/orders/kitchen`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).message || 'Failed to fetch kitchen orders');
+  }
+  return res.json();
+};
+
+export const updateKitchenOrderStatus = async (orderId: string, status: string): Promise<void> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getKitchenToken()]);
+  const res = await fetch(`${base}/orders/${orderId}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).message || 'Failed to update order');
+  }
+};

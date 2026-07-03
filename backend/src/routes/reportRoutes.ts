@@ -74,16 +74,21 @@ router.get('/tally', authMiddleware, async (req: AuthRequest, res: Response) => 
     const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
 
     const today = new Date();
-    const fromDate = from ? new Date(from) : new Date(today.getFullYear(), today.getMonth(), 1);
+    let fromDate = from ? new Date(from) : new Date(today.getFullYear(), today.getMonth(), 1);
     fromDate.setHours(0, 0, 0, 0);
     const toDate = to ? new Date(to) : new Date();
     toDate.setHours(23, 59, 59, 999);
 
-    const orders = await Order.find({
-      hotelId,
-      status: { $ne: 'cancelled' },
-      createdAt: { $gte: fromDate, $lte: toDate },
-    }).sort({ createdAt: 1 }).lean();
+    // Cap range at 90 days to prevent loading years of orders into heap
+    const maxFrom = new Date(toDate);
+    maxFrom.setDate(maxFrom.getDate() - 90);
+    if (fromDate < maxFrom) fromDate = maxFrom;
+
+    const orders = await Order.find(
+      { hotelId, status: { $ne: 'cancelled' }, createdAt: { $gte: fromDate, $lte: toDate } },
+      { orderNumber: 1, createdAt: 1, customerName: 1, tableNumber: 1, paymentMethod: 1,
+        subtotal: 1, taxTotal: 1, discountAmount: 1, grandTotal: 1, orderSource: 1 },
+    ).sort({ createdAt: 1 }).lean();
 
     const ddmmyyyy = (d: Date) => {
       const dt = new Date(d);

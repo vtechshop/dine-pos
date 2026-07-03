@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { saveAuthCache, getAuthCache, clearAuthCache } from '../database/authDao';
-import { saveToken, clearToken } from '../services/api';
+import { saveToken, clearToken, clearRefreshToken } from '../services/api';
 
 const AUTH_KEY = '@hotel_pos_logged_in';
 
@@ -53,7 +53,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     await AsyncStorage.removeItem(AUTH_KEY);
+    // clearToken() also fires server-side refresh token revocation (fire-and-forget)
     await clearToken();
+    await clearRefreshToken();
     clearAuthCache();
     setIsOfflineLogin(false);
     setIsLoggedIn(false);

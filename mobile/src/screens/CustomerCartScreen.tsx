@@ -9,12 +9,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import QRCode from 'react-native-qrcode-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../utils/alert';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
 import { getStoredHotelId } from '../services/api';
-import { RootStackParamList, CartItem } from '../types';
+import { RootStackParamList, CartItem, Order } from '../types';
+import { printReceipt } from '../utils/receipt';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, API_BASE_URL } from '../utils/constants';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -118,6 +120,41 @@ const CustomerCartScreen: React.FC = () => {
       clearCart();
       Vibration.vibrate([0, 100, 80, 300]);
       setPlacedOrder(snapshot);
+      // Fire-and-forget auto-print — only if BT printer is configured
+      (async () => {
+        try {
+          const savedPrinter = await AsyncStorage.getItem('@hotel_pos_bt_printer');
+          if (!savedPrinter) return;
+          await printReceipt({
+            _id: snapshot._id,
+            orderNumber: snapshot.orderNumber,
+            items: snapshot.items.map(i => ({
+              product: i.product._id,
+              productName: i.product.name,
+              quantity: i.quantity,
+              price: i.product.price,
+              taxPercent: i.product.taxPercent ?? 0,
+              taxAmount: i.taxAmount,
+              total: i.total,
+            })),
+            subtotal: snapshot.subtotal,
+            taxTotal: snapshot.taxTotal,
+            discountAmount: 0,
+            grandTotal: snapshot.grandTotal,
+            paymentMethod: 'cash',
+            splitDetails: {},
+            status: 'pending',
+            orderSource: 'dine-in',
+            isParcel: false,
+            customerName: snapshot.customerName,
+            customerPhone: snapshot.customerPhone,
+            tableNumber: snapshot.tableNumber,
+            notes: snapshot.notes,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          } as Order, settings);
+        } catch { /* silent — print failure must not block order confirmation */ }
+      })();
     } catch (e: any) {
       showAlert('Error', e.message || 'Failed to place order. Try again.');
     } finally { setPlacing(false); }

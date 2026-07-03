@@ -10,8 +10,12 @@ import { Colors } from '../utils/constants';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { SyncProvider } from '../context/SyncContext';
+import { RemoteConfigProvider } from '../context/RemoteConfigContext';
+import { FeatureFlagsProvider } from '../context/FeatureFlagsContext';
 
 import SplashScreen from '../screens/SplashScreen';
+import ForceUpdateScreen from '../screens/ForceUpdateScreen';
+import MaintenanceModeScreen from '../screens/MaintenanceModeScreen';
 import RoleSelectScreen from '../screens/RoleSelectScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ProductsScreen from '../screens/ProductsScreen';
@@ -31,6 +35,8 @@ import SuperAdminLoginScreen from '../screens/SuperAdminLoginScreen';
 import SuperAdminDashboardScreen from '../screens/SuperAdminDashboardScreen';
 import SupportScreen from '../screens/SupportScreen';
 import HotelStatusScreen from '../screens/HotelStatusScreen';
+import KitchenLoginScreen from '../screens/KitchenLoginScreen';
+import KitchenDisplayScreen from '../screens/KitchenDisplayScreen';
 import CategoriesScreen from '../screens/CategoriesScreen';
 import TableLayoutScreen from '../screens/TableLayoutScreen';
 import ReservationScreen from '../screens/ReservationScreen';
@@ -180,12 +186,16 @@ const AppNavigator = () => {
   const safeTopPrimary = { paddingTop: top, backgroundColor: Colors.primary };
 
   return (
+    <RemoteConfigProvider>
+    <FeatureFlagsProvider>
     <SyncProvider>
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: true, gestureDirection: 'horizontal', contentStyle: { backgroundColor: Colors.background } }}>
         {!isLoggedIn ? (
           <>
             <Stack.Screen name="Splash"               component={SplashScreen}               options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="ForceUpdate"          component={ForceUpdateScreen}          options={{ contentStyle: safeTop, gestureEnabled: false }} />
+            <Stack.Screen name="MaintenanceMode"      component={MaintenanceModeScreen}      options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="RoleSelect"           component={RoleSelectScreen}           options={{ contentStyle: safeTopPrimary }} />
             <Stack.Screen name="AdminLogin"           component={AdminLoginScreen}           options={{ contentStyle: safeTop }} />
             <Stack.Screen name="BusinessSetup"        component={BusinessSetupScreen}        options={{ contentStyle: safeTop }} />
@@ -194,10 +204,13 @@ const AppNavigator = () => {
             <Stack.Screen name="HotelStatus"          component={HotelStatusScreen}          options={{ contentStyle: safeTop }} />
             <Stack.Screen name="CustomerTabs"         component={CustomerTabNavigator}       options={{ contentStyle: safeTop }} />
             <Stack.Screen name="CustomerOrderConfirm" component={CustomerOrderConfirmScreen} options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="KitchenLogin"         component={KitchenLoginScreen}         options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="KitchenDisplay"       component={KitchenDisplayScreen}       options={{ contentStyle: safeTop, gestureEnabled: false }} />
           </>
         ) : (
           <>
             <Stack.Screen name="MainTabs"   component={TabNavigator}      options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="HotelStatus"          component={HotelStatusScreen}          options={{ contentStyle: safeTop }} />
             <Stack.Screen name="Support"    component={SupportScreen}     options={{ contentStyle: safeTop }} />
             <Stack.Screen name="Categories" component={CategoriesScreen}  options={{ contentStyle: safeTop }} />
             <Stack.Screen name="Products"   component={ProductsScreen}    options={{ contentStyle: safeTop }} />
@@ -225,6 +238,8 @@ const AppNavigator = () => {
       </Stack.Navigator>
     </NavigationContainer>
     </SyncProvider>
+    </FeatureFlagsProvider>
+    </RemoteConfigProvider>
   );
 };
 

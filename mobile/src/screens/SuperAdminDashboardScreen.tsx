@@ -5,16 +5,16 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList, Hotel, SuperAdminStats } from '../types';
+import { RootStackParamList, Hotel, SuperAdminStats, AppNotification, Device, RemoteConfig, FeatureFlags } from '../types';
 import { showAlert } from '../utils/alert';
-import { getSuperAdminStats, getAllHotels, approveHotelWithCredentials, rejectHotel, suspendHotel, activateHotel, getAllTickets, adminReplyTicket, updateTicketStatus, getBranchRevenue, setHotelPremium, Ticket } from '../services/api';
+import { getSuperAdminStats, getAllHotels, approveHotelWithCredentials, rejectHotel, suspendHotel, activateHotel, getAllTickets, adminReplyTicket, updateTicketStatus, getBranchRevenue, setHotelPremium, Ticket, getBroadcastNotifications, createBroadcastNotification, deleteBroadcastNotification, getAllDevices, getSystemHealth, getRemoteConfigAdmin, updateRemoteConfig, startHotelTrial, extendHotelTrial, expireHotel, updateHotelFeatures } from '../services/api';
 import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SuperAdminDashboard'>;
 
-type TabView = 'hotels' | 'tickets' | 'revenue';
-type StatusFilter = 'all' | 'pending' | 'active' | 'suspended' | 'rejected';
+type TabView = 'hotels' | 'tickets' | 'revenue' | 'notifications' | 'devices' | 'config';
+type StatusFilter = 'all' | 'pending' | 'trial' | 'active' | 'expired' | 'suspended' | 'rejected';
 type TicketFilter = 'all' | 'open' | 'in-progress' | 'resolved' | 'closed';
 
 const TICKET_STATUS_COLORS: Record<string, string> = {
@@ -32,14 +32,18 @@ const PRIORITY_COLORS: Record<string, string> = {
 
 const STATUS_COLORS: Record<string, string> = {
   pending: Colors.warning,
+  trial: Colors.accent,
   active: Colors.success,
+  expired: '#9E9E9E',
   suspended: Colors.danger,
-  rejected: '#9E9E9E',
+  rejected: '#B71C1C',
 };
 
 const STATUS_ICONS: Record<string, keyof typeof MaterialIcons.glyphMap> = {
   pending: 'hourglass-empty',
+  trial: 'timer',
   active: 'check-circle',
+  expired: 'timer-off',
   suspended: 'block',
   rejected: 'cancel',
 };
@@ -48,7 +52,10 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const { bottom } = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabView>('hotels');
   const [stats, setStats] = useState<SuperAdminStats | null>(null);
-  const [hotels, setHotels] = useState<Hotel[]>([]);
+  const [hotels, setHotels]             = useState<Hotel[]>([]);
+  const [hotelPage, setHotelPage]       = useState(1);
+  const [hotelTotalPages, setHotelTotalPages] = useState(1);
+  const [hotelLoadingMore, setHotelLoadingMore] = useState(false);
   const [branchRevenue, setBranchRevenue] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -72,16 +79,41 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [adminReply, setAdminReply] = useState('');
   const [replyLoading, setReplyLoading] = useState(false);
 
+  // Notifications
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [newNotifTitle, setNewNotifTitle] = useState('');
+  const [newNotifMsg, setNewNotifMsg]     = useState('');
+  const [notifLoading, setNotifLoading]   = useState(false);
+
+  // Devices
+  const [devices, setDevices] = useState<Device[]>([]);
+
+  // Remote Config
+  const [remoteConfig, setRemoteConfig]   = useState<RemoteConfig | null>(null);
+  const [configLoading, setConfigLoading] = useState(false);
+  const [editConfig, setEditConfig]       = useState<Partial<RemoteConfig>>({});
+
+  // Health
+  const [health, setHealth] = useState<{ mongo: { stateLabel: string }; totalDevices: number; onlineDevices: number } | null>(null);
+
   const loadData = useCallback(async () => {
     try {
-      const [statsData, hotelsData, ticketsData] = await Promise.all([
+      const [statsData, hotelsResult, ticketsData, notifsData, devicesData, healthData] = await Promise.all([
         getSuperAdminStats(),
-        getAllHotels(filterStatus === 'all' ? undefined : filterStatus, search || undefined),
+        getAllHotels(filterStatus === 'all' ? undefined : filterStatus, search || undefined, 1),
         getAllTickets(ticketFilter === 'all' ? undefined : ticketFilter),
+        getBroadcastNotifications().catch(() => [] as AppNotification[]),
+        getAllDevices().catch(() => [] as Device[]),
+        getSystemHealth().catch(() => null),
       ]);
       setStats(statsData);
-      setHotels(hotelsData);
+      setHotels(hotelsResult.hotels);
+      setHotelPage(1);
+      setHotelTotalPages(hotelsResult.pages);
       setTickets(ticketsData);
+      setNotifications(notifsData);
+      setDevices(devicesData);
+      setHealth(healthData);
     } catch (error: any) {
       showAlert('Error', error.message || 'Failed to load data');
     } finally {
@@ -89,6 +121,23 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
       setRefreshing(false);
     }
   }, [filterStatus, search, ticketFilter]);
+
+  const loadMoreHotels = useCallback(async () => {
+    if (hotelLoadingMore || hotelPage >= hotelTotalPages) return;
+    setHotelLoadingMore(true);
+    try {
+      const next = hotelPage + 1;
+      const result = await getAllHotels(
+        filterStatus === 'all' ? undefined : filterStatus,
+        search || undefined,
+        next,
+      );
+      setHotels(prev => [...prev, ...result.hotels]);
+      setHotelPage(next);
+      setHotelTotalPages(result.pages);
+    } catch { /* silent: network error on scroll shouldn't disrupt the list */ }
+    finally { setHotelLoadingMore(false); }
+  }, [hotelPage, hotelTotalPages, hotelLoadingMore, filterStatus, search]);
 
   const handleAdminReply = async () => {
     if (!selectedTicket || !adminReply.trim()) return;
@@ -207,6 +256,62 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleStartTrial = async (hotel: Hotel) => {
+    showAlert('Start Trial', `Start a 14-day trial for ${hotel.hotelName}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Start Trial', onPress: async () => {
+          setActionLoading(true);
+          try {
+            await startHotelTrial(hotel._id, 14);
+            showAlert('Done', 'Trial started!');
+            setShowDetail(false);
+            loadData();
+          } catch (e: any) {
+            showAlert('Error', e.message);
+          } finally { setActionLoading(false); }
+        },
+      },
+    ]);
+  };
+
+  const handleExtendTrial = async (hotel: Hotel) => {
+    showAlert('Extend Trial', `Add 7 more days to ${hotel.hotelName}'s trial?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Extend', onPress: async () => {
+          setActionLoading(true);
+          try {
+            await extendHotelTrial(hotel._id, 7);
+            showAlert('Done', 'Trial extended by 7 days!');
+            loadData();
+          } catch (e: any) {
+            showAlert('Error', e.message);
+          } finally { setActionLoading(false); }
+        },
+      },
+    ]);
+  };
+
+  const handleExpire = async (hotel: Hotel) => {
+    showAlert('Expire', `Force-expire ${hotel.hotelName}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Expire', style: 'destructive', onPress: async () => {
+          setActionLoading(true);
+          try {
+            await expireHotel(hotel._id);
+            showAlert('Done', `${hotel.hotelName} expired`);
+            setShowDetail(false);
+            loadData();
+          } catch (e: any) {
+            showAlert('Error', e.message);
+          } finally { setActionLoading(false); }
+        },
+      },
+    ]);
   };
 
   const handlePremiumToggle = async (hotel: Hotel) => {
@@ -363,6 +468,14 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
               </View>
             )}
 
+            {/* SaaS Info */}
+            {renderSection('Subscription & Trial', [
+              { label: 'Status', value: hotel.status },
+              { label: 'Plan', value: hotel.subscriptionPlan || 'none' },
+              { label: 'Trial Start', value: hotel.trialStartDate ? new Date(hotel.trialStartDate).toLocaleDateString('en-IN') : '—' },
+              { label: 'Trial End', value: hotel.trialEndDate ? new Date(hotel.trialEndDate).toLocaleDateString('en-IN') : '—' },
+            ])}
+
             {/* Registration Date */}
             <Text style={styles.regDate}>
               Registered: {new Date(hotel.createdAt).toLocaleString('en-IN')}
@@ -389,52 +502,67 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
           )}
 
           {/* Action Buttons */}
-          <View style={[styles.detailActions, { paddingBottom: Spacing.lg + bottom }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.detailActions, { paddingBottom: Spacing.lg + bottom, gap: Spacing.sm }]}>
             {hotel.status === 'pending' && (
               <>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.rejectBtn]}
-                  onPress={() => { setShowRejectModal(true); }}
-                  disabled={actionLoading}
-                >
+                <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => { setShowRejectModal(true); }} disabled={actionLoading}>
                   <MaterialIcons name="cancel" size={18} color={Colors.white} />
                   <Text style={styles.actionBtnText}>Reject</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.approveBtn]}
-                  onPress={() => handleApprove(hotel)}
-                  disabled={actionLoading}
-                >
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleStartTrial(hotel)} disabled={actionLoading}>
+                  <MaterialIcons name="timer" size={18} color={Colors.white} />
+                  <Text style={styles.actionBtnText}>Start Trial</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleApprove(hotel)} disabled={actionLoading}>
                   {actionLoading ? <ActivityIndicator size="small" color={Colors.white} /> : (
-                    <>
-                      <MaterialIcons name="check-circle" size={18} color={Colors.white} />
-                      <Text style={styles.actionBtnText}>Approve</Text>
-                    </>
+                    <><MaterialIcons name="check-circle" size={18} color={Colors.white} /><Text style={styles.actionBtnText}>Approve</Text></>
                   )}
                 </TouchableOpacity>
               </>
             )}
+            {hotel.status === 'trial' && (
+              <>
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.info, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleExtendTrial(hotel)} disabled={actionLoading}>
+                  <MaterialIcons name="more-time" size={18} color={Colors.white} />
+                  <Text style={styles.actionBtnText}>+7 Days</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleActivate(hotel)} disabled={actionLoading}>
+                  <MaterialIcons name="check-circle" size={18} color={Colors.white} />
+                  <Text style={styles.actionBtnText}>Activate</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleExpire(hotel)} disabled={actionLoading}>
+                  <MaterialIcons name="timer-off" size={18} color={Colors.white} />
+                  <Text style={styles.actionBtnText}>Expire</Text>
+                </TouchableOpacity>
+              </>
+            )}
             {hotel.status === 'active' && (
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.suspendBtn]}
-                onPress={() => handleSuspend(hotel)}
-                disabled={actionLoading}
-              >
-                <MaterialIcons name="block" size={18} color={Colors.white} />
-                <Text style={styles.actionBtnText}>Suspend</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity style={[styles.actionBtn, styles.suspendBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleSuspend(hotel)} disabled={actionLoading}>
+                  <MaterialIcons name="block" size={18} color={Colors.white} />
+                  <Text style={styles.actionBtnText}>Suspend</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleExpire(hotel)} disabled={actionLoading}>
+                  <MaterialIcons name="timer-off" size={18} color={Colors.white} />
+                  <Text style={styles.actionBtnText}>Expire</Text>
+                </TouchableOpacity>
+              </>
             )}
-            {(hotel.status === 'suspended' || hotel.status === 'rejected') && (
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.approveBtn]}
-                onPress={() => handleActivate(hotel)}
-                disabled={actionLoading}
-              >
-                <MaterialIcons name="check-circle" size={18} color={Colors.white} />
-                <Text style={styles.actionBtnText}>Activate</Text>
-              </TouchableOpacity>
+            {(hotel.status === 'expired' || hotel.status === 'suspended' || hotel.status === 'rejected') && (
+              <>
+                <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleActivate(hotel)} disabled={actionLoading}>
+                  <MaterialIcons name="check-circle" size={18} color={Colors.white} />
+                  <Text style={styles.actionBtnText}>Activate</Text>
+                </TouchableOpacity>
+                {hotel.status === 'expired' && (
+                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleExtendTrial(hotel)} disabled={actionLoading}>
+                    <MaterialIcons name="more-time" size={18} color={Colors.white} />
+                    <Text style={styles.actionBtnText}>Extend Trial</Text>
+                  </TouchableOpacity>
+                )}
+              </>
             )}
-          </View>
+          </ScrollView>
         </View>
 
         {/* Reject Reason Modal */}
@@ -697,41 +825,221 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Stats */}
       {stats && (
-        <View style={styles.statsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
           {renderStatCard('Total', stats.total, Colors.info, 'store')}
-          {renderStatCard('Pending', stats.pending, Colors.warning, 'hourglass-empty')}
           {renderStatCard('Active', stats.active, Colors.success, 'check-circle')}
-          {renderStatCard('Tickets', tickets.filter(t => t.status === 'open').length, Colors.danger, 'support-agent')}
-        </View>
+          {renderStatCard('Trial', stats.trial ?? 0, Colors.accent, 'timer')}
+          {renderStatCard('Pending', stats.pending, Colors.warning, 'hourglass-empty')}
+          {renderStatCard('Expired', stats.expired ?? 0, Colors.textSecondary, 'timer-off')}
+          {renderStatCard('Suspended', stats.suspended, Colors.danger, 'block')}
+          {renderStatCard('Today', stats.todayRegistrations ?? 0, Colors.primary, 'today')}
+          {renderStatCard('Tickets', tickets.filter(t => t.status === 'open').length, '#7B1FA2', 'support-agent')}
+          {health && renderStatCard('Online', health.onlineDevices, Colors.success, 'devices')}
+        </ScrollView>
       )}
 
       {/* Tab Switch */}
-      <View style={styles.tabRow}>
-        <TouchableOpacity style={[styles.tabBtn, activeTab === 'hotels' && styles.tabBtnActive]} onPress={() => setActiveTab('hotels')}>
-          <MaterialIcons name="store" size={18} color={activeTab === 'hotels' ? Colors.white : Colors.textSecondary} />
-          <Text style={[styles.tabBtnText, activeTab === 'hotels' && styles.tabBtnTextActive]}>Hotels ({hotels.length})</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.tabBtn, activeTab === 'tickets' && styles.tabBtnActive]} onPress={() => setActiveTab('tickets')}>
-          <MaterialIcons name="support-agent" size={18} color={activeTab === 'tickets' ? Colors.white : Colors.textSecondary} />
-          <Text style={[styles.tabBtnText, activeTab === 'tickets' && styles.tabBtnTextActive]}>
-            Tickets {tickets.filter(t => t.status === 'open').length > 0 ? `(${tickets.filter(t => t.status === 'open').length} open)` : ''}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'revenue' && styles.tabBtnActive]}
-          onPress={async () => {
-            setActiveTab('revenue');
-            if (!branchRevenue) {
-              try { setBranchRevenue(await getBranchRevenue()); } catch {}
-            }
-          }}
-        >
-          <MaterialIcons name="bar-chart" size={18} color={activeTab === 'revenue' ? Colors.white : Colors.textSecondary} />
-          <Text style={[styles.tabBtnText, activeTab === 'revenue' && styles.tabBtnTextActive]}>Revenue</Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRow} contentContainerStyle={{ gap: 0 }}>
+        {([
+          { id: 'hotels', icon: 'store', label: `Hotels (${hotels.length})` },
+          { id: 'tickets', icon: 'support-agent', label: `Tickets${tickets.filter(t => t.status === 'open').length > 0 ? ` (${tickets.filter(t => t.status === 'open').length})` : ''}` },
+          { id: 'revenue', icon: 'bar-chart', label: 'Revenue' },
+          { id: 'notifications', icon: 'notifications', label: `Notifs (${notifications.length})` },
+          { id: 'devices', icon: 'devices', label: `Devices (${devices.length})` },
+          { id: 'config', icon: 'settings', label: 'Config' },
+        ] as { id: TabView; icon: keyof typeof MaterialIcons.glyphMap; label: string }[]).map((t) => (
+          <TouchableOpacity
+            key={t.id}
+            style={[styles.tabBtn, activeTab === t.id && styles.tabBtnActive]}
+            onPress={async () => {
+              setActiveTab(t.id);
+              if (t.id === 'revenue' && !branchRevenue) {
+                try { setBranchRevenue(await getBranchRevenue()); } catch {}
+              }
+              if (t.id === 'config' && !remoteConfig) {
+                try {
+                  const cfg = await getRemoteConfigAdmin();
+                  setRemoteConfig(cfg);
+                  setEditConfig(cfg);
+                } catch {}
+              }
+            }}
+          >
+            <MaterialIcons name={t.icon} size={16} color={activeTab === t.id ? Colors.primary : Colors.textSecondary} />
+            <Text style={[styles.tabBtnText, activeTab === t.id && styles.tabBtnTextActive]}>{t.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
-      {activeTab === 'revenue' ? (
+      {activeTab === 'notifications' ? (
+        <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 60, gap: Spacing.md }}>
+          <View style={styles.detailSection}>
+            <Text style={styles.detailSectionTitle}>Broadcast Notification</Text>
+            <TextInput
+              style={[styles.rejectInput, { height: 44, minHeight: 44, marginBottom: Spacing.sm, textAlignVertical: 'center' }]}
+              placeholder="Title"
+              placeholderTextColor={Colors.textMuted}
+              value={newNotifTitle}
+              onChangeText={setNewNotifTitle}
+            />
+            <TextInput
+              style={[styles.rejectInput, { marginBottom: Spacing.md }]}
+              placeholder="Message"
+              placeholderTextColor={Colors.textMuted}
+              value={newNotifMsg}
+              onChangeText={setNewNotifMsg}
+              multiline
+              numberOfLines={3}
+            />
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.approveBtn, { marginTop: 0 }]}
+              disabled={notifLoading || !newNotifTitle.trim() || !newNotifMsg.trim()}
+              onPress={async () => {
+                setNotifLoading(true);
+                try {
+                  await createBroadcastNotification({ title: newNotifTitle.trim(), message: newNotifMsg.trim() });
+                  setNewNotifTitle(''); setNewNotifMsg('');
+                  const updated = await getBroadcastNotifications();
+                  setNotifications(updated);
+                  showAlert('Sent', 'Notification broadcast to all hotels');
+                } catch (e: any) { showAlert('Error', e.message); }
+                finally { setNotifLoading(false); }
+              }}
+            >
+              {notifLoading ? <ActivityIndicator size="small" color={Colors.white} /> : (
+                <Text style={styles.actionBtnText}>Send to All Hotels</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {notifications.map((n) => (
+            <View key={n._id} style={[styles.hotelCard, { flexDirection: 'column', alignItems: 'flex-start', gap: Spacing.xs }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'flex-start' }}>
+                <Text style={[styles.hotelName, { flex: 1 }]}>{n.title}</Text>
+                <TouchableOpacity
+                  onPress={async () => {
+                    try { await deleteBroadcastNotification(n._id); const updated = await getBroadcastNotifications(); setNotifications(updated); }
+                    catch (e: any) { showAlert('Error', e.message); }
+                  }}
+                >
+                  <MaterialIcons name="delete-outline" size={20} color={Colors.danger} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.hotelOwner}>{n.message}</Text>
+              <Text style={styles.hotelDate}>{new Date(n.createdAt).toLocaleString('en-IN')}</Text>
+            </View>
+          ))}
+          {notifications.length === 0 && (
+            <View style={styles.emptyState}>
+              <MaterialIcons name="notifications-none" size={48} color={Colors.textMuted} />
+              <Text style={styles.emptyText}>No notifications sent</Text>
+            </View>
+          )}
+        </ScrollView>
+      ) : activeTab === 'devices' ? (
+        <FlatList
+          data={devices}
+          keyExtractor={(d) => d._id}
+          contentContainerStyle={styles.listContent}
+          onRefresh={() => { setRefreshing(true); loadData(); }}
+          refreshing={refreshing}
+          renderItem={({ item: d }) => (
+            <View style={[styles.hotelCard, { flexDirection: 'column', alignItems: 'flex-start', gap: Spacing.xs }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+                <MaterialIcons name={d.platform === 'ios' ? 'phone-iphone' : 'phone-android'} size={18} color={Colors.textSecondary} />
+                <Text style={styles.hotelName}>{d.deviceName}</Text>
+                <View style={[styles.statusDot, { backgroundColor: d.isOnline ? Colors.success : Colors.textMuted }]} />
+              </View>
+              <Text style={styles.hotelOwner}>v{d.appVersion} · {d.platform} · {typeof d.hotelId === 'object' ? d.hotelId.hotelName : ''}</Text>
+              <Text style={styles.hotelDate}>Last seen {new Date(d.lastSeen).toLocaleString('en-IN')}</Text>
+            </View>
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <MaterialIcons name="devices" size={48} color={Colors.textMuted} />
+              <Text style={styles.emptyText}>No devices registered</Text>
+            </View>
+          }
+        />
+      ) : activeTab === 'config' ? (
+        <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 80, gap: Spacing.md }}>
+          {!remoteConfig ? (
+            <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+          ) : (
+            <>
+              {health && (
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>System Health</Text>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>MongoDB</Text><Text style={styles.detailValue}>{health.mongo.stateLabel}</Text></View>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>Total Devices</Text><Text style={styles.detailValue}>{health.totalDevices}</Text></View>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>Online (5m)</Text><Text style={styles.detailValue}>{health.onlineDevices}</Text></View>
+                </View>
+              )}
+
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Remote Config</Text>
+
+                {[
+                  { key: 'minimumAppVersion', label: 'Min App Version (Android)' },
+                  { key: 'minimumAppVersionIos', label: 'Min App Version (iOS)' },
+                  { key: 'trialDays', label: 'Default Trial Days' },
+                  { key: 'maintenanceMessage', label: 'Maintenance Message' },
+                  { key: 'forceUpdateMessage', label: 'Force Update Message' },
+                  { key: 'broadcastMessage', label: 'Broadcast Message' },
+                ].map(({ key, label }) => (
+                  <View key={key} style={{ marginBottom: Spacing.sm }}>
+                    <Text style={[styles.detailLabel, { marginBottom: 4 }]}>{label}</Text>
+                    <TextInput
+                      style={[styles.rejectInput, { minHeight: 40, height: 40, paddingVertical: Spacing.sm, textAlignVertical: 'center' }]}
+                      value={String(editConfig[key as keyof RemoteConfig] ?? '')}
+                      onChangeText={(v) => setEditConfig((p) => ({ ...p, [key]: v }))}
+                      placeholderTextColor={Colors.textMuted}
+                    />
+                  </View>
+                ))}
+
+                {[
+                  { key: 'maintenanceMode', label: 'Maintenance Mode' },
+                  { key: 'forceUpdate', label: 'Force Update' },
+                  { key: 'paymentEnabled', label: 'Payment Enabled' },
+                ].map(({ key, label }) => (
+                  <View key={key} style={[styles.detailRow, { paddingVertical: Spacing.md }]}>
+                    <Text style={styles.detailLabel}>{label}</Text>
+                    <TouchableOpacity
+                      onPress={() => setEditConfig((p) => ({ ...p, [key]: !p[key as keyof RemoteConfig] }))}
+                    >
+                      <MaterialIcons
+                        name={(editConfig[key as keyof RemoteConfig] ? 'toggle-on' : 'toggle-off')}
+                        size={32}
+                        color={editConfig[key as keyof RemoteConfig] ? Colors.success : Colors.textMuted}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.approveBtn, { marginTop: Spacing.md }]}
+                  disabled={configLoading}
+                  onPress={async () => {
+                    setConfigLoading(true);
+                    try {
+                      const result = await updateRemoteConfig(editConfig);
+                      setRemoteConfig(result.config);
+                      setEditConfig(result.config);
+                      showAlert('Saved', 'Remote config updated!');
+                    } catch (e: any) { showAlert('Error', e.message); }
+                    finally { setConfigLoading(false); }
+                  }}
+                >
+                  {configLoading ? <ActivityIndicator size="small" color={Colors.white} /> : (
+                    <Text style={styles.actionBtnText}>Save Config</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </ScrollView>
+      ) : activeTab === 'revenue' ? (
         <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 60 }}>
           {!branchRevenue ? (
             <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
@@ -774,7 +1082,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
           </View>
           {/* Filter */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
-            {(['all', 'pending', 'active', 'suspended', 'rejected'] as StatusFilter[]).map((s) => (
+            {(['all', 'pending', 'trial', 'active', 'expired', 'suspended', 'rejected'] as StatusFilter[]).map((s) => (
               <TouchableOpacity key={s} style={[styles.filterTab, filterStatus === s && styles.filterTabActive]} onPress={() => setFilterStatus(s)}>
                 <Text style={[styles.filterTabText, filterStatus === s && styles.filterTabTextActive]}>{s.charAt(0).toUpperCase() + s.slice(1)}</Text>
               </TouchableOpacity>
@@ -787,6 +1095,13 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
             contentContainerStyle={styles.listContent}
             onRefresh={() => { setRefreshing(true); loadData(); }}
             refreshing={refreshing}
+            onEndReached={loadMoreHotels}
+            onEndReachedThreshold={0.3}
+            ListFooterComponent={
+              hotelLoadingMore
+                ? <ActivityIndicator size="small" color={Colors.primary} style={{ paddingVertical: 16 }} />
+                : null
+            }
             ListEmptyComponent={<View style={styles.emptyState}><MaterialIcons name="store" size={48} color={Colors.textMuted} /><Text style={styles.emptyText}>No hotels found</Text></View>}
           />
         </>
@@ -807,7 +1122,7 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
 
   statsRow: { flexDirection: 'row', padding: Spacing.md, gap: Spacing.sm },
-  statCard: { flex: 1, backgroundColor: Colors.card, borderRadius: BorderRadius.md, padding: Spacing.md, alignItems: 'center', borderTopWidth: 3, gap: 4 },
+  statCard: { width: 80, backgroundColor: Colors.card, borderRadius: BorderRadius.md, padding: Spacing.md, alignItems: 'center', borderTopWidth: 3, gap: 4 },
   statValue: { fontSize: FontSize.xxl, fontWeight: 'bold' },
   statLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, textAlign: 'center' },
 
@@ -886,10 +1201,10 @@ const styles = StyleSheet.create({
   confirmRejectBtn: { flex: 1, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: Colors.danger, alignItems: 'center' },
 
   // Tab switcher
-  tabRow: { flexDirection: 'row', backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  tabBtn: { flex: 1, paddingVertical: Spacing.md, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabRow: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, flexShrink: 0 },
+  tabBtn: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.lg, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', flexDirection: 'row', gap: 5 },
   tabBtnActive: { borderBottomColor: Colors.primary },
-  tabBtnText: { color: Colors.textSecondary, fontSize: FontSize.md, fontWeight: '600' },
+  tabBtnText: { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '600' },
   tabBtnTextActive: { color: Colors.primary },
 
   // Ticket styles

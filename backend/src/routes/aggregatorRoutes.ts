@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Order from '../models/Order';
 import Hotel from '../models/Hotel';
+import DailyCounter from '../models/DailyCounter';
 import { io } from '../server';
 
 const router = Router();
@@ -14,21 +15,16 @@ const SOURCE_MAP: Record<string, OrderSourceType> = {
   takeaway:'takeaway',
 };
 
-// Generate order number helper
+// Atomic counter — same pattern as orderRoutes.ts, AGG prefix for aggregator orders
 const generateOrderNumber = async (hotelId: string): Promise<string> => {
-  const today = new Date();
-  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-  const prefix = `AGG-${dateStr}`;
-  const startOfDay = new Date(today); startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay   = new Date(today); endOfDay.setHours(23, 59, 59, 999);
-  const lastOrder = await Order.findOne({
-    hotelId,
-    orderNumber: { $regex: `^AGG-${dateStr}` },
-    createdAt: { $gte: startOfDay, $lte: endOfDay },
-  }).sort({ createdAt: -1 });
-  let seq = 1;
-  if (lastOrder) seq = parseInt(lastOrder.orderNumber.split('-').pop() || '0') + 1;
-  return `${prefix}-${String(seq).padStart(3, '0')}`;
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const key = `AGG-${dateStr}-${hotelId}`;
+  const counter = await DailyCounter.findOneAndUpdate(
+    { key },
+    { $inc: { seq: 1 }, $setOnInsert: { key } },
+    { upsert: true, new: true },
+  );
+  return `AGG-${dateStr}-${String(counter!.seq).padStart(3, '0')}`;
 };
 
 const WEBHOOK_SECRET = process.env.AGGREGATOR_SECRET;

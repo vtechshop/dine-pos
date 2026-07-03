@@ -47,37 +47,52 @@ function ChatScreenInner() {
 
   // Connect socket ONCE on mount — never disconnect on tab/table change
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ['websocket'] });
-    socketRef.current = socket;
+    let mounted = true;
 
-    socket.on('connect', () => socket.emit('join', 'admin'));
+    (async () => {
+      const [token, hotelId] = await Promise.all([getToken(), getStoredHotelId()]);
+      if (!mounted) return;
 
-    socket.on('new_message', (msg: ChatMsg) => {
-      const current = selectedTableRef.current;
+      const socket = io(SOCKET_URL, {
+        transports: ['websocket'],
+        auth: { token: token || '' },
+      });
+      socketRef.current = socket;
 
-      setTables(prev => {
-        const exists = prev.find(t => t._id === msg.tableNumber);
-        if (exists) {
-          return prev.map(t => t._id === msg.tableNumber
-            ? { ...t, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt,
-                unread: msg.sender === 'customer' && current !== msg.tableNumber ? t.unread + 1 : t.unread }
-            : t
-          );
-        }
-        return [{ _id: msg.tableNumber, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt, unread: msg.sender === 'customer' ? 1 : 0 }, ...prev];
+      socket.on('connect', () => {
+        if (hotelId) socket.emit('join_hotel', hotelId);
       });
 
-      if (msg.tableNumber === current) {
-        setMessages(prev => {
-          // avoid duplicate if optimistic message already added
-          if (prev.some(m => m._id === msg._id)) return prev;
-          return [...prev, msg];
-        });
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-      }
-    });
+      socket.on('new_message', (msg: ChatMsg) => {
+        const current = selectedTableRef.current;
 
-    return () => { socket.disconnect(); };
+        setTables(prev => {
+          const exists = prev.find(t => t._id === msg.tableNumber);
+          if (exists) {
+            return prev.map(t => t._id === msg.tableNumber
+              ? { ...t, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt,
+                  unread: msg.sender === 'customer' && current !== msg.tableNumber ? t.unread + 1 : t.unread }
+              : t
+            );
+          }
+          return [{ _id: msg.tableNumber, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt, unread: msg.sender === 'customer' ? 1 : 0 }, ...prev];
+        });
+
+        if (msg.tableNumber === current) {
+          setMessages(prev => {
+            if (prev.some(m => m._id === msg._id)) return prev;
+            return [...prev, msg];
+          });
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+        }
+      });
+    })();
+
+    return () => {
+      mounted = false;
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+    };
   }, []);
 
   // Load table list

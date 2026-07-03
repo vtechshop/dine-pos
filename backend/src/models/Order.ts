@@ -145,6 +145,7 @@ const OrderSchema: Schema = new Schema(
 OrderSchema.index({ hotelId: 1, createdAt: -1 });                           // order list per hotel
 OrderSchema.index({ hotelId: 1, status: 1, createdAt: -1 });                // filtered order list
 OrderSchema.index({ hotelId: 1, orderSource: 1, createdAt: -1 });           // source filter (Swiggy/Zomato analytics)
+OrderSchema.index({ hotelId: 1, customerPhone: 1, createdAt: -1 });         // customer aggregation — skips null/empty phones efficiently
 OrderSchema.index({ createdAt: -1 });                                        // admin-wide report
 // Sparse unique index: null values are excluded, non-null offlineIds must be globally unique.
 // This is the idempotency guard — a retry with the same offlineId is a no-op.

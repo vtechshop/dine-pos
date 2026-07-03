@@ -1,22 +1,22 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, ActivityIndicator, StatusBar,
+  RefreshControl, ActivityIndicator, StatusBar, Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { io, Socket } from 'socket.io-client';
-import { RootStackParamList, TabParamList, DailyReport } from '../types';
+import { RootStackParamList, TabParamList, DailyReport, KOTOrderInput } from '../types';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
-import { getDailyReport, getProducts, getCategories, getStoredHotelId, getSocketUrl, getLowStockProducts, getLowStockIngredients, getOrder } from '../services/api';
+import { getDailyReport, getProducts, getCategories, getStoredHotelId, getSocketUrl, getToken, getLowStockProducts, getLowStockIngredients, getOrder, getNotifications } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
-import { useSync } from '../context/SyncContext';
-import { SyncStatusBar } from '../components/SyncStatusBar';
+import { OfflineIndicator } from '../components/OfflineIndicator';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-import { printReceipt } from '../utils/receipt';
+import TrialBanner from '../components/TrialBanner';
+import { printReceipt, printKOT } from '../utils/receipt';
 import { setupNotifications, notifyNewOrder, notifyChatMessage } from '../utils/notifications';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -43,7 +43,9 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [orderBadge, setOrderBadge] = useState(0);
   const [lowStockCount, setLowStockCount] = useState(0);
   const [lowIngredientCount, setLowIngredientCount] = useState(0);
-  const { pendingCount } = useSync();
+  const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null);
+  const [notifUnread, setNotifUnread] = useState(0);
+  const [printError, setPrintError] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -54,16 +56,22 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const fetchStats = useCallback(async () => {
     try {
       setError(null);
-      const [report, products, categories, lowStock, lowIngredients] = await Promise.all([
+      const [report, products, categories, lowStock, lowIngredients, notifs] = await Promise.all([
         getDailyReport().catch((): DailyReport => ({ date: '', totalSales: 0, totalTax: 0, totalOrders: 0, paymentBreakdown: { cash: 0, upi: 0, card: 0, split: 0 } })),
         getProducts().catch(() => []),
         getCategories().catch(() => []),
         getLowStockProducts(5).catch(() => ({ products: [], threshold: 5 })),
         getLowStockIngredients().catch(() => ({ ingredients: [] })),
+        getNotifications().catch(() => ({ notifications: [], unreadCount: 0 })),
       ]);
       setStats({ todayOrders: report.totalOrders, todaySales: report.totalSales, totalProducts: products.length, totalCategories: categories.length });
       setLowStockCount(lowStock.products.length);
       setLowIngredientCount(lowIngredients.ingredients.length);
+      setNotifUnread(notifs.unreadCount);
+
+      // Read trial info from AsyncStorage (stored at login)
+      const storedTrial = await AsyncStorage.getItem('@dine_trial_days').catch(() => null);
+      if (storedTrial !== null) setTrialDaysRemaining(parseInt(storedTrial, 10));
     } catch (e: any) {
       setError(e.message || 'Failed to load data');
     } finally {
@@ -93,11 +101,11 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     let mounted = true;
     const connect = async () => {
-      const hotelId = await getStoredHotelId();
+      const [hotelId, url, token] = await Promise.all([getStoredHotelId(), getSocketUrl(), getToken()]);
       if (!hotelId || !mounted) return;
-      const url = await getSocketUrl();
       const socket = io(url, {
         transports: ['websocket'],
+        auth: { token: token || '' },
         reconnectionAttempts: 10,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 10000,
@@ -106,7 +114,6 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       socketRef.current = socket;
       socket.on('connect', () => {
         socket.emit('join_hotel', hotelId);
-        socket.emit('join', 'admin');
       });
       socket.on('new_message', (msg: { sender: string; tableNumber: string; message: string }) => {
         if (!mounted || msg.sender !== 'customer') return;
@@ -115,17 +122,23 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       socket.on('new_order', async (data: NewOrderAlert) => {
         if (!mounted) return;
         setNewOrderAlert(data);
+        setPrintError(false);
         setOrderBadge(p => p + 1);
         fetchStats();
         notifyNewOrder(data.tableNumber, data.grandTotal, data.itemCount, settingsRef.current.currencySymbol || '₹');
-        // Auto-print receipt if a Bluetooth printer is paired
-        try {
-          const btAddress = await AsyncStorage.getItem(BT_PRINTER_ADDRESS_KEY);
-          if (data._id && btAddress) {
-            const order = await getOrder(data._id);
-            if (order) await printReceipt(order, settingsRef.current);
+        // Auto-print KOT if a Bluetooth printer is configured
+        if (data._id) {
+          try {
+            const btAddress = await AsyncStorage.getItem(BT_PRINTER_ADDRESS_KEY);
+            if (btAddress) {
+              const order = await getOrder(data._id);
+              if (order && mounted) await printKOT(order as unknown as KOTOrderInput, settingsRef.current);
+            }
+          } catch {
+            // Auto-print failed (printer off/out of range) — show red dot so admin can tap Print manually
+            if (mounted) setPrintError(true);
           }
-        } catch { /* silent — print failure should not block order flow */ }
+        }
       });
     };
     connect();
@@ -133,6 +146,21 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   }, [fetchStats]);
 
   const onRefresh = useCallback(() => { setRefreshing(true); fetchStats(); }, [fetchStats]);
+
+  const handlePrintKOT = useCallback(async (alert: NewOrderAlert) => {
+    if (!alert._id) {
+      Alert.alert('Print Error', 'Order ID missing. Cannot print.');
+      return;
+    }
+    try {
+      const order = await getOrder(alert._id);
+      if (!order) { Alert.alert('Print Error', 'Order not found.'); return; }
+      await printKOT(order as unknown as KOTOrderInput, settingsRef.current);
+      setPrintError(false);
+    } catch (e: any) {
+      Alert.alert('Print Failed', e?.message || 'Could not print KOT. Make sure the Bluetooth printer is on and paired.');
+    }
+  }, []);
 
   const now = new Date();
   const hour = now.getHours();
@@ -191,6 +219,14 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         )}
 
+        {/* ── Trial banner ── */}
+        {trialDaysRemaining !== null && trialDaysRemaining <= 7 && (
+          <TrialBanner
+            daysRemaining={trialDaysRemaining}
+            onContactSupport={() => navigation.navigate('Support')}
+          />
+        )}
+
         {/* ── Low Stock Alert ── */}
         {lowStockCount > 0 && (
           <TouchableOpacity
@@ -221,33 +257,40 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         )}
 
-        {/* ── Sync Status Bar ── */}
-        {pendingCount > 0 && (
-          <View style={{ marginBottom: Spacing.lg, borderRadius: BorderRadius.lg, overflow: 'hidden' }}>
-            <SyncStatusBar />
-          </View>
-        )}
+        {/* ── Offline Indicator ── */}
+        <OfflineIndicator />
 
         {/* ── New Order Alert ── */}
         {newOrderAlert && (
-          <TouchableOpacity
-            style={styles.alertBanner}
-            onPress={() => { setNewOrderAlert(null); setOrderBadge(0); navigation.navigate('Orders'); }}
-            activeOpacity={0.88}
-          >
+          <View style={styles.alertBanner}>
             <View style={styles.alertBannerPulse} />
-            <MaterialIcons name="notifications-active" size={24} color={Colors.white} />
-            <View style={{ flex: 1, marginLeft: Spacing.md }}>
-              <Text style={styles.alertTitle}>New Order — {newOrderAlert.orderNumber}</Text>
-              <Text style={styles.alertSub}>
-                {newOrderAlert.tableNumber ? `Table ${newOrderAlert.tableNumber}  ·  ` : ''}
-                {newOrderAlert.itemCount} item{newOrderAlert.itemCount !== 1 ? 's' : ''}  ·  {fmt(newOrderAlert.grandTotal)}
-              </Text>
-            </View>
-            {orderBadge > 0 && (
-              <View style={styles.alertBadge}><Text style={styles.alertBadgeText}>{orderBadge}</Text></View>
-            )}
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}
+              onPress={() => { setNewOrderAlert(null); setOrderBadge(0); setPrintError(false); navigation.navigate('Orders'); }}
+              activeOpacity={0.88}
+            >
+              <MaterialIcons name="notifications-active" size={24} color={Colors.white} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.alertTitle}>New Order — {newOrderAlert.orderNumber}</Text>
+                <Text style={styles.alertSub}>
+                  {newOrderAlert.tableNumber ? `Table ${newOrderAlert.tableNumber}  ·  ` : ''}
+                  {newOrderAlert.itemCount} item{newOrderAlert.itemCount !== 1 ? 's' : ''}  ·  {fmt(newOrderAlert.grandTotal)}
+                </Text>
+              </View>
+              {orderBadge > 0 && (
+                <View style={styles.alertBadge}><Text style={styles.alertBadgeText}>{orderBadge}</Text></View>
+              )}
+            </TouchableOpacity>
+            {/* Print KOT button — red dot shows if auto-print failed */}
+            <TouchableOpacity
+              style={styles.alertPrintBtn}
+              onPress={() => handlePrintKOT(newOrderAlert)}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="print" size={22} color={Colors.white} />
+              {printError && <View style={styles.alertPrintErrorDot} />}
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* ── Hero Revenue Card ── */}
@@ -364,6 +407,14 @@ const styles = StyleSheet.create({
     minWidth: 28, height: 28, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6,
   },
   alertBadgeText: { color: Colors.white, fontWeight: '800', fontSize: FontSize.sm },
+  alertPrintBtn: {
+    backgroundColor: 'rgba(0,0,0,0.22)', borderRadius: 8,
+    padding: 8, alignItems: 'center', justifyContent: 'center', marginLeft: 6,
+  },
+  alertPrintErrorDot: {
+    position: 'absolute', top: 2, right: 2,
+    width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF4444',
+  },
 
   // Hero card
   heroCard: {

@@ -54,6 +54,7 @@ const SettingsScreen: React.FC = () => {
   const [defaultTaxPercent, setDefaultTaxPercent] = useState('');
   const [printerWidth, setPrinterWidth] = useState<'58mm' | '80mm'>('80mm');
   const [footerText, setFooterText] = useState('');
+  const [kitchenPin, setKitchenPin] = useState('');
   const [apiBaseUrl, setApiBaseUrl] = useState('');
 
   const [saving, setSaving] = useState(false);
@@ -82,6 +83,7 @@ const SettingsScreen: React.FC = () => {
     setDefaultTaxPercent(String(settings.defaultTaxPercent || 5));
     setPrinterWidth(settings.printerWidth || '80mm');
     setFooterText(settings.footerText || '');
+    setKitchenPin((settings as any).kitchenPin || '');
   }, [settings]);
 
   // Load stored API base URL and printer
@@ -200,6 +202,7 @@ const SettingsScreen: React.FC = () => {
         defaultTaxPercent: taxNum,
         printerWidth,
         footerText: footerText.trim(),
+        kitchenPin: kitchenPin.trim(),
       });
 
       showAlert('Success', 'Settings saved successfully');
@@ -587,6 +590,27 @@ const SettingsScreen: React.FC = () => {
               ))}
             </View>
           )}
+        </View>
+
+        {/* Kitchen PIN Section */}
+        <Text style={styles.sectionHeader}>Kitchen Display</Text>
+        <View style={styles.section}>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Kitchen PIN</Text>
+            <TextInput
+              style={styles.input}
+              value={kitchenPin}
+              onChangeText={v => setKitchenPin(v.replace(/\D/g, '').slice(0, 6))}
+              placeholder="4–6 digit PIN for kitchen staff"
+              placeholderTextColor={Colors.textMuted}
+              keyboardType="number-pad"
+              maxLength={6}
+              secureTextEntry
+            />
+            <Text style={styles.hint}>
+              Kitchen staff enter this PIN to access the Kitchen Display (KDS)
+            </Text>
+          </View>
         </View>
 
         {/* API Section */}

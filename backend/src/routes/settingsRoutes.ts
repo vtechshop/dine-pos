@@ -10,11 +10,13 @@ router.use(authMiddleware);
 // GET settings for this hotel — includes premium status from Hotel record
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    let settings = await Settings.findOne({ hotelId: req.hotelId });
-    if (!settings) {
-      settings = await Settings.create({ hotelId: req.hotelId });
-    }
-    const hotel = await Hotel.findById(req.hotelId).select('isPremium premiumPlan premiumExpiry trialEndsAt');
+    // Run both queries in parallel — they have no data dependency
+    const [settingsDoc, hotel] = await Promise.all([
+      Settings.findOne({ hotelId: req.hotelId }),
+      Hotel.findById(req.hotelId).select('isPremium premiumPlan premiumExpiry trialEndsAt'),
+    ]);
+    const settings = settingsDoc ?? await Settings.create({ hotelId: req.hotelId });
+
     const now = new Date();
     const isPremiumActive =
       hotel?.isPremium &&

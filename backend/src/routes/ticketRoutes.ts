@@ -1,22 +1,30 @@
 import { Router, Request, Response } from 'express';
+import { timingSafeEqual } from 'crypto';
 import Ticket from '../models/Ticket';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-// Super admin auth middleware
+// Super admin auth — uses timingSafeEqual to prevent timing attacks
 const superAdminAuth = (req: Request, res: Response, next: Function) => {
-  const id = req.headers['x-super-admin-id'] as string;
-  const pass = req.headers['x-super-admin-pass'] as string;
-  if (id === (process.env.SUPER_ADMIN_ID || 'superadmin') && pass === (process.env.SUPER_ADMIN_PASS || 'super1234')) {
-    return next();
-  }
+  const id   = req.headers['x-super-admin-id']   as string ?? '';
+  const pass = req.headers['x-super-admin-pass']  as string ?? '';
+  const expectedId   = process.env.SUPER_ADMIN_ID   || 'superadmin';
+  const expectedPass = process.env.SUPER_ADMIN_PASS || 'super1234';
+  try {
+    const idBuf   = Buffer.from(id);
+    const passBuf = Buffer.from(pass);
+    const okId   = idBuf.length   === Buffer.from(expectedId).length   && timingSafeEqual(idBuf,   Buffer.from(expectedId));
+    const okPass = passBuf.length === Buffer.from(expectedPass).length && timingSafeEqual(passBuf, Buffer.from(expectedPass));
+    if (okId && okPass) return next();
+  } catch { /* fall through */ }
   return res.status(401).json({ message: 'Unauthorized' });
 };
 
-// ── Hotel routes ───────────────────────────────────────────────────────────
+// ── Hotel routes (JWT required) ────────────────────────────────────────────
 
 // POST /api/tickets — raise a ticket
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { hotelName, hotelPhone, subject, description, category, priority } = req.body;
     if (!hotelName || !hotelPhone || !subject || !description) {
@@ -30,7 +38,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // GET /api/tickets/hotel/:phone — get tickets for a hotel
-router.get('/hotel/:phone', async (req: Request, res: Response) => {
+router.get('/hotel/:phone', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const tickets = await Ticket.find({ hotelPhone: req.params.phone }).sort({ createdAt: -1 });
     return res.json(tickets);
@@ -40,7 +48,7 @@ router.get('/hotel/:phone', async (req: Request, res: Response) => {
 });
 
 // POST /api/tickets/:id/reply — hotel adds a reply
-router.post('/:id/reply', async (req: Request, res: Response) => {
+router.post('/:id/reply', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { message } = req.body;
     if (!message) return res.status(400).json({ message: 'Message required' });

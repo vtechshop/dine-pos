@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Order from '../models/Order';
 import Product from '../models/Product';
 import Ingredient from '../models/Ingredient';
+import DailyCounter from '../models/DailyCounter';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { io } from '../server';
 
@@ -42,26 +43,16 @@ const applyIngredientStockChange = async (orderItems: { product?: any; quantity:
 };
 
 // Helper: Generate order number like ORD-20260310-001 (per hotel)
-const generateOrderNumber = async (hotelId: string): Promise<string> => {
-  const today = new Date();
-  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-  const prefix = `ORD-${dateStr}`;
-
-  const startOfDay = new Date(today); startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(today); endOfDay.setHours(23, 59, 59, 999);
-
-  const lastOrder = await Order.findOne({
-    hotelId,
-    createdAt: { $gte: startOfDay, $lte: endOfDay },
-  }).sort({ createdAt: -1 });
-
-  let sequence = 1;
-  if (lastOrder) {
-    const lastSeq = parseInt(lastOrder.orderNumber.split('-').pop() || '0');
-    sequence = lastSeq + 1;
-  }
-
-  return `${prefix}-${String(sequence).padStart(3, '0')}`;
+// Uses an atomic MongoDB $inc counter — no race condition under concurrent tablets.
+const generateOrderNumber = async (hotelId: string, prefix = 'ORD'): Promise<string> => {
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const key = `${prefix}-${dateStr}-${hotelId}`;
+  const counter = await DailyCounter.findOneAndUpdate(
+    { key },
+    { $inc: { seq: 1 }, $setOnInsert: { key } },
+    { upsert: true, new: true },
+  );
+  return `${prefix}-${dateStr}-${String(counter!.seq).padStart(3, '0')}`;
 };
 
 // Daily report — uses aggregation pipeline (single DB pass, faster than multiple reduce loops)
@@ -158,6 +149,20 @@ router.get('/reports/products', authMiddleware, async (req: AuthRequest, res: Re
 // All remaining routes require auth
 router.use(authMiddleware);
 
+// GET /api/orders/kitchen — active orders for KDS (pending + preparing), oldest first
+router.get('/kitchen', async (req: AuthRequest, res: Response) => {
+  try {
+    const orders = await Order.find(
+      { hotelId: req.hotelId, status: { $in: ['pending', 'preparing'] } },
+      { orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1, status: 1, createdAt: 1,
+        'items.productName': 1, 'items.quantity': 1 },
+    ).sort({ createdAt: 1 }).lean();
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+});
+
 // GET all orders
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
@@ -184,7 +189,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const skip = (page - 1) * limit;
 
     const [orders, total] = await Promise.all([
-      Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       Order.countDocuments(filter),
     ]);
     res.json({ orders, total, page, pages: Math.ceil(total / limit) });
@@ -197,20 +202,26 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.get('/customers', async (req: AuthRequest, res: Response) => {
   try {
     const match: any = {
-      hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId),
+      hotelId: new mongoose.Types.ObjectId(req.hotelId),
       status: { $ne: 'cancelled' },
       customerPhone: { $nin: ['', null] },
     };
+
     if (req.query.from && req.query.to) {
       const from = new Date(req.query.from as string);
       const to = new Date(req.query.to as string);
       to.setHours(23, 59, 59, 999);
       match.createdAt = { $gte: from, $lte: to };
+    } else {
+      // Default cap: last 90 days — prevents unbounded full-collection scan
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      match.createdAt = { $gte: ninetyDaysAgo };
     }
 
     const customers = await Order.aggregate([
       { $match: match },
-      { $sort: { createdAt: -1 } },
+      // No pre-group $sort — $first/$max/$min accumulators don't require sorted input
       { $group: {
         _id: '$customerPhone',
         customerName:   { $first: '$customerName' },

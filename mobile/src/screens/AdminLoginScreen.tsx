@@ -8,13 +8,30 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { showAlert } from '../utils/alert';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
-import { adminLogin, getSettings, requestCredentialReset, checkResetStatus } from '../services/api';
+import { adminLogin, getSettings, requestCredentialReset, checkResetStatus, registerDevice } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useFeatureFlags } from '../context/FeatureFlagsContext';
+import { APP_VERSION } from '../utils/constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AdminLogin'>;
 
+// Stable per-installation device identifier stored in AsyncStorage.
+// Generated once on first launch; survives restarts but not app uninstalls.
+// Avoids collapsing all tablets at one hotel into a single device record.
+const DEVICE_ID_KEY = '@dine_device_id';
+async function getOrCreateDeviceId(): Promise<string> {
+  let id = await AsyncStorage.getItem(DEVICE_ID_KEY);
+  if (!id) {
+    id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    await AsyncStorage.setItem(DEVICE_ID_KEY, id);
+  }
+  return id;
+}
+
 const AdminLoginScreen: React.FC<Props> = ({ navigation }) => {
   const { login } = useAuth();
+  const { setFlags } = useFeatureFlags();
   const [userId, setUserId]     = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -44,11 +61,52 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation }) => {
       const result = await adminLogin(userId.trim(), password.trim());
       const s = await getSettings();
       if (!s.isSetupComplete) { navigation.replace('BusinessSetup', undefined); return; }
+
+      // Apply feature flags from login response
+      if (result.features) await setFlags(result.features);
+
+      // Persist trial days for HomeScreen banner
+      if (result.trialDaysRemaining !== undefined) {
+        await AsyncStorage.setItem('@dine_trial_days', String(result.trialDaysRemaining));
+      } else {
+        await AsyncStorage.removeItem('@dine_trial_days');
+      }
+
       // Cache JWT + hotelId + hotelName in SQLite for offline login
       await login(result.token, result.hotelId, result.hotelName);
+
+      // Register device in background (non-blocking)
+      getOrCreateDeviceId().then((deviceId) =>
+        registerDevice({
+          deviceId,
+          deviceName: 'POS Device',
+          platform: Platform.OS === 'ios' ? 'ios' : 'android',
+          appVersion: APP_VERSION,
+          osVersion: '',
+        })
+      ).catch(() => {});
+
+      // Warn if trial is running low — show warning screen with a Continue button
+      if (result.trialDaysRemaining !== undefined && result.trialDaysRemaining <= 7) {
+        navigation.replace('HotelStatus', {
+          status: 'trial',
+          hotelName: result.hotelName,
+          trialDaysRemaining: result.trialDaysRemaining,
+        });
+        return;
+      }
+      // login() sets isLoggedIn=true → AppNavigator switches to MainTabs automatically
     } catch (error: any) {
       const msg = error.message || '';
-      if (msg.toLowerCase().includes('suspended')) { navigation.replace('HotelStatus', { status: 'suspended', hotelName: '' }); return; }
+      const code = (error as any).code || '';
+      if (code === 'TRIAL_EXPIRED') {
+        navigation.replace('HotelStatus', { status: 'expired', hotelName: '' });
+        return;
+      }
+      if (msg.toLowerCase().includes('suspended')) {
+        navigation.replace('HotelStatus', { status: 'suspended', hotelName: '' });
+        return;
+      }
       shake();
       showAlert('Login Failed', msg || 'Invalid credentials');
     } finally { setLoading(false); }

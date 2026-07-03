@@ -1,5 +1,18 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface IFeatureFlags {
+  payment: boolean;
+  reservations: boolean;
+  customerChat: boolean;
+  qrOrdering: boolean;
+  expenses: boolean;
+  reports: boolean;
+  tables: boolean;
+  ingredients: boolean;
+  waste: boolean;
+  aggregator: boolean;
+}
+
 export interface IHotel extends Document {
   // Basic Info
   hotelName: string;
@@ -34,8 +47,8 @@ export interface IHotel extends Document {
   adminId: string;
   adminPasswordHash: string;
 
-  // Status
-  status: 'pending' | 'active' | 'suspended' | 'rejected';
+  // Status — 'trial' = approved + within trial period
+  status: 'pending' | 'trial' | 'active' | 'expired' | 'suspended' | 'rejected';
   rejectionReason: string;
   approvedAt: Date | null;
 
@@ -44,7 +57,19 @@ export interface IHotel extends Document {
   resetRequestedAt: Date | null;
   resetFulfilledAt: Date | null;
 
-  // Premium / Subscription
+  // Trial management
+  trialStartDate: Date | null;
+  trialEndDate: Date | null;
+
+  // Subscription
+  subscriptionPlan: 'none' | 'starter' | 'professional' | 'enterprise';
+  planStartDate: Date | null;
+  planExpiryDate: Date | null;
+
+  // Feature flags (per-hotel capability toggles)
+  features: IFeatureFlags;
+
+  // Legacy Premium / Subscription (kept for backwards compat)
   isPremium: boolean;
   premiumPlan: string;
   premiumExpiry: Date | null;
@@ -84,7 +109,7 @@ const HotelSchema: Schema = new Schema(
     adminId:          { type: String, default: '' },
     adminPasswordHash:{ type: String, default: '' },
 
-    status:             { type: String, enum: ['pending', 'active', 'suspended', 'rejected'], default: 'pending' },
+    status:             { type: String, enum: ['pending', 'trial', 'active', 'expired', 'suspended', 'rejected'], default: 'pending' },
     rejectionReason:    { type: String, default: '' },
     approvedAt:         { type: Date, default: null },
 
@@ -92,6 +117,30 @@ const HotelSchema: Schema = new Schema(
     resetRequestedAt:   { type: Date, default: null },
     resetFulfilledAt:   { type: Date, default: null },
 
+    // Trial management
+    trialStartDate:     { type: Date, default: null },
+    trialEndDate:       { type: Date, default: null },
+
+    // Subscription
+    subscriptionPlan:   { type: String, enum: ['none', 'starter', 'professional', 'enterprise'], default: 'none' },
+    planStartDate:      { type: Date, default: null },
+    planExpiryDate:     { type: Date, default: null },
+
+    // Feature flags
+    features: {
+      payment:        { type: Boolean, default: false },
+      reservations:   { type: Boolean, default: true },
+      customerChat:   { type: Boolean, default: true },
+      qrOrdering:     { type: Boolean, default: true },
+      expenses:       { type: Boolean, default: true },
+      reports:        { type: Boolean, default: true },
+      tables:         { type: Boolean, default: true },
+      ingredients:    { type: Boolean, default: false },
+      waste:          { type: Boolean, default: false },
+      aggregator:     { type: Boolean, default: false },
+    },
+
+    // Legacy premium fields (backwards compat)
     isPremium:          { type: Boolean, default: false },
     premiumPlan:        { type: String, default: 'free' },
     premiumExpiry:      { type: Date, default: null },

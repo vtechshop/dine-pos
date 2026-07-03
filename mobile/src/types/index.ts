@@ -108,6 +108,7 @@ export interface Settings {
   currencySymbol: string;
   printerWidth: '58mm' | '80mm';
   footerText: string;
+  kitchenPin: string;
   isSetupComplete: boolean;
   isPremium?: boolean;
   premiumPlan?: string;
@@ -158,7 +159,59 @@ export interface Customer {
   firstOrderDate: string;
 }
 
-// Navigation
+// Feature flags per hotel
+export interface FeatureFlags {
+  payment: boolean;
+  reservations: boolean;
+  customerChat: boolean;
+  qrOrdering: boolean;
+  expenses: boolean;
+  reports: boolean;
+  tables: boolean;
+  ingredients: boolean;
+  waste: boolean;
+  aggregator: boolean;
+}
+
+// Remote Config (system-wide, fetched on startup)
+export interface RemoteConfig {
+  maintenanceMode: boolean;
+  maintenanceMessage: string;
+  minimumAppVersion: string;
+  minimumAppVersionIos: string;
+  forceUpdate: boolean;
+  forceUpdateMessage: string;
+  trialDays: number;
+  paymentEnabled: boolean;
+  broadcastMessage: string;
+  broadcastMessageType: 'info' | 'warning' | 'success';
+}
+
+// Device
+export interface Device {
+  _id: string;
+  deviceId: string;
+  hotelId: string | { _id: string; hotelName: string };
+  deviceName: string;
+  platform: 'android' | 'ios' | 'web';
+  appVersion: string;
+  osVersion: string;
+  lastSeen: string;
+  isOnline: boolean;
+  createdAt: string;
+}
+
+// Broadcast Notification
+export interface AppNotification {
+  _id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'maintenance' | 'update' | 'success';
+  isRead: boolean;
+  createdAt: string;
+  expiresAt: string | null;
+}
+
 // Hotel (SaaS tenant)
 export interface Hotel {
   _id: string;
@@ -185,12 +238,18 @@ export interface Hotel {
   upiId: string;
   ifscVerified: boolean;
   adminId?: string;
-  status: 'pending' | 'active' | 'suspended' | 'rejected';
+  status: 'pending' | 'trial' | 'active' | 'expired' | 'suspended' | 'rejected';
   rejectionReason: string;
   approvedAt: string | null;
   resetRequested?: boolean;
   resetRequestedAt?: string | null;
   resetFulfilledAt?: string | null;
+  trialStartDate?: string | null;
+  trialEndDate?: string | null;
+  subscriptionPlan?: 'none' | 'starter' | 'professional' | 'enterprise';
+  planStartDate?: string | null;
+  planExpiryDate?: string | null;
+  features?: FeatureFlags;
   isPremium?: boolean;
   premiumPlan?: string;
   premiumExpiry?: string | null;
@@ -201,9 +260,13 @@ export interface Hotel {
 export interface SuperAdminStats {
   total: number;
   pending: number;
+  trial: number;
   active: number;
+  expired: number;
   suspended: number;
   rejected: number;
+  resetRequests: number;
+  todayRegistrations: number;
 }
 
 // Table
@@ -341,7 +404,9 @@ export type RootStackParamList = {
   RoleSelect: undefined;
   AdminLogin: undefined;
   BusinessSetup: { resubmit?: boolean; rejectionReason?: string; phone?: string } | undefined;
-  HotelStatus: { status: 'pending' | 'suspended'; hotelName?: string };
+  HotelStatus: { status: 'pending' | 'trial' | 'expired' | 'suspended'; hotelName?: string; trialDaysRemaining?: number };
+  ForceUpdate: { minimumVersion: string; message?: string };
+  MaintenanceMode: { message?: string };
   MainTabs: undefined;
   CustomerTabs: undefined;
   SuperAdminLogin: undefined;
@@ -358,6 +423,8 @@ export type RootStackParamList = {
   Customers: undefined;
   Ingredients: undefined;
   Chat: undefined;
+  KitchenLogin: undefined;
+  KitchenDisplay: undefined;
 };
 
 export type TabParamList = {

@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: dine-pos-api
+    runtime: node
+    plan: standard          # 2 vCPU / 4 GB RAM — minimum for 500 hotels under load
+    region: singapore       # Change to match your customer base (e.g. oregon, frankfurt)
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      - key: PORT
+        value: 5000
+
+      # Set these in the Render dashboard → Environment tab
+      - key: JWT_SECRET
+        sync: false         # Strong random secret — never commit to source control
+
+      - key: MONGODB_URI
+        sync: false         # MongoDB Atlas connection string
+
+      - key: REDIS_URL
+        sync: false         # Upstash Redis URL (optional — falls back to in-memory if unset)
+
+      - key: ALLOWED_ORIGINS
+        sync: false         # Comma-separated list of allowed CORS origins
+
+      - key: SUPER_ADMIN_ID
+        sync: false
+
+      - key: SUPER_ADMIN_PASS
+        sync: false
+
+      - key: AGGREGATOR_SECRET
+        sync: false
+
+    # Auto-scaling: Render Standard supports horizontal scale-out.
+    # Socket.IO will use the Redis adapter when REDIS_URL is set,
+    # allowing all instances to share the same pub/sub bus.
+    scaling:
+      minInstances: 1
+      maxInstances: 3       # Scale to 3 at peak; each handles ~200 concurrent hotels
+      targetMemoryPercent: 80
+      targetCPUPercent: 75
