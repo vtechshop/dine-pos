@@ -9,6 +9,7 @@ import {
   saveCustomers, setSyncMeta, getSyncMeta, updateLocalProductStock,
 } from '../database/localCacheDao';
 import * as api from '../services/api';
+import { flushCustomerOrderQueue } from '../services/api';
 
 export type SyncStatus = 'offline' | 'online' | 'syncing' | 'synced' | 'error';
 export type SyncListener = (status: SyncStatus, pendingCount: number, lastSyncAt: Date | null, error?: string) => void;
@@ -184,6 +185,9 @@ export const startSyncEngine = (): void => {
       // Orders remain safely queued in SQLite — max 30 s delay is acceptable.
       const jitterMs = Math.floor(Math.random() * 30_000);
       setTimeout(() => syncNow(), jitterMs);
+      // Customer orders queued during offline — flush immediately (no jitter needed,
+      // these are per-device and small in number)
+      flushCustomerOrderQueue().catch(() => {});
     } else if (!_isConnected) {
       _lastError = null;
       notifyListeners('offline');
@@ -197,6 +201,7 @@ export const startSyncEngine = (): void => {
     _isConnected = !!(state.isConnected && state.isInternetReachable !== false);
     notifyListeners(deriveStatus());
     if (_isConnected && getPendingCount() > 0) syncNow();
+    if (_isConnected) flushCustomerOrderQueue().catch(() => {});
   });
 };
 

@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
-import { getPublicMenu } from '../services/api';
+import { getPublicMenu, getStoredHotelId, saveMenuCache, loadMenuCache } from '../services/api';
 import { Category, Product } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
 import { useNavigation } from '@react-navigation/native';
@@ -42,6 +42,7 @@ const CustomerMenuScreen: React.FC = () => {
   const [search,        setSearch]       = useState('');
   const [foodFilter,    setFoodFilter]   = useState<'all' | 'veg' | 'non-veg'>('all');
   const [detailProduct, setDetailProduct]= useState<Product | null>(null);
+  const [isOffline,     setIsOffline]    = useState(false);
   const tapCount = useRef(0);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSecretTap = () => {
@@ -54,14 +55,29 @@ const CustomerMenuScreen: React.FC = () => {
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const { categories: cats, products: prods } = await getPublicMenu();
       setCategories(cats);
       setProducts(prods);
       setFiltered(prods);
-    } catch { /* silent — customer sees empty menu if server unreachable */ }
-    finally { setLoading(false); }
+      setIsOffline(false);
+      // Persist for offline use
+      const hotelId = await getStoredHotelId();
+      if (hotelId) saveMenuCache(hotelId, cats, prods).catch(() => {});
+    } catch {
+      // No network — try cached menu
+      const hotelId = await getStoredHotelId();
+      const cached = hotelId ? await loadMenuCache(hotelId) : null;
+      if (cached) {
+        setCategories(cached.categories);
+        setProducts(cached.products);
+        setFiltered(cached.products);
+        setIsOffline(true);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Centralised filter logic — runs whenever any filter changes
@@ -322,6 +338,14 @@ const CustomerMenuScreen: React.FC = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
 
+      {/* Offline banner */}
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <MaterialIcons name="wifi-off" size={14} color={Colors.white} />
+          <Text style={styles.offlineBannerText}>Offline — showing cached menu. Orders will sync when online.</Text>
+        </View>
+      )}
+
       {/* ── Header ── */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -434,6 +458,11 @@ const CustomerMenuScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
+  offlineBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.textMuted, paddingHorizontal: Spacing.lg, paddingVertical: 8,
+  },
+  offlineBannerText: { flex: 1, color: Colors.white, fontSize: FontSize.xs, fontWeight: '600' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5', padding: Spacing.xxl },
   loadingText: { color: Colors.textSecondary, marginTop: Spacing.md, fontSize: FontSize.md },
   blockedTitle: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.text, marginTop: Spacing.lg, textAlign: 'center' },

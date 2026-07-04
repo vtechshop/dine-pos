@@ -14,7 +14,7 @@ import { showAlert } from '../utils/alert';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
-import { getStoredHotelId } from '../services/api';
+import { getStoredHotelId, enqueueCustomerOrder } from '../services/api';
 import { RootStackParamList, CartItem, Order } from '../types';
 import { printReceipt } from '../utils/receipt';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, API_BASE_URL } from '../utils/constants';
@@ -35,6 +35,7 @@ interface PlacedOrder {
   customerPhone: string;
   tableNumber: string;
   notes: string;
+  isOffline?: boolean;
 }
 
 const CustomerCartScreen: React.FC = () => {
@@ -156,7 +157,53 @@ const CustomerCartScreen: React.FC = () => {
         } catch { /* silent — print failure must not block order confirmation */ }
       })();
     } catch (e: any) {
-      showAlert('Error', e.message || 'Failed to place order. Try again.');
+      // Network error → queue locally so it syncs when online
+      const isNetworkErr = !e.message || e.message.includes('Network') || e.message.includes('fetch') || e.message.includes('connect') || e.message.includes('timeout');
+      if (isNetworkErr && hotelId) {
+        const localToken = String(Math.floor(Math.random() * 90 + 10));
+        const orderPayload = {
+          hotel: hotelId,
+          source: 'dine-in' as const,
+          orderSource: 'dine-in',
+          items: cart.items.map(item => ({
+            product: item.product._id,
+            productName: item.product.name,
+            quantity: item.quantity,
+            price: item.product.price,
+            taxPercent: item.product.taxPercent,
+            taxAmount: item.taxAmount,
+            total: item.total,
+          })),
+          tableNumber: cart.tableNumber,
+          customerName: cart.customerName,
+          notes: cart.notes,
+          subtotal: cart.subtotal,
+          taxTotal: cart.taxTotal,
+          grandTotal: cart.grandTotal,
+          paymentMethod: 'cash',
+          status: 'pending',
+        };
+        await enqueueCustomerOrder(hotelId, localToken, orderPayload);
+        const offlineSnapshot = {
+          _id: `offline_${Date.now()}`,
+          orderNumber: `QUEUED-${localToken}`,
+          token: localToken,
+          items: [...cart.items],
+          subtotal: cart.subtotal,
+          taxTotal: cart.taxTotal,
+          grandTotal: cart.grandTotal,
+          customerName: cart.customerName,
+          customerPhone: cart.customerPhone,
+          tableNumber: cart.tableNumber,
+          notes: cart.notes,
+          isOffline: true,
+        };
+        clearCart();
+        Vibration.vibrate([0, 100, 80, 300]);
+        setPlacedOrder(offlineSnapshot);
+      } else {
+        showAlert('Error', e.message || 'Failed to place order. Try again.');
+      }
     } finally { setPlacing(false); }
   };
 
@@ -219,8 +266,18 @@ const CustomerCartScreen: React.FC = () => {
             <Text style={styles.billOrderNum}>{placedOrder.orderNumber}</Text>
           </View>
 
+          {/* Offline queued notice */}
+          {placedOrder.isOffline && (
+            <View style={styles.offlineNotice}>
+              <MaterialIcons name="wifi-off" size={16} color={Colors.warning} />
+              <Text style={styles.offlineNoticeText}>
+                You're offline — your order is saved and will reach the kitchen once connection is restored.
+              </Text>
+            </View>
+          )}
+
           {/* Token */}
-          <View style={styles.tokenBox}>
+          <View style={[styles.tokenBox, placedOrder.isOffline && { backgroundColor: Colors.textSecondary }]}>
             <Text style={styles.tokenLabel}>YOUR TOKEN</Text>
             <Text style={styles.tokenNum}>#{placedOrder.token}</Text>
             {placedOrder.tableNumber ? <Text style={styles.tokenTable}>Table {placedOrder.tableNumber}</Text> : null}
@@ -503,6 +560,13 @@ const styles = StyleSheet.create({
   billSuccess: { fontSize: FontSize.xxxl, fontWeight: '900', color: Colors.text, marginTop: Spacing.sm },
   billOrderNum: { fontSize: FontSize.md, color: Colors.textSecondary, marginTop: 4 },
 
+  offlineNotice: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm,
+    backgroundColor: Colors.warningBg, borderRadius: BorderRadius.lg,
+    padding: Spacing.md, marginBottom: Spacing.md,
+    borderWidth: 1, borderColor: Colors.warning + '40',
+  },
+  offlineNoticeText: { flex: 1, fontSize: FontSize.sm, color: Colors.text, lineHeight: 20 },
   tokenBox: {
     backgroundColor: Colors.primary, borderRadius: BorderRadius.xxl,
     paddingVertical: Spacing.xxl, alignItems: 'center', marginBottom: Spacing.lg,

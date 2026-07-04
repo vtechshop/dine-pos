@@ -951,3 +951,64 @@ export const updateKitchenOrderStatus = async (orderId: string, status: string):
     throw new Error((data as any).message || 'Failed to update order');
   }
 };
+
+// ── Customer menu cache ────────────────────────────────────────────────────────
+const MENU_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+export const MENU_CACHE_KEY = (hotelId: string) => `@customer_menu_${hotelId}`;
+
+export const saveMenuCache = async (hotelId: string, categories: Category[], products: Product[]): Promise<void> => {
+  await AsyncStorage.setItem(MENU_CACHE_KEY(hotelId), JSON.stringify({ categories, products, cachedAt: Date.now() }));
+};
+
+export const loadMenuCache = async (hotelId: string): Promise<{ categories: Category[]; products: Product[] } | null> => {
+  const raw = await AsyncStorage.getItem(MENU_CACHE_KEY(hotelId));
+  if (!raw) return null;
+  const { categories, products, cachedAt } = JSON.parse(raw);
+  if (Date.now() - cachedAt > MENU_CACHE_TTL) return null; // stale
+  return { categories, products };
+};
+
+// ── Customer order queue (offline orders waiting to sync) ─────────────────────
+const CUSTOMER_ORDER_QUEUE_KEY = '@customer_order_queue';
+
+export interface QueuedCustomerOrder {
+  id: string;
+  hotelId: string;
+  localToken: string;
+  orderData: Parameters<typeof createPublicOrder>[0];
+  queuedAt: number;
+}
+
+export const enqueueCustomerOrder = async (
+  hotelId: string,
+  localToken: string,
+  orderData: Parameters<typeof createPublicOrder>[0],
+): Promise<string> => {
+  const id = `local_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const existing: QueuedCustomerOrder[] = JSON.parse(
+    await AsyncStorage.getItem(CUSTOMER_ORDER_QUEUE_KEY) || '[]'
+  );
+  await AsyncStorage.setItem(
+    CUSTOMER_ORDER_QUEUE_KEY,
+    JSON.stringify([...existing, { id, hotelId, localToken, orderData, queuedAt: Date.now() }])
+  );
+  return id;
+};
+
+export const flushCustomerOrderQueue = async (): Promise<void> => {
+  const raw = await AsyncStorage.getItem(CUSTOMER_ORDER_QUEUE_KEY);
+  if (!raw) return;
+  const queue: QueuedCustomerOrder[] = JSON.parse(raw);
+  if (queue.length === 0) return;
+
+  const remaining: QueuedCustomerOrder[] = [];
+  for (const entry of queue) {
+    try {
+      await createPublicOrder(entry.orderData);
+      // Success — server emits new_order socket → kitchen/admin notified automatically
+    } catch {
+      remaining.push(entry); // keep for next retry
+    }
+  }
+  await AsyncStorage.setItem(CUSTOMER_ORDER_QUEUE_KEY, JSON.stringify(remaining));
+};
