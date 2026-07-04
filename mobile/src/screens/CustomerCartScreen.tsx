@@ -15,6 +15,7 @@ import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
 import { getStoredHotelId, enqueueCustomerOrder } from '../services/api';
+import { isConnected } from '../sync/syncEngine';
 import { RootStackParamList, CartItem, Order } from '../types';
 import { printReceipt } from '../utils/receipt';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, API_BASE_URL } from '../utils/constants';
@@ -80,29 +81,56 @@ const CustomerCartScreen: React.FC = () => {
     if (!hotelId) { showAlert('Error', 'Hotel not found. Please scan the QR code again.'); return; }
 
     setPlacing(true);
-    try {
-      const order = await api.createPublicOrder({
-        hotel: hotelId,
-        source: 'dine-in',
-        orderSource: 'dine-in',
-        items: cart.items.map(item => ({
-          product: item.product._id,
-          productName: item.product.name,
-          quantity: item.quantity,
-          price: item.product.price,
-          taxPercent: item.product.taxPercent,
-          taxAmount: item.taxAmount,
-          total: item.total,
-        })),
-        tableNumber: cart.tableNumber,
-        customerName: cart.customerName,
-        notes: cart.notes,
+
+    const orderPayload = {
+      hotel: hotelId,
+      source: 'dine-in' as const,
+      orderSource: 'dine-in',
+      items: cart.items.map(item => ({
+        product: item.product._id,
+        productName: item.product.name,
+        quantity: item.quantity,
+        price: item.product.price,
+        taxPercent: item.product.taxPercent,
+        taxAmount: item.taxAmount,
+        total: item.total,
+      })),
+      tableNumber: cart.tableNumber,
+      customerName: cart.customerName,
+      notes: cart.notes,
+      subtotal: cart.subtotal,
+      taxTotal: cart.taxTotal,
+      grandTotal: cart.grandTotal,
+      paymentMethod: 'cash',
+      status: 'pending',
+    };
+
+    // If offline — queue immediately, no API call needed
+    if (!isConnected()) {
+      const localToken = String(Math.floor(Math.random() * 90 + 10));
+      await enqueueCustomerOrder(hotelId, localToken, orderPayload);
+      clearCart();
+      Vibration.vibrate([0, 100, 80, 300]);
+      setPlacedOrder({
+        _id: `offline_${Date.now()}`,
+        orderNumber: `QUEUED-${localToken}`,
+        token: localToken,
+        items: [...cart.items],
         subtotal: cart.subtotal,
         taxTotal: cart.taxTotal,
         grandTotal: cart.grandTotal,
-        paymentMethod: 'cash',
-        status: 'pending',
+        customerName: cart.customerName,
+        customerPhone: cart.customerPhone,
+        tableNumber: cart.tableNumber,
+        notes: cart.notes,
+        isOffline: true,
       });
+      setPlacing(false);
+      return;
+    }
+
+    try {
+      const order = await api.createPublicOrder(orderPayload);
 
       const token = order.orderNumber.split('-').pop() || '1';
       const snapshot = {
@@ -157,53 +185,7 @@ const CustomerCartScreen: React.FC = () => {
         } catch { /* silent — print failure must not block order confirmation */ }
       })();
     } catch (e: any) {
-      // Network error → queue locally so it syncs when online
-      const isNetworkErr = !e.message || e.message.includes('Network') || e.message.includes('fetch') || e.message.includes('connect') || e.message.includes('timeout');
-      if (isNetworkErr && hotelId) {
-        const localToken = String(Math.floor(Math.random() * 90 + 10));
-        const orderPayload = {
-          hotel: hotelId,
-          source: 'dine-in' as const,
-          orderSource: 'dine-in',
-          items: cart.items.map(item => ({
-            product: item.product._id,
-            productName: item.product.name,
-            quantity: item.quantity,
-            price: item.product.price,
-            taxPercent: item.product.taxPercent,
-            taxAmount: item.taxAmount,
-            total: item.total,
-          })),
-          tableNumber: cart.tableNumber,
-          customerName: cart.customerName,
-          notes: cart.notes,
-          subtotal: cart.subtotal,
-          taxTotal: cart.taxTotal,
-          grandTotal: cart.grandTotal,
-          paymentMethod: 'cash',
-          status: 'pending',
-        };
-        await enqueueCustomerOrder(hotelId, localToken, orderPayload);
-        const offlineSnapshot = {
-          _id: `offline_${Date.now()}`,
-          orderNumber: `QUEUED-${localToken}`,
-          token: localToken,
-          items: [...cart.items],
-          subtotal: cart.subtotal,
-          taxTotal: cart.taxTotal,
-          grandTotal: cart.grandTotal,
-          customerName: cart.customerName,
-          customerPhone: cart.customerPhone,
-          tableNumber: cart.tableNumber,
-          notes: cart.notes,
-          isOffline: true,
-        };
-        clearCart();
-        Vibration.vibrate([0, 100, 80, 300]);
-        setPlacedOrder(offlineSnapshot);
-      } else {
-        showAlert('Error', e.message || 'Failed to place order. Try again.');
-      }
+      showAlert('Error', e.message || 'Failed to place order. Try again.');
     } finally { setPlacing(false); }
   };
 
