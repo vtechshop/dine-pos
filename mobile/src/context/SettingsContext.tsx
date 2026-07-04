@@ -31,6 +31,7 @@ const defaultSettings: Settings = {
   printerWidth: '58mm',
   footerText: 'Thank you! Visit again!',
   isSetupComplete: false,
+  kitchenPin: '',
 };
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
