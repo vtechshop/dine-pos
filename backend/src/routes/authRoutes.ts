@@ -4,7 +4,8 @@ import rateLimit from 'express-rate-limit';
 import Hotel from '../models/Hotel';
 import RefreshToken from '../models/RefreshToken';
 import Settings from '../models/Settings';
-import { generateToken, generateRefreshToken, generateKitchenToken } from '../middleware/auth';
+import { generateToken, generateRefreshToken, generateKitchenToken, generateWaiterToken } from '../middleware/auth';
+import Waiter from '../models/Waiter';
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -139,6 +140,41 @@ router.post('/kitchen', loginLimiter, async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'Incorrect PIN' });
     }
     return res.json({ token: generateKitchenToken(hotelId) });
+  } catch {
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// POST /api/auth/waiter — login with hotelId + employeeCode + PIN
+router.post('/waiter', loginLimiter, async (req: Request, res: Response) => {
+  const { hotelId, employeeCode, pin } = req.body;
+  if (!hotelId || !employeeCode || !pin) {
+    return res.status(400).json({ message: 'Hotel ID, employee code and PIN required' });
+  }
+  try {
+    const waiter = await Waiter.findOne({
+      hotelId,
+      employeeCode: employeeCode.toString().trim().toUpperCase(),
+    }).lean();
+    if (!waiter) {
+      return res.status(401).json({ message: 'Employee code not found' });
+    }
+    if (!waiter.isActive) {
+      return res.status(403).json({ message: 'Your account is inactive. Contact admin.' });
+    }
+    if ((waiter as any).pin !== pin.toString().trim()) {
+      return res.status(401).json({ message: 'Incorrect PIN' });
+    }
+    const token = generateWaiterToken(hotelId, String((waiter as any)._id), waiter.name);
+    return res.json({
+      token,
+      waiter: {
+        _id:          (waiter as any)._id,
+        name:         waiter.name,
+        employeeCode: waiter.employeeCode,
+        mobile:       waiter.mobile,
+      },
+    });
   } catch {
     return res.status(500).json({ message: 'Server error' });
   }

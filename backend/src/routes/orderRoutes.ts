@@ -163,6 +163,20 @@ router.get('/kitchen', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/orders/waiter — ready orders waiting to be served, oldest first
+router.get('/waiter', async (req: AuthRequest, res: Response) => {
+  try {
+    const orders = await Order.find(
+      { hotelId: req.hotelId, status: 'ready' },
+      { orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1, status: 1, createdAt: 1,
+        'items.productName': 1, 'items.quantity': 1 },
+    ).sort({ createdAt: 1 }).lean();
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+});
+
 // GET all orders
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
@@ -352,6 +366,10 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     }
 
     existing.status = status;
+    if (status === 'served') {
+      existing.servedBy = req.waiterName || req.waiterId || '';
+      existing.servedAt = new Date();
+    }
     await existing.save();
 
     io.to(`hotel_${req.hotelId}`).emit('order_status_update', {
@@ -362,12 +380,20 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       customerName: existing.customerName || '',
     });
 
-    // Stub: future waiter notification when kitchen marks ready
     if (existing.status === 'ready') {
       io.to(`hotel_${req.hotelId}`).emit('waiter_order_ready', {
         orderId: existing._id,
         orderNumber: existing.orderNumber,
         tableNumber: existing.tableNumber || '',
+        customerName: existing.customerName || '',
+      });
+    }
+    if (existing.status === 'served') {
+      io.to(`hotel_${req.hotelId}`).emit('order_served', {
+        orderId: existing._id,
+        orderNumber: existing.orderNumber,
+        tableNumber: existing.tableNumber || '',
+        servedBy: existing.servedBy || '',
       });
     }
 

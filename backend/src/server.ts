@@ -39,6 +39,7 @@ import reportRoutes from './routes/reportRoutes';
 import remoteConfigRoutes from './routes/remoteConfigRoutes';
 import deviceRoutes from './routes/deviceRoutes';
 import notificationRoutes from './routes/notificationRoutes';
+import waiterRoutes from './routes/waiterRoutes';
 
 dotenv.config();
 
@@ -137,6 +138,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/remote-config', remoteConfigRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/waiters', waiterRoutes);
 
 // Enhanced health check — covers MongoDB, Redis, memory, uptime, version
 app.get('/api/health', async (_req, res) => {

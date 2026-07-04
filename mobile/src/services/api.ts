@@ -952,6 +952,142 @@ export const updateKitchenOrderStatus = async (orderId: string, status: string):
   }
 };
 
+// ==================== WAITER DISPLAY ====================
+
+const WAITER_TOKEN_KEY = '@hotel_pos_waiter_token';
+let _cachedWaiterToken: string | null = null;
+
+export const saveWaiterToken = async (token: string): Promise<void> => {
+  _cachedWaiterToken = token;
+  await AsyncStorage.setItem(WAITER_TOKEN_KEY, token);
+};
+
+export const getWaiterToken = async (): Promise<string | null> => {
+  if (_cachedWaiterToken) return _cachedWaiterToken;
+  try { _cachedWaiterToken = await AsyncStorage.getItem(WAITER_TOKEN_KEY); } catch { _cachedWaiterToken = null; }
+  return _cachedWaiterToken;
+};
+
+export const clearWaiterToken = async (): Promise<void> => {
+  _cachedWaiterToken = null;
+  await AsyncStorage.removeItem(WAITER_TOKEN_KEY);
+};
+
+export const waiterLogin = async (hotelId: string, employeeCode: string, pin: string): Promise<{ token: string; waiter: { _id: string; name: string; employeeCode: string; mobile: string } }> => {
+  const base = await getBaseUrl();
+  const res = await fetch(`${base}/auth/waiter`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hotelId, employeeCode, pin }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error((data as any).message || 'Login failed');
+  return data;
+};
+
+export interface WaiterProfile {
+  _id: string;
+  name: string;
+  employeeCode: string;
+  mobile: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export const getWaiters = async (): Promise<WaiterProfile[]> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const res = await fetch(`${base}/waiters`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error('Failed to fetch waiters');
+  return res.json();
+};
+
+export const addWaiter = async (payload: { name: string; employeeCode: string; pin: string; mobile?: string }): Promise<WaiterProfile> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const res = await fetch(`${base}/waiters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error((data as any).message || 'Failed to add waiter');
+  return data;
+};
+
+export const updateWaiter = async (id: string, payload: { name?: string; mobile?: string; employeeCode?: string }): Promise<WaiterProfile> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const res = await fetch(`${base}/waiters/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error((data as any).message || 'Failed to update waiter');
+  return data;
+};
+
+export const resetWaiterPin = async (id: string, pin: string): Promise<void> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const res = await fetch(`${base}/waiters/${id}/pin`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ pin }),
+  });
+  if (!res.ok) throw new Error('Failed to reset PIN');
+};
+
+export const toggleWaiter = async (id: string): Promise<{ isActive: boolean }> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const res = await fetch(`${base}/waiters/${id}/toggle`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Failed to toggle waiter');
+  return res.json();
+};
+
+export const deleteWaiter = async (id: string): Promise<void> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const res = await fetch(`${base}/waiters/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Failed to delete waiter');
+};
+
+export interface WaiterOrderItem { productName: string; quantity: number }
+export interface WaiterOrder {
+  _id: string;
+  orderNumber: string;
+  tableNumber: string;
+  customerName: string;
+  notes: string;
+  status: 'ready';
+  createdAt: string;
+  items: WaiterOrderItem[];
+}
+
+export const getWaiterOrders = async (): Promise<WaiterOrder[]> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getWaiterToken()]);
+  const res = await fetch(`${base}/orders/waiter`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Failed to fetch waiter orders');
+  return res.json();
+};
+
+export const markOrderServed = async (orderId: string): Promise<void> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getWaiterToken()]);
+  const res = await fetch(`${base}/orders/${orderId}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ status: 'served' }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).message || 'Failed to mark served');
+  }
+};
+
 // ── Customer menu cache ────────────────────────────────────────────────────────
 const MENU_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 export const MENU_CACHE_KEY = (hotelId: string) => `@customer_menu_${hotelId}`;

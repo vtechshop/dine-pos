@@ -7,6 +7,9 @@ import RefreshToken from '../models/RefreshToken';
 export interface AuthRequest extends Request {
   hotelId?: string;
   hotelName?: string;
+  role?: string;
+  waiterId?: string;
+  waiterName?: string;
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'hotelbillingpos_secret_key_change_in_production';
@@ -54,9 +57,12 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { hotelId: string; hotelName: string };
-    req.hotelId = decoded.hotelId;
-    req.hotelName = decoded.hotelName;
+    const decoded = jwt.verify(token, JWT_SECRET) as { hotelId: string; hotelName?: string; role?: string; waiterId?: string; waiterName?: string };
+    req.hotelId    = decoded.hotelId;
+    req.hotelName  = decoded.hotelName;
+    req.role       = decoded.role;
+    req.waiterId   = decoded.waiterId;
+    req.waiterName = decoded.waiterName;
 
     // Check current hotel status — a live JWT is not enough
     let status: string;
@@ -97,6 +103,10 @@ export const generateToken = (hotelId: string, hotelName: string): string => {
 
 export const generateKitchenToken = (hotelId: string): string => {
   return jwt.sign({ hotelId, role: 'kitchen' }, JWT_SECRET, { expiresIn: '12h' });
+};
+
+export const generateWaiterToken = (hotelId: string, waiterId: string, waiterName: string): string => {
+  return jwt.sign({ hotelId, role: 'waiter', waiterId, waiterName }, JWT_SECRET, { expiresIn: '12h' });
 };
 
 export const generateRefreshToken = async (hotelId: string): Promise<string> => {

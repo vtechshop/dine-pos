@@ -33,6 +33,8 @@ export interface IOrder extends Document {
   customerPhone: string;
   tableNumber: string;
   notes: string;
+  servedBy: string;
+  servedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -137,6 +139,8 @@ const OrderSchema: Schema = new Schema(
       enum: ['dine-in', 'takeaway', 'swiggy', 'zomato', 'qr'],
       default: 'dine-in',
     },
+    servedBy:  { type: String, default: '' },
+    servedAt:  { type: Date, default: null },
   },
   { timestamps: true }
 );

@@ -613,6 +613,27 @@ const SettingsScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Waiter Management */}
+        <Text style={styles.sectionHeader}>Waiter Management</Text>
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.navRow}
+            onPress={() => navigation.navigate('WaiterManagement' as any)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.navRowLeft}>
+              <View style={[styles.navRowIcon, { backgroundColor: Colors.accentBg }]}>
+                <Text style={{ fontSize: 18 }}>🛎️</Text>
+              </View>
+              <View>
+                <Text style={styles.navRowTitle}>Manage Waiters</Text>
+                <Text style={styles.navRowSub}>Add, edit, remove waiter accounts</Text>
+              </View>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={Colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
         {/* API Section */}
         <Text style={styles.sectionHeader}>Server Connection</Text>
         <View style={styles.section}>
@@ -993,6 +1014,17 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 2,
   },
+  navRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: Spacing.md,
+  },
+  navRowLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, flex: 1 },
+  navRowIcon: {
+    width: 44, height: 44, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  navRowTitle: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
+  navRowSub:   { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
 });
 
 export default SettingsScreen;

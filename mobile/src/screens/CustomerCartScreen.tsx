@@ -49,7 +49,7 @@ const CustomerCartScreen: React.FC = () => {
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
   const [countdown, setCountdown] = useState(6);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [liveStatus, setLiveStatus] = useState<'received' | 'preparing' | 'ready'>('received');
+  const [liveStatus, setLiveStatus] = useState<'received' | 'preparing' | 'ready' | 'served'>('received');
   const statusSocketRef = useRef<Socket | null>(null);
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
@@ -91,6 +91,10 @@ const CustomerCartScreen: React.FC = () => {
         if (!mounted || data.orderId !== placedOrder._id) return;
         if (data.status === 'preparing') setLiveStatus('preparing');
         else if (data.status === 'ready') setLiveStatus('ready');
+      });
+      socket.on('order_served', (data: { orderId: string }) => {
+        if (!mounted || data.orderId !== placedOrder._id) return;
+        setLiveStatus('served');
       });
     })();
     return () => {
@@ -292,19 +296,23 @@ const CustomerCartScreen: React.FC = () => {
                 { key: 'received',  label: 'Received',  icon: 'receipt' as const },
                 { key: 'preparing', label: 'Preparing', icon: 'local-fire-department' as const },
                 { key: 'ready',     label: 'Ready!',    icon: 'check-circle' as const },
+                { key: 'served',    label: 'Served',    icon: 'room-service' as const },
               ].map((step, i) => {
-                const steps = ['received', 'preparing', 'ready'];
+                const steps = ['received', 'preparing', 'ready', 'served'];
                 const active = steps.indexOf(liveStatus) >= i;
+                const isServed = step.key === 'served' && liveStatus === 'served';
                 return (
                   <React.Fragment key={step.key}>
                     {i > 0 && (
                       <View style={[styles.statusConnector, active && styles.statusConnectorActive]} />
                     )}
                     <View style={styles.statusStep}>
-                      <View style={[styles.statusDot, active && styles.statusDotActive]}>
-                        <MaterialIcons name={step.icon} size={14} color={active ? Colors.white : Colors.textMuted} />
+                      <View style={[styles.statusDot, active && styles.statusDotActive, isServed && styles.statusDotServed]}>
+                        <MaterialIcons name={step.icon} size={13} color={active ? Colors.white : Colors.textMuted} />
                       </View>
-                      <Text style={[styles.statusLabel, active && styles.statusLabelActive]}>{step.label}</Text>
+                      <Text style={[styles.statusLabel, active && styles.statusLabelActive, isServed && styles.statusLabelServed]}>
+                        {step.label}
+                      </Text>
                     </View>
                   </React.Fragment>
                 );
@@ -673,8 +681,10 @@ const styles = StyleSheet.create({
   statusDotActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   statusConnector: { flex: 1, height: 2, backgroundColor: Colors.border, marginHorizontal: 4, marginBottom: 16 },
   statusConnectorActive: { backgroundColor: Colors.primary },
-  statusLabel: { fontSize: FontSize.xs, color: Colors.textMuted, fontWeight: '600' },
+  statusLabel:       { fontSize: FontSize.xs, color: Colors.textMuted, fontWeight: '600' },
   statusLabelActive: { color: Colors.primary },
+  statusDotServed:   { backgroundColor: Colors.info, borderColor: Colors.info },
+  statusLabelServed: { color: Colors.info },
 });
 
 export default CustomerCartScreen;

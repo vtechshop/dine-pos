@@ -108,6 +108,24 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
               <MaterialIcons name="arrow-forward" size={18} color={Colors.white} />
             </View>
           </TouchableOpacity>
+
+          {/* Waiter */}
+          <TouchableOpacity
+            style={[styles.roleCard, styles.roleCardWaiter]}
+            onPress={() => navigation.navigate('WaiterLogin')}
+            activeOpacity={0.88}
+          >
+            <View style={[styles.roleCardBg, { backgroundColor: Colors.accent + '15' }]} />
+            <View style={[styles.roleEmojiBubble, { backgroundColor: Colors.accentBg }]}>
+              <Text style={{ fontSize: 42 }}>🛎️</Text>
+            </View>
+            <Text style={styles.roleCardTitle}>Waiter</Text>
+            <Text style={styles.roleCardDesc}>See ready orders and serve tables</Text>
+            <View style={[styles.roleCardCTA, { backgroundColor: Colors.accent }]}>
+              <Text style={styles.roleCardCTAText}>Waiter Login</Text>
+              <MaterialIcons name="arrow-forward" size={18} color={Colors.white} />
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Super admin */}
@@ -148,6 +166,7 @@ const styles = StyleSheet.create({
   roleCardCustomer: { backgroundColor: Colors.primaryBg, borderColor: Colors.primary + '40' },
   roleCardAdmin:    { backgroundColor: Colors.infoBg,    borderColor: Colors.info + '40' },
   roleCardKitchen:  { backgroundColor: '#E6F9EE',        borderColor: Colors.success + '40' },
+  roleCardWaiter:   { backgroundColor: Colors.accentBg,  borderColor: Colors.accent + '40' },
   roleCardBg: {
     position: 'absolute', top: -30, right: -30,
     width: 120, height: 120, borderRadius: 60,

@@ -425,6 +425,9 @@ export type RootStackParamList = {
   Chat: undefined;
   KitchenLogin: undefined;
   KitchenDisplay: undefined;
+  WaiterLogin: undefined;
+  WaiterDisplay: undefined;
+  WaiterManagement: undefined;
 };
 
 export type TabParamList = {

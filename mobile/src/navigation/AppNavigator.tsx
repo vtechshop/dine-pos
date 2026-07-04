@@ -37,6 +37,9 @@ import SupportScreen from '../screens/SupportScreen';
 import HotelStatusScreen from '../screens/HotelStatusScreen';
 import KitchenLoginScreen from '../screens/KitchenLoginScreen';
 import KitchenDisplayScreen from '../screens/KitchenDisplayScreen';
+import WaiterLoginScreen from '../screens/WaiterLoginScreen';
+import WaiterDisplayScreen from '../screens/WaiterDisplayScreen';
+import WaiterManagementScreen from '../screens/WaiterManagementScreen';
 import CategoriesScreen from '../screens/CategoriesScreen';
 import TableLayoutScreen from '../screens/TableLayoutScreen';
 import ReservationScreen from '../screens/ReservationScreen';
@@ -206,6 +209,8 @@ const AppNavigator = () => {
             <Stack.Screen name="CustomerOrderConfirm" component={CustomerOrderConfirmScreen} options={{ contentStyle: safeTop }} />
             <Stack.Screen name="KitchenLogin"         component={KitchenLoginScreen}         options={{ contentStyle: safeTop }} />
             <Stack.Screen name="KitchenDisplay"       component={KitchenDisplayScreen}       options={{ contentStyle: safeTop, gestureEnabled: false }} />
+            <Stack.Screen name="WaiterLogin"          component={WaiterLoginScreen}          options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="WaiterDisplay"        component={WaiterDisplayScreen}        options={{ contentStyle: safeTop, gestureEnabled: false }} />
           </>
         ) : (
           <>
@@ -221,6 +226,7 @@ const AppNavigator = () => {
             <Stack.Screen name="Ingredients"  component={IngredientsScreen}  options={{ contentStyle: safeTop }} />
             <Stack.Screen name="QRMenu"       component={QRMenuScreen}       options={{ contentStyle: safeTop }} />
             <Stack.Screen name="Chat"         component={ChatScreen}         options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="WaiterManagement" component={WaiterManagementScreen} options={{ contentStyle: safeTop }} />
             <Stack.Screen
               name="AddProduct"
               component={AddProductScreen}

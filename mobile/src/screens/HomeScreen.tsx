@@ -46,7 +46,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null);
   const [notifUnread, setNotifUnread] = useState(0);
   const [printError, setPrintError] = useState(false);
-  const [orderStatusAlert, setOrderStatusAlert] = useState<{ label: string; isReady: boolean } | null>(null);
+  const [orderStatusAlert, setOrderStatusAlert] = useState<{ label: string; isReady: boolean; isServed: boolean } | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -124,12 +124,18 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         if (!mounted) return;
         const label = data.tableNumber ? `Table ${data.tableNumber}` : (data.orderNumber || 'Order');
         if (data.status === 'ready') {
-          setOrderStatusAlert({ label, isReady: true });
+          setOrderStatusAlert({ label, isReady: true, isServed: false });
           notifyOrderReady(data.tableNumber || '', data.orderNumber || '');
         } else if (data.status === 'preparing') {
-          setOrderStatusAlert({ label, isReady: false });
+          setOrderStatusAlert({ label, isReady: false, isServed: false });
           notifyOrderPreparing(data.tableNumber || '', data.orderNumber || '');
         }
+      });
+      socket.on('order_served', (data: { orderId: string; tableNumber?: string; orderNumber?: string; servedBy?: string }) => {
+        if (!mounted) return;
+        const label = data.tableNumber ? `Table ${data.tableNumber}` : (data.orderNumber || 'Order');
+        setOrderStatusAlert({ label, isReady: false, isServed: true });
+        fetchStats();
       });
       socket.on('new_order', async (data: NewOrderAlert) => {
         if (!mounted) return;
@@ -312,17 +318,24 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         )}
 
-        {/* ── Order Status Banner (kitchen ready / preparing) ── */}
+        {/* ── Order Status Banner (kitchen ready / preparing / served) ── */}
         {orderStatusAlert && (
           <TouchableOpacity
-            style={[styles.alertBanner, { backgroundColor: orderStatusAlert.isReady ? Colors.success : Colors.warning }]}
+            style={[styles.alertBanner, {
+              backgroundColor: orderStatusAlert.isServed ? Colors.info
+                : orderStatusAlert.isReady ? Colors.success
+                : Colors.warning,
+            }]}
             onPress={() => setOrderStatusAlert(null)}
             activeOpacity={0.88}
           >
-            <MaterialIcons name={orderStatusAlert.isReady ? 'check-circle' : 'local-fire-department'} size={22} color={Colors.white} />
+            <MaterialIcons
+              name={orderStatusAlert.isServed ? 'room-service' : orderStatusAlert.isReady ? 'check-circle' : 'local-fire-department'}
+              size={22} color={Colors.white}
+            />
             <View style={{ flex: 1, marginLeft: Spacing.md }}>
               <Text style={styles.alertTitle}>
-                {orderStatusAlert.isReady ? '✅ Ready to Serve' : '👨‍🍳 Now Preparing'}
+                {orderStatusAlert.isServed ? '🛎️ Order Served' : orderStatusAlert.isReady ? '✅ Ready to Serve' : '👨‍🍳 Now Preparing'}
               </Text>
               <Text style={styles.alertSub}>{orderStatusAlert.label}</Text>
             </View>
