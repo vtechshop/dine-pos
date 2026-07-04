@@ -17,7 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import TrialBanner from '../components/TrialBanner';
 import { printReceipt, printKOT } from '../utils/receipt';
-import { setupNotifications, notifyNewOrder, notifyChatMessage } from '../utils/notifications';
+import { setupNotifications, notifyNewOrder, notifyChatMessage, notifyOrderReady, notifyOrderPreparing } from '../utils/notifications';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -46,6 +46,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null);
   const [notifUnread, setNotifUnread] = useState(0);
   const [printError, setPrintError] = useState(false);
+  const [orderStatusAlert, setOrderStatusAlert] = useState<{ label: string; isReady: boolean } | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -119,6 +120,17 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         if (!mounted || msg.sender !== 'customer') return;
         notifyChatMessage(msg.tableNumber, msg.message);
       });
+      socket.on('order_status_update', (data: { orderId: string; status: string; tableNumber?: string; orderNumber?: string; customerName?: string }) => {
+        if (!mounted) return;
+        const label = data.tableNumber ? `Table ${data.tableNumber}` : (data.orderNumber || 'Order');
+        if (data.status === 'ready') {
+          setOrderStatusAlert({ label, isReady: true });
+          notifyOrderReady(data.tableNumber || '', data.orderNumber || '');
+        } else if (data.status === 'preparing') {
+          setOrderStatusAlert({ label, isReady: false });
+          notifyOrderPreparing(data.tableNumber || '', data.orderNumber || '');
+        }
+      });
       socket.on('new_order', async (data: NewOrderAlert) => {
         if (!mounted) return;
         setNewOrderAlert(data);
@@ -144,6 +156,13 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     connect();
     return () => { mounted = false; socketRef.current?.disconnect(); socketRef.current = null; };
   }, [fetchStats]);
+
+  // Auto-dismiss order-status banner after 8s
+  useEffect(() => {
+    if (!orderStatusAlert) return;
+    const t = setTimeout(() => setOrderStatusAlert(null), 8000);
+    return () => clearTimeout(t);
+  }, [orderStatusAlert]);
 
   const onRefresh = useCallback(() => { setRefreshing(true); fetchStats(); }, [fetchStats]);
 
@@ -291,6 +310,24 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
               {printError && <View style={styles.alertPrintErrorDot} />}
             </TouchableOpacity>
           </View>
+        )}
+
+        {/* ── Order Status Banner (kitchen ready / preparing) ── */}
+        {orderStatusAlert && (
+          <TouchableOpacity
+            style={[styles.alertBanner, { backgroundColor: orderStatusAlert.isReady ? Colors.success : Colors.warning }]}
+            onPress={() => setOrderStatusAlert(null)}
+            activeOpacity={0.88}
+          >
+            <MaterialIcons name={orderStatusAlert.isReady ? 'check-circle' : 'local-fire-department'} size={22} color={Colors.white} />
+            <View style={{ flex: 1, marginLeft: Spacing.md }}>
+              <Text style={styles.alertTitle}>
+                {orderStatusAlert.isReady ? '✅ Ready to Serve' : '👨‍🍳 Now Preparing'}
+              </Text>
+              <Text style={styles.alertSub}>{orderStatusAlert.label}</Text>
+            </View>
+            <MaterialIcons name="close" size={18} color={Colors.white} />
+          </TouchableOpacity>
         )}
 
         {/* ── Hero Revenue Card ── */}

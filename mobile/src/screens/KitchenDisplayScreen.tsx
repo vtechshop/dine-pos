@@ -13,6 +13,7 @@ import {
   getKitchenToken, getStoredHotelId, getSocketUrl,
   KitchenOrder,
 } from '../services/api';
+import { setupNotifications, notifyNewKitchenOrder } from '../utils/notifications';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'KitchenDisplay'>;
@@ -24,6 +25,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const mountedRef = useRef(true);
+  const seenOrderIds = useRef<Set<string>>(new Set());
 
   const pending   = orders.filter(o => o.status === 'pending');
   const preparing = orders.filter(o => o.status === 'preparing');
@@ -43,6 +45,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   // ── Socket: real-time new orders + status changes ───────────────────────────
   useEffect(() => {
     mountedRef.current = true;
+    setupNotifications();
     loadOrders();
 
     let socket: Socket;
@@ -64,11 +67,14 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         socket.emit('join_hotel', hotelId);
       });
 
-      // New order arrives — add to pending and vibrate
-      socket.on('new_order', (data: { orderId: string }) => {
+      // New order arrives — dedup, vibrate, play sound, reload
+      socket.on('new_order', (data: { orderId?: string; _id?: string }) => {
         if (!mountedRef.current) return;
-        Vibration.vibrate([0, 200, 100, 200]);
-        // Reload from server to get full order data
+        const id = data.orderId || data._id || '';
+        if (id && seenOrderIds.current.has(id)) return; // dedup
+        if (id) seenOrderIds.current.add(id);
+        Vibration.vibrate([0, 300, 150, 300, 150, 500]);
+        notifyNewKitchenOrder();
         loadOrders();
       });
 
@@ -120,24 +126,35 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   // ── Elapsed time label ──────────────────────────────────────────────────────
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 30000); // refresh every 30s
+    const interval = setInterval(() => setTick(t => t + 1), 1000); // every second for live timer
     return () => clearInterval(interval);
   }, []);
 
-  const elapsed = (createdAt: string) => {
-    const mins = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins}m ago`;
-    return `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
+  const elapsed = (createdAt: string): { label: string; mins: number } => {
+    const totalSecs = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return {
+      label: `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`,
+      mins,
+    };
+  };
+
+  const timerColor = (mins: number) => {
+    if (mins < 5)  return Colors.success;
+    if (mins < 10) return Colors.warning;
+    return Colors.danger;
   };
 
   // ── Order card ──────────────────────────────────────────────────────────────
   const renderCard = (order: KitchenOrder) => {
+    void tick; // trigger re-render every second
     const isPending = order.status === 'pending';
     const isUpdating = updatingId === order._id;
     const token = order.orderNumber.split('-').pop() || '?';
-    const mins = Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000);
-    const urgent = mins >= 10;
+    const { label: elapsedLabel, mins: elapsedMins } = elapsed(order.createdAt);
+    const color = timerColor(elapsedMins);
+    const urgent = elapsedMins >= 10;
 
     return (
       <View key={order._id} style={[styles.card, isPending ? styles.cardPending : styles.cardPreparing, urgent && styles.cardUrgent]}>
@@ -151,8 +168,8 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
             {order.customerName ? <Text style={styles.customerLabel} numberOfLines={1}>{order.customerName}</Text> : null}
           </View>
           <View style={[styles.timeBadge, urgent && styles.timeBadgeUrgent]}>
-            <MaterialIcons name="schedule" size={12} color={urgent ? Colors.danger : Colors.textMuted} />
-            <Text style={[styles.timeText, urgent && styles.timeTextUrgent]}>{elapsed(order.createdAt)}</Text>
+            <MaterialIcons name="schedule" size={12} color={color} />
+            <Text style={[styles.timeText, { color }]}>{elapsedLabel}</Text>
           </View>
         </View>
 

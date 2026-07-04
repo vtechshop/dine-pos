@@ -69,3 +69,48 @@ export const notifyNewOrder = async (
     });
   } catch {}
 };
+
+// ── Kitchen Display alerts ────────────────────────────────────────────────────
+
+export const notifyNewKitchenOrder = async (): Promise<void> => {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '🍽 New Order!',
+        body: 'New order received in kitchen',
+        sound: 'order_alert.wav',
+        data: { type: 'kitchen_new_order' },
+      },
+      trigger: { channelId: 'order_alerts' } as any,
+    });
+  } catch {}
+};
+
+export const notifyOrderPreparing = async (tableNumber: string, orderNumber: string): Promise<void> => {
+  try {
+    const label = tableNumber ? `Table ${tableNumber}` : `Order ${orderNumber}`;
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '👨‍🍳 Preparing',
+        body: `${label} is being prepared`,
+        data: { type: 'order_preparing' },
+      },
+      trigger: { channelId: 'order_alerts' } as any,
+    });
+  } catch {}
+};
+
+export const notifyOrderReady = async (tableNumber: string, orderNumber: string): Promise<void> => {
+  try {
+    const label = tableNumber ? `Table ${tableNumber}` : `Order ${orderNumber}`;
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '✅ Order Ready!',
+        body: `${label} is ready to serve`,
+        sound: 'order_alert.wav',
+        data: { type: 'order_ready' },
+      },
+      trigger: { channelId: 'order_alerts' } as any,
+    });
+  } catch {}
+};

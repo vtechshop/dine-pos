@@ -358,7 +358,18 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       orderId: existing._id,
       orderNumber: existing.orderNumber,
       status: existing.status,
+      tableNumber:  existing.tableNumber  || '',
+      customerName: existing.customerName || '',
     });
+
+    // Stub: future waiter notification when kitchen marks ready
+    if (existing.status === 'ready') {
+      io.to(`hotel_${req.hotelId}`).emit('waiter_order_ready', {
+        orderId: existing._id,
+        orderNumber: existing.orderNumber,
+        tableNumber: existing.tableNumber || '',
+      });
+    }
 
     res.json(existing);
   } catch (error) {

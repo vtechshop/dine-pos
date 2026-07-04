@@ -14,7 +14,8 @@ import { showAlert } from '../utils/alert';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
-import { getStoredHotelId, enqueueCustomerOrder } from '../services/api';
+import { getStoredHotelId, enqueueCustomerOrder, getSocketUrl } from '../services/api';
+import { io as socketIO, Socket } from 'socket.io-client';
 import { isConnected } from '../sync/syncEngine';
 import { RootStackParamList, CartItem, Order } from '../types';
 import { printReceipt } from '../utils/receipt';
@@ -48,6 +49,8 @@ const CustomerCartScreen: React.FC = () => {
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
   const [countdown, setCountdown] = useState(6);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [liveStatus, setLiveStatus] = useState<'received' | 'preparing' | 'ready'>('received');
+  const statusSocketRef = useRef<Socket | null>(null);
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
 
@@ -71,6 +74,30 @@ const CustomerCartScreen: React.FC = () => {
       }
     }, 1000);
     return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+  }, [placedOrder?._id]);
+
+  // Live order status via socket when confirmation is showing
+  useEffect(() => {
+    if (!placedOrder || placedOrder.isOffline) return;
+    setLiveStatus('received');
+    let mounted = true;
+    (async () => {
+      const [hotelId, url] = await Promise.all([getStoredHotelId(), getSocketUrl()]);
+      if (!hotelId || !mounted) return;
+      const socket = socketIO(url, { transports: ['websocket'], reconnectionAttempts: 5 });
+      statusSocketRef.current = socket;
+      socket.on('connect', () => socket.emit('join_hotel', hotelId));
+      socket.on('order_status_update', (data: { orderId: string; status: string }) => {
+        if (!mounted || data.orderId !== placedOrder._id) return;
+        if (data.status === 'preparing') setLiveStatus('preparing');
+        else if (data.status === 'ready') setLiveStatus('ready');
+      });
+    })();
+    return () => {
+      mounted = false;
+      statusSocketRef.current?.disconnect();
+      statusSocketRef.current = null;
+    };
   }, [placedOrder?._id]);
 
   const handlePlaceOrder = async () => {
@@ -255,6 +282,33 @@ const CustomerCartScreen: React.FC = () => {
               <Text style={styles.offlineNoticeText}>
                 You're offline — your order is saved and will reach the kitchen once connection is restored.
               </Text>
+            </View>
+          )}
+
+          {/* Live order status tracker */}
+          {!placedOrder.isOffline && (
+            <View style={styles.statusTrack}>
+              {[
+                { key: 'received',  label: 'Received',  icon: 'receipt' as const },
+                { key: 'preparing', label: 'Preparing', icon: 'local-fire-department' as const },
+                { key: 'ready',     label: 'Ready!',    icon: 'check-circle' as const },
+              ].map((step, i) => {
+                const steps = ['received', 'preparing', 'ready'];
+                const active = steps.indexOf(liveStatus) >= i;
+                return (
+                  <React.Fragment key={step.key}>
+                    {i > 0 && (
+                      <View style={[styles.statusConnector, active && styles.statusConnectorActive]} />
+                    )}
+                    <View style={styles.statusStep}>
+                      <View style={[styles.statusDot, active && styles.statusDotActive]}>
+                        <MaterialIcons name={step.icon} size={14} color={active ? Colors.white : Colors.textMuted} />
+                      </View>
+                      <Text style={[styles.statusLabel, active && styles.statusLabelActive]}>{step.label}</Text>
+                    </View>
+                  </React.Fragment>
+                );
+              })}
             </View>
           )}
 
@@ -602,6 +656,25 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginLeft: 4,
   },
   countdownText: { color: Colors.white, fontSize: FontSize.sm, fontWeight: '900' },
+
+  // Live status tracker
+  statusTrack: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.card, borderRadius: BorderRadius.xl,
+    padding: Spacing.lg, marginBottom: Spacing.md,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  statusStep: { alignItems: 'center', gap: 4 },
+  statusDot: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: Colors.background, borderWidth: 2, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  statusDotActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  statusConnector: { flex: 1, height: 2, backgroundColor: Colors.border, marginHorizontal: 4, marginBottom: 16 },
+  statusConnectorActive: { backgroundColor: Colors.primary },
+  statusLabel: { fontSize: FontSize.xs, color: Colors.textMuted, fontWeight: '600' },
+  statusLabelActive: { color: Colors.primary },
 });
 
 export default CustomerCartScreen;
