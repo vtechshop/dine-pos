@@ -1,9 +1,10 @@
 import { Router, Response } from 'express';
 import Reservation from '../models/Reservation';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requireAdmin);
 
 // GET reservations — optional ?date=YYYY-MM-DD filter
 router.get('/', async (req: AuthRequest, res: Response) => {

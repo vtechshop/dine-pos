@@ -189,7 +189,7 @@ const TableLayoutScreen: React.FC = () => {
         )}
       </ScrollView>
 
-      <Text style={styles.hint}>Tap table to toggle status · Long press to edit</Text>
+      <Text style={[styles.hint, { paddingBottom: (bottom || 0) + Spacing.md }]}>Tap table to toggle status · Long press to edit</Text>
 
       {/* Add/Edit Modal */}
       <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>

@@ -1,10 +1,12 @@
 import { Router, Response } from 'express';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import Order from '../models/Order';
 import Settings from '../models/Settings';
 import mongoose from 'mongoose';
 
 const router = Router();
+router.use(authMiddleware);
+router.use(requireAdmin);
 
 // GET /api/reports/gst?from=YYYY-MM-DD&to=YYYY-MM-DD
 // Groups non-cancelled order items by tax rate, returns CGST/SGST breakdown

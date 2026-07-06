@@ -1,9 +1,13 @@
 import { Router, Response } from 'express';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import bcrypt from 'bcryptjs';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import Waiter from '../models/Waiter';
+import { logAudit } from '../utils/audit';
+import { validatePin } from '../utils/pinPolicy';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requireAdmin);
 
 // GET /api/waiters — list all waiters for this hotel
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -24,8 +28,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   if (!name || !employeeCode || !pin) {
     return res.status(400).json({ message: 'Name, employee code and PIN are required' });
   }
-  if (pin.length < 4 || pin.length > 6) {
-    return res.status(400).json({ message: 'PIN must be 4–6 digits' });
+  const pinCheck = validatePin(pin);
+  if (!pinCheck.valid) {
+    return res.status(400).json({ message: pinCheck.message });
   }
   try {
     const code = employeeCode.toString().trim().toUpperCase();
@@ -37,11 +42,12 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       hotelId: req.hotelId,
       name: name.trim(),
       employeeCode: code,
-      pin: pin.toString().trim(),
+      pin: await bcrypt.hash(pin.toString().trim(), 12),
       mobile: (mobile || '').trim(),
       isActive: true,
     });
     const { pin: _pin, ...safe } = (waiter.toObject() as any);
+    logAudit(req, 'waiter.created', 'waiter', String((waiter as any)._id), { name: name.trim(), employeeCode: code });
     return res.status(201).json(safe);
   } catch (error: any) {
     if (error.code === 11000) {
@@ -65,6 +71,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       { new: true, select: '-pin' }
     ).lean();
     if (!waiter) return res.status(404).json({ message: 'Waiter not found' });
+    logAudit(req, 'waiter.updated', 'waiter', req.params.id, { changes: update });
     return res.json(waiter);
   } catch {
     return res.status(500).json({ message: 'Server error' });
@@ -74,16 +81,18 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
 // PATCH /api/waiters/:id/pin — reset PIN
 router.patch('/:id/pin', async (req: AuthRequest, res: Response) => {
   const { pin } = req.body;
-  if (!pin || pin.length < 4 || pin.length > 6) {
-    return res.status(400).json({ message: 'PIN must be 4–6 digits' });
+  const pinCheck = validatePin(pin);
+  if (!pinCheck.valid) {
+    return res.status(400).json({ message: pinCheck.message });
   }
   try {
     const waiter = await Waiter.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
-      { pin: pin.toString().trim() },
+      { pin: await bcrypt.hash(pin.toString().trim(), 12) },
       { new: true, select: '-pin' }
     ).lean();
     if (!waiter) return res.status(404).json({ message: 'Waiter not found' });
+    logAudit(req, 'waiter.pin_reset', 'waiter', req.params.id);
     return res.json({ message: 'PIN updated successfully' });
   } catch {
     return res.status(500).json({ message: 'Server error' });
@@ -97,6 +106,7 @@ router.patch('/:id/toggle', async (req: AuthRequest, res: Response) => {
     if (!waiter) return res.status(404).json({ message: 'Waiter not found' });
     waiter.isActive = !waiter.isActive;
     await waiter.save();
+    logAudit(req, 'waiter.toggled', 'waiter', req.params.id, { isActive: waiter.isActive });
     return res.json({ isActive: waiter.isActive });
   } catch {
     return res.status(500).json({ message: 'Server error' });
@@ -108,6 +118,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const waiter = await Waiter.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });
     if (!waiter) return res.status(404).json({ message: 'Waiter not found' });
+    logAudit(req, 'waiter.deleted', 'waiter', req.params.id, { name: (waiter as any).name });
     return res.json({ message: 'Waiter deleted' });
   } catch {
     return res.status(500).json({ message: 'Server error' });

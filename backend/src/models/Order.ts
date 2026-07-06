@@ -35,6 +35,9 @@ export interface IOrder extends Document {
   notes: string;
   servedBy: string;
   servedAt: Date | null;
+  completedBy: string;
+  completedAt: Date | null;
+  cashierId: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -139,8 +142,11 @@ const OrderSchema: Schema = new Schema(
       enum: ['dine-in', 'takeaway', 'swiggy', 'zomato', 'qr'],
       default: 'dine-in',
     },
-    servedBy:  { type: String, default: '' },
-    servedAt:  { type: Date, default: null },
+    servedBy:    { type: String, default: '' },
+    servedAt:    { type: Date, default: null },
+    completedBy: { type: String, default: '' },
+    completedAt: { type: Date, default: null },
+    cashierId:   { type: String, default: '' },
   },
   { timestamps: true }
 );

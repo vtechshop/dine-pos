@@ -1,11 +1,12 @@
 import { Router, Response } from 'express';
 import Product from '../models/Product';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { logAudit } from '../utils/audit';
 
 const router = Router();
 
-// All product routes require auth
 router.use(authMiddleware);
+router.use(requireAdmin);
 
 // GET all products for this hotel
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -60,6 +61,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const product = new Product({ ...req.body, hotelId: req.hotelId });
     await product.save();
     const populated = await product.populate('category', 'name color');
+    logAudit(req, 'product.created', 'product', String((product as any)._id), { name: (product as any).name });
     res.status(201).json(populated);
   } catch (error) {
     res.status(400).json({ message: 'Invalid data', error });
@@ -75,6 +77,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       { new: true, runValidators: true }
     ).populate('category', 'name color');
     if (!product) return res.status(404).json({ message: 'Product not found' });
+    logAudit(req, 'product.updated', 'product', req.params.id, { name: (product as any).name });
     res.json(product);
   } catch (error) {
     res.status(400).json({ message: 'Invalid data', error });
@@ -90,6 +93,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       { new: true }
     );
     if (!product) return res.status(404).json({ message: 'Product not found' });
+    logAudit(req, 'product.deleted', 'product', req.params.id, { name: (product as any).name });
     res.json({ message: 'Product deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });

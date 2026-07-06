@@ -46,7 +46,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null);
   const [notifUnread, setNotifUnread] = useState(0);
   const [printError, setPrintError] = useState(false);
-  const [orderStatusAlert, setOrderStatusAlert] = useState<{ label: string; isReady: boolean; isServed: boolean } | null>(null);
+  const [orderStatusAlert, setOrderStatusAlert] = useState<{ label: string; isReady: boolean; isServed: boolean; isCompleted: boolean } | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -120,21 +120,27 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         if (!mounted || msg.sender !== 'customer') return;
         notifyChatMessage(msg.tableNumber, msg.message);
       });
+      socket.on('order_completed', (data: { orderId: string; tableNumber?: string; orderNumber?: string; completedBy?: string; paymentMethod?: string; grandTotal?: number }) => {
+        if (!mounted) return;
+        const label = data.tableNumber ? `Table ${data.tableNumber}` : (data.orderNumber || 'Order');
+        setOrderStatusAlert({ label, isReady: false, isServed: false, isCompleted: true });
+        fetchStats();
+      });
       socket.on('order_status_update', (data: { orderId: string; status: string; tableNumber?: string; orderNumber?: string; customerName?: string }) => {
         if (!mounted) return;
         const label = data.tableNumber ? `Table ${data.tableNumber}` : (data.orderNumber || 'Order');
         if (data.status === 'ready') {
-          setOrderStatusAlert({ label, isReady: true, isServed: false });
+          setOrderStatusAlert({ label, isReady: true, isServed: false, isCompleted: false });
           notifyOrderReady(data.tableNumber || '', data.orderNumber || '');
         } else if (data.status === 'preparing') {
-          setOrderStatusAlert({ label, isReady: false, isServed: false });
+          setOrderStatusAlert({ label, isReady: false, isServed: false, isCompleted: false });
           notifyOrderPreparing(data.tableNumber || '', data.orderNumber || '');
         }
       });
       socket.on('order_served', (data: { orderId: string; tableNumber?: string; orderNumber?: string; servedBy?: string }) => {
         if (!mounted) return;
         const label = data.tableNumber ? `Table ${data.tableNumber}` : (data.orderNumber || 'Order');
-        setOrderStatusAlert({ label, isReady: false, isServed: true });
+        setOrderStatusAlert({ label, isReady: false, isServed: true, isCompleted: false });
         fetchStats();
       });
       socket.on('new_order', async (data: NewOrderAlert) => {
@@ -322,7 +328,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         {orderStatusAlert && (
           <TouchableOpacity
             style={[styles.alertBanner, {
-              backgroundColor: orderStatusAlert.isServed ? Colors.info
+              backgroundColor: orderStatusAlert.isCompleted ? Colors.success
+                : orderStatusAlert.isServed ? Colors.info
                 : orderStatusAlert.isReady ? Colors.success
                 : Colors.warning,
             }]}
@@ -330,12 +337,12 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
             activeOpacity={0.88}
           >
             <MaterialIcons
-              name={orderStatusAlert.isServed ? 'room-service' : orderStatusAlert.isReady ? 'check-circle' : 'local-fire-department'}
+              name={orderStatusAlert.isCompleted ? 'point-of-sale' : orderStatusAlert.isServed ? 'room-service' : orderStatusAlert.isReady ? 'check-circle' : 'local-fire-department'}
               size={22} color={Colors.white}
             />
             <View style={{ flex: 1, marginLeft: Spacing.md }}>
               <Text style={styles.alertTitle}>
-                {orderStatusAlert.isServed ? '🛎️ Order Served' : orderStatusAlert.isReady ? '✅ Ready to Serve' : '👨‍🍳 Now Preparing'}
+                {orderStatusAlert.isCompleted ? '💰 Payment Collected' : orderStatusAlert.isServed ? '🛎️ Order Served' : orderStatusAlert.isReady ? '✅ Ready to Serve' : '👨‍🍳 Now Preparing'}
               </Text>
               <Text style={styles.alertSub}>{orderStatusAlert.label}</Text>
             </View>
@@ -471,6 +478,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.xxl,
     padding: Spacing.xl,
+    marginTop: Spacing.md,
     marginBottom: Spacing.xl,
     flexDirection: 'row',
     alignItems: 'center',

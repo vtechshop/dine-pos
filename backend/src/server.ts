@@ -40,6 +40,8 @@ import remoteConfigRoutes from './routes/remoteConfigRoutes';
 import deviceRoutes from './routes/deviceRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import waiterRoutes from './routes/waiterRoutes';
+import cashierRoutes from './routes/cashierRoutes';
+import auditRoutes from './routes/auditRoutes';
 
 dotenv.config();
 
@@ -48,6 +50,21 @@ const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET || JWT_SECRET === 'hotelbillingpos_secret_key_change_in_production') {
   console.error('❌ FATAL: JWT_SECRET is not set or is using the default insecure value. Set a strong secret in .env');
   process.exit(1);
+}
+
+const SUPER_ADMIN_PASS = process.env.SUPER_ADMIN_PASS;
+if (!SUPER_ADMIN_PASS) {
+  console.error('❌ FATAL: SUPER_ADMIN_PASS is not set. Add it to your .env file.');
+  process.exit(1);
+}
+
+if (!process.env.MONGODB_URI) {
+  console.error('❌ FATAL: MONGODB_URI is not set. Add it to your .env file.');
+  process.exit(1);
+}
+
+if (!process.env.NODE_ENV) {
+  console.warn('⚠ NODE_ENV is not set. Running in development mode.');
 }
 
 const app = express();
@@ -59,8 +76,8 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o
 app.use(cors({
   origin: (origin, cb) => {
     // Allow requests with no origin (mobile apps, Postman, server-to-server)
-    if (!origin || allowedOrigins.length === 0) return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) return cb(null, true);
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true,
@@ -71,8 +88,8 @@ const io = new Server(httpServer, {
   cors: {
     origin: (origin, cb) => {
       // Allow requests with no origin (mobile apps, native clients)
-      if (!origin || allowedOrigins.length === 0) return cb(null, true);
-      if (allowedOrigins.includes(origin)) return cb(null, true);
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) return cb(null, true);
       cb(new Error(`Socket.io CORS: origin ${origin} not allowed`));
     },
     methods: ['GET', 'POST'],
@@ -139,6 +156,8 @@ app.use('/api/remote-config', remoteConfigRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/waiters', waiterRoutes);
+app.use('/api/cashiers', cashierRoutes);
+app.use('/api/audit', auditRoutes);
 
 // Enhanced health check — covers MongoDB, Redis, memory, uptime, version
 app.get('/api/health', async (_req, res) => {
@@ -152,19 +171,20 @@ app.get('/api/health', async (_req, res) => {
 
   res.status(mongoState === 1 ? 200 : 503).json({
     status,
-    version: process.env.npm_package_version || '1.0.0',
-    environment: process.env.NODE_ENV || 'development',
+    mongodb: mongoLabel,
+    redis: redisStatus,
     uptime: +process.uptime().toFixed(1),
-    timestamp: new Date().toISOString(),
     memory: {
       heapUsedMB: toMB(mem.heapUsed),
       heapTotalMB: toMB(mem.heapTotal),
       rssMB: toMB(mem.rss),
     },
-    services: {
-      mongodb: mongoLabel,
-      redis: redisStatus,
-    },
+    version: process.env.npm_package_version || '1.0.0',
+    nodeVersion: process.version,
+    pid: process.pid,
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString(),
+    services: { mongodb: mongoLabel, redis: redisStatus },
   });
 });
 

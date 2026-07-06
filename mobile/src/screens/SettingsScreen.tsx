@@ -634,6 +634,27 @@ const SettingsScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
+        {/* Cashier Management */}
+        <Text style={styles.sectionHeader}>Cashier Management</Text>
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.navRow}
+            onPress={() => navigation.navigate('CashierManagement' as any)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.navRowLeft}>
+              <View style={[styles.navRowIcon, { backgroundColor: Colors.infoBg }]}>
+                <Text style={{ fontSize: 18 }}>💰</Text>
+              </View>
+              <View>
+                <Text style={styles.navRowTitle}>Manage Cashiers</Text>
+                <Text style={styles.navRowSub}>Add, edit, remove cashier accounts</Text>
+              </View>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={Colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
         {/* API Section */}
         <Text style={styles.sectionHeader}>Server Connection</Text>
         <View style={styles.section}>

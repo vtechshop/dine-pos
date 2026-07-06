@@ -1,9 +1,11 @@
 import { Router, Response } from 'express';
 import Ingredient from '../models/Ingredient';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { logAudit } from '../utils/audit';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requireAdmin);
 
 // GET all ingredients for this hotel
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -33,6 +35,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const ingredient = new Ingredient({ ...req.body, hotelId: req.hotelId });
     await ingredient.save();
+    logAudit(req, 'ingredient.created', 'ingredient', String((ingredient as any)._id), { name: (ingredient as any).name });
     res.status(201).json(ingredient);
   } catch (error) {
     res.status(400).json({ message: 'Invalid data', error });
@@ -48,6 +51,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       { new: true, runValidators: true }
     );
     if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+    logAudit(req, 'ingredient.updated', 'ingredient', req.params.id, { name: (ingredient as any).name });
     res.json(ingredient);
   } catch (error) {
     res.status(400).json({ message: 'Invalid data', error });
@@ -67,6 +71,7 @@ router.patch('/:id/restock', async (req: AuthRequest, res: Response) => {
       { new: true }
     );
     if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+    logAudit(req, 'ingredient.restocked', 'ingredient', req.params.id, { name: (ingredient as any).name, quantity });
     res.json(ingredient);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
@@ -78,6 +83,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const ingredient = await Ingredient.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });
     if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+    logAudit(req, 'ingredient.deleted', 'ingredient', req.params.id, { name: (ingredient as any).name });
     res.json({ message: 'Deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });

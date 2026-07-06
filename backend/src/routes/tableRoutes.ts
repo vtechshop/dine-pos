@@ -1,9 +1,11 @@
 import { Router, Response } from 'express';
 import Table from '../models/Table';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { logAudit } from '../utils/audit';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requireAdmin);
 
 // GET all tables for hotel
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -20,6 +22,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const table = new Table({ ...req.body, hotelId: req.hotelId });
     await table.save();
+    logAudit(req, 'table.created', 'table', String((table as any)._id), { number: (table as any).number });
     res.status(201).json(table);
   } catch (error: any) {
     if (error.code === 11000) return res.status(400).json({ message: 'Table number already exists' });
@@ -36,6 +39,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       { new: true, runValidators: true }
     );
     if (!table) return res.status(404).json({ message: 'Table not found' });
+    logAudit(req, 'table.updated', 'table', req.params.id);
     res.json(table);
   } catch (error) {
     res.status(400).json({ message: 'Invalid data', error });
@@ -58,6 +62,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       { new: true }
     );
     if (!table) return res.status(404).json({ message: 'Table not found' });
+    logAudit(req, 'table.status_changed', 'table', req.params.id, { status });
     res.json(table);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
@@ -69,6 +74,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const table = await Table.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });
     if (!table) return res.status(404).json({ message: 'Table not found' });
+    logAudit(req, 'table.deleted', 'table', req.params.id, { number: (table as any).number });
     res.json({ message: 'Table deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });

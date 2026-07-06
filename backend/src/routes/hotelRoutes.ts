@@ -1,18 +1,66 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import Hotel from '../models/Hotel';
 
+const JWT_SECRET = process.env.JWT_SECRET || 'hotelbillingpos_secret_key_change_in_production';
+
+// Verifies JWT only — does NOT enforce subscription status.
+// Used for endpoints that expired hotels still need to access.
+const jwtOnlyAuth = (req: Request, res: Response, next: NextFunction): void => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) { res.status(401).json({ message: 'Authentication required' }); return; }
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { hotelId: string };
+    (req as any).hotelId = decoded.hotelId;
+    next();
+  } catch {
+    res.status(401).json({ message: 'Invalid or expired session' });
+  }
+};
+
 const router = Router();
+
+const VALID_BUSINESS_TYPES = [
+  'restaurant', 'hotel', 'bakery', 'cafe', 'sweet-shop', 'juice-shop',
+  'fast-food', 'cloud-kitchen', 'food-court', 'mess', 'catering',
+  'veg', 'non-veg', 'both',
+];
 
 // POST /api/hotels/register — Hotel registers for the platform
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const existing = await Hotel.findOne({ phone: req.body.phone });
-    if (existing) {
+    const { hotelName, ownerName, phone, email, businessType, state, city } = req.body;
+
+    if (!hotelName?.trim()) return res.status(400).json({ message: 'Business name is required' });
+    if (!ownerName?.trim()) return res.status(400).json({ message: 'Owner name is required' });
+    if (!phone?.trim())     return res.status(400).json({ message: 'Phone number is required' });
+    if (!/^\d{10}$/.test(String(phone).trim())) {
+      return res.status(400).json({ message: 'Phone number must be exactly 10 digits' });
+    }
+    if (!email?.trim()) return res.status(400).json({ message: 'Email address is required' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
+      return res.status(400).json({ message: 'Please provide a valid email address' });
+    }
+    if (!businessType || !VALID_BUSINESS_TYPES.includes(businessType)) {
+      return res.status(400).json({ message: 'Please select a valid business type' });
+    }
+    if (!state?.trim()) return res.status(400).json({ message: 'State is required' });
+    if (!city?.trim())  return res.status(400).json({ message: 'City is required' });
+
+    const existingPhone = await Hotel.findOne({ phone: String(phone).trim() });
+    if (existingPhone) {
       return res.status(400).json({ message: 'A hotel with this phone number is already registered' });
+    }
+
+    const existingEmail = await Hotel.findOne({ email: String(email).trim().toLowerCase() });
+    if (existingEmail) {
+      return res.status(400).json({ message: 'This email address is already registered' });
     }
 
     const hotel = await Hotel.create({
       ...req.body,
+      phone: String(phone).trim(),
+      email: String(email).trim().toLowerCase(),
       status: 'pending',
     });
 
@@ -93,6 +141,37 @@ router.get('/reset-status/:phone', async (req: Request, res: Response) => {
     if (!hotel) return res.status(404).json({ message: 'No hotel found' });
     return res.json(hotel);
   } catch (error) {
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// GET /api/hotels/subscription — returns live subscription info (JWT-only, no status gate)
+router.get('/subscription', jwtOnlyAuth, async (req: Request, res: Response) => {
+  try {
+    const hotelId = (req as any).hotelId;
+    const hotel = await Hotel.findById(hotelId)
+      .select('status subscriptionType subscriptionEndDate trialEndDate planExpiryDate hotelName')
+      .lean();
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+
+    const h = hotel as any;
+    const now = new Date();
+    const endDate: Date | null = h.subscriptionEndDate || h.trialEndDate || h.planExpiryDate || null;
+    const daysRemaining = endDate
+      ? Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / 86400000))
+      : 0;
+    const isExpired = !endDate || endDate < now || h.status === 'expired';
+
+    return res.json({
+      subscriptionStatus: h.status,
+      subscriptionType: h.subscriptionType || 'trial',
+      trialEndDate: h.trialEndDate || null,
+      subscriptionEndDate: h.subscriptionEndDate || null,
+      daysRemaining,
+      isExpired,
+      hotelName: h.hotelName,
+    });
+  } catch {
     return res.status(500).json({ message: 'Server error' });
   }
 });

@@ -1,11 +1,13 @@
 import { Router, Response } from 'express';
 import Expense from '../models/Expense';
 import Order from '../models/Order';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { logAudit } from '../utils/audit';
 import mongoose from 'mongoose';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requireAdmin);
 
 // GET expenses with optional date range
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -77,6 +79,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const expense = new Expense({ ...req.body, hotelId: req.hotelId });
     await expense.save();
+    logAudit(req, 'expense.created', 'expense', String((expense as any)._id), { description: (expense as any).description, amount: (expense as any).amount });
     res.status(201).json(expense);
   } catch (error) {
     res.status(400).json({ message: 'Invalid data', error });
@@ -92,6 +95,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       { new: true, runValidators: true }
     );
     if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    logAudit(req, 'expense.updated', 'expense', req.params.id, { description: (expense as any).description, amount: (expense as any).amount });
     res.json(expense);
   } catch (error) {
     res.status(400).json({ message: 'Invalid data', error });
@@ -103,6 +107,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const expense = await Expense.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });
     if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    logAudit(req, 'expense.deleted', 'expense', req.params.id, { description: (expense as any).description, amount: (expense as any).amount });
     res.json({ message: 'Deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });

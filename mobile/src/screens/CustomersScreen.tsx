@@ -2,9 +2,10 @@ import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, Alert, Linking, Modal, TextInput,
-  ScrollView, Platform,
+  ScrollView,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -50,6 +51,7 @@ const TEMPLATES = [
 
 const CustomersScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { bottom } = useSafeAreaInsets();
   const { settings } = useSettings();
   const cur = settings.currencySymbol || '₹';
   const fmt = (n: number) => `${cur}${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -447,7 +449,7 @@ const CustomersScreen: React.FC = () => {
 
       {/* ── Broadcast bottom bar ── */}
       {broadcastMode && selectedIds.size > 0 && (
-        <View style={styles.blastBar}>
+        <View style={[styles.blastBar, { paddingBottom: (bottom || 0) + Spacing.md }]}>
           <View>
             <Text style={styles.blastBarCount}>{selectedIds.size} customer{selectedIds.size !== 1 ? 's' : ''} selected</Text>
             <Text style={styles.blastBarSub}>Tap to compose your message</Text>
@@ -462,7 +464,7 @@ const CustomersScreen: React.FC = () => {
       {/* ── Compose Modal ── */}
       <Modal visible={blastStep === 'compose'} transparent animationType="slide" onRequestClose={() => setBlastStep(null)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: (bottom || 0) + Spacing.xl }]}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>📣 WhatsApp Blast</Text>
             <Text style={styles.modalSub}>Sending to {blastQueue.length} customer{blastQueue.length !== 1 ? 's' : ''}</Text>
@@ -516,7 +518,7 @@ const CustomersScreen: React.FC = () => {
       {/* ── Sending Modal ── */}
       <Modal visible={blastStep === 'sending'} transparent animationType="slide" onRequestClose={exitBroadcast}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: (bottom || 0) + Spacing.xl }]}>
             <View style={styles.modalHandle} />
 
             <View style={styles.sendingProgress}>
@@ -663,7 +665,7 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalSheet: {
     backgroundColor: Colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: Spacing.xl, paddingBottom: Platform.OS === 'ios' ? 40 : Spacing.xl,
+    padding: Spacing.xl,
     maxHeight: '92%',
   },
   modalHandle: {

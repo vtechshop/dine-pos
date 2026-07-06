@@ -7,6 +7,8 @@ import Order from '../models/Order';
 import Device from '../models/Device';
 import Notification from '../models/Notification';
 import RemoteConfig from '../models/RemoteConfig';
+import { generateAdminId, generatePassword } from '../utils/credentialGenerator';
+import { bootstrapNewHotel } from '../services/bootstrapHotel';
 
 const router = Router();
 
@@ -93,13 +95,97 @@ router.get('/hotels/:id', superAdminAuth, async (req: Request, res: Response) =>
 
 router.put('/hotels/:id/approve', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    const existing = await Hotel.findById(req.params.id);
+    if (!existing) return res.status(404).json({ message: 'Hotel not found' });
+
+    const { trialDays = 14, features } = req.body;
+    const days = Math.max(1, Math.min(365, parseInt(trialDays) || 14));
+
+    // Auto-generate unique adminId (retry on collision)
+    let adminId = '';
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const candidate = generateAdminId();
+      const taken = await Hotel.findOne({ adminId: candidate, _id: { $ne: req.params.id } });
+      if (!taken) { adminId = candidate; break; }
+    }
+    if (!adminId) return res.status(500).json({ message: 'Could not generate unique Admin ID' });
+
+    const plainPassword = generatePassword();
+    const adminPasswordHash = await bcrypt.hash(plainPassword, 12);
+
+    const trialStartDate = new Date();
+    const trialEndDate = new Date();
+    trialEndDate.setDate(trialEndDate.getDate() + days);
+
+    const featureUpdate: Record<string, boolean> = {};
+    const allowedFeatures = ['payment', 'reservations', 'customerChat', 'qrOrdering', 'expenses', 'reports', 'tables', 'ingredients', 'waste', 'aggregator'];
+    if (features && typeof features === 'object') {
+      for (const key of allowedFeatures) {
+        if (features[key] !== undefined) featureUpdate[`features.${key}`] = Boolean(features[key]);
+      }
+    }
+
     const hotel = await Hotel.findByIdAndUpdate(
       req.params.id,
-      { status: 'active', approvedAt: new Date(), rejectionReason: '' },
+      {
+        $set: {
+          adminId,
+          adminPasswordHash,
+          status: 'trial',
+          approvedAt: trialStartDate,
+          trialStartDate,
+          trialEndDate,
+          subscriptionType: 'trial',
+          subscriptionStartDate: trialStartDate,
+          subscriptionEndDate: trialEndDate,
+          rejectionReason: '',
+          resetRequested: false,
+          resetFulfilledAt: null,
+          ...featureUpdate,
+        },
+      },
       { new: true }
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
-    return res.json({ message: `${hotel.hotelName} approved`, hotel });
+
+    const { kitchenPin } = await bootstrapNewHotel(hotel._id as any, {
+      hotelName: hotel.hotelName,
+      phone: hotel.phone,
+    });
+
+    const credentials = { adminId, password: plainPassword, kitchenPin };
+
+    const emailPayload = {
+      to: hotel.email,
+      subject: `Welcome to Dine POS — Your Account is Approved!`,
+      hotelName: hotel.hotelName,
+      ownerName: hotel.ownerName,
+      adminId,
+      password: plainPassword,
+      kitchenPin,
+      trialEndDate: trialEndDate.toLocaleDateString('en-IN'),
+      loginUrl: 'https://app.dinepos.in',
+    };
+
+    const whatsappPayload = {
+      phone: hotel.phone,
+      message:
+        `Hi ${hotel.ownerName}! 🎉\n` +
+        `Your *Dine POS* account for *${hotel.hotelName}* is approved!\n\n` +
+        `*Admin ID:* ${adminId}\n` +
+        `*Password:* ${plainPassword}\n` +
+        `*Kitchen PIN:* ${kitchenPin}\n\n` +
+        `Trial active until: ${trialEndDate.toLocaleDateString('en-IN')}\n` +
+        `Download the app and login to get started.`,
+    };
+
+    return res.json({
+      message: `${hotel.hotelName} approved — ${days}-day trial started`,
+      hotel,
+      credentials,
+      emailPayload,
+      whatsappPayload,
+    });
   } catch { return res.status(500).json({ message: 'Server error' }); }
 });
 
@@ -197,11 +283,10 @@ router.put('/hotels/:id/premium', superAdminAuth, async (req: Request, res: Resp
   } catch { return res.status(500).json({ message: 'Server error' }); }
 });
 
-// PUT /api/superadmin/hotels/:id/trial — start or extend trial
+// PUT /api/superadmin/hotels/:id/trial — start or reset trial
 router.put('/hotels/:id/trial', superAdminAuth, async (req: Request, res: Response) => {
   try {
-    const { trialDays } = req.body;
-    const days = Math.max(1, Math.min(365, parseInt(trialDays) || 14));
+    const days = Math.max(1, Math.min(365, parseInt(req.body.trialDays || req.body.days) || 14));
 
     const trialStartDate = new Date();
     const trialEndDate   = new Date();
@@ -210,17 +295,87 @@ router.put('/hotels/:id/trial', superAdminAuth, async (req: Request, res: Respon
     const hotel = await Hotel.findByIdAndUpdate(
       req.params.id,
       {
-        status:          'trial',
+        status:               'trial',
         trialStartDate,
         trialEndDate,
-        approvedAt:      trialStartDate,
-        rejectionReason: '',
+        subscriptionType:     'trial',
+        subscriptionStartDate: trialStartDate,
+        subscriptionEndDate:  trialEndDate,
+        approvedAt:           trialStartDate,
+        rejectionReason:      '',
       },
       { new: true }
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     return res.json({
       message: `${hotel.hotelName} trial started for ${days} days (until ${trialEndDate.toLocaleDateString('en-IN')})`,
+      hotel,
+    });
+  } catch { return res.status(500).json({ message: 'Server error' }); }
+});
+
+// PUT /api/superadmin/hotels/:id/extend-trial — add days to current trial end
+router.put('/hotels/:id/extend-trial', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const addDays = Math.max(1, Math.min(365, parseInt(req.body.days) || 7));
+
+    const hotel = await Hotel.findById(req.params.id);
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+
+    const base = hotel.subscriptionEndDate && hotel.subscriptionEndDate > new Date()
+      ? hotel.subscriptionEndDate
+      : (hotel.trialEndDate && hotel.trialEndDate > new Date() ? hotel.trialEndDate : new Date());
+
+    const newEnd = new Date(base);
+    newEnd.setDate(newEnd.getDate() + addDays);
+
+    const updated = await Hotel.findByIdAndUpdate(
+      req.params.id,
+      {
+        trialEndDate:       newEnd,
+        subscriptionEndDate: newEnd,
+        status:             'trial',
+        subscriptionType:   'trial',
+      },
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Hotel not found' });
+    return res.json({
+      message: `Trial extended by ${addDays} days (until ${newEnd.toLocaleDateString('en-IN')})`,
+      hotel: updated,
+    });
+  } catch { return res.status(500).json({ message: 'Server error' }); }
+});
+
+// PUT /api/superadmin/hotels/:id/plan — convert to paid subscription
+router.put('/hotels/:id/plan', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { plan, durationDays } = req.body;
+    const validPlans = ['starter', 'professional', 'enterprise'];
+    if (!validPlans.includes(plan)) return res.status(400).json({ message: 'plan must be starter, professional, or enterprise' });
+    const days = Math.max(1, Math.min(730, parseInt(durationDays) || 30));
+
+    const subscriptionStartDate = new Date();
+    const subscriptionEndDate   = new Date();
+    subscriptionEndDate.setDate(subscriptionEndDate.getDate() + days);
+
+    const hotel = await Hotel.findByIdAndUpdate(
+      req.params.id,
+      {
+        status:               'active',
+        subscriptionType:     plan,
+        subscriptionStartDate,
+        subscriptionEndDate,
+        subscriptionPlan:     plan,
+        planStartDate:        subscriptionStartDate,
+        planExpiryDate:       subscriptionEndDate,
+        rejectionReason:      '',
+      },
+      { new: true }
+    );
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    return res.json({
+      message: `${hotel.hotelName} converted to ${plan} plan (${days} days, until ${subscriptionEndDate.toLocaleDateString('en-IN')})`,
       hotel,
     });
   } catch { return res.status(500).json({ message: 'Server error' }); }

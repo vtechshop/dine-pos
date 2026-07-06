@@ -4,8 +4,10 @@ import rateLimit from 'express-rate-limit';
 import Hotel from '../models/Hotel';
 import RefreshToken from '../models/RefreshToken';
 import Settings from '../models/Settings';
-import { generateToken, generateRefreshToken, generateKitchenToken, generateWaiterToken } from '../middleware/auth';
+import { generateToken, generateRefreshToken, generateKitchenToken, generateWaiterToken, generateCashierToken } from '../middleware/auth';
 import Waiter from '../models/Waiter';
+import Cashier from '../models/Cashier';
+import { logAuditRaw } from '../utils/audit';
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -63,6 +65,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
 
     const isMatch = await bcrypt.compare(password, hotel.adminPasswordHash);
     if (!isMatch) {
+      logAuditRaw({ hotelId: hotel._id.toString(), action: 'login.failure', targetType: 'hotel', targetId: hotel._id.toString(), metadata: { userId, reason: 'wrong_password' }, ip: req.ip });
       return res.status(401).json({ message: 'Invalid User ID or Password' });
     }
 
@@ -74,6 +77,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     // Compute trial info for the mobile app
     const daysRemaining = hotel.status === 'trial' ? trialDaysRemaining(hotel.trialEndDate) : null;
 
+    logAuditRaw({ hotelId: hotel._id.toString(), action: 'login.success', targetType: 'hotel', targetId: hotel._id.toString(), metadata: { userId }, ip: req.ip });
     return res.json({
       success: true,
       token,
@@ -136,9 +140,11 @@ router.post('/kitchen', loginLimiter, async (req: Request, res: Response) => {
     if (!settings || !(settings as any).kitchenPin) {
       return res.status(403).json({ message: 'Kitchen PIN not set. Ask admin to configure it in Settings.' });
     }
-    if ((settings as any).kitchenPin !== pin.toString().trim()) {
+    if (!await bcrypt.compare(pin.toString().trim(), (settings as any).kitchenPin)) {
+      logAuditRaw({ hotelId, action: 'kitchen.login.failure', targetType: 'kitchen', metadata: { reason: 'wrong_pin' }, ip: req.ip });
       return res.status(401).json({ message: 'Incorrect PIN' });
     }
+    logAuditRaw({ hotelId, action: 'kitchen.login.success', targetType: 'kitchen', ip: req.ip });
     return res.json({ token: generateKitchenToken(hotelId) });
   } catch {
     return res.status(500).json({ message: 'Server error' });
@@ -162,9 +168,11 @@ router.post('/waiter', loginLimiter, async (req: Request, res: Response) => {
     if (!waiter.isActive) {
       return res.status(403).json({ message: 'Your account is inactive. Contact admin.' });
     }
-    if ((waiter as any).pin !== pin.toString().trim()) {
+    if (!await bcrypt.compare(pin.toString().trim(), (waiter as any).pin)) {
+      logAuditRaw({ hotelId, action: 'waiter.login.failure', targetType: 'waiter', targetId: String((waiter as any)._id), metadata: { employeeCode, reason: 'wrong_pin' }, ip: req.ip });
       return res.status(401).json({ message: 'Incorrect PIN' });
     }
+    logAuditRaw({ hotelId, action: 'waiter.login.success', targetType: 'waiter', targetId: String((waiter as any)._id), metadata: { employeeCode }, ip: req.ip });
     const token = generateWaiterToken(hotelId, String((waiter as any)._id), waiter.name);
     return res.json({
       token,
@@ -173,6 +181,43 @@ router.post('/waiter', loginLimiter, async (req: Request, res: Response) => {
         name:         waiter.name,
         employeeCode: waiter.employeeCode,
         mobile:       waiter.mobile,
+      },
+    });
+  } catch {
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// POST /api/auth/cashier — login with hotelId + employeeCode + PIN
+router.post('/cashier', loginLimiter, async (req: Request, res: Response) => {
+  const { hotelId, employeeCode, pin } = req.body;
+  if (!hotelId || !employeeCode || !pin) {
+    return res.status(400).json({ message: 'Hotel ID, employee code and PIN required' });
+  }
+  try {
+    const cashier = await Cashier.findOne({
+      hotelId,
+      employeeCode: employeeCode.toString().trim().toUpperCase(),
+    }).lean();
+    if (!cashier) {
+      return res.status(401).json({ message: 'Employee code not found' });
+    }
+    if (!cashier.isActive) {
+      return res.status(403).json({ message: 'Your account is inactive. Contact admin.' });
+    }
+    if (!await bcrypt.compare(pin.toString().trim(), (cashier as any).pin)) {
+      logAuditRaw({ hotelId, action: 'cashier.login.failure', targetType: 'cashier', targetId: String((cashier as any)._id), metadata: { employeeCode, reason: 'wrong_pin' }, ip: req.ip });
+      return res.status(401).json({ message: 'Incorrect PIN' });
+    }
+    logAuditRaw({ hotelId, action: 'cashier.login.success', targetType: 'cashier', targetId: String((cashier as any)._id), metadata: { employeeCode }, ip: req.ip });
+    const token = generateCashierToken(hotelId, String((cashier as any)._id), cashier.name);
+    return res.json({
+      token,
+      cashier: {
+        _id:          (cashier as any)._id,
+        name:         cashier.name,
+        employeeCode: cashier.employeeCode,
+        mobile:       cashier.mobile,
       },
     });
   } catch {

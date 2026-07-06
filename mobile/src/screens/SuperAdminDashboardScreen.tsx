@@ -7,7 +7,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, Hotel, SuperAdminStats, AppNotification, Device, RemoteConfig, FeatureFlags } from '../types';
 import { showAlert } from '../utils/alert';
-import { getSuperAdminStats, getAllHotels, approveHotelWithCredentials, rejectHotel, suspendHotel, activateHotel, getAllTickets, adminReplyTicket, updateTicketStatus, getBranchRevenue, setHotelPremium, Ticket, getBroadcastNotifications, createBroadcastNotification, deleteBroadcastNotification, getAllDevices, getSystemHealth, getRemoteConfigAdmin, updateRemoteConfig, startHotelTrial, extendHotelTrial, expireHotel, updateHotelFeatures } from '../services/api';
+import { getSuperAdminStats, getAllHotels, approveHotel, approveHotelWithCredentials, rejectHotel, suspendHotel, activateHotel, getAllTickets, adminReplyTicket, updateTicketStatus, getBranchRevenue, setHotelPremium, Ticket, getBroadcastNotifications, createBroadcastNotification, deleteBroadcastNotification, getAllDevices, getSystemHealth, getRemoteConfigAdmin, updateRemoteConfig, startHotelTrial, expireHotel, updateHotelFeatures, extendTrialDays, convertToPaidPlan } from '../services/api';
 import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -70,6 +70,26 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [newAdminId, setNewAdminId] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
+
+  // New approval modal state
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [approveTrialDays, setApproveTrialDays] = useState(14);
+  const [approveFeatures, setApproveFeatures] = useState<Partial<FeatureFlags>>({
+    reservations: true, customerChat: true, qrOrdering: true,
+    expenses: true, reports: true, tables: true,
+    payment: false, ingredients: false, waste: false, aggregator: false,
+  });
+  const [showCredentialResult, setShowCredentialResult] = useState(false);
+  const [generatedCredentials, setGeneratedCredentials] = useState<{ adminId: string; password: string; kitchenPin: string } | null>(null);
+
+  // Extend trial modal
+  const [showExtendModal, setShowExtendModal] = useState(false);
+  const [extendDays, setExtendDays] = useState(7);
+
+  // Convert to paid plan modal
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [convertPlan, setConvertPlan] = useState<'starter' | 'professional' | 'enterprise'>('starter');
+  const [convertDuration, setConvertDuration] = useState(30);
 
   // Tickets
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -169,9 +189,30 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleApprove = (hotel: Hotel) => {
     setSelectedHotel(hotel);
-    setNewAdminId('');
-    setNewPassword('');
-    setShowCredentialsModal(true);
+    setApproveTrialDays(14);
+    setApproveFeatures({
+      reservations: true, customerChat: true, qrOrdering: true,
+      expenses: true, reports: true, tables: true,
+      payment: false, ingredients: false, waste: false, aggregator: false,
+    });
+    setShowApproveModal(true);
+  };
+
+  const handleApproveSubmit = async () => {
+    if (!selectedHotel) return;
+    setActionLoading(true);
+    try {
+      const result = await approveHotel(selectedHotel._id, approveTrialDays, approveFeatures);
+      setGeneratedCredentials(result.credentials);
+      setShowApproveModal(false);
+      setShowCredentialResult(true);
+      setShowDetail(false);
+      loadData();
+    } catch (error: any) {
+      showAlert('Error', error.message);
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleApproveWithCredentials = async () => {
@@ -187,13 +228,11 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     setActionLoading(true);
     try {
       await approveHotelWithCredentials(selectedHotel._id, newAdminId.trim(), newPassword);
-      const isReset = selectedHotel.status === 'active';
       showAlert(
-        isReset ? 'Credentials Updated!' : 'Approved!',
-        `${selectedHotel.hotelName} ${isReset ? 'credentials updated' : 'approved'}.\n\nAdmin ID: ${newAdminId.trim()}\nPassword: ${newPassword}\n\nShare these with the hotel owner.`
+        'Credentials Updated!',
+        `${selectedHotel.hotelName} credentials updated.\n\nAdmin ID: ${newAdminId.trim()}\nPassword: ${newPassword}\n\nShare these with the hotel owner.`
       );
       setShowCredentialsModal(false);
-      if (!isReset) setShowDetail(false);
       loadData();
     } catch (error: any) {
       showAlert('Error', error.message);
@@ -277,22 +316,48 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     ]);
   };
 
-  const handleExtendTrial = async (hotel: Hotel) => {
-    showAlert('Extend Trial', `Add 7 more days to ${hotel.hotelName}'s trial?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Extend', onPress: async () => {
-          setActionLoading(true);
-          try {
-            await extendHotelTrial(hotel._id, 7);
-            showAlert('Done', 'Trial extended by 7 days!');
-            loadData();
-          } catch (e: any) {
-            showAlert('Error', e.message);
-          } finally { setActionLoading(false); }
-        },
-      },
-    ]);
+  const openExtendModal = (hotel: Hotel) => {
+    setSelectedHotel(hotel);
+    setExtendDays(7);
+    setShowExtendModal(true);
+  };
+
+  const handleExtendSubmit = async () => {
+    if (!selectedHotel) return;
+    setActionLoading(true);
+    try {
+      await extendTrialDays(selectedHotel._id, extendDays);
+      setShowExtendModal(false);
+      loadData();
+      showAlert('Done', `Trial extended by ${extendDays} days!`);
+    } catch (e: any) {
+      showAlert('Error', e.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const openConvertModal = (hotel: Hotel) => {
+    setSelectedHotel(hotel);
+    setConvertPlan('starter');
+    setConvertDuration(30);
+    setShowConvertModal(true);
+  };
+
+  const handleConvertSubmit = async () => {
+    if (!selectedHotel) return;
+    setActionLoading(true);
+    try {
+      await convertToPaidPlan(selectedHotel._id, convertPlan, convertDuration);
+      setShowConvertModal(false);
+      setShowDetail(false);
+      loadData();
+      showAlert('Done', `${selectedHotel.hotelName} converted to ${convertPlan} plan!`);
+    } catch (e: any) {
+      showAlert('Error', e.message);
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleExpire = async (hotel: Hotel) => {
@@ -352,38 +417,61 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     </View>
   );
 
-  const renderHotelCard = ({ item }: { item: Hotel }) => (
-    <TouchableOpacity
-      style={styles.hotelCard}
-      onPress={() => { setSelectedHotel(item); setShowDetail(true); }}
-      activeOpacity={0.8}
-    >
-      <View style={styles.hotelCardLeft}>
-        <View style={[styles.statusDot, { backgroundColor: STATUS_COLORS[item.status] }]} />
-        <View style={styles.hotelCardInfo}>
-          <Text style={styles.hotelName} numberOfLines={1}>{item.hotelName}</Text>
-          <Text style={styles.hotelOwner}>{item.ownerName} • {item.phone}</Text>
-          <Text style={styles.hotelCity}>{item.city}, {item.state}</Text>
+  const renderHotelCard = ({ item }: { item: Hotel }) => {
+    let subBadge: string | null = null;
+    let subBadgeColor = Colors.success;
+    if (item.status === 'trial') {
+      const endStr = item.subscriptionEndDate || item.trialEndDate;
+      if (endStr) {
+        const daysLeft = Math.ceil((new Date(endStr).getTime() - Date.now()) / 86400000);
+        subBadge = `${daysLeft}d left`;
+        subBadgeColor = daysLeft <= 3 ? Colors.danger : daysLeft <= 7 ? Colors.warning : Colors.success;
+      }
+    } else if (item.status === 'active' && item.subscriptionType && item.subscriptionType !== 'trial') {
+      const planLabel: Record<string, string> = { starter: 'Starter', professional: 'Pro', enterprise: 'Ent' };
+      subBadge = planLabel[item.subscriptionType] || item.subscriptionType;
+      subBadgeColor = Colors.info;
+    }
+
+    return (
+      <TouchableOpacity
+        style={styles.hotelCard}
+        onPress={() => { setSelectedHotel(item); setShowDetail(true); }}
+        activeOpacity={0.8}
+      >
+        <View style={styles.hotelCardLeft}>
+          <View style={[styles.statusDot, { backgroundColor: STATUS_COLORS[item.status] }]} />
+          <View style={styles.hotelCardInfo}>
+            <Text style={styles.hotelName} numberOfLines={1}>{item.hotelName}</Text>
+            <Text style={styles.hotelOwner}>{item.ownerName} • {item.phone}</Text>
+            <Text style={styles.hotelCity}>{item.city}, {item.state}</Text>
+          </View>
         </View>
-      </View>
-      <View style={styles.hotelCardRight}>
-        <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status] + '22', borderColor: STATUS_COLORS[item.status] }]}>
-          <Text style={[styles.statusText, { color: STATUS_COLORS[item.status] }]}>
-            {item.status.toUpperCase()}
+        <View style={styles.hotelCardRight}>
+          <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status] + '22', borderColor: STATUS_COLORS[item.status] }]}>
+            <Text style={[styles.statusText, { color: STATUS_COLORS[item.status] }]}>
+              {item.status.toUpperCase()}
+            </Text>
+          </View>
+          {subBadge && (
+            <View style={[styles.statusBadge, { backgroundColor: subBadgeColor + '22', borderColor: subBadgeColor }]}>
+              <Text style={[styles.statusText, { color: subBadgeColor }]}>{subBadge}</Text>
+            </View>
+          )}
+          <Text style={styles.hotelDate}>
+            {new Date(item.createdAt).toLocaleDateString('en-IN')}
           </Text>
         </View>
-        <Text style={styles.hotelDate}>
-          {new Date(item.createdAt).toLocaleDateString('en-IN')}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const renderDetailModal = () => {
     if (!selectedHotel) return null;
     const hotel = selectedHotel;
 
     return (
+      <>
       <Modal visible={showDetail} animationType="slide" onRequestClose={() => setShowDetail(false)}>
         <View style={styles.detailContainer}>
           <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
@@ -522,9 +610,13 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
             )}
             {hotel.status === 'trial' && (
               <>
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.info, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleExtendTrial(hotel)} disabled={actionLoading}>
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.info, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openExtendModal(hotel)} disabled={actionLoading}>
                   <MaterialIcons name="more-time" size={18} color={Colors.white} />
-                  <Text style={styles.actionBtnText}>+7 Days</Text>
+                  <Text style={styles.actionBtnText}>Extend Trial</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#7B1FA2', flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openConvertModal(hotel)} disabled={actionLoading}>
+                  <MaterialIcons name="upgrade" size={18} color={Colors.white} />
+                  <Text style={styles.actionBtnText}>Convert to Plan</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleActivate(hotel)} disabled={actionLoading}>
                   <MaterialIcons name="check-circle" size={18} color={Colors.white} />
@@ -554,29 +646,102 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
                   <MaterialIcons name="check-circle" size={18} color={Colors.white} />
                   <Text style={styles.actionBtnText}>Activate</Text>
                 </TouchableOpacity>
-                {hotel.status === 'expired' && (
-                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleExtendTrial(hotel)} disabled={actionLoading}>
-                    <MaterialIcons name="more-time" size={18} color={Colors.white} />
-                    <Text style={styles.actionBtnText}>Extend Trial</Text>
-                  </TouchableOpacity>
+                {(hotel.status === 'expired') && (
+                  <>
+                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.info, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openExtendModal(hotel)} disabled={actionLoading}>
+                      <MaterialIcons name="more-time" size={18} color={Colors.white} />
+                      <Text style={styles.actionBtnText}>Extend Trial</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#7B1FA2', flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openConvertModal(hotel)} disabled={actionLoading}>
+                      <MaterialIcons name="upgrade" size={18} color={Colors.white} />
+                      <Text style={styles.actionBtnText}>Convert to Plan</Text>
+                    </TouchableOpacity>
+                  </>
                 )}
               </>
             )}
           </ScrollView>
         </View>
 
-        {/* Reject Reason Modal */}
-        {/* Credentials modal for approval */}
+        {/* New Approve Modal — trial duration + feature flags */}
+        <Modal visible={showApproveModal} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: Spacing.md }}>
+              <View style={[styles.rejectModal, { maxHeight: undefined }]}>
+                <Text style={styles.rejectModalTitle}>Approve: {selectedHotel?.hotelName}</Text>
+                <Text style={{ color: Colors.textSecondary, fontSize: FontSize.sm, marginBottom: Spacing.md }}>
+                  Admin ID and password will be auto-generated. Set trial duration and features below.
+                </Text>
+
+                <Text style={{ color: Colors.text, fontWeight: '700', fontSize: FontSize.sm, marginBottom: Spacing.sm }}>Trial Duration</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.md }}>
+                  {[7, 14, 30, 60, 90].map((d) => (
+                    <TouchableOpacity
+                      key={d}
+                      onPress={() => setApproveTrialDays(d)}
+                      style={{
+                        paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20,
+                        backgroundColor: approveTrialDays === d ? Colors.primary : Colors.surface,
+                        borderWidth: 1, borderColor: approveTrialDays === d ? Colors.primary : Colors.border,
+                      }}
+                    >
+                      <Text style={{ color: approveTrialDays === d ? Colors.white : Colors.textSecondary, fontWeight: '600', fontSize: FontSize.sm }}>{d} days</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={{ color: Colors.text, fontWeight: '700', fontSize: FontSize.sm, marginBottom: Spacing.sm }}>Feature Flags</Text>
+                {([
+                  ['tables',      'Tables'],
+                  ['expenses',    'Expenses'],
+                  ['reports',     'Reports'],
+                  ['reservations','Reservations'],
+                  ['qrOrdering',  'QR Ordering'],
+                  ['customerChat','Customer Chat'],
+                  ['ingredients', 'Ingredients'],
+                  ['waste',       'Waste Tracking'],
+                  ['payment',     'Payment Module'],
+                  ['aggregator',  'Aggregator'],
+                ] as [keyof FeatureFlags, string][]).map(([key, label]) => (
+                  <View key={key} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 }}>
+                    <Text style={{ color: Colors.text, fontSize: FontSize.sm }}>{label}</Text>
+                    <TouchableOpacity
+                      onPress={() => setApproveFeatures(prev => ({ ...prev, [key]: !prev[key] }))}
+                      style={{
+                        width: 46, height: 26, borderRadius: 13,
+                        backgroundColor: approveFeatures[key] ? Colors.success : Colors.border,
+                        justifyContent: 'center',
+                        alignItems: approveFeatures[key] ? 'flex-end' : 'flex-start',
+                        paddingHorizontal: 3,
+                      }}
+                    >
+                      <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: Colors.white }} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                <View style={[styles.rejectModalActions, { marginTop: Spacing.md }]}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowApproveModal(false)}>
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.confirmRejectBtn, { backgroundColor: Colors.success }]} onPress={handleApproveSubmit} disabled={actionLoading}>
+                    {actionLoading ? <ActivityIndicator size="small" color={Colors.white} /> : (
+                      <Text style={styles.actionBtnText}>Approve</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </Modal>
+
+        {/* Credential Reset Modal (for active hotels) */}
         <Modal visible={showCredentialsModal} transparent animationType="fade">
           <View style={styles.modalOverlay}>
             <View style={styles.rejectModal}>
-              <Text style={styles.rejectModalTitle}>
-                {selectedHotel?.status === 'active' ? 'Reset Login Credentials' : 'Set Login Credentials'}
-              </Text>
+              <Text style={styles.rejectModalTitle}>Reset Login Credentials</Text>
               <Text style={{ color: Colors.textSecondary, fontSize: FontSize.sm, marginBottom: Spacing.md }}>
-                {selectedHotel?.status === 'active'
-                  ? 'Update the login credentials for this hotel. Share the new credentials with the hotel owner.'
-                  : 'These will be the hotel admin\'s login details. Share them with the hotel owner after approval.'}
+                Update the login credentials for this hotel. Share the new credentials with the hotel owner.
               </Text>
               <TextInput
                 style={[styles.rejectInput, { marginBottom: Spacing.sm, height: 48, textAlignVertical: 'center' }]}
@@ -589,7 +754,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.sm, borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.md, paddingHorizontal: Spacing.md }}>
                 <TextInput
                   style={[{ flex: 1, color: Colors.text, fontSize: FontSize.md, paddingVertical: Spacing.sm }]}
-                  placeholder="Password (min 6 chars)"
+                  placeholder="New password (min 6 chars)"
                   placeholderTextColor={Colors.textMuted}
                   value={newPassword}
                   onChangeText={setNewPassword}
@@ -605,7 +770,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.confirmRejectBtn, { backgroundColor: Colors.success }]} onPress={handleApproveWithCredentials} disabled={actionLoading}>
                   {actionLoading ? <ActivityIndicator size="small" color={Colors.white} /> : (
-                    <Text style={styles.actionBtnText}>Approve</Text>
+                    <Text style={styles.actionBtnText}>Update</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -640,6 +805,142 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </Modal>
       </Modal>
+
+      {/* Extend Trial Modal */}
+      <Modal visible={showExtendModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.rejectModal}>
+            <Text style={styles.rejectModalTitle}>Extend Trial</Text>
+            <Text style={{ color: Colors.textSecondary, fontSize: FontSize.sm, marginBottom: Spacing.md }}>
+              {selectedHotel?.hotelName} — choose how many days to add.
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.md }}>
+              {[7, 15, 30, 60, 90].map((d) => (
+                <TouchableOpacity
+                  key={d}
+                  onPress={() => setExtendDays(d)}
+                  style={{
+                    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20,
+                    backgroundColor: extendDays === d ? Colors.primary : Colors.surface,
+                    borderWidth: 1, borderColor: extendDays === d ? Colors.primary : Colors.border,
+                  }}
+                >
+                  <Text style={{ color: extendDays === d ? Colors.white : Colors.textSecondary, fontWeight: '600', fontSize: FontSize.sm }}>{d} days</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.rejectModalActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowExtendModal(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.confirmRejectBtn, { backgroundColor: Colors.info }]} onPress={handleExtendSubmit} disabled={actionLoading}>
+                {actionLoading ? <ActivityIndicator size="small" color={Colors.white} /> : (
+                  <Text style={styles.actionBtnText}>Extend</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Convert to Paid Plan Modal */}
+      <Modal visible={showConvertModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: Spacing.md }}>
+            <View style={styles.rejectModal}>
+              <Text style={styles.rejectModalTitle}>Convert to Paid Plan</Text>
+              <Text style={{ color: Colors.textSecondary, fontSize: FontSize.sm, marginBottom: Spacing.md }}>
+                {selectedHotel?.hotelName}
+              </Text>
+
+              <Text style={{ color: Colors.text, fontWeight: '700', fontSize: FontSize.sm, marginBottom: Spacing.sm }}>Plan</Text>
+              <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md }}>
+                {(['starter', 'professional', 'enterprise'] as const).map((p) => (
+                  <TouchableOpacity
+                    key={p}
+                    onPress={() => setConvertPlan(p)}
+                    style={{
+                      flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 10,
+                      backgroundColor: convertPlan === p ? '#7B1FA2' : Colors.surface,
+                      borderWidth: 1, borderColor: convertPlan === p ? '#7B1FA2' : Colors.border,
+                    }}
+                  >
+                    <Text style={{ color: convertPlan === p ? Colors.white : Colors.textSecondary, fontWeight: '700', fontSize: FontSize.sm }}>
+                      {p.charAt(0).toUpperCase() + p.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={{ color: Colors.text, fontWeight: '700', fontSize: FontSize.sm, marginBottom: Spacing.sm }}>Duration</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.md }}>
+                {[30, 90, 180, 365].map((d) => (
+                  <TouchableOpacity
+                    key={d}
+                    onPress={() => setConvertDuration(d)}
+                    style={{
+                      paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20,
+                      backgroundColor: convertDuration === d ? '#7B1FA2' : Colors.surface,
+                      borderWidth: 1, borderColor: convertDuration === d ? '#7B1FA2' : Colors.border,
+                    }}
+                  >
+                    <Text style={{ color: convertDuration === d ? Colors.white : Colors.textSecondary, fontWeight: '600', fontSize: FontSize.sm }}>
+                      {d === 365 ? '1 Year' : `${d} days`}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.rejectModalActions}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowConvertModal(false)}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.confirmRejectBtn, { backgroundColor: '#7B1FA2' }]} onPress={handleConvertSubmit} disabled={actionLoading}>
+                  {actionLoading ? <ActivityIndicator size="small" color={Colors.white} /> : (
+                    <Text style={styles.actionBtnText}>Convert</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Generated Credentials Result Modal — shown after auto-approve */}
+      <Modal visible={showCredentialResult} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.rejectModal, { borderTopWidth: 4, borderTopColor: Colors.success }]}>
+            <View style={{ alignItems: 'center', marginBottom: Spacing.md }}>
+              <MaterialIcons name="check-circle" size={48} color={Colors.success} />
+              <Text style={[styles.rejectModalTitle, { marginTop: Spacing.sm }]}>Hotel Approved!</Text>
+            </View>
+            <Text style={{ color: Colors.textSecondary, fontSize: FontSize.sm, marginBottom: Spacing.md, textAlign: 'center' }}>
+              Share these credentials with the hotel owner. This is the only time the password is shown.
+            </Text>
+            <View style={{ backgroundColor: Colors.background, borderRadius: BorderRadius.sm, padding: Spacing.md, gap: Spacing.sm, marginBottom: Spacing.md }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: Colors.textSecondary, fontSize: FontSize.sm }}>Admin ID</Text>
+                <Text style={{ color: Colors.text, fontSize: FontSize.sm, fontWeight: '700', fontFamily: 'monospace' }}>{generatedCredentials?.adminId}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: Colors.textSecondary, fontSize: FontSize.sm }}>Password</Text>
+                <Text style={{ color: Colors.text, fontSize: FontSize.sm, fontWeight: '700', fontFamily: 'monospace' }}>{generatedCredentials?.password}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: Colors.textSecondary, fontSize: FontSize.sm }}>Kitchen PIN</Text>
+                <Text style={{ color: Colors.text, fontSize: FontSize.sm, fontWeight: '700', fontFamily: 'monospace' }}>{generatedCredentials?.kitchenPin}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.confirmRejectBtn, { backgroundColor: Colors.success }]}
+              onPress={() => { setShowCredentialResult(false); setGeneratedCredentials(null); }}
+            >
+              <Text style={styles.actionBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      </>
     );
   };
 
@@ -825,7 +1126,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Stats */}
       {stats && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0, height: 88 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
           {renderStatCard('Total', stats.total, Colors.info, 'store')}
           {renderStatCard('Active', stats.active, Colors.success, 'check-circle')}
           {renderStatCard('Trial', stats.trial ?? 0, Colors.accent, 'timer')}
@@ -1201,7 +1502,7 @@ const styles = StyleSheet.create({
   confirmRejectBtn: { flex: 1, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: Colors.danger, alignItems: 'center' },
 
   // Tab switcher
-  tabRow: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, flexShrink: 0 },
+  tabRow: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, flexShrink: 0, height: 36 },
   tabBtn: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.lg, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', flexDirection: 'row', gap: 5 },
   tabBtnActive: { borderBottomColor: Colors.primary },
   tabBtnText: { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '600' },

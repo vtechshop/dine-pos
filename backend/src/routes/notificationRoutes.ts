@@ -2,9 +2,11 @@ import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import Notification from '../models/Notification';
 import NotificationRead from '../models/NotificationRead';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 
 const router = Router();
+router.use(authMiddleware);
+router.use(requireAdmin);
 
 // GET /api/notifications — notifications for this hotel (unread first)
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {

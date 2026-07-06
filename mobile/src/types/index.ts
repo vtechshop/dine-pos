@@ -213,11 +213,17 @@ export interface AppNotification {
 }
 
 // Hotel (SaaS tenant)
+export type BusinessType =
+  | 'restaurant' | 'hotel' | 'bakery' | 'cafe' | 'sweet-shop'
+  | 'juice-shop' | 'fast-food' | 'cloud-kitchen' | 'food-court' | 'mess' | 'catering'
+  | 'veg' | 'non-veg' | 'both';
+
 export interface Hotel {
   _id: string;
   hotelName: string;
   ownerName: string;
-  businessType: 'veg' | 'non-veg' | 'both';
+  businessType: BusinessType;
+  referralCode?: string;
   phone: string;
   email: string;
   address: string;
@@ -249,6 +255,9 @@ export interface Hotel {
   subscriptionPlan?: 'none' | 'starter' | 'professional' | 'enterprise';
   planStartDate?: string | null;
   planExpiryDate?: string | null;
+  subscriptionType?: 'trial' | 'starter' | 'professional' | 'enterprise';
+  subscriptionStartDate?: string | null;
+  subscriptionEndDate?: string | null;
   features?: FeatureFlags;
   isPremium?: boolean;
   premiumPlan?: string;
@@ -428,6 +437,11 @@ export type RootStackParamList = {
   WaiterLogin: undefined;
   WaiterDisplay: undefined;
   WaiterManagement: undefined;
+  CashierLogin: undefined;
+  CashierDashboard: undefined;
+  CashierManagement: undefined;
+  StaffRole: undefined;
+  SubscriptionExpired: { hotelName: string; expiredOn: string; subscriptionType: string };
 };
 
 export type TabParamList = {

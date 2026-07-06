@@ -1,11 +1,12 @@
 import { Router, Response } from 'express';
 import Category from '../models/Category';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { logAudit } from '../utils/audit';
 
 const router = Router();
 
-// All category routes require auth
 router.use(authMiddleware);
+router.use(requireAdmin);
 
 // GET all categories for this hotel
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -37,6 +38,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const category = new Category({ ...req.body, hotelId: req.hotelId });
     await category.save();
+    logAudit(req, 'category.created', 'category', String((category as any)._id), { name: (category as any).name });
     res.status(201).json(category);
   } catch (error: any) {
     res.status(400).json({ message: error.message || 'Invalid data' });
@@ -52,6 +54,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       { new: true, runValidators: true }
     );
     if (!category) return res.status(404).json({ message: 'Category not found' });
+    logAudit(req, 'category.updated', 'category', req.params.id, { name: (category as any).name });
     res.json(category);
   } catch (error) {
     res.status(400).json({ message: 'Invalid data', error });
@@ -67,6 +70,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       { new: true }
     );
     if (!category) return res.status(404).json({ message: 'Category not found' });
+    logAudit(req, 'category.deleted', 'category', req.params.id, { name: (category as any).name });
     res.json({ message: 'Category deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });

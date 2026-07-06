@@ -13,11 +13,17 @@ export interface IFeatureFlags {
   aggregator: boolean;
 }
 
+export type BusinessType =
+  | 'restaurant' | 'hotel' | 'bakery' | 'cafe' | 'sweet-shop'
+  | 'juice-shop' | 'fast-food' | 'cloud-kitchen' | 'food-court' | 'mess' | 'catering'
+  | 'veg' | 'non-veg' | 'both';
+
 export interface IHotel extends Document {
   // Basic Info
   hotelName: string;
   ownerName: string;
-  businessType: 'veg' | 'non-veg' | 'both';
+  businessType: BusinessType;
+  referralCode: string;
 
   // Contact
   phone: string;
@@ -66,6 +72,11 @@ export interface IHotel extends Document {
   planStartDate: Date | null;
   planExpiryDate: Date | null;
 
+  // New subscription fields (canonical)
+  subscriptionType: 'trial' | 'starter' | 'professional' | 'enterprise';
+  subscriptionStartDate: Date | null;
+  subscriptionEndDate: Date | null;
+
   // Feature flags (per-hotel capability toggles)
   features: IFeatureFlags;
 
@@ -83,16 +94,22 @@ const HotelSchema: Schema = new Schema(
   {
     hotelName:        { type: String, required: true },
     ownerName:        { type: String, required: true },
-    businessType:     { type: String, enum: ['veg', 'non-veg', 'both'], default: 'both' },
+    businessType: {
+      type: String,
+      enum: ['restaurant', 'hotel', 'bakery', 'cafe', 'sweet-shop', 'juice-shop', 'fast-food',
+             'cloud-kitchen', 'food-court', 'mess', 'catering', 'veg', 'non-veg', 'both'],
+      default: 'restaurant',
+    },
+    referralCode:     { type: String, default: '' },
 
     phone:            { type: String, required: true },
     email:            { type: String, default: '' },
-    address:          { type: String, required: true },
+    address:          { type: String, default: '' },
     city:             { type: String, default: '' },
     state:            { type: String, default: '' },
     pincode:          { type: String, default: '' },
 
-    fssaiNumber:      { type: String, required: true },
+    fssaiNumber:      { type: String, default: '' },
     fssaiVerified:    { type: Boolean, default: false },
     gstNumber:        { type: String, default: '' },
     gstVerified:      { type: Boolean, default: false },
@@ -121,10 +138,15 @@ const HotelSchema: Schema = new Schema(
     trialStartDate:     { type: Date, default: null },
     trialEndDate:       { type: Date, default: null },
 
-    // Subscription
+    // Subscription (legacy)
     subscriptionPlan:   { type: String, enum: ['none', 'starter', 'professional', 'enterprise'], default: 'none' },
     planStartDate:      { type: Date, default: null },
     planExpiryDate:     { type: Date, default: null },
+
+    // Subscription (canonical)
+    subscriptionType:       { type: String, enum: ['trial', 'starter', 'professional', 'enterprise'], default: 'trial' },
+    subscriptionStartDate:  { type: Date, default: null },
+    subscriptionEndDate:    { type: Date, default: null },
 
     // Feature flags
     features: {

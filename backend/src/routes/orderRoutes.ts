@@ -4,7 +4,9 @@ import Order from '../models/Order';
 import Product from '../models/Product';
 import Ingredient from '../models/Ingredient';
 import DailyCounter from '../models/DailyCounter';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, requireKitchenOrAdmin, requireWaiterOrAdmin, requireCashierOrAdmin, AuthRequest } from '../middleware/auth';
+import { requireActiveStaff } from '../middleware/staffAuth';
+import { logAudit } from '../utils/audit';
 import { io } from '../server';
 
 const router = Router();
@@ -56,7 +58,7 @@ const generateOrderNumber = async (hotelId: string, prefix = 'ORD'): Promise<str
 };
 
 // Daily report — uses aggregation pipeline (single DB pass, faster than multiple reduce loops)
-router.get('/reports/daily', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
     const date = new Date(dateStr);
@@ -120,7 +122,7 @@ router.get('/reports/daily', authMiddleware, async (req: AuthRequest, res: Respo
 });
 
 // Product-wise sales report for a date
-router.get('/reports/products', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/reports/products', authMiddleware, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
     const date = new Date(dateStr);
@@ -146,11 +148,12 @@ router.get('/reports/products', authMiddleware, async (req: AuthRequest, res: Re
   }
 });
 
-// All remaining routes require auth
+// All remaining routes require auth + active staff check
 router.use(authMiddleware);
+router.use(requireActiveStaff);
 
 // GET /api/orders/kitchen — active orders for KDS (pending + preparing), oldest first
-router.get('/kitchen', async (req: AuthRequest, res: Response) => {
+router.get('/kitchen', requireKitchenOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const orders = await Order.find(
       { hotelId: req.hotelId, status: { $in: ['pending', 'preparing'] } },
@@ -164,7 +167,7 @@ router.get('/kitchen', async (req: AuthRequest, res: Response) => {
 });
 
 // GET /api/orders/waiter — ready orders waiting to be served, oldest first
-router.get('/waiter', async (req: AuthRequest, res: Response) => {
+router.get('/waiter', requireWaiterOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const orders = await Order.find(
       { hotelId: req.hotelId, status: 'ready' },
@@ -177,8 +180,33 @@ router.get('/waiter', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/orders/cashier — today's orders for cashier dashboard (active + completed)
+router.get('/cashier', requireCashierOrAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay   = new Date(now); endOfDay.setHours(23, 59, 59, 999);
+    const orders = await Order.find(
+      {
+        hotelId: req.hotelId,
+        status: { $nin: ['cancelled'] },
+        createdAt: { $gte: startOfDay, $lte: endOfDay },
+      },
+      {
+        orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1,
+        status: 1, paymentMethod: 1, grandTotal: 1, subtotal: 1, taxTotal: 1, discountAmount: 1,
+        orderSource: 1, isParcel: 1, createdAt: 1, completedBy: 1, completedAt: 1, cashierId: 1,
+        'items.productName': 1, 'items.quantity': 1, 'items.price': 1, 'items.total': 1,
+      }
+    ).sort({ createdAt: -1 }).lean();
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+});
+
 // GET all orders
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const filter: any = { hotelId: req.hotelId };
 
@@ -213,7 +241,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 });
 
 // GET customer list — aggregated from orders (name, phone, totalOrders, totalSpent, lastOrderDate)
-router.get('/customers', async (req: AuthRequest, res: Response) => {
+router.get('/customers', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const match: any = {
       hotelId: new mongoose.Types.ObjectId(req.hotelId),
@@ -255,7 +283,7 @@ router.get('/customers', async (req: AuthRequest, res: Response) => {
 });
 
 // GET single order
-router.get('/:id', async (req: AuthRequest, res: Response) => {
+router.get('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const order = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId });
     if (!order) return res.status(404).json({ message: 'Order not found' });
@@ -266,7 +294,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 });
 
 // POST create order — idempotent, deducts stock, emits socket alert
-router.post('/', async (req: AuthRequest, res: Response) => {
+router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     // ── Idempotency guard ────────────────────────────────────────────────────
     // offlineId is the client-generated queue item id. If the network dropped
@@ -344,14 +372,36 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
 // PATCH update order status only
 router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
-  const { status } = req.body;
+  const { status, paymentMethod } = req.body;
   const allowed = ['pending', 'preparing', 'ready', 'served', 'completed', 'cancelled'];
   if (!allowed.includes(status)) {
     return res.status(400).json({ message: 'Invalid status' });
   }
+
+  // Role-based status enforcement — staff can only transition to their allowed statuses
+  const role = req.role; // undefined = admin (no restriction)
+  if (role === 'kitchen' && !['preparing', 'ready'].includes(status)) {
+    return res.status(403).json({ message: 'Access denied.' });
+  }
+  if (role === 'waiter' && status !== 'served') {
+    return res.status(403).json({ message: 'Access denied.' });
+  }
+  if (role === 'cashier' && status !== 'completed') {
+    return res.status(403).json({ message: 'Access denied.' });
+  }
+
   try {
     const existing = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId });
     if (!existing) return res.status(404).json({ message: 'Order not found' });
+
+    // Audit log for cancellation
+    if (status === 'cancelled' && existing.status !== 'cancelled') {
+      logAudit(req, 'order.cancelled', 'order', String(existing._id), {
+        orderNumber: existing.orderNumber,
+        prevStatus:  existing.status,
+        grandTotal:  existing.grandTotal,
+      });
+    }
 
     // Restore stock when cancelling a non-cancelled order
     if (status === 'cancelled' && existing.status !== 'cancelled') {
@@ -369,6 +419,14 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     if (status === 'served') {
       existing.servedBy = req.waiterName || req.waiterId || '';
       existing.servedAt = new Date();
+    }
+    if (status === 'completed') {
+      existing.completedBy = req.cashierName || req.cashierId || '';
+      existing.completedAt = new Date();
+      existing.cashierId   = req.cashierId || '';
+      if (paymentMethod && ['cash', 'upi', 'card', 'split'].includes(paymentMethod)) {
+        existing.paymentMethod = paymentMethod;
+      }
     }
     await existing.save();
 
@@ -396,6 +454,16 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         servedBy: existing.servedBy || '',
       });
     }
+    if (existing.status === 'completed') {
+      io.to(`hotel_${req.hotelId}`).emit('order_completed', {
+        orderId: existing._id,
+        orderNumber: existing.orderNumber,
+        tableNumber: existing.tableNumber || '',
+        completedBy: existing.completedBy || '',
+        paymentMethod: existing.paymentMethod,
+        grandTotal: existing.grandTotal,
+      });
+    }
 
     res.json(existing);
   } catch (error) {
@@ -404,7 +472,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
 });
 
 // PUT update order status
-router.put('/:id', async (req: AuthRequest, res: Response) => {
+router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const order = await Order.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },

@@ -1,7 +1,10 @@
 import { Router, Response } from 'express';
+import bcrypt from 'bcryptjs';
 import Settings from '../models/Settings';
 import Hotel from '../models/Hotel';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { logAudit } from '../utils/audit';
+import { validatePin } from '../utils/pinPolicy';
 
 const router = Router();
 
@@ -39,11 +42,19 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 });
 
 // PUT update settings for this hotel
-router.put('/', async (req: AuthRequest, res: Response) => {
+router.put('/', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
+    const body = { ...req.body };
+    if (body.kitchenPin && typeof body.kitchenPin === 'string') {
+      const pinCheck = validatePin(body.kitchenPin);
+      if (!pinCheck.valid) {
+        return res.status(400).json({ message: pinCheck.message });
+      }
+      body.kitchenPin = await bcrypt.hash(body.kitchenPin, 12);
+    }
     const settings = await Settings.findOneAndUpdate(
       { hotelId: req.hotelId },
-      { ...req.body, hotelId: req.hotelId },
+      { ...body, hotelId: req.hotelId },
       { new: true, upsert: true, runValidators: true }
     );
 
@@ -56,6 +67,7 @@ router.put('/', async (req: AuthRequest, res: Response) => {
       await Hotel.findByIdAndUpdate(req.hotelId, syncFields);
     }
 
+    logAudit(req, 'settings.updated', 'settings', req.hotelId || '', { changedKeys: Object.keys(body).filter(k => k !== 'hotelId') });
     res.json(settings);
   } catch (error) {
     res.status(400).json({ message: 'Invalid data', error });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useWindowDimensions, View, ActivityIndicator, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { navigationRef } from '../utils/navigationRef';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -40,12 +41,17 @@ import KitchenDisplayScreen from '../screens/KitchenDisplayScreen';
 import WaiterLoginScreen from '../screens/WaiterLoginScreen';
 import WaiterDisplayScreen from '../screens/WaiterDisplayScreen';
 import WaiterManagementScreen from '../screens/WaiterManagementScreen';
+import CashierLoginScreen from '../screens/CashierLoginScreen';
+import CashierDashboardScreen from '../screens/CashierDashboardScreen';
+import CashierManagementScreen from '../screens/CashierManagementScreen';
+import StaffRoleScreen from '../screens/StaffRoleScreen';
 import CategoriesScreen from '../screens/CategoriesScreen';
 import TableLayoutScreen from '../screens/TableLayoutScreen';
 import ReservationScreen from '../screens/ReservationScreen';
 import ExpenseScreen from '../screens/ExpenseScreen';
 import CustomersScreen from '../screens/CustomersScreen';
 import IngredientsScreen from '../screens/IngredientsScreen';
+import SubscriptionExpiredScreen from '../screens/SubscriptionExpiredScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<TabParamList>();
@@ -185,21 +191,22 @@ const AppNavigator = () => {
     );
   }
 
-  const safeTop = { paddingTop: top, backgroundColor: Colors.background };
-  const safeTopPrimary = { paddingTop: top, backgroundColor: Colors.primary };
+  const safeTop        = { paddingTop: top, backgroundColor: Colors.background };
+  const safeTopDark    = { paddingTop: top, backgroundColor: '#130A04' };
 
   return (
     <RemoteConfigProvider>
     <FeatureFlagsProvider>
     <SyncProvider>
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: true, gestureDirection: 'horizontal', contentStyle: { backgroundColor: Colors.background } }}>
         {!isLoggedIn ? (
           <>
             <Stack.Screen name="Splash"               component={SplashScreen}               options={{ contentStyle: safeTop }} />
             <Stack.Screen name="ForceUpdate"          component={ForceUpdateScreen}          options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="MaintenanceMode"      component={MaintenanceModeScreen}      options={{ contentStyle: safeTop, gestureEnabled: false }} />
-            <Stack.Screen name="RoleSelect"           component={RoleSelectScreen}           options={{ contentStyle: safeTopPrimary }} />
+            <Stack.Screen name="RoleSelect"           component={RoleSelectScreen}           options={{ contentStyle: safeTopDark }} />
+            <Stack.Screen name="StaffRole"            component={StaffRoleScreen}            options={{ contentStyle: safeTopDark }} />
             <Stack.Screen name="AdminLogin"           component={AdminLoginScreen}           options={{ contentStyle: safeTop }} />
             <Stack.Screen name="BusinessSetup"        component={BusinessSetupScreen}        options={{ contentStyle: safeTop }} />
             <Stack.Screen name="SuperAdminLogin"      component={SuperAdminLoginScreen}      options={{ contentStyle: safeTop }} />
@@ -211,6 +218,8 @@ const AppNavigator = () => {
             <Stack.Screen name="KitchenDisplay"       component={KitchenDisplayScreen}       options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="WaiterLogin"          component={WaiterLoginScreen}          options={{ contentStyle: safeTop }} />
             <Stack.Screen name="WaiterDisplay"        component={WaiterDisplayScreen}        options={{ contentStyle: safeTop, gestureEnabled: false }} />
+            <Stack.Screen name="CashierLogin"         component={CashierLoginScreen}         options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="CashierDashboard"     component={CashierDashboardScreen}     options={{ contentStyle: safeTop, gestureEnabled: false }} />
           </>
         ) : (
           <>
@@ -226,7 +235,9 @@ const AppNavigator = () => {
             <Stack.Screen name="Ingredients"  component={IngredientsScreen}  options={{ contentStyle: safeTop }} />
             <Stack.Screen name="QRMenu"       component={QRMenuScreen}       options={{ contentStyle: safeTop }} />
             <Stack.Screen name="Chat"         component={ChatScreen}         options={{ contentStyle: safeTop }} />
-            <Stack.Screen name="WaiterManagement" component={WaiterManagementScreen} options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="WaiterManagement"    component={WaiterManagementScreen}    options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="CashierManagement"   component={CashierManagementScreen}   options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="SubscriptionExpired" component={SubscriptionExpiredScreen} options={{ contentStyle: { backgroundColor: Colors.primary }, gestureEnabled: false }} />
             <Stack.Screen
               name="AddProduct"
               component={AddProductScreen}

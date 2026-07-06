@@ -798,22 +798,22 @@ const styles = StyleSheet.create({
 
   // Categories — vertical list (tablets only)
   catList: { width: CAT_W, backgroundColor: Colors.surface, borderRightWidth: 1, borderRightColor: Colors.border },
-  catBtn: { alignItems: 'center', paddingVertical: 14, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  catBtn: { alignItems: 'center', paddingVertical: 9, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: Colors.border },
   catBtnActive: { backgroundColor: Colors.primaryBg, borderLeftWidth: 3, borderLeftColor: Colors.primary },
   catText: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 4, textAlign: 'center', lineHeight: 13 },
   catTextActive: { color: Colors.primary, fontWeight: '700' },
 
   // Category chips — horizontal scroll (phones only)
   catChipWrap: {
-    height: 48,
+    height: 42,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  catChipContent: { paddingHorizontal: 10, paddingVertical: 7, gap: 7, flexDirection: 'row', alignItems: 'center' },
+  catChipContent: { paddingHorizontal: 10, paddingVertical: 4, gap: 7, flexDirection: 'row', alignItems: 'center' },
   catChip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 12, paddingVertical: 7,
+    paddingHorizontal: 12, paddingVertical: 5,
     borderRadius: BorderRadius.round,
     backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border,
   },

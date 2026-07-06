@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../utils/constants';
 import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport, GSTR1Json, RemoteConfig, Device, AppNotification, FeatureFlags } from '../types';
+import { navigateGlobal } from '../utils/navigationRef';
 
 const API_URL_STORAGE_KEY = '@hotel_pos_api_base_url';
 const JWT_STORAGE_KEY = '@hotel_pos_jwt_token';
@@ -11,7 +12,7 @@ let _cachedBaseUrl: string | null = null;
 let _cachedToken: string | null = null;
 let _cachedRefreshToken: string | null = null;
 
-const getBaseUrl = async (): Promise<string> => {
+export const getBaseUrl = async (): Promise<string> => {
   if (_cachedBaseUrl) return _cachedBaseUrl;
   try {
     const stored = await AsyncStorage.getItem(API_URL_STORAGE_KEY);
@@ -172,6 +173,17 @@ const fetchAPI = async <T>(
         if (response.status < 500) {
           const err: any = new Error(errBody.message || 'Request failed');
           if (errBody.code) err.code = errBody.code;
+          if (errBody.code === 'TRIAL_EXPIRED' || errBody.code === 'PLAN_EXPIRED') {
+            const expiredOnRaw = errBody.expiredOn;
+            const expiredOn = expiredOnRaw
+              ? new Date(expiredOnRaw).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+              : 'Unknown';
+            navigateGlobal('SubscriptionExpired', {
+              hotelName: errBody.hotelName || 'Your Business',
+              expiredOn,
+              subscriptionType: errBody.subscriptionType || 'trial',
+            });
+          }
           throw err;
         }
         // Retry server errors (5xx) after backoff
@@ -526,6 +538,16 @@ export const checkResetStatus = (phone: string): Promise<{ adminId?: string; res
   return fetchAPI(`/hotels/reset-status/${phone}`, undefined, true);
 };
 
+export const getSubscriptionInfo = (): Promise<{
+  subscriptionStatus: string;
+  subscriptionType: string;
+  trialEndDate: string | null;
+  subscriptionEndDate: string | null;
+  daysRemaining: number;
+  isExpired: boolean;
+  hotelName: string;
+}> => fetchAPI('/hotels/subscription');
+
 // ==================== VERIFICATION ====================
 
 export const verifyIFSC = (ifsc: string): Promise<{ valid: boolean; bank?: string; branch?: string; city?: string; state?: string }> => {
@@ -609,8 +631,21 @@ export const approveHotelWithCredentials = (
   });
 };
 
-export const approveHotel = (id: string): Promise<{ message: string }> => {
-  return superAdminFetch(`/superadmin/hotels/${id}/approve`, { method: 'PUT' });
+export const approveHotel = (
+  id: string,
+  trialDays: number = 14,
+  features?: Partial<FeatureFlags>
+): Promise<{
+  message: string;
+  hotel: Hotel;
+  credentials: { adminId: string; password: string; kitchenPin: string };
+  emailPayload: Record<string, string>;
+  whatsappPayload: Record<string, string>;
+}> => {
+  return superAdminFetch(`/superadmin/hotels/${id}/approve`, {
+    method: 'PUT',
+    body: JSON.stringify({ trialDays, features }),
+  });
 };
 
 export const rejectHotel = (id: string, reason: string): Promise<{ message: string }> => {
@@ -833,6 +868,16 @@ export const startHotelTrial = (id: string, days?: number): Promise<{ message: s
 
 export const extendHotelTrial = (id: string, days: number): Promise<{ message: string; hotel: Hotel }> =>
   superAdminFetch(`/superadmin/hotels/${id}/trial`, { method: 'PUT', body: JSON.stringify({ days, extend: true }) });
+
+export const extendTrialDays = (id: string, days: number): Promise<{ message: string; hotel: Hotel }> =>
+  superAdminFetch(`/superadmin/hotels/${id}/extend-trial`, { method: 'PUT', body: JSON.stringify({ days }) });
+
+export const convertToPaidPlan = (
+  id: string,
+  plan: 'starter' | 'professional' | 'enterprise',
+  durationDays: number,
+): Promise<{ message: string; hotel: Hotel }> =>
+  superAdminFetch(`/superadmin/hotels/${id}/plan`, { method: 'PUT', body: JSON.stringify({ plan, durationDays }) });
 
 export const updateHotelFeatures = (id: string, features: Partial<FeatureFlags>): Promise<{ message: string; features: FeatureFlags }> =>
   superAdminFetch(`/superadmin/hotels/${id}/features`, { method: 'PUT', body: JSON.stringify({ features }) });
@@ -1085,6 +1130,159 @@ export const markOrderServed = async (orderId: string): Promise<void> => {
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error((data as any).message || 'Failed to mark served');
+  }
+};
+
+// ==================== CASHIER DISPLAY ====================
+
+const CASHIER_TOKEN_KEY = '@hotel_pos_cashier_token';
+let _cachedCashierToken: string | null = null;
+
+export const saveCashierToken = async (token: string): Promise<void> => {
+  _cachedCashierToken = token;
+  await AsyncStorage.setItem(CASHIER_TOKEN_KEY, token);
+};
+
+export const getCashierToken = async (): Promise<string | null> => {
+  if (_cachedCashierToken) return _cachedCashierToken;
+  try { _cachedCashierToken = await AsyncStorage.getItem(CASHIER_TOKEN_KEY); } catch { _cachedCashierToken = null; }
+  return _cachedCashierToken;
+};
+
+export const clearCashierToken = async (): Promise<void> => {
+  _cachedCashierToken = null;
+  await AsyncStorage.removeItem(CASHIER_TOKEN_KEY);
+};
+
+export const cashierLogin = async (hotelId: string, employeeCode: string, pin: string): Promise<{ token: string; cashier: { _id: string; name: string; employeeCode: string; mobile: string } }> => {
+  const base = await getBaseUrl();
+  const res = await fetch(`${base}/auth/cashier`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hotelId, employeeCode, pin }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Login failed');
+  return data;
+};
+
+export interface CashierProfile {
+  _id: string;
+  name: string;
+  employeeCode: string;
+  mobile: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export const getCashiers = async (): Promise<CashierProfile[]> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const res = await fetch(`${base}/cashiers`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error('Failed to load cashiers');
+  return res.json();
+};
+
+export const addCashier = async (payload: { name: string; employeeCode: string; pin: string; mobile?: string }): Promise<CashierProfile> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const res = await fetch(`${base}/cashiers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Failed to add cashier');
+  return data;
+};
+
+export const updateCashier = async (id: string, payload: { name?: string; mobile?: string; employeeCode?: string }): Promise<CashierProfile> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const res = await fetch(`${base}/cashiers/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Failed to update cashier');
+  return data;
+};
+
+export const resetCashierPin = async (id: string, pin: string): Promise<void> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const res = await fetch(`${base}/cashiers/${id}/pin`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ pin }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).message || 'Failed to reset PIN');
+  }
+};
+
+export const toggleCashier = async (id: string): Promise<{ isActive: boolean }> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const res = await fetch(`${base}/cashiers/${id}/toggle`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Failed to toggle cashier');
+  return data;
+};
+
+export const deleteCashier = async (id: string): Promise<void> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+  const res = await fetch(`${base}/cashiers/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).message || 'Failed to delete cashier');
+  }
+};
+
+export interface CashierOrderItem { productName: string; quantity: number; price: number; total: number }
+export interface CashierOrder {
+  _id: string;
+  orderNumber: string;
+  tableNumber: string;
+  customerName: string;
+  notes: string;
+  status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed';
+  paymentMethod: 'cash' | 'upi' | 'card' | 'split';
+  grandTotal: number;
+  subtotal: number;
+  taxTotal: number;
+  discountAmount: number;
+  orderSource: string;
+  isParcel: boolean;
+  createdAt: string;
+  completedBy: string;
+  completedAt: string | null;
+  cashierId: string;
+  items: CashierOrderItem[];
+}
+
+export const getCashierOrders = async (): Promise<CashierOrder[]> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
+  const res = await fetch(`${base}/orders/cashier`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Failed to load orders');
+  return res.json();
+};
+
+export const completeOrderPayment = async (orderId: string, paymentMethod: 'cash' | 'upi' | 'card'): Promise<void> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
+  const res = await fetch(`${base}/orders/${orderId}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ status: 'completed', paymentMethod }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).message || 'Failed to complete order');
   }
 };
 
