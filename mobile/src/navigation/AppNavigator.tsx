@@ -205,8 +205,8 @@ const AppNavigator = () => {
             <Stack.Screen name="Splash"               component={SplashScreen}               options={{ contentStyle: safeTop }} />
             <Stack.Screen name="ForceUpdate"          component={ForceUpdateScreen}          options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="MaintenanceMode"      component={MaintenanceModeScreen}      options={{ contentStyle: safeTop, gestureEnabled: false }} />
-            <Stack.Screen name="RoleSelect"           component={RoleSelectScreen}           options={{ contentStyle: safeTopDark }} />
-            <Stack.Screen name="StaffRole"            component={StaffRoleScreen}            options={{ contentStyle: safeTopDark }} />
+            <Stack.Screen name="RoleSelect"           component={RoleSelectScreen}           options={{ contentStyle: { backgroundColor: Colors.primary } }} />
+            <Stack.Screen name="StaffRole"            component={StaffRoleScreen}            options={{ contentStyle: { backgroundColor: Colors.primary } }} />
             <Stack.Screen name="AdminLogin"           component={AdminLoginScreen}           options={{ contentStyle: safeTop }} />
             <Stack.Screen name="BusinessSetup"        component={BusinessSetupScreen}        options={{ contentStyle: safeTop }} />
             <Stack.Screen name="SuperAdminLogin"      component={SuperAdminLoginScreen}      options={{ contentStyle: safeTop }} />

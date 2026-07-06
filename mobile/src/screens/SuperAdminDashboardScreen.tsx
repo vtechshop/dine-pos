@@ -411,7 +411,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   const renderStatCard = (label: string, value: number, color: string, icon: keyof typeof MaterialIcons.glyphMap) => (
     <View style={[styles.statCard, { borderTopColor: color }]}>
-      <MaterialIcons name={icon} size={24} color={color} />
+      <MaterialIcons name={icon} size={20} color={color} />
       <Text style={[styles.statValue, { color }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
@@ -1126,7 +1126,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Stats */}
       {stats && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0, height: 88 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0, height: 72 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
           {renderStatCard('Total', stats.total, Colors.info, 'store')}
           {renderStatCard('Active', stats.active, Colors.success, 'check-circle')}
           {renderStatCard('Trial', stats.trial ?? 0, Colors.accent, 'timer')}
@@ -1422,9 +1422,9 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: FontSize.xxl, fontWeight: 'bold', color: Colors.text },
   headerSubtitle: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
 
-  statsRow: { flexDirection: 'row', padding: Spacing.md, gap: Spacing.sm },
-  statCard: { width: 80, backgroundColor: Colors.card, borderRadius: BorderRadius.md, padding: Spacing.md, alignItems: 'center', borderTopWidth: 3, gap: 4 },
-  statValue: { fontSize: FontSize.xxl, fontWeight: 'bold' },
+  statsRow: { flexDirection: 'row', padding: Spacing.sm, gap: Spacing.sm },
+  statCard: { width: 76, backgroundColor: Colors.card, borderRadius: BorderRadius.md, padding: Spacing.sm, alignItems: 'center', borderTopWidth: 3, gap: 2 },
+  statValue: { fontSize: FontSize.xl, fontWeight: 'bold' },
   statLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, textAlign: 'center' },
 
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, marginHorizontal: Spacing.md, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, borderWidth: 1, borderColor: Colors.border, gap: Spacing.sm },
@@ -1503,7 +1503,7 @@ const styles = StyleSheet.create({
 
   // Tab switcher
   tabRow: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, flexShrink: 0, height: 36 },
-  tabBtn: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.lg, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', flexDirection: 'row', gap: 5 },
+  tabBtn: { paddingVertical: Spacing.xs, paddingHorizontal: Spacing.lg, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', flexDirection: 'row', gap: 5 },
   tabBtnActive: { borderBottomColor: Colors.primary },
   tabBtnText: { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '600' },
   tabBtnTextActive: { color: Colors.primary },

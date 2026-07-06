@@ -5,39 +5,22 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { MaterialIcons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
 import { useSettings } from '../context/SettingsContext';
 import { useCart } from '../context/CartContext';
+import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoleSelect'>;
 
-// ── Dark POS terminal tokens ──────────────────────────────────────────────────
-const C = {
-  ground:   '#130A04',
-  surface:  '#1E1108',
-  surfaceH: '#2A1A0E',
-  border:   'rgba(255,160,80,.10)',
-  divider:  'rgba(255,160,80,.06)',
-  text:     '#F0E8DC',
-  text2:    '#A08878',
-  text3:    '#5C3E30',
-  red:      '#E8380D',
-  redBg:    'rgba(232,56,13,.12)',
-  blue:     '#1565C0',
-  blueBg:   'rgba(21,101,192,.12)',
-  green:    '#2E7D32',
-  greenBg:  'rgba(46,125,50,.12)',
-};
-
 const pad = (n: number) => String(n).padStart(2, '0');
-
-const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
   const { settings } = useSettings();
   const { clearCart } = useCart();
-  const { top, bottom } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
 
   const [time, setTime] = useState(() => {
     const n = new Date();
@@ -48,13 +31,13 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
     return `${DAYS[n.getDay()]}, ${n.getDate()} ${MONTHS[n.getMonth()]}`;
   });
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(16)).current;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim,  { toValue: 1, duration: 380, useNativeDriver: true, easing: Easing.out(Easing.quad) }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 380, useNativeDriver: true, easing: Easing.out(Easing.quad) }),
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 400, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
     ]).start();
 
     const id = setInterval(() => {
@@ -66,218 +49,179 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
   }, []);
 
   return (
-    <View style={[styles.root, { paddingTop: top }]}>
-      <StatusBar barStyle="light-content" backgroundColor={C.ground} translucent={false} />
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} translucent={false} />
 
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.hotelEmoji}>🏨</Text>
+      {/* ── Orange banner ───────────────────────────────────────────────── */}
+      <View style={styles.banner}>
+        <View style={styles.bannerLeft}>
+          <Text style={styles.bannerEmoji}>🍽️</Text>
           <View>
-            <Text style={styles.hotelName} numberOfLines={1}>
+            <Text style={styles.bannerHotel} numberOfLines={1}>
               {settings.hotelName || 'Dine POS'}
             </Text>
-            <Text style={styles.hotelSub}>Point of Sale</Text>
+            <Text style={styles.bannerSub}>Point of Sale</Text>
           </View>
         </View>
-        <View style={styles.headerRight}>
-          <Text style={styles.clock}>{time}</Text>
-          <Text style={styles.dateText}>{dateStr}</Text>
+        <View style={styles.bannerRight}>
+          <Text style={styles.bannerClock}>{time}</Text>
+          <Text style={styles.bannerDate}>{dateStr}</Text>
         </View>
       </View>
 
-      <View style={styles.divider} />
+      {/* ── Body ────────────────────────────────────────────────────────── */}
+      <View style={styles.body}>
+        <Text style={styles.sectionTitle}>Select Your Role</Text>
 
-      {/* ── Cards ──────────────────────────────────────────────────────── */}
-      <Animated.View
-        style={[styles.cards, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
-      >
-        {/* Customer */}
-        <RoleCard
-          accentColor={C.red}
-          iconBg={C.redBg}
-          emoji="👤"
-          role="Customer"
-          desc="Browse Menu & Place Orders"
-          onPress={() => { clearCart(); navigation.replace('CustomerTabs'); }}
-        />
+        <Animated.View style={[styles.cards, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
 
-        {/* Business Admin */}
-        <RoleCard
-          accentColor={C.blue}
-          iconBg={C.blueBg}
-          emoji="👨‍💼"
-          role="Business Admin"
-          desc="Manage Products, Orders, Reports & Settings"
-          onPress={() => navigation.replace('AdminLogin')}
-        />
+          <RoleCard
+            accentColor={Colors.primary}
+            iconBg={Colors.primaryBg}
+            icon="person"
+            emoji="👤"
+            role="Customer"
+            desc="Browse Menu & Place Orders"
+            onPress={() => { clearCart(); navigation.replace('CustomerTabs'); }}
+          />
 
-        {/* Staff Login */}
-        <RoleCard
-          accentColor={C.green}
-          iconBg={C.greenBg}
-          emoji="👥"
-          role="Staff Login"
-          desc="Cashier · Kitchen · Waiter"
-          onPress={() => navigation.navigate('StaffRole')}
-        />
-      </Animated.View>
+          <RoleCard
+            accentColor={Colors.info}
+            iconBg={Colors.infoBg}
+            icon="business-center"
+            emoji="👨‍💼"
+            role="Business Admin"
+            desc="Manage Products, Orders, Reports & Settings"
+            onPress={() => navigation.replace('AdminLogin')}
+          />
+
+          <RoleCard
+            accentColor={Colors.success}
+            iconBg={Colors.successBg}
+            icon="groups"
+            emoji="👥"
+            role="Staff Login"
+            desc="Cashier · Kitchen · Waiter"
+            onPress={() => navigation.navigate('StaffRole')}
+          />
+
+        </Animated.View>
+      </View>
 
       {/* ── Platform admin ──────────────────────────────────────────────── */}
       <TouchableOpacity
-        style={[styles.superBtn, { marginBottom: bottom + 8 }]}
+        style={[styles.superBtn, { marginBottom: bottom + Spacing.lg }]}
         onPress={() => navigation.replace('SuperAdminLogin')}
         activeOpacity={0.7}
       >
-        <Text style={styles.superBtnText}>🔐  Platform Admin</Text>
+        <MaterialIcons name="lock" size={13} color={Colors.textMuted} />
+        <Text style={styles.superBtnText}>Platform Admin</Text>
       </TouchableOpacity>
     </View>
   );
 };
 
-// ── Reusable role card ────────────────────────────────────────────────────────
+// ── Role card ─────────────────────────────────────────────────────────────────
 interface RoleCardProps {
   accentColor: string;
   iconBg: string;
+  icon: keyof typeof MaterialIcons.glyphMap;
   emoji: string;
   role: string;
   desc: string;
   onPress: () => void;
 }
 
-const RoleCard: React.FC<RoleCardProps> = ({ accentColor, iconBg, emoji, role, desc, onPress }) => {
+const RoleCard: React.FC<RoleCardProps> = ({ accentColor, iconBg, icon, emoji, role, desc, onPress }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  const onPressIn = () =>
-    Animated.spring(scaleAnim, { toValue: 0.975, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
-  const onPressOut = () =>
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
+  const onPressIn  = () => Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
+  const onPressOut = () => Animated.spring(scaleAnim, { toValue: 1,    useNativeDriver: true, speed: 50, bounciness: 0 }).start();
 
   return (
     <Animated.View style={[styles.cardOuter, { transform: [{ scale: scaleAnim }] }]}>
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, { borderTopColor: accentColor }]}
         onPress={onPress}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         activeOpacity={1}
       >
-        {/* Left accent bar */}
-        <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
-
-        {/* Icon */}
         <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
           <Text style={styles.iconEmoji}>{emoji}</Text>
         </View>
 
-        {/* Text */}
         <View style={styles.cardText}>
           <Text style={styles.cardRole}>{role}</Text>
           <Text style={styles.cardDesc} numberOfLines={2}>{desc}</Text>
         </View>
 
-        {/* Arrow */}
-        <Text style={styles.cardArrow}>›</Text>
+        <MaterialIcons name="chevron-right" size={22} color={accentColor} style={styles.cardArrow} />
       </TouchableOpacity>
     </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: C.ground,
-  },
+  root: { flex: 1, backgroundColor: Colors.background },
 
-  // Header
-  header: {
+  // Banner
+  banner: {
+    backgroundColor: Colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 18,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.xxl,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  hotelEmoji: { fontSize: 26 },
-  hotelName: {
-    fontSize: 17, fontWeight: '800', color: C.text,
-    letterSpacing: -0.3, maxWidth: 180,
-  },
-  hotelSub: { fontSize: 11, color: C.text3, fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 1 },
-  headerRight: { alignItems: 'flex-end' },
-  clock: {
-    fontSize: 28, fontWeight: '300', color: C.text,
-    letterSpacing: -1, fontVariant: ['tabular-nums'],
-    fontFamily: 'System',
-  },
-  dateText: { fontSize: 11, color: C.text2, fontWeight: '500', marginTop: 1 },
+  bannerLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, flex: 1 },
+  bannerEmoji: { fontSize: 30 },
+  bannerHotel: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.white, letterSpacing: -0.3, maxWidth: 160 },
+  bannerSub: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)', fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 },
+  bannerRight: { alignItems: 'flex-end' },
+  bannerClock: { fontSize: FontSize.xxl, fontWeight: '300', color: Colors.white, letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
+  bannerDate: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.75)', fontWeight: '500', marginTop: 2 },
 
-  divider: { height: 1, backgroundColor: C.divider, marginHorizontal: 0 },
+  // Body
+  body: { flex: 1, paddingHorizontal: Spacing.xl, paddingTop: Spacing.xl },
+  sectionTitle: {
+    fontSize: FontSize.sm, fontWeight: '700', color: Colors.textMuted,
+    letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: Spacing.lg,
+  },
 
   // Cards
-  cards: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 4,
-    gap: 10,
-  },
-
+  cards: { flex: 1, gap: Spacing.md },
   cardOuter: { flex: 1 },
   card: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: C.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: C.border,
-    overflow: 'hidden',
-    minHeight: 82,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderTopWidth: 3,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.md,
+    ...Shadows.sm,
   },
-
-  accentBar: {
-    width: 5,
-    alignSelf: 'stretch',
-  },
-
   iconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 16,
-    marginRight: 4,
-    flexShrink: 0,
+    width: 56, height: 56, borderRadius: BorderRadius.md,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  iconEmoji: { fontSize: 26 },
-
-  cardText: { flex: 1, paddingHorizontal: 14, paddingVertical: 12 },
-  cardRole: {
-    fontSize: 17, fontWeight: '800', color: C.text,
-    letterSpacing: -0.3, marginBottom: 3,
-  },
-  cardDesc: {
-    fontSize: 13, color: C.text2, fontWeight: '500', lineHeight: 18,
-  },
-
-  cardArrow: {
-    fontSize: 26, color: C.text3,
-    paddingRight: 16, paddingTop: 2,
-    lineHeight: 30,
-  },
+  iconEmoji: { fontSize: 28 },
+  cardText: { flex: 1 },
+  cardRole: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.text, marginBottom: 3 },
+  cardDesc: { fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 18 },
+  cardArrow: { flexShrink: 0 },
 
   // Platform admin
   superBtn: {
-    alignSelf: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    marginTop: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    alignSelf: 'center', paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md,
   },
-  superBtnText: {
-    fontSize: 12, color: C.text3, fontWeight: '600', letterSpacing: 0.4,
-  },
+  superBtnText: { fontSize: FontSize.sm, color: Colors.textMuted, fontWeight: '600', letterSpacing: 0.3 },
 });
 
 export default RoleSelectScreen;
