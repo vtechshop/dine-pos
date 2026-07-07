@@ -411,7 +411,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   const renderStatCard = (label: string, value: number, color: string, icon: keyof typeof MaterialIcons.glyphMap) => (
     <View style={[styles.statCard, { borderTopColor: color }]}>
-      <MaterialIcons name={icon} size={20} color={color} />
+      <MaterialIcons name={icon} size={14} color={color} />
       <Text style={[styles.statValue, { color }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
@@ -1126,7 +1126,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Stats */}
       {stats && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0, height: 72 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0, height: 64 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
           {renderStatCard('Total', stats.total, Colors.info, 'store')}
           {renderStatCard('Active', stats.active, Colors.success, 'check-circle')}
           {renderStatCard('Trial', stats.trial ?? 0, Colors.accent, 'timer')}
@@ -1418,14 +1418,14 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
   loadingText: { color: Colors.textSecondary, marginTop: Spacing.md },
 
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: Colors.surface, paddingHorizontal: Spacing.lg, paddingTop: Spacing.xxl, paddingBottom: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  headerTitle: { fontSize: FontSize.xxl, fontWeight: 'bold', color: Colors.text },
-  headerSubtitle: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: Colors.surface, paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  headerTitle: { fontSize: FontSize.xl, fontWeight: 'bold', color: Colors.text },
+  headerSubtitle: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 1 },
 
-  statsRow: { flexDirection: 'row', padding: Spacing.sm, gap: Spacing.sm },
-  statCard: { width: 76, backgroundColor: Colors.card, borderRadius: BorderRadius.md, padding: Spacing.sm, alignItems: 'center', borderTopWidth: 3, gap: 2 },
-  statValue: { fontSize: FontSize.xl, fontWeight: 'bold' },
-  statLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, textAlign: 'center' },
+  statsRow: { flexDirection: 'row', paddingVertical: 4, paddingHorizontal: Spacing.sm, gap: Spacing.xs },
+  statCard: { width: 68, backgroundColor: Colors.card, borderRadius: BorderRadius.sm, paddingVertical: 5, paddingHorizontal: 6, alignItems: 'center', borderTopWidth: 3, gap: 1 },
+  statValue: { fontSize: FontSize.md, fontWeight: 'bold' },
+  statLabel: { fontSize: 9, color: Colors.textSecondary, textAlign: 'center' },
 
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, marginHorizontal: Spacing.md, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, borderWidth: 1, borderColor: Colors.border, gap: Spacing.sm },
   searchInput: { flex: 1, paddingVertical: Spacing.sm, color: Colors.text, fontSize: FontSize.md },
@@ -1450,7 +1450,7 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 10, fontWeight: 'bold' },
   hotelDate: { fontSize: FontSize.xs, color: Colors.textMuted },
 
-  emptyState: { alignItems: 'center', paddingVertical: 60, gap: Spacing.md },
+  emptyState: { alignItems: 'center', paddingVertical: Spacing.xl, gap: Spacing.sm },
   emptyText: { color: Colors.textMuted, fontSize: FontSize.md },
 
   // Detail Modal
