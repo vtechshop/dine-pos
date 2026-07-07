@@ -10,7 +10,7 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import { DailyReport, GSTReport, TallyReport, GSTR1Json, Product } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
-import { getDailyReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics, createWasteLog, getGSTReport, getTallyExport, getGSTR1Json } from '../services/api';
+import { getDailyReport, getRangeReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics, createWasteLog, getGSTReport, getTallyExport, getGSTR1Json } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
 
 type Tab = 'daily' | 'products' | 'stock' | 'waste' | 'gst';
@@ -41,6 +41,28 @@ const getMonthStart = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 };
 
+const fmtDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const getWeekRange = (dateStr: string) => {
+  const d = new Date(dateStr);
+  const day = d.getDay();
+  const mon = new Date(d); mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  return { from: fmtDate(mon), to: fmtDate(sun) };
+};
+
+const getMonthRange = (dateStr: string) => {
+  const d = new Date(dateStr);
+  const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return { from, to: fmtDate(last) };
+};
+
+const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const shortDate = (s: string) => { const d = new Date(s); return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`; };
+
 const ReportsScreen: React.FC = () => {
   const { settings } = useSettings();
   const [tab, setTab] = useState<Tab>('daily');
@@ -62,6 +84,23 @@ const ReportsScreen: React.FC = () => {
   const emptyWasteForm = { productName: '', quantity: '', unit: 'portion', reason: 'expired' as WasteReason, estimatedLoss: '', notes: '' };
   const [wasteForm, setWasteForm] = useState(emptyWasteForm);
   const cur = settings.currencySymbol || '₹';
+
+  // Premium gate modal
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [premiumFeature, setPremiumFeature] = useState('');
+
+  const requirePremium = (featureName: string, action: () => void) => {
+    if (settings.isPremium) { action(); return; }
+    setPremiumFeature(featureName);
+    setShowPremiumModal(true);
+  };
+
+  // WhatsApp share modal
+  type SharePeriod = 'daily' | 'weekly' | 'monthly';
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [sharePeriod, setSharePeriod] = useState<SharePeriod>('daily');
+  const [shareDate, setShareDate] = useState(getTodayString());
+  const [shareLoading, setShareLoading] = useState(false);
 
   const fetchDaily = useCallback(async (d: string) => {
     setLoading(true);
@@ -135,6 +174,61 @@ const ReportsScreen: React.FC = () => {
     const raw = (settings.phone || '').replace(/\D/g, '');
     const waPhone = raw.startsWith('91') ? raw : `91${raw}`;
     Linking.openURL(`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`);
+  };
+
+  const handleShareSubmit = async () => {
+    setShareLoading(true);
+    try {
+      let r: DailyReport;
+      let header: string;
+      let dateLabel: string;
+
+      if (sharePeriod === 'daily') {
+        r = await getDailyReport(shareDate);
+        header = '📊 *Daily Sales Summary*';
+        dateLabel = `📅 Date: ${shareDate}`;
+      } else if (sharePeriod === 'weekly') {
+        const { from, to } = getWeekRange(shareDate);
+        r = await getRangeReport(from, to);
+        header = '📊 *Weekly Sales Summary*';
+        dateLabel = `📅 Week: ${shortDate(from)} → ${shortDate(to)}`;
+      } else {
+        const { from, to } = getMonthRange(shareDate);
+        r = await getRangeReport(from, to);
+        const d = new Date(shareDate);
+        header = '📊 *Monthly Sales Summary*';
+        dateLabel = `📅 Month: ${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`;
+      }
+
+      if (r.totalOrders === 0) {
+        showAlert('No Data', 'No orders found for this period');
+        return;
+      }
+
+      const avg = (r.totalSales / r.totalOrders).toFixed(2);
+      const msg =
+        `${header}\n` +
+        `${dateLabel}\n` +
+        `🏨 ${settings.hotelName}\n\n` +
+        `💰 Total Sales: ${cur}${r.totalSales.toFixed(2)}\n` +
+        `📋 Orders: ${r.totalOrders}\n` +
+        `💸 Tax Collected: ${cur}${r.totalTax.toFixed(2)}\n` +
+        `📊 Avg Order: ${cur}${avg}\n\n` +
+        `💳 *Payments:*\n` +
+        `• Cash: ${cur}${r.paymentBreakdown.cash.toFixed(2)}\n` +
+        `• UPI: ${cur}${r.paymentBreakdown.upi.toFixed(2)}\n` +
+        `• Card: ${cur}${r.paymentBreakdown.card.toFixed(2)}\n\n` +
+        `_Sent via Dine POS_`;
+
+      const raw = (settings.phone || '').replace(/\D/g, '');
+      const waPhone = raw.startsWith('91') ? raw : `91${raw}`;
+      setShowShareModal(false);
+      Linking.openURL(`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`);
+    } catch (e: any) {
+      showAlert('Error', e.message || 'Failed to fetch report');
+    } finally {
+      setShareLoading(false);
+    }
   };
 
   const handleExportGST = async () => {
@@ -336,13 +430,15 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Reports</Text>
-        {tab === 'daily' && report && report.totalOrders > 0 && (
+        {tab === 'daily' && (
           <TouchableOpacity
             style={[styles.headerAddBtn, { backgroundColor: '#25D366' }]}
-            onPress={handleWhatsAppSummary}
+            onPress={() => requirePremium('WhatsApp Report Share', () => {
+              setShareDate(date); setSharePeriod('daily'); setShowShareModal(true);
+            })}
             activeOpacity={0.8}
           >
-            <MaterialIcons name="send" size={20} color={Colors.white} />
+            <MaterialIcons name={settings.isPremium ? 'share' : 'lock'} size={20} color={Colors.white} />
           </TouchableOpacity>
         )}
         {tab === 'waste' && (
@@ -666,15 +762,16 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
               {gstReport && gstReport.rows.length > 0 && (
                 <TouchableOpacity
                   style={styles.exportBtn}
-                  onPress={handleExportGST}
+                  onPress={() => requirePremium('GST PDF Export', handleExportGST)}
                   disabled={gstExporting}
                   activeOpacity={0.8}
                 >
                   {gstExporting
                     ? <ActivityIndicator size="small" color={Colors.white} />
                     : <>
-                        <MaterialIcons name="download" size={18} color={Colors.white} />
+                        <MaterialIcons name={settings.isPremium ? 'download' : 'lock'} size={18} color={Colors.white} />
                         <Text style={styles.exportBtnText}>Export PDF (GSTR-1)</Text>
+                        {!settings.isPremium && <View style={styles.premiumTag}><Text style={styles.premiumTagTxt}>PRO</Text></View>}
                       </>
                   }
                 </TouchableOpacity>
@@ -683,15 +780,16 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
               {/* Tally Export — order-level for accountant */}
               <TouchableOpacity
                 style={[styles.exportBtn, { backgroundColor: '#1565C0', marginTop: 10 }]}
-                onPress={handleExportTally}
+                onPress={() => requirePremium('Tally Export', handleExportTally)}
                 disabled={tallyExporting}
                 activeOpacity={0.8}
               >
                 {tallyExporting
                   ? <ActivityIndicator size="small" color={Colors.white} />
                   : <>
-                      <MaterialIcons name="account-balance" size={18} color={Colors.white} />
+                      <MaterialIcons name={settings.isPremium ? 'account-balance' : 'lock'} size={18} color={Colors.white} />
                       <Text style={styles.exportBtnText}>Tally Export (Accountant)</Text>
+                      {!settings.isPremium && <View style={styles.premiumTag}><Text style={styles.premiumTagTxt}>PRO</Text></View>}
                     </>
                 }
               </TouchableOpacity>
@@ -699,15 +797,16 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
               {/* GSTR-1 JSON — portal upload format */}
               <TouchableOpacity
                 style={[styles.exportBtn, { backgroundColor: '#2E7D32', marginTop: 10 }]}
-                onPress={handleExportGSTR1Json}
+                onPress={() => requirePremium('GSTR-1 JSON Export', handleExportGSTR1Json)}
                 disabled={gstr1Exporting}
                 activeOpacity={0.8}
               >
                 {gstr1Exporting
                   ? <ActivityIndicator size="small" color={Colors.white} />
                   : <>
-                      <MaterialIcons name="upload-file" size={18} color={Colors.white} />
+                      <MaterialIcons name={settings.isPremium ? 'upload-file' : 'lock'} size={18} color={Colors.white} />
                       <Text style={styles.exportBtnText}>GSTR-1 JSON (Portal Upload)</Text>
+                      {!settings.isPremium && <View style={styles.premiumTag}><Text style={styles.premiumTagTxt}>PRO</Text></View>}
                     </>
                 }
               </TouchableOpacity>
@@ -746,6 +845,139 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
 
         </ScrollView>
       )}
+      {/* ── Premium Gate Modal ── */}
+      <Modal visible={showPremiumModal} transparent animationType="fade" onRequestClose={() => setShowPremiumModal(false)}>
+        <TouchableOpacity style={styles.premiumOverlay} activeOpacity={1} onPress={() => setShowPremiumModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.premiumCard}>
+            <View style={styles.premiumIconCircle}>
+              <Text style={styles.premiumCrown}>👑</Text>
+            </View>
+            <Text style={styles.premiumLabel}>Premium Feature</Text>
+            <Text style={styles.premiumFeatureName}>{premiumFeature}</Text>
+            <Text style={styles.premiumDesc}>
+              Upgrade to a paid plan to unlock exports, WhatsApp reports, and more advanced features.
+            </Text>
+
+            <View style={styles.premiumPlanRow}>
+              {['Basic ₹499/mo', 'Pro ₹999/mo'].map(plan => (
+                <View key={plan} style={styles.premiumPlanChip}>
+                  <MaterialIcons name="star" size={11} color={Colors.primary} />
+                  <Text style={styles.premiumPlanTxt}>{plan}</Text>
+                </View>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={styles.premiumUpgradeBtn}
+              onPress={() => { setShowPremiumModal(false); }}
+              activeOpacity={0.85}
+            >
+              <MaterialIcons name="upgrade" size={18} color={Colors.white} />
+              <Text style={styles.premiumUpgradeTxt}>Contact Support to Upgrade</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.premiumDismiss} onPress={() => setShowPremiumModal(false)}>
+              <Text style={styles.premiumDismissTxt}>Maybe later</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── WhatsApp Share Modal ── */}
+      <Modal visible={showShareModal} transparent animationType="slide" onRequestClose={() => setShowShareModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Share Sales Report</Text>
+
+            {/* Period selector */}
+            <View style={styles.sharePeriodRow}>
+              {(['daily', 'weekly', 'monthly'] as const).map(p => (
+                <TouchableOpacity
+                  key={p}
+                  style={[styles.sharePeriodChip, sharePeriod === p && styles.sharePeriodChipActive]}
+                  onPress={() => setSharePeriod(p)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.sharePeriodTxt, sharePeriod === p && styles.sharePeriodTxtActive]}>
+                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Date / range display */}
+            {sharePeriod === 'daily' && (
+              <>
+                <Text style={styles.modalLabel}>Date</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={shareDate}
+                  onChangeText={setShareDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </>
+            )}
+
+            {sharePeriod === 'weekly' && (
+              <>
+                <Text style={styles.modalLabel}>Pick any date in the week</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={shareDate}
+                  onChangeText={setShareDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={Colors.textMuted}
+                />
+                {(() => { const { from, to } = getWeekRange(shareDate); return (
+                  <Text style={styles.shareRangeHint}>
+                    Week: {shortDate(from)} → {shortDate(to)}
+                  </Text>
+                ); })()}
+              </>
+            )}
+
+            {sharePeriod === 'monthly' && (
+              <>
+                <Text style={styles.modalLabel}>Month (any date in month)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={shareDate}
+                  onChangeText={setShareDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={Colors.textMuted}
+                />
+                {(() => { const d = new Date(shareDate); return (
+                  <Text style={styles.shareRangeHint}>
+                    {MONTHS_LONG[d.getMonth()]} {d.getFullYear()}
+                  </Text>
+                ); })()}
+              </>
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowShareModal(false)}>
+                <Text style={styles.modalCancelTxt}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, { backgroundColor: '#25D366' }]}
+                onPress={handleShareSubmit}
+                disabled={shareLoading}
+              >
+                {shareLoading
+                  ? <ActivityIndicator size="small" color={Colors.white} />
+                  : <>
+                      <MaterialIcons name="send" size={18} color={Colors.white} />
+                      <Text style={styles.modalSaveTxt}>Send on WhatsApp</Text>
+                    </>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Log Waste Modal ── */}
       <Modal visible={showWasteModal} transparent animationType="slide" onRequestClose={() => setShowWasteModal(false)}>
         <View style={styles.modalOverlay}>
@@ -1129,8 +1361,70 @@ const styles = StyleSheet.create({
   modalSaveBtn: {
     flex: 2, paddingVertical: 14, borderRadius: BorderRadius.lg,
     backgroundColor: Colors.primary, alignItems: 'center',
+    flexDirection: 'row', justifyContent: 'center', gap: 6,
   },
   modalSaveTxt: { color: Colors.white, fontWeight: '800', fontSize: FontSize.lg },
+
+  // Premium tag badge on buttons
+  premiumTag: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: BorderRadius.round,
+    paddingHorizontal: 7, paddingVertical: 2,
+    marginLeft: Spacing.xs,
+  },
+  premiumTagTxt: { fontSize: 9, fontWeight: '900', color: Colors.white, letterSpacing: 0.5 },
+
+  // Premium gate modal
+  premiumOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center', alignItems: 'center', padding: Spacing.xl,
+  },
+  premiumCard: {
+    backgroundColor: Colors.surface, borderRadius: BorderRadius.xxl,
+    padding: Spacing.xxl, alignItems: 'center', width: '100%',
+    borderWidth: 2, borderColor: Colors.primary + '40',
+  },
+  premiumIconCircle: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: Colors.primaryBg,
+    alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.md,
+  },
+  premiumCrown: { fontSize: 36 },
+  premiumLabel: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  premiumFeatureName: { fontSize: FontSize.xl, fontWeight: '900', color: Colors.text, marginBottom: Spacing.sm, textAlign: 'center' },
+  premiumDesc: { fontSize: FontSize.sm, color: Colors.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: Spacing.lg },
+  premiumPlanRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.xl, flexWrap: 'wrap', justifyContent: 'center' },
+  premiumPlanChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: Colors.primaryBg, borderRadius: BorderRadius.round,
+    paddingHorizontal: Spacing.md, paddingVertical: 6,
+    borderWidth: 1, borderColor: Colors.primary + '30',
+  },
+  premiumPlanTxt: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '700' },
+  premiumUpgradeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.primary, borderRadius: BorderRadius.xl,
+    paddingVertical: Spacing.lg, paddingHorizontal: Spacing.xl,
+    width: '100%', justifyContent: 'center',
+  },
+  premiumUpgradeTxt: { color: Colors.white, fontSize: FontSize.md, fontWeight: '800' },
+  premiumDismiss: { marginTop: Spacing.md, paddingVertical: Spacing.sm },
+  premiumDismissTxt: { fontSize: FontSize.sm, color: Colors.textMuted, fontWeight: '600' },
+
+  // WhatsApp share modal
+  sharePeriodRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
+  sharePeriodChip: {
+    flex: 1, paddingVertical: Spacing.sm, borderRadius: BorderRadius.md,
+    borderWidth: 1.5, borderColor: Colors.border,
+    backgroundColor: Colors.card, alignItems: 'center',
+  },
+  sharePeriodChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  sharePeriodTxt: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.textSecondary },
+  sharePeriodTxtActive: { color: Colors.white },
+  shareRangeHint: {
+    fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600',
+    marginTop: 6, marginBottom: Spacing.sm, textAlign: 'center',
+  },
 });
 
 export default ReportsScreen;

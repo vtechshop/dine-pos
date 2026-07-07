@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, StatusBar,
-  Animated, Easing,
+  Animated, Easing, Image,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -10,6 +11,12 @@ import { RootStackParamList } from '../types';
 import { useSettings } from '../context/SettingsContext';
 import { useCart } from '../context/CartContext';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
+
+export const ROLE_IMG_KEYS = {
+  customer: '@role_img_customer',
+  admin:    '@role_img_admin',
+  staff:    '@role_img_staff',
+};
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoleSelect'>;
 
@@ -33,6 +40,16 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
 
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+
+  const [roleImgs, setRoleImgs] = useState<{ customer: string; admin: string; staff: string }>({
+    customer: '', admin: '', staff: '',
+  });
+
+  useEffect(() => {
+    AsyncStorage.multiGet([ROLE_IMG_KEYS.customer, ROLE_IMG_KEYS.admin, ROLE_IMG_KEYS.staff])
+      .then(([[, c], [, a], [, s]]) => setRoleImgs({ customer: c || '', admin: a || '', staff: s || '' }))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     Animated.parallel([
@@ -80,6 +97,7 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
             iconBg={Colors.primaryBg}
             icon="person"
             emoji="👤"
+            imageUri={roleImgs.customer}
             role="Customer"
             desc="Browse Menu & Place Orders"
             onPress={() => { clearCart(); navigation.replace('CustomerTabs'); }}
@@ -90,6 +108,7 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
             iconBg={Colors.infoBg}
             icon="business-center"
             emoji="👨‍💼"
+            imageUri={roleImgs.admin}
             role="Business Admin"
             desc="Manage Products, Orders, Reports & Settings"
             onPress={() => navigation.replace('AdminLogin')}
@@ -100,6 +119,7 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
             iconBg={Colors.successBg}
             icon="groups"
             emoji="👥"
+            imageUri={roleImgs.staff}
             role="Staff Login"
             desc="Cashier · Kitchen · Waiter"
             onPress={() => navigation.navigate('StaffRole')}
@@ -127,12 +147,13 @@ interface RoleCardProps {
   iconBg: string;
   icon: keyof typeof MaterialIcons.glyphMap;
   emoji: string;
+  imageUri?: string;
   role: string;
   desc: string;
   onPress: () => void;
 }
 
-const RoleCard: React.FC<RoleCardProps> = ({ accentColor, iconBg, icon, emoji, role, desc, onPress }) => {
+const RoleCard: React.FC<RoleCardProps> = ({ accentColor, iconBg, icon, emoji, imageUri, role, desc, onPress }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const onPressIn  = () => Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
   const onPressOut = () => Animated.spring(scaleAnim, { toValue: 1,    useNativeDriver: true, speed: 50, bounciness: 0 }).start();
@@ -146,8 +167,12 @@ const RoleCard: React.FC<RoleCardProps> = ({ accentColor, iconBg, icon, emoji, r
         onPressOut={onPressOut}
         activeOpacity={1}
       >
-        <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
-          <Text style={styles.iconEmoji}>{emoji}</Text>
+        <View style={[styles.iconWrap, { backgroundColor: imageUri ? 'transparent' : iconBg }]}>
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.roleImage} resizeMode="cover" />
+          ) : (
+            <Text style={styles.iconEmoji}>{emoji}</Text>
+          )}
         </View>
 
         <View style={styles.cardText}>
@@ -168,17 +193,17 @@ const styles = StyleSheet.create({
   banner: {
     backgroundColor: Colors.primary,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.xl,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing.md,
   },
   bannerLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, flex: 1 },
   bannerEmoji: { fontSize: 30 },
   bannerHotel: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.white, letterSpacing: -0.3, maxWidth: 160 },
   bannerSub: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)', fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 },
-  bannerRight: { alignItems: 'flex-end' },
+  bannerRight: { alignItems: 'flex-end', justifyContent: 'flex-end' },
   bannerClock: { fontSize: FontSize.xxl, fontWeight: '300', color: Colors.white, letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
   bannerDate: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.75)', fontWeight: '500', marginTop: 2 },
 
@@ -211,6 +236,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   iconEmoji: { fontSize: 28 },
+  roleImage: { width: 56, height: 56, borderRadius: BorderRadius.md },
   cardText: { flex: 1 },
   cardRole: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.text, marginBottom: 3 },
   cardDesc: { fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 18 },

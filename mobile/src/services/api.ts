@@ -469,6 +469,9 @@ export const getDailyReport = (date?: string): Promise<DailyReport> => {
   return fetchAPI<DailyReport>(`/orders/reports/daily${query}`);
 };
 
+export const getRangeReport = (from: string, to: string): Promise<DailyReport> =>
+  fetchAPI<DailyReport>(`/orders/reports/range?from=${from}&to=${to}`);
+
 export const getGSTReport = (from: string, to: string): Promise<GSTReport> => {
   return fetchAPI<GSTReport>(`/reports/gst?from=${from}&to=${to}`);
 };

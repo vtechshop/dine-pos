@@ -11,7 +11,10 @@ import {
   StatusBar,
   Alert,
   Linking,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { ROLE_IMG_KEYS } from './RoleSelectScreen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -59,6 +62,30 @@ const SettingsScreen: React.FC = () => {
 
   const [saving, setSaving] = useState(false);
   const [registering, setRegistering] = useState(false);
+
+  // Role card images
+  const [roleImgs, setRoleImgs] = useState({ customer: '', admin: '', staff: '' });
+  useEffect(() => {
+    AsyncStorage.multiGet([ROLE_IMG_KEYS.customer, ROLE_IMG_KEYS.admin, ROLE_IMG_KEYS.staff])
+      .then(([[, c], [, a], [, s]]) => setRoleImgs({ customer: c || '', admin: a || '', staff: s || '' }))
+      .catch(() => {});
+  }, []);
+
+  const pickRoleImage = async (role: 'customer' | 'admin' | 'staff') => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { showAlert('Permission needed', 'Allow photo library access to pick an image.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+    if (!result.canceled && result.assets[0]) {
+      const uri = result.assets[0].uri;
+      await AsyncStorage.setItem(ROLE_IMG_KEYS[role], uri);
+      setRoleImgs(prev => ({ ...prev, [role]: uri }));
+    }
+  };
+
+  const removeRoleImage = async (role: 'customer' | 'admin' | 'staff') => {
+    await AsyncStorage.removeItem(ROLE_IMG_KEYS[role]);
+    setRoleImgs(prev => ({ ...prev, [role]: '' }));
+  };
   const [seeding, setSeeding] = useState(false);
   const [btDevices, setBtDevices] = useState<BluetoothDevice[]>([]);
   const [connectedPrinter, setConnectedPrinter] = useState<string>('');
@@ -276,6 +303,41 @@ const SettingsScreen: React.FC = () => {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: Spacing.xxl * 3 + bottom }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Role Card Appearance */}
+        <Text style={styles.sectionHeader}>Role Card Appearance</Text>
+        <View style={styles.section}>
+          <Text style={[styles.label, { marginBottom: Spacing.md }]}>
+            Tap a card to change its image. Shown on the login role selector screen.
+          </Text>
+          {([
+            { role: 'customer' as const, label: 'Customer',       emoji: '👤' },
+            { role: 'admin'    as const, label: 'Business Admin',  emoji: '👨‍💼' },
+            { role: 'staff'    as const, label: 'Staff Login',     emoji: '👥' },
+          ]).map(({ role, label, emoji }) => (
+            <View key={role} style={styles.roleImgRow}>
+              <TouchableOpacity style={styles.roleImgThumb} onPress={() => pickRoleImage(role)} activeOpacity={0.8}>
+                {roleImgs[role] ? (
+                  <Image source={{ uri: roleImgs[role] }} style={styles.roleImgPreview} resizeMode="cover" />
+                ) : (
+                  <Text style={{ fontSize: 28 }}>{emoji}</Text>
+                )}
+                <View style={styles.roleImgEditBadge}>
+                  <MaterialIcons name="edit" size={11} color={Colors.white} />
+                </View>
+              </TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.roleImgLabel}>{label}</Text>
+                <Text style={styles.roleImgSub}>{roleImgs[role] ? 'Custom image set' : 'Using default emoji'}</Text>
+              </View>
+              {roleImgs[role] ? (
+                <TouchableOpacity onPress={() => removeRoleImage(role)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <MaterialIcons name="close" size={20} color={Colors.danger} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ))}
+        </View>
+
         {/* Hotel Info Section */}
         <Text style={styles.sectionHeader}>Hotel Information</Text>
         <View style={styles.section}>
@@ -1035,6 +1097,22 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 2,
   },
+  roleImgRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginBottom: Spacing.md },
+  roleImgThumb: {
+    width: 60, height: 60, borderRadius: BorderRadius.md,
+    backgroundColor: Colors.background, borderWidth: 1.5, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center', position: 'relative',
+  },
+  roleImgPreview: { width: 60, height: 60, borderRadius: BorderRadius.md },
+  roleImgEditBadge: {
+    position: 'absolute', bottom: -4, right: -4,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: Colors.surface,
+  },
+  roleImgLabel: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
+  roleImgSub: { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: 2 },
+
   navRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: Spacing.md,

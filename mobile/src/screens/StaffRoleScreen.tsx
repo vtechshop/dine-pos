@@ -113,11 +113,11 @@ const styles = StyleSheet.create({
   banner: {
     backgroundColor: Colors.primary,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: Spacing.lg,
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.xl,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing.md,
   },
   backBtn: {
     width: 38, height: 38, borderRadius: 19,
