@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xl,
+    paddingTop: 40,
     paddingBottom: Spacing.md,
   },
   bannerLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, flex: 1 },

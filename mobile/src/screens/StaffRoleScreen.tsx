@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: Spacing.lg,
     paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xl,
+    paddingTop: 40,
     paddingBottom: Spacing.md,
   },
   backBtn: {
