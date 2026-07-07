@@ -92,7 +92,7 @@ android {
         applicationId 'com.jegatheswar.dinepos'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 28
+        versionCode 29
         versionName "1.3.0"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
@@ -105,7 +105,7 @@ android {
             keyPassword 'android'
         }
         release {
-            storeFile file('eas-upload.jks')
+            storeFile file('release.keystore')
             storePassword '05c08ac5b23f031629b7093239dd3098'
             keyAlias '58c91a09e82cba2cecfe5d410dfadc24'
             keyPassword '7514b71e25a655533c8519ac285f0484'
