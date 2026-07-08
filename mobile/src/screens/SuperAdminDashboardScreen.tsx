@@ -1126,7 +1126,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Stats */}
       {stats && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0, flexGrow: 0, height: 64 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0, flexGrow: 0, height: 70 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
           {renderStatCard('Total', stats.total, Colors.info, 'store')}
           {renderStatCard('Active', stats.active, Colors.success, 'check-circle')}
           {renderStatCard('Trial', stats.trial ?? 0, Colors.accent, 'timer')}
@@ -1423,7 +1423,7 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 1 },
 
   statsRow: { flexDirection: 'row', paddingVertical: 4, paddingHorizontal: Spacing.sm, gap: Spacing.xs },
-  statCard: { width: 68, backgroundColor: Colors.card, borderRadius: BorderRadius.sm, paddingVertical: 5, paddingHorizontal: 6, alignItems: 'center', borderTopWidth: 3, gap: 1 },
+  statCard: { width: 68, backgroundColor: Colors.card, borderRadius: BorderRadius.sm, paddingVertical: 8, paddingHorizontal: 6, alignItems: 'center', borderTopWidth: 3, gap: 1 },
   statValue: { fontSize: FontSize.md, fontWeight: 'bold' },
   statLabel: { fontSize: 9, color: Colors.textSecondary, textAlign: 'center' },
 
