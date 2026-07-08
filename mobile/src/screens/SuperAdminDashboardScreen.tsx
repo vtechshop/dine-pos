@@ -489,7 +489,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           </View>
 
-          <ScrollView style={styles.detailScroll} contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}>
+          <ScrollView style={styles.detailScroll} contentContainerStyle={{ padding: Spacing.lg, paddingBottom: Spacing.lg + bottom }}>
 
             {/* Rejection reason if rejected */}
             {hotel.status === 'rejected' && hotel.rejectionReason ? (
@@ -568,98 +568,98 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.regDate}>
               Registered: {new Date(hotel.createdAt).toLocaleString('en-IN')}
             </Text>
-          </ScrollView>
 
-          {/* Premium Toggle */}
-          {hotel.status === 'active' && (
-            <TouchableOpacity
-              style={[styles.premiumToggleBtn, hotel.isPremium && styles.premiumToggleBtnActive]}
-              onPress={() => handlePremiumToggle(hotel)}
-              disabled={actionLoading}
-            >
-              <Text style={styles.premiumToggleEmoji}>👑</Text>
-              <Text style={[styles.premiumToggleText, hotel.isPremium && styles.premiumToggleTextActive]}>
-                {hotel.isPremium ? 'Premium Active — Tap to Remove' : 'Activate Premium Plan'}
-              </Text>
-              <MaterialIcons
-                name={hotel.isPremium ? 'toggle-on' : 'toggle-off'}
-                size={28}
-                color={hotel.isPremium ? Colors.white : Colors.textMuted}
-              />
-            </TouchableOpacity>
-          )}
-
-          {/* Action Buttons */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.detailActions, { paddingBottom: Spacing.lg + bottom, gap: Spacing.sm }]}>
-            {hotel.status === 'pending' && (
-              <>
-                <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => { setShowRejectModal(true); }} disabled={actionLoading}>
-                  <MaterialIcons name="cancel" size={18} color={Colors.white} />
-                  <Text style={styles.actionBtnText}>Reject</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleStartTrial(hotel)} disabled={actionLoading}>
-                  <MaterialIcons name="timer" size={18} color={Colors.white} />
-                  <Text style={styles.actionBtnText}>Start Trial</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleApprove(hotel)} disabled={actionLoading}>
-                  {actionLoading ? <ActivityIndicator size="small" color={Colors.white} /> : (
-                    <><MaterialIcons name="check-circle" size={18} color={Colors.white} /><Text style={styles.actionBtnText}>Approve</Text></>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
-            {hotel.status === 'trial' && (
-              <>
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.info, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openExtendModal(hotel)} disabled={actionLoading}>
-                  <MaterialIcons name="more-time" size={18} color={Colors.white} />
-                  <Text style={styles.actionBtnText}>Extend Trial</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#7B1FA2', flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openConvertModal(hotel)} disabled={actionLoading}>
-                  <MaterialIcons name="upgrade" size={18} color={Colors.white} />
-                  <Text style={styles.actionBtnText}>Convert to Plan</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleActivate(hotel)} disabled={actionLoading}>
-                  <MaterialIcons name="check-circle" size={18} color={Colors.white} />
-                  <Text style={styles.actionBtnText}>Activate</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleExpire(hotel)} disabled={actionLoading}>
-                  <MaterialIcons name="timer-off" size={18} color={Colors.white} />
-                  <Text style={styles.actionBtnText}>Expire</Text>
-                </TouchableOpacity>
-              </>
-            )}
+            {/* Premium Toggle */}
             {hotel.status === 'active' && (
-              <>
-                <TouchableOpacity style={[styles.actionBtn, styles.suspendBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleSuspend(hotel)} disabled={actionLoading}>
-                  <MaterialIcons name="block" size={18} color={Colors.white} />
-                  <Text style={styles.actionBtnText}>Suspend</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleExpire(hotel)} disabled={actionLoading}>
-                  <MaterialIcons name="timer-off" size={18} color={Colors.white} />
-                  <Text style={styles.actionBtnText}>Expire</Text>
-                </TouchableOpacity>
-              </>
+              <TouchableOpacity
+                style={[styles.premiumToggleBtn, hotel.isPremium && styles.premiumToggleBtnActive]}
+                onPress={() => handlePremiumToggle(hotel)}
+                disabled={actionLoading}
+              >
+                <Text style={styles.premiumToggleEmoji}>👑</Text>
+                <Text style={[styles.premiumToggleText, hotel.isPremium && styles.premiumToggleTextActive]}>
+                  {hotel.isPremium ? 'Premium Active — Tap to Remove' : 'Activate Premium Plan'}
+                </Text>
+                <MaterialIcons
+                  name={hotel.isPremium ? 'toggle-on' : 'toggle-off'}
+                  size={28}
+                  color={hotel.isPremium ? Colors.white : Colors.textMuted}
+                />
+              </TouchableOpacity>
             )}
-            {(hotel.status === 'expired' || hotel.status === 'suspended' || hotel.status === 'rejected') && (
-              <>
-                <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleActivate(hotel)} disabled={actionLoading}>
-                  <MaterialIcons name="check-circle" size={18} color={Colors.white} />
-                  <Text style={styles.actionBtnText}>Activate</Text>
-                </TouchableOpacity>
-                {(hotel.status === 'expired') && (
-                  <>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.info, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openExtendModal(hotel)} disabled={actionLoading}>
-                      <MaterialIcons name="more-time" size={18} color={Colors.white} />
-                      <Text style={styles.actionBtnText}>Extend Trial</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#7B1FA2', flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openConvertModal(hotel)} disabled={actionLoading}>
-                      <MaterialIcons name="upgrade" size={18} color={Colors.white} />
-                      <Text style={styles.actionBtnText}>Convert to Plan</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </>
-            )}
+
+            {/* Action Buttons — inline so no white space gap */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: Spacing.lg }} contentContainerStyle={styles.detailActions}>
+              {hotel.status === 'pending' && (
+                <>
+                  <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => { setShowRejectModal(true); }} disabled={actionLoading}>
+                    <MaterialIcons name="cancel" size={18} color={Colors.white} />
+                    <Text style={styles.actionBtnText}>Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleStartTrial(hotel)} disabled={actionLoading}>
+                    <MaterialIcons name="timer" size={18} color={Colors.white} />
+                    <Text style={styles.actionBtnText}>Start Trial</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleApprove(hotel)} disabled={actionLoading}>
+                    {actionLoading ? <ActivityIndicator size="small" color={Colors.white} /> : (
+                      <><MaterialIcons name="check-circle" size={18} color={Colors.white} /><Text style={styles.actionBtnText}>Approve</Text></>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
+              {hotel.status === 'trial' && (
+                <>
+                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.info, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openExtendModal(hotel)} disabled={actionLoading}>
+                    <MaterialIcons name="more-time" size={18} color={Colors.white} />
+                    <Text style={styles.actionBtnText}>Extend Trial</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#7B1FA2', flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openConvertModal(hotel)} disabled={actionLoading}>
+                    <MaterialIcons name="upgrade" size={18} color={Colors.white} />
+                    <Text style={styles.actionBtnText}>Convert to Plan</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleActivate(hotel)} disabled={actionLoading}>
+                    <MaterialIcons name="check-circle" size={18} color={Colors.white} />
+                    <Text style={styles.actionBtnText}>Activate</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleExpire(hotel)} disabled={actionLoading}>
+                    <MaterialIcons name="timer-off" size={18} color={Colors.white} />
+                    <Text style={styles.actionBtnText}>Expire</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {hotel.status === 'active' && (
+                <>
+                  <TouchableOpacity style={[styles.actionBtn, styles.suspendBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleSuspend(hotel)} disabled={actionLoading}>
+                    <MaterialIcons name="block" size={18} color={Colors.white} />
+                    <Text style={styles.actionBtnText}>Suspend</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleExpire(hotel)} disabled={actionLoading}>
+                    <MaterialIcons name="timer-off" size={18} color={Colors.white} />
+                    <Text style={styles.actionBtnText}>Expire</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {(hotel.status === 'expired' || hotel.status === 'suspended' || hotel.status === 'rejected') && (
+                <>
+                  <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleActivate(hotel)} disabled={actionLoading}>
+                    <MaterialIcons name="check-circle" size={18} color={Colors.white} />
+                    <Text style={styles.actionBtnText}>Activate</Text>
+                  </TouchableOpacity>
+                  {(hotel.status === 'expired') && (
+                    <>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.info, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openExtendModal(hotel)} disabled={actionLoading}>
+                        <MaterialIcons name="more-time" size={18} color={Colors.white} />
+                        <Text style={styles.actionBtnText}>Extend Trial</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#7B1FA2', flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openConvertModal(hotel)} disabled={actionLoading}>
+                        <MaterialIcons name="upgrade" size={18} color={Colors.white} />
+                        <Text style={styles.actionBtnText}>Convert to Plan</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </>
+              )}
+            </ScrollView>
           </ScrollView>
         </View>
 
@@ -1126,7 +1126,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Stats */}
       {stats && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0, flexGrow: 0, height: 70 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0, flexGrow: 0, height: 74 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
           {renderStatCard('Total', stats.total, Colors.info, 'store')}
           {renderStatCard('Active', stats.active, Colors.success, 'check-circle')}
           {renderStatCard('Trial', stats.trial ?? 0, Colors.accent, 'timer')}
@@ -1423,7 +1423,7 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 1 },
 
   statsRow: { flexDirection: 'row', paddingVertical: 4, paddingHorizontal: Spacing.sm, gap: Spacing.xs },
-  statCard: { width: 68, backgroundColor: Colors.card, borderRadius: BorderRadius.sm, paddingVertical: 8, paddingHorizontal: 6, alignItems: 'center', borderTopWidth: 3, gap: 1 },
+  statCard: { width: 68, backgroundColor: Colors.card, borderRadius: BorderRadius.sm, paddingVertical: 11, paddingHorizontal: 6, alignItems: 'center', borderTopWidth: 3, gap: 1 },
   statValue: { fontSize: FontSize.md, fontWeight: 'bold' },
   statLabel: { fontSize: 9, color: Colors.textSecondary, textAlign: 'center' },
 
@@ -1476,7 +1476,7 @@ const styles = StyleSheet.create({
 
   premiumToggleBtn: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-    marginHorizontal: Spacing.lg, marginBottom: Spacing.sm,
+    marginTop: Spacing.md,
     backgroundColor: Colors.card, borderRadius: BorderRadius.md,
     padding: Spacing.md, borderWidth: 1.5, borderColor: Colors.border,
   },
@@ -1484,9 +1484,9 @@ const styles = StyleSheet.create({
   premiumToggleEmoji: { fontSize: 20 },
   premiumToggleText: { flex: 1, fontSize: FontSize.md, fontWeight: '700', color: Colors.textSecondary },
   premiumToggleTextActive: { color: Colors.white },
-  detailActions: { flexDirection: 'row', paddingTop: Spacing.lg, paddingHorizontal: Spacing.lg, gap: Spacing.md, backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border },
-  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.md, borderRadius: BorderRadius.md, gap: Spacing.xs },
-  actionBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: 'bold' },
+  detailActions: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.sm, gap: Spacing.sm },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: BorderRadius.md, gap: Spacing.xs },
+  actionBtnText: { color: Colors.white, fontSize: FontSize.sm, fontWeight: 'bold' },
   approveBtn: { backgroundColor: Colors.success },
   rejectBtn: { backgroundColor: Colors.danger },
   suspendBtn: { backgroundColor: Colors.warning },
@@ -1502,7 +1502,7 @@ const styles = StyleSheet.create({
   confirmRejectBtn: { flex: 1, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: Colors.danger, alignItems: 'center' },
 
   // Tab switcher
-  tabRow: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, flexShrink: 0, flexGrow: 0, height: 36 },
+  tabRow: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, flexShrink: 0, flexGrow: 0, height: 36, marginTop: 3 },
   tabBtn: { paddingVertical: 3, paddingHorizontal: Spacing.lg, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', flexDirection: 'row', gap: 5 },
   tabBtnActive: { borderBottomColor: Colors.primary },
   tabBtnText: { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '600' },
