@@ -1,9 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, StatusBar, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Colors, FontSize, Spacing, APP_VERSION } from '../utils/constants';
 import { useRemoteConfig } from '../context/RemoteConfigContext';
+
+const REMEMBER_DEVICE_KEY = '@dine_remember_device';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Splash'>;
 
@@ -64,7 +67,10 @@ const SplashScreen: React.FC<Props> = ({ navigation }) => {
       ]).start();
     }, 650);
 
-    const navigate = () => {
+    let cancelled = false;
+
+    const navigate = async () => {
+      if (cancelled) return;
       pulse.stop();
       const cfg = configRef.current;
       if (cfg.maintenanceMode) {
@@ -81,11 +87,21 @@ const SplashScreen: React.FC<Props> = ({ navigation }) => {
         });
         return;
       }
+      // If the user previously chose "Remember this device" but their session
+      // has since expired (AuthContext cleared isLoggedIn), route them straight
+      // to AdminLogin rather than making them navigate through RoleSelect.
+      try {
+        const remembered = await AsyncStorage.getItem(REMEMBER_DEVICE_KEY);
+        if (remembered === 'true') {
+          navigation.replace('AdminLogin', { sessionExpired: true });
+          return;
+        }
+      } catch {}
       navigation.replace('RoleSelect');
     };
 
     const t = setTimeout(navigate, 2600);
-    return () => { clearTimeout(t); pulse.stop(); };
+    return () => { cancelled = true; clearTimeout(t); pulse.stop(); };
   }, []);
 
   return (

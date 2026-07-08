@@ -411,7 +411,7 @@ export interface PnLReport {
 export type RootStackParamList = {
   Splash: undefined;
   RoleSelect: undefined;
-  AdminLogin: undefined;
+  AdminLogin: { sessionExpired?: boolean } | undefined;
   BusinessSetup: { resubmit?: boolean; rejectionReason?: string; phone?: string } | undefined;
   HotelStatus: { status: 'pending' | 'trial' | 'expired' | 'suspended'; hotelName?: string; trialDaysRemaining?: number };
   ForceUpdate: { minimumVersion: string; message?: string };

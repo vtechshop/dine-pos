@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../utils/constants';
 import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport, GSTR1Json, RemoteConfig, Device, AppNotification, FeatureFlags } from '../types';
 import { navigateGlobal } from '../utils/navigationRef';
+import { emitSessionExpired } from '../utils/authEvents';
 
 const API_URL_STORAGE_KEY = '@hotel_pos_api_base_url';
 const JWT_STORAGE_KEY = '@hotel_pos_jwt_token';
@@ -91,6 +92,31 @@ export const setSuperAdminCredentials = (id: string, pass: string) => {
   superAdminCredentials = { id, pass };
 };
 
+// ── JWT helpers (no external library) ────────────────────────────────────────
+
+// Decodes the payload section of a JWT without verifying the signature.
+export const decodeJwtPayload = (token: string): Record<string, any> | null => {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    // base64url → base64 + padding
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '=='.slice(0, (4 - (b64.length % 4)) % 4);
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+};
+
+// Returns the JWT expiry as a unix-epoch ms value, or null if not decodable.
+export const getJwtExpiryMs = async (): Promise<number | null> => {
+  const token = await getToken();
+  if (!token) return null;
+  const payload = decodeJwtPayload(token);
+  if (typeof payload?.exp !== 'number') return null;
+  return payload.exp * 1000;
+};
+
 // ── Token refresh singleton ──────────────────────────────────────────────────
 // Prevents concurrent 401s from firing multiple parallel refresh attempts.
 
@@ -114,10 +140,27 @@ const _doRefresh = async (): Promise<boolean> => {
   }
 };
 
-const tryRefreshTokens = (): Promise<boolean> => {
+export const tryRefreshTokens = (): Promise<boolean> => {
   if (_refreshing) return _refreshing;
   _refreshing = _doRefresh().finally(() => { _refreshing = null; });
   return _refreshing;
+};
+
+// Validates the stored JWT locally (expiry check) and refreshes if needed.
+// Safe to call at app launch — avoids a network round-trip when token is still fresh.
+export const validateSession = async (): Promise<'valid' | 'refreshed' | 'expired'> => {
+  const token = await getToken();
+  if (!token) {
+    const ok = await tryRefreshTokens();
+    return ok ? 'refreshed' : 'expired';
+  }
+  const payload = decodeJwtPayload(token);
+  // If we can't decode, trust the token and let the server reject if stale.
+  if (typeof payload?.exp !== 'number') return 'valid';
+  if (payload.exp * 1000 > Date.now()) return 'valid';
+  // Token expired — attempt silent refresh.
+  const ok = await tryRefreshTokens();
+  return ok ? 'refreshed' : 'expired';
 };
 
 // ── Generic fetch wrapper ────────────────────────────────────────────────────
@@ -164,6 +207,8 @@ const fetchAPI = async <T>(
           if (refreshed) {
             return fetchAPI<T>(endpoint, options, skipAuth, retries, true);
           }
+          // Both tokens exhausted — notify AuthContext to clear state and redirect.
+          emitSessionExpired().catch(() => {});
           const err: any = new Error('Session expired. Please login again.');
           err.code = 'SESSION_EXPIRED';
           throw err;

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar,
   ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, Animated,
@@ -29,15 +29,24 @@ async function getOrCreateDeviceId(): Promise<string> {
   return id;
 }
 
-const AdminLoginScreen: React.FC<Props> = ({ navigation }) => {
+const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
   const { login } = useAuth();
   const { setFlags } = useFeatureFlags();
-  const [userId, setUserId]     = useState('');
-  const [password, setPassword] = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading]   = useState(false);
+  const [userId, setUserId]       = useState('');
+  const [password, setPassword]   = useState('');
+  const [showPass, setShowPass]   = useState(false);
+  const [loading, setLoading]     = useState(false);
   const [userFocus, setUserFocus] = useState(false);
   const [passFocus, setPassFocus] = useState(false);
+  const [remember, setRemember]   = useState(true);
+
+  const sessionExpired = route.params?.sessionExpired;
+
+  useEffect(() => {
+    if (sessionExpired) {
+      showAlert('Session Expired', 'Your session has expired. Please login again.');
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [forgotModal, setForgotModal]     = useState(false);
   const [forgotStep, setForgotStep]       = useState<'input' | 'sent' | 'done'>('input');
@@ -72,8 +81,8 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation }) => {
         await AsyncStorage.removeItem('@dine_trial_days');
       }
 
-      // Cache JWT + hotelId + hotelName in SQLite for offline login
-      await login(result.token, result.hotelId, result.hotelName);
+      // Cache JWT + hotelId + hotelName; persist session if "remember device" is on.
+      await login(result.token, result.hotelId, result.hotelName, remember);
 
       // Register device in background (non-blocking)
       getOrCreateDeviceId().then((deviceId) =>
@@ -244,6 +253,18 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
           </View>
 
+          {/* Remember Device checkbox */}
+          <TouchableOpacity
+            style={styles.rememberRow}
+            onPress={() => setRemember((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, remember && styles.checkboxActive]}>
+              {remember && <MaterialIcons name="check" size={13} color={Colors.white} />}
+            </View>
+            <Text style={styles.rememberText}>Remember this device</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={[styles.loginBtn, loading && { opacity: 0.7 }]} onPress={handleLogin} activeOpacity={0.85} disabled={loading}>
             {loading
               ? <ActivityIndicator size="small" color={Colors.white} />
@@ -284,6 +305,10 @@ const styles = StyleSheet.create({
   input: { flex: 1, paddingVertical: 15, fontSize: FontSize.lg, color: Colors.text },
   loginBtn: { flexDirection: 'row', backgroundColor: Colors.primary, paddingVertical: 16, borderRadius: BorderRadius.lg, justifyContent: 'center', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm, ...Shadows.primary },
   loginBtnText: { color: Colors.white, fontSize: FontSize.xl, fontWeight: '800' },
+  rememberRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background },
+  checkboxActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  rememberText: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600' },
   forgotRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: Spacing.sm },
   forgotText: { color: Colors.textMuted, fontSize: FontSize.md },
   registerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: Spacing.xl, paddingBottom: Spacing.xxl },
