@@ -886,6 +886,9 @@ export const registerDevice = (data: {
   appVersion: string;
   osVersion: string;
   pushToken?: string;
+  refreshToken?: string;
+  rememberDevice?: boolean;
+  adminId?: string;
 }): Promise<{ message: string; device: Device }> =>
   fetchAPI('/devices/register', { method: 'POST', body: JSON.stringify(data) });
 
@@ -894,6 +897,15 @@ export const deviceHeartbeat = (deviceId: string, appVersion?: string): Promise<
 
 export const getMyDevices = (): Promise<Device[]> =>
   fetchAPI<Device[]>('/devices');
+
+export const logoutDevice = (deviceId: string): Promise<{ ok: boolean }> =>
+  fetchAPI(`/devices/${deviceId}/logout`, { method: 'PATCH' });
+
+export const logoutAllDevices = (): Promise<{ ok: boolean }> =>
+  fetchAPI('/devices/logout-all', { method: 'DELETE' });
+
+export const deleteDevice = (deviceId: string): Promise<{ ok: boolean }> =>
+  fetchAPI(`/devices/${deviceId}`, { method: 'DELETE' });
 
 // ==================== NOTIFICATIONS ====================
 

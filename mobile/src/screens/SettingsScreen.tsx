@@ -675,6 +675,27 @@ const SettingsScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Account / Device Management */}
+        <Text style={styles.sectionHeader}>Account</Text>
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.navRow}
+            onPress={() => navigation.navigate('TrustedDevices' as any)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.navRowLeft}>
+              <View style={[styles.navRowIcon, { backgroundColor: Colors.primaryBg }]}>
+                <Text style={{ fontSize: 18 }}>📱</Text>
+              </View>
+              <View>
+                <Text style={styles.navRowTitle}>Trusted Devices</Text>
+                <Text style={styles.navRowSub}>Manage devices with saved login sessions</Text>
+              </View>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={Colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
         {/* Waiter Management */}
         <Text style={styles.sectionHeader}>Waiter Management</Text>
         <View style={styles.section}>
@@ -842,8 +863,7 @@ const SettingsScreen: React.FC = () => {
         </View>
 
         {/* Logout */}
-        <View style={styles.seedSection}>
-          <Text style={styles.sectionHeader}>Account</Text>
+        <View style={[styles.seedSection, { marginTop: Spacing.sm }]}>
           <View style={styles.section}>
             <TouchableOpacity
               style={styles.logoutBtn}

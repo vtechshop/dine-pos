@@ -52,6 +52,7 @@ import ExpenseScreen from '../screens/ExpenseScreen';
 import CustomersScreen from '../screens/CustomersScreen';
 import IngredientsScreen from '../screens/IngredientsScreen';
 import SubscriptionExpiredScreen from '../screens/SubscriptionExpiredScreen';
+import TrustedDevicesScreen from '../screens/TrustedDevicesScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<TabParamList>();
@@ -237,6 +238,7 @@ const AppNavigator = () => {
             <Stack.Screen name="Chat"         component={ChatScreen}         options={{ contentStyle: safeTop }} />
             <Stack.Screen name="WaiterManagement"    component={WaiterManagementScreen}    options={{ contentStyle: safeTop }} />
             <Stack.Screen name="CashierManagement"   component={CashierManagementScreen}   options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="TrustedDevices"      component={TrustedDevicesScreen}      options={{ contentStyle: safeTop }} />
             <Stack.Screen name="SubscriptionExpired" component={SubscriptionExpiredScreen} options={{ contentStyle: { backgroundColor: Colors.primary }, gestureEnabled: false }} />
             <Stack.Screen
               name="AddProduct"

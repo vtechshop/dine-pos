@@ -441,6 +441,7 @@ export type RootStackParamList = {
   CashierDashboard: undefined;
   CashierManagement: undefined;
   StaffRole: undefined;
+  TrustedDevices: undefined;
   SubscriptionExpired: { hotelName: string; expiredOn: string; subscriptionType: string };
 };
 

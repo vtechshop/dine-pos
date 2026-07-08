@@ -5,6 +5,7 @@ import { timingSafeEqual } from 'crypto';
 import Hotel from '../models/Hotel';
 import Order from '../models/Order';
 import Device from '../models/Device';
+import RefreshToken from '../models/RefreshToken';
 import Notification from '../models/Notification';
 import RemoteConfig from '../models/RemoteConfig';
 import { generateAdminId, generatePassword } from '../utils/credentialGenerator';
@@ -209,6 +210,11 @@ router.put('/hotels/:id/suspend', superAdminAuth, async (req: Request, res: Resp
       req.params.id, { status: 'suspended' }, { new: true }
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    // Revoke all active sessions so the device is locked out immediately
+    await Promise.all([
+      RefreshToken.updateMany({ hotelId: req.params.id, revokedAt: null }, { revokedAt: new Date() }),
+      Device.updateMany({ hotelId: req.params.id }, { isActive: false, isOnline: false }),
+    ]).catch(() => {});
     return res.json({ message: `${hotel.hotelName} suspended`, hotel });
   } catch { return res.status(500).json({ message: 'Server error' }); }
 });

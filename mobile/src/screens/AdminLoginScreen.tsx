@@ -84,7 +84,7 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
       // Cache JWT + hotelId + hotelName; persist session if "remember device" is on.
       await login(result.token, result.hotelId, result.hotelName, remember);
 
-      // Register device in background (non-blocking)
+      // Register device in background (non-blocking) — pass refreshToken so backend can link session
       getOrCreateDeviceId().then((deviceId) =>
         registerDevice({
           deviceId,
@@ -92,6 +92,9 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
           platform: Platform.OS === 'ios' ? 'ios' : 'android',
           appVersion: APP_VERSION,
           osVersion: '',
+          refreshToken: result.refreshToken,
+          rememberDevice: remember,
+          adminId: result.hotelId,
         })
       ).catch(() => {});
 
