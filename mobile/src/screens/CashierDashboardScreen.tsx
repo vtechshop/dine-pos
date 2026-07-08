@@ -115,7 +115,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
             sound: 'order_alert.wav',
             data: { type: 'cashier_new' },
           },
-          trigger: { channelId: 'order_alerts' } as any,
+          trigger: { channelId: 'order_alerts_v2' } as any,
         }).catch(() => {});
         loadOrders();
       });

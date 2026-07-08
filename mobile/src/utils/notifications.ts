@@ -15,7 +15,11 @@ export const setupNotifications = async (): Promise<void> => {
   try {
     const { status } = await Notifications.requestPermissionsAsync();
     if (status !== 'granted') return;
-    await Notifications.setNotificationChannelAsync('order_alerts', {
+  } catch { return; }
+
+  // Each channel in its own try/catch so one failure never blocks the other
+  try {
+    await Notifications.setNotificationChannelAsync('order_alerts_v2', {
       name: 'New Order Alerts',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 200, 100, 300],
@@ -23,7 +27,10 @@ export const setupNotifications = async (): Promise<void> => {
       enableVibrate: true,
       sound: 'order_alert.wav',
     });
-    await Notifications.setNotificationChannelAsync('chat_alerts', {
+  } catch {}
+
+  try {
+    await Notifications.setNotificationChannelAsync('chat_alerts_v2', {
       name: 'Customer Chat',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 150, 80, 150],
@@ -46,7 +53,7 @@ export const notifyChatMessage = async (
           : message,
         data: { type: 'chat', tableNumber },
       },
-      trigger: { channelId: 'chat_alerts' } as any,
+      trigger: { channelId: 'chat_alerts_v2' } as any,
     });
   } catch {}
 };
@@ -65,7 +72,7 @@ export const notifyNewOrder = async (
         body: `${table} · ${itemCount} item${itemCount !== 1 ? 's' : ''} · ${currency}${grandTotal.toFixed(0)}`,
         sound: 'order_alert.wav',
       },
-      trigger: { channelId: 'order_alerts' } as any,
+      trigger: { channelId: 'order_alerts_v2' } as any,
     });
   } catch {}
 };
@@ -81,7 +88,7 @@ export const notifyNewKitchenOrder = async (): Promise<void> => {
         sound: 'order_alert.wav',
         data: { type: 'kitchen_new_order' },
       },
-      trigger: { channelId: 'order_alerts' } as any,
+      trigger: { channelId: 'order_alerts_v2' } as any,
     });
   } catch {}
 };
@@ -95,7 +102,7 @@ export const notifyOrderPreparing = async (tableNumber: string, orderNumber: str
         body: `${label} is being prepared`,
         data: { type: 'order_preparing' },
       },
-      trigger: { channelId: 'order_alerts' } as any,
+      trigger: { channelId: 'order_alerts_v2' } as any,
     });
   } catch {}
 };
@@ -110,7 +117,7 @@ export const notifyOrderReady = async (tableNumber: string, orderNumber: string)
         sound: 'order_alert.wav',
         data: { type: 'order_ready' },
       },
-      trigger: { channelId: 'order_alerts' } as any,
+      trigger: { channelId: 'order_alerts_v2' } as any,
     });
   } catch {}
 };
