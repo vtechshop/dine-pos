@@ -17,13 +17,12 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#1A1A2E",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/icon.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "com.jegatheswar.dinepos",
-      "versionCode": 30,
+      "versionCode": 31,
       "predictiveBackGestureEnabled": false,
       "newArchEnabled": false,
       "permissions": [

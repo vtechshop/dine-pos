@@ -1126,7 +1126,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Stats */}
       {stats && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0, flexGrow: 0, height: 54 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0, flexGrow: 0, height: 64 }} contentContainerStyle={[styles.statsRow, { gap: Spacing.sm }]}>
           {renderStatCard('Total', stats.total, Colors.info, 'store')}
           {renderStatCard('Active', stats.active, Colors.success, 'check-circle')}
           {renderStatCard('Trial', stats.trial ?? 0, Colors.accent, 'timer')}
@@ -1422,8 +1422,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: FontSize.xl, fontWeight: 'bold', color: Colors.text },
   headerSubtitle: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 1 },
 
-  statsRow: { flexDirection: 'row', paddingVertical: 2, paddingHorizontal: Spacing.sm, gap: Spacing.xs },
-  statCard: { width: 66, backgroundColor: Colors.card, borderRadius: BorderRadius.sm, paddingVertical: 4, paddingHorizontal: 6, alignItems: 'center', borderTopWidth: 3, gap: 1 },
+  statsRow: { flexDirection: 'row', paddingVertical: 4, paddingHorizontal: Spacing.sm, gap: Spacing.xs },
+  statCard: { width: 68, backgroundColor: Colors.card, borderRadius: BorderRadius.sm, paddingVertical: 5, paddingHorizontal: 6, alignItems: 'center', borderTopWidth: 3, gap: 1 },
   statValue: { fontSize: FontSize.md, fontWeight: 'bold' },
   statLabel: { fontSize: 9, color: Colors.textSecondary, textAlign: 'center' },
 
@@ -1502,8 +1502,8 @@ const styles = StyleSheet.create({
   confirmRejectBtn: { flex: 1, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: Colors.danger, alignItems: 'center' },
 
   // Tab switcher
-  tabRow: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, flexShrink: 0, flexGrow: 0, height: 32 },
-  tabBtn: { paddingVertical: 2, paddingHorizontal: Spacing.md, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', flexDirection: 'row', gap: 4 },
+  tabRow: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, flexShrink: 0, flexGrow: 0, height: 36 },
+  tabBtn: { paddingVertical: 3, paddingHorizontal: Spacing.lg, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', flexDirection: 'row', gap: 5 },
   tabBtnActive: { borderBottomColor: Colors.primary },
   tabBtnText: { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '600' },
   tabBtnTextActive: { color: Colors.primary },
