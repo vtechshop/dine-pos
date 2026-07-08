@@ -117,7 +117,7 @@ const CustomerMenuScreen: React.FC = () => {
   // ── Category chip ──────────────────────────────────────────────────────────
   const renderCatChip = (cat: Category | null) => {
     const active = cat ? selectedCat === cat._id : selectedCat === null;
-    const color = cat?.color || Colors.primary;
+    const color = Colors.primary;
     const iconName = cat?.icon;
     return (
       <TouchableOpacity
