@@ -93,14 +93,9 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
           content: {
             title: '🛎️ Order Ready!',
             body: `Table ${data.tableNumber || '—'} · ${data.orderNumber}`,
-            sound: 'order_alert.wav',
             data: { type: 'waiter_ready' },
           },
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-            seconds: 1,
-            channelId: 'order_alerts_v2',
-          },
+          trigger: { channelId: 'order_alerts_v3' },
         }).catch(() => {});
         setReadyPopup({ orderNumber: data.orderNumber, tableNumber: data.tableNumber || '' });
         loadOrders();

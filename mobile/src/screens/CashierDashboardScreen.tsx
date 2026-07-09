@@ -113,14 +113,9 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
           content: {
             title: '💰 New Order!',
             body: 'A new order requires payment collection.',
-            sound: 'order_alert.wav',
             data: { type: 'cashier_new' },
           },
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-            seconds: 1,
-            channelId: 'order_alerts_v2',
-          },
+          trigger: { channelId: 'order_alerts_v3' },
         }).catch(() => {});
         setNewOrderPopup(true);
         loadOrders();

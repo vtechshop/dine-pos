@@ -1,5 +1,5 @@
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { Platform, Vibration } from 'react-native';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -10,28 +10,22 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// Valid immediate trigger for Expo Notifications v55 (SDK 52+)
-const orderTrigger = (): Notifications.TimeIntervalTriggerInput => ({
-  type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-  seconds: 1,
-  channelId: 'order_alerts_v2',
+// ChannelAwareTriggerInput — immediate delivery, no AlarmManager, works on all Android versions
+const orderTrigger = (): Notifications.ChannelAwareTriggerInput => ({
+  channelId: 'order_alerts_v3',
 });
 
-const chatTrigger = (): Notifications.TimeIntervalTriggerInput => ({
-  type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-  seconds: 1,
+const chatTrigger = (): Notifications.ChannelAwareTriggerInput => ({
   channelId: 'chat_alerts_v2',
 });
 
 export const setupNotifications = async (): Promise<void> => {
   if (Platform.OS !== 'android') return;
-  try {
-    const { status } = await Notifications.requestPermissionsAsync();
-    if (status !== 'granted') return;
-  } catch { return; }
 
+  // Create channels FIRST — Android allows this without POST_NOTIFICATIONS permission.
+  // Channel sound is locked after first creation, so bumping to v3 forces a fresh channel.
   try {
-    await Notifications.setNotificationChannelAsync('order_alerts_v2', {
+    await Notifications.setNotificationChannelAsync('order_alerts_v3', {
       name: 'New Order Alerts',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 200, 100, 300],
@@ -49,6 +43,11 @@ export const setupNotifications = async (): Promise<void> => {
       lightColor: '#E8380D',
       enableVibrate: true,
     });
+  } catch {}
+
+  // Request permission after channels exist
+  try {
+    await Notifications.requestPermissionsAsync();
   } catch {}
 };
 
@@ -76,13 +75,13 @@ export const notifyNewOrder = async (
   itemCount: number,
   currency = '₹',
 ): Promise<void> => {
+  Vibration.vibrate([0, 200, 100, 300]);
   try {
     const table = tableNumber ? `Table ${tableNumber}` : 'Walk-in';
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🍽 New Order!',
         body: `${table} · ${itemCount} item${itemCount !== 1 ? 's' : ''} · ${currency}${grandTotal.toFixed(0)}`,
-        sound: 'order_alert.wav',
       },
       trigger: orderTrigger(),
     });
@@ -97,7 +96,6 @@ export const notifyNewKitchenOrder = async (): Promise<void> => {
       content: {
         title: '🍽 New Order!',
         body: 'New order received in kitchen',
-        sound: 'order_alert.wav',
         data: { type: 'kitchen_new_order' },
       },
       trigger: orderTrigger(),
@@ -126,7 +124,6 @@ export const notifyOrderReady = async (tableNumber: string, orderNumber: string)
       content: {
         title: '✅ Order Ready!',
         body: `${label} is ready to serve`,
-        sound: 'order_alert.wav',
         data: { type: 'order_ready' },
       },
       trigger: orderTrigger(),
