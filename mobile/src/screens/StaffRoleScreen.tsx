@@ -36,7 +36,6 @@ const StaffRoleScreen: React.FC<Props> = ({ navigation }) => {
 
           <RoleCard
             accentColor={Colors.info}
-            iconBg={Colors.infoBg}
             emoji="💰"
             role="Cashier"
             desc="Billing & Payments"
@@ -45,7 +44,6 @@ const StaffRoleScreen: React.FC<Props> = ({ navigation }) => {
 
           <RoleCard
             accentColor={Colors.success}
-            iconBg={Colors.successBg}
             emoji="👨‍🍳"
             role="Kitchen"
             desc="Kitchen Display System"
@@ -54,7 +52,6 @@ const StaffRoleScreen: React.FC<Props> = ({ navigation }) => {
 
           <RoleCard
             accentColor={Colors.accent}
-            iconBg={Colors.accentBg}
             emoji="🍽️"
             role="Waiter"
             desc="Serve Orders & Table Operations"
@@ -70,14 +67,13 @@ const StaffRoleScreen: React.FC<Props> = ({ navigation }) => {
 // ── Role card ─────────────────────────────────────────────────────────────────
 interface RoleCardProps {
   accentColor: string;
-  iconBg: string;
   emoji: string;
   role: string;
   desc: string;
   onPress: () => void;
 }
 
-const RoleCard: React.FC<RoleCardProps> = ({ accentColor, iconBg, emoji, role, desc, onPress }) => {
+const RoleCard: React.FC<RoleCardProps> = ({ accentColor, emoji, role, desc, onPress }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const onPressIn  = () => Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
   const onPressOut = () => Animated.spring(scaleAnim, { toValue: 1,    useNativeDriver: true, speed: 50, bounciness: 0 }).start();
@@ -85,22 +81,26 @@ const RoleCard: React.FC<RoleCardProps> = ({ accentColor, iconBg, emoji, role, d
   return (
     <Animated.View style={[styles.cardOuter, { transform: [{ scale: scaleAnim }] }]}>
       <TouchableOpacity
-        style={[styles.card, { borderTopColor: accentColor }]}
+        style={styles.card}
         onPress={onPress}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         activeOpacity={1}
       >
-        <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
-          <Text style={styles.iconEmoji}>{emoji}</Text>
+        <View style={[styles.cardHero, { backgroundColor: accentColor + '18' }]}>
+          <View style={[styles.iconCircle, { backgroundColor: accentColor + '28' }]}>
+            <Text style={styles.iconEmoji}>{emoji}</Text>
+          </View>
         </View>
-
-        <View style={styles.cardText}>
-          <Text style={styles.cardRole}>{role}</Text>
-          <Text style={styles.cardDesc}>{desc}</Text>
+        <View style={[styles.cardBody, { borderTopColor: accentColor }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardRole}>{role}</Text>
+            <Text style={styles.cardDesc}>{desc}</Text>
+          </View>
+          <View style={[styles.cardChip, { backgroundColor: accentColor + '18' }]}>
+            <MaterialIcons name="arrow-forward" size={20} color={accentColor} />
+          </View>
         </View>
-
-        <MaterialIcons name="chevron-right" size={22} color={accentColor} />
       </TouchableOpacity>
     </Animated.View>
   );
@@ -140,26 +140,37 @@ const styles = StyleSheet.create({
   cardOuter: { flex: 1 },
   card: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
+    borderRadius: BorderRadius.xl,
     borderWidth: 1.5,
     borderColor: Colors.border,
-    borderTopWidth: 3,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.md,
+    overflow: 'hidden',
     ...Shadows.sm,
   },
-  iconWrap: {
-    width: 56, height: 56, borderRadius: BorderRadius.md,
+  cardHero: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconCircle: {
+    width: 76, height: 76, borderRadius: 38,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  iconEmoji: { fontSize: 36 },
+  cardBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderTopWidth: 3,
+    gap: Spacing.md,
+  },
+  cardRole: { fontSize: FontSize.lg, fontWeight: '900', color: Colors.text, marginBottom: 2 },
+  cardDesc: { fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 18 },
+  cardChip: {
+    width: 38, height: 38, borderRadius: 19,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  iconEmoji: { fontSize: 28 },
-  cardText: { flex: 1 },
-  cardRole: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.text, marginBottom: 3 },
-  cardDesc: { fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 18 },
 });
 
 export default StaffRoleScreen;

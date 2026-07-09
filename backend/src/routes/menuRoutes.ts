@@ -3,6 +3,7 @@ import Product from '../models/Product';
 import Category from '../models/Category';
 import Settings from '../models/Settings';
 import Order from '../models/Order';
+import DailyCounter from '../models/DailyCounter';
 import mongoose from 'mongoose';
 import { io } from '../server';
 
@@ -16,19 +17,16 @@ const resolveHotelId = async (hotelParam?: string): Promise<mongoose.Types.Objec
   return undefined;
 };
 
-// ─── Helper: generate order number ───────────────────────────────────────────
+// ─── Helper: generate order number (atomic — same counter as orderRoutes.ts) ──
 const generateOrderNumber = async (hotelId: string): Promise<string> => {
-  const today = new Date();
-  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-  const prefix = `ORD-${dateStr}`;
-  const startOfDay = new Date(today); startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay   = new Date(today); endOfDay.setHours(23, 59, 59, 999);
-  const lastOrder = await Order.findOne({
-    hotelId, createdAt: { $gte: startOfDay, $lte: endOfDay },
-  }).sort({ createdAt: -1 });
-  let seq = 1;
-  if (lastOrder) seq = parseInt(lastOrder.orderNumber.split('-').pop() || '0') + 1;
-  return `${prefix}-${String(seq).padStart(3, '0')}`;
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const key = `ORD-${dateStr}-${hotelId}`;
+  const counter = await DailyCounter.findOneAndUpdate(
+    { key },
+    { $inc: { seq: 1 }, $setOnInsert: { key } },
+    { upsert: true, new: true },
+  );
+  return `ORD-${dateStr}-${String(counter!.seq).padStart(3, '0')}`;
 };
 
 // GET /api/public/menu?hotel=<hotelId>

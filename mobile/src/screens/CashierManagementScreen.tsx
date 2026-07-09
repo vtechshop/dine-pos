@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
   ActivityIndicator, StatusBar, Modal, TextInput, Alert,
+  KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -203,60 +204,77 @@ const CashierManagementScreen: React.FC<Props> = ({ navigation }) => {
       )}
 
       <Modal visible={modalMode === 'add' || modalMode === 'edit'} transparent animationType="slide" onRequestClose={closeModal}>
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={closeModal} />
-        <View style={styles.sheet}>
-          <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>{modalMode === 'add' ? 'Add Cashier' : 'Edit Cashier'}</Text>
-
-          <View style={styles.inputWrap}>
-            <MaterialIcons name="person-outline" size={18} color={Colors.textMuted} />
-            <TextInput style={styles.input} placeholder="Full Name *" placeholderTextColor={Colors.textMuted}
-              value={name} onChangeText={setName} />
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={styles.backdrop} />
+          <View style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>{modalMode === 'add' ? 'Add Cashier' : 'Edit Cashier'}</Text>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <View style={styles.inputWrap}>
+                <MaterialIcons name="person-outline" size={18} color={Colors.textMuted} />
+                <TextInput style={styles.input} placeholder="Full Name *" placeholderTextColor={Colors.textMuted}
+                  value={name} onChangeText={setName} />
+              </View>
+              <View style={styles.inputWrap}>
+                <MaterialIcons name="badge" size={18} color={Colors.textMuted} />
+                <TextInput style={styles.input} placeholder="Employee Code (e.g. C001) *"
+                  placeholderTextColor={Colors.textMuted} value={employeeCode}
+                  onChangeText={v => setEmployeeCode(v.toUpperCase())} autoCapitalize="characters" />
+              </View>
+              <View style={styles.inputWrap}>
+                <MaterialIcons name="phone" size={18} color={Colors.textMuted} />
+                <TextInput style={styles.input} placeholder="Mobile (optional)" placeholderTextColor={Colors.textMuted}
+                  value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
+              </View>
+              {modalMode === 'add' && (
+                <View style={styles.inputWrap}>
+                  <MaterialIcons name="lock-outline" size={18} color={Colors.textMuted} />
+                  <TextInput style={[styles.input, { letterSpacing: 4 }]} placeholder="PIN (4–6 digits) *"
+                    placeholderTextColor={Colors.textMuted} value={pin}
+                    onChangeText={v => setPin(v.replace(/\D/g, '').slice(0, 6))}
+                    keyboardType="number-pad" secureTextEntry />
+                </View>
+              )}
+              {!!formError && <Text style={styles.formError}>{formError}</Text>}
+              <View style={styles.btnRow}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={closeModal} disabled={saving}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
+                  {saving ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.saveBtnText}>Save</Text>}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
-          <View style={styles.inputWrap}>
-            <MaterialIcons name="badge" size={18} color={Colors.textMuted} />
-            <TextInput style={styles.input} placeholder="Employee Code (e.g. C001) *"
-              placeholderTextColor={Colors.textMuted} value={employeeCode}
-              onChangeText={v => setEmployeeCode(v.toUpperCase())} autoCapitalize="characters" />
-          </View>
-          <View style={styles.inputWrap}>
-            <MaterialIcons name="phone" size={18} color={Colors.textMuted} />
-            <TextInput style={styles.input} placeholder="Mobile (optional)" placeholderTextColor={Colors.textMuted}
-              value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
-          </View>
-          {modalMode === 'add' && (
-            <View style={styles.inputWrap}>
-              <MaterialIcons name="lock-outline" size={18} color={Colors.textMuted} />
-              <TextInput style={[styles.input, { letterSpacing: 4 }]} placeholder="PIN (4–6 digits) *"
-                placeholderTextColor={Colors.textMuted} value={pin}
-                onChangeText={v => setPin(v.replace(/\D/g, '').slice(0, 6))}
-                keyboardType="number-pad" secureTextEntry />
-            </View>
-          )}
-          {!!formError && <Text style={styles.formError}>{formError}</Text>}
-          <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
-            {saving ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.saveBtnText}>Save</Text>}
-          </TouchableOpacity>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={modalMode === 'pin'} transparent animationType="slide" onRequestClose={closeModal}>
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={closeModal} />
-        <View style={styles.sheet}>
-          <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>Reset PIN — {selected?.name}</Text>
-          <View style={styles.inputWrap}>
-            <MaterialIcons name="lock-outline" size={18} color={Colors.textMuted} />
-            <TextInput style={[styles.input, { letterSpacing: 4 }]} placeholder="New PIN (4–6 digits)"
-              placeholderTextColor={Colors.textMuted} value={pin}
-              onChangeText={v => setPin(v.replace(/\D/g, '').slice(0, 6))}
-              keyboardType="number-pad" secureTextEntry autoFocus />
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={styles.backdrop} />
+          <View style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Reset PIN — {selected?.name}</Text>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <View style={styles.inputWrap}>
+                <MaterialIcons name="lock-outline" size={18} color={Colors.textMuted} />
+                <TextInput style={[styles.input, { letterSpacing: 4 }]} placeholder="New PIN (4–6 digits)"
+                  placeholderTextColor={Colors.textMuted} value={pin}
+                  onChangeText={v => setPin(v.replace(/\D/g, '').slice(0, 6))}
+                  keyboardType="number-pad" secureTextEntry autoFocus />
+              </View>
+              {!!formError && <Text style={styles.formError}>{formError}</Text>}
+              <View style={styles.btnRow}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={closeModal} disabled={saving}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleResetPin} disabled={saving}>
+                  {saving ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.saveBtnText}>Update PIN</Text>}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
-          {!!formError && <Text style={styles.formError}>{formError}</Text>}
-          <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleResetPin} disabled={saving}>
-            {saving ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.saveBtnText}>Update PIN</Text>}
-          </TouchableOpacity>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -309,7 +327,6 @@ const styles = StyleSheet.create({
   sheet: {
     backgroundColor: Colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24,
     padding: Spacing.xl, paddingBottom: 40,
-    position: 'absolute', bottom: 0, left: 0, right: 0,
   },
   sheetHandle: { width: 36, height: 4, backgroundColor: Colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: Spacing.lg },
   sheetTitle: { fontSize: FontSize.xl, fontWeight: '900', color: Colors.text, marginBottom: Spacing.lg },
@@ -321,9 +338,16 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, paddingVertical: 13, fontSize: FontSize.md, color: Colors.text },
   formError: { color: Colors.danger, fontSize: FontSize.sm, marginBottom: Spacing.sm, paddingLeft: 4 },
+  btnRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.md },
+  cancelBtn: {
+    flex: 1, borderRadius: BorderRadius.xl,
+    paddingVertical: 14, alignItems: 'center',
+    borderWidth: 1.5, borderColor: Colors.border,
+  },
+  cancelBtnText: { color: Colors.textSecondary, fontSize: FontSize.lg, fontWeight: '700' },
   saveBtn: {
-    backgroundColor: Colors.info, borderRadius: BorderRadius.xl,
-    paddingVertical: 14, alignItems: 'center', marginTop: Spacing.md,
+    flex: 1, backgroundColor: Colors.info, borderRadius: BorderRadius.xl,
+    paddingVertical: 14, alignItems: 'center',
   },
   saveBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '800' },
 });

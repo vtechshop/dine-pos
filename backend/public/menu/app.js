@@ -153,7 +153,11 @@
       body:    JSON.stringify(payload),
     });
 
-    if (!res.ok) throw new Error('Order failed');
+    if (!res.ok) {
+      let msg = 'Order failed';
+      try { const e = await res.json(); if (e?.message) msg = e.message; } catch {}
+      throw new Error(msg);
+    }
     return res.json();
   }
 
@@ -681,8 +685,8 @@
       playSuccessSound();
       view = 'menu';
       renderSuccess(order);
-    } catch {
-      showToast('Failed to place order. Check connection and try again.');
+    } catch (err) {
+      showToast(err?.message && err.message !== 'Order failed' ? err.message : 'Failed to place order. Check connection and try again.');
       if (btn) { btn.disabled = false; btn.textContent = '🍽️ Place Order'; }
     }
   };
