@@ -73,11 +73,18 @@ const PORT = process.env.PORT || 5000;
 
 // ── CORS — restrict to known origins ─────────────────────────────────────────
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
+
+// Public QR menu routes: open to any browser origin (customers scan from any device)
+app.use('/api/public', cors({ origin: '*' }));
+
+// All other routes: restrict to allowedOrigins (or allow all if not configured)
 app.use(cors({
   origin: (origin, cb) => {
     // Allow requests with no origin (mobile apps, Postman, server-to-server)
     if (!origin) return cb(null, true);
-    if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) return cb(null, true);
+    // If ALLOWED_ORIGINS not configured, allow all
+    if (allowedOrigins.length === 0) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true,
