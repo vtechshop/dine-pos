@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, ActivityIndicator, StatusBar, Alert,
+  RefreshControl, ActivityIndicator, StatusBar, Alert, Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
@@ -291,38 +291,45 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         {/* ── Offline Indicator ── */}
         <OfflineIndicator />
 
-        {/* ── New Order Alert ── */}
-        {newOrderAlert && (
-          <View style={styles.alertBanner}>
-            <View style={styles.alertBannerPulse} />
-            <TouchableOpacity
-              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}
-              onPress={() => { setNewOrderAlert(null); setOrderBadge(0); setPrintError(false); navigation.navigate('Orders'); }}
-              activeOpacity={0.88}
-            >
-              <MaterialIcons name="notifications-active" size={24} color={Colors.white} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.alertTitle}>New Order — {newOrderAlert.orderNumber}</Text>
-                <Text style={styles.alertSub}>
-                  {newOrderAlert.tableNumber ? `Table ${newOrderAlert.tableNumber}  ·  ` : ''}
-                  {newOrderAlert.itemCount} item{newOrderAlert.itemCount !== 1 ? 's' : ''}  ·  {fmt(newOrderAlert.grandTotal)}
-                </Text>
-              </View>
-              {orderBadge > 0 && (
-                <View style={styles.alertBadge}><Text style={styles.alertBadgeText}>{orderBadge}</Text></View>
-              )}
-            </TouchableOpacity>
-            {/* Print KOT button — red dot shows if auto-print failed */}
-            <TouchableOpacity
-              style={styles.alertPrintBtn}
-              onPress={() => handlePrintKOT(newOrderAlert)}
-              activeOpacity={0.7}
-            >
-              <MaterialIcons name="print" size={22} color={Colors.white} />
-              {printError && <View style={styles.alertPrintErrorDot} />}
-            </TouchableOpacity>
+        {/* ── New Order Alert (Modal floats over all admin tabs) ── */}
+        <Modal
+          visible={!!newOrderAlert}
+          transparent
+          animationType="slide"
+          statusBarTranslucent
+          onRequestClose={() => { setNewOrderAlert(null); setOrderBadge(0); }}
+        >
+          <View style={{ marginTop: (StatusBar.currentHeight || 0) + 8, marginHorizontal: Spacing.lg }}>
+            <View style={styles.alertBanner}>
+              <View style={styles.alertBannerPulse} />
+              <TouchableOpacity
+                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}
+                onPress={() => { setNewOrderAlert(null); setOrderBadge(0); setPrintError(false); navigation.navigate('Orders'); }}
+                activeOpacity={0.88}
+              >
+                <MaterialIcons name="notifications-active" size={24} color={Colors.white} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.alertTitle}>New Order — {newOrderAlert?.orderNumber}</Text>
+                  <Text style={styles.alertSub}>
+                    {newOrderAlert?.tableNumber ? `Table ${newOrderAlert.tableNumber}  ·  ` : ''}
+                    {newOrderAlert?.itemCount} item{newOrderAlert?.itemCount !== 1 ? 's' : ''}  ·  {fmt(newOrderAlert?.grandTotal ?? 0)}
+                  </Text>
+                </View>
+                {orderBadge > 0 && (
+                  <View style={styles.alertBadge}><Text style={styles.alertBadgeText}>{orderBadge}</Text></View>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertPrintBtn}
+                onPress={() => newOrderAlert && handlePrintKOT(newOrderAlert)}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="print" size={22} color={Colors.white} />
+                {printError && <View style={styles.alertPrintErrorDot} />}
+              </TouchableOpacity>
+            </View>
           </View>
-        )}
+        </Modal>
 
         {/* ── Order Status Banner (kitchen ready / preparing / served) ── */}
         {orderStatusAlert && (

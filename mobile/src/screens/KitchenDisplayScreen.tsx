@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  ActivityIndicator, StatusBar, Vibration, ScrollView,
+  ActivityIndicator, StatusBar, Vibration, ScrollView, Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -26,6 +26,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const socketRef = useRef<Socket | null>(null);
   const mountedRef = useRef(true);
   const seenOrderIds = useRef<Set<string>>(new Set());
+  const [newOrderPopup, setNewOrderPopup] = useState(false);
 
   const pending   = orders.filter(o => o.status === 'pending');
   const preparing = orders.filter(o => o.status === 'preparing');
@@ -75,6 +76,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         if (id) seenOrderIds.current.add(id);
         Vibration.vibrate([0, 300, 150, 300, 150, 500]);
         notifyNewKitchenOrder();
+        setNewOrderPopup(true);
         loadOrders();
       });
 
@@ -292,6 +294,30 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </ScrollView>
       )}
+
+      {/* ── New Order Popup (floats over screen) ── */}
+      <Modal
+        visible={newOrderPopup}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setNewOrderPopup(false)}
+      >
+        <TouchableOpacity
+          style={{ marginTop: (StatusBar.currentHeight || 0) + 8, marginHorizontal: 16 }}
+          onPress={() => setNewOrderPopup(false)}
+          activeOpacity={1}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.warning, borderRadius: 14, padding: 16, gap: 12, overflow: 'hidden' }}>
+            <MaterialIcons name="restaurant" size={24} color={Colors.white} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: Colors.white, fontWeight: '700', fontSize: 16 }}>New Order in Kitchen!</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, marginTop: 2 }}>Tap to dismiss</Text>
+            </View>
+            <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.8)" />
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };

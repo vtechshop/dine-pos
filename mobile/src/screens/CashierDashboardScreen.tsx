@@ -37,6 +37,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const socketRef = useRef<Socket | null>(null);
   const mountedRef = useRef(true);
   const [tick, setTick] = useState(0);
+  const [newOrderPopup, setNewOrderPopup] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setTick(s => s + 1), 1000);
@@ -115,8 +116,13 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
             sound: 'order_alert.wav',
             data: { type: 'cashier_new' },
           },
-          trigger: { channelId: 'order_alerts_v2' } as any,
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+            seconds: 1,
+            channelId: 'order_alerts_v2',
+          },
         }).catch(() => {});
+        setNewOrderPopup(true);
         loadOrders();
       });
 
@@ -398,6 +404,30 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
             )}
           </View>
         </View>
+      </Modal>
+
+      {/* ── New Order Popup (floats over screen) ── */}
+      <Modal
+        visible={newOrderPopup}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setNewOrderPopup(false)}
+      >
+        <TouchableOpacity
+          style={{ marginTop: (StatusBar.currentHeight || 0) + 8, marginHorizontal: 16 }}
+          onPress={() => setNewOrderPopup(false)}
+          activeOpacity={1}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.success, borderRadius: 14, padding: 16, gap: 12, overflow: 'hidden' }}>
+            <MaterialIcons name="notifications-active" size={24} color={Colors.white} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: Colors.white, fontWeight: '700', fontSize: 16 }}>New Order!</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, marginTop: 2 }}>A new order requires payment collection</Text>
+            </View>
+            <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.8)" />
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
