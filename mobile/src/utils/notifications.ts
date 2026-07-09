@@ -10,6 +10,19 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// Valid immediate trigger for Expo Notifications v55 (SDK 52+)
+const orderTrigger = (): Notifications.TimeIntervalTriggerInput => ({
+  type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+  seconds: 1,
+  channelId: 'order_alerts_v2',
+});
+
+const chatTrigger = (): Notifications.TimeIntervalTriggerInput => ({
+  type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+  seconds: 1,
+  channelId: 'chat_alerts_v2',
+});
+
 export const setupNotifications = async (): Promise<void> => {
   if (Platform.OS !== 'android') return;
   try {
@@ -17,7 +30,6 @@ export const setupNotifications = async (): Promise<void> => {
     if (status !== 'granted') return;
   } catch { return; }
 
-  // Each channel in its own try/catch so one failure never blocks the other
   try {
     await Notifications.setNotificationChannelAsync('order_alerts_v2', {
       name: 'New Order Alerts',
@@ -53,7 +65,7 @@ export const notifyChatMessage = async (
           : message,
         data: { type: 'chat', tableNumber },
       },
-      trigger: { channelId: 'chat_alerts_v2' } as any,
+      trigger: chatTrigger(),
     });
   } catch {}
 };
@@ -72,7 +84,7 @@ export const notifyNewOrder = async (
         body: `${table} · ${itemCount} item${itemCount !== 1 ? 's' : ''} · ${currency}${grandTotal.toFixed(0)}`,
         sound: 'order_alert.wav',
       },
-      trigger: { channelId: 'order_alerts_v2' } as any,
+      trigger: orderTrigger(),
     });
   } catch {}
 };
@@ -88,7 +100,7 @@ export const notifyNewKitchenOrder = async (): Promise<void> => {
         sound: 'order_alert.wav',
         data: { type: 'kitchen_new_order' },
       },
-      trigger: { channelId: 'order_alerts_v2' } as any,
+      trigger: orderTrigger(),
     });
   } catch {}
 };
@@ -102,7 +114,7 @@ export const notifyOrderPreparing = async (tableNumber: string, orderNumber: str
         body: `${label} is being prepared`,
         data: { type: 'order_preparing' },
       },
-      trigger: { channelId: 'order_alerts_v2' } as any,
+      trigger: orderTrigger(),
     });
   } catch {}
 };
@@ -117,7 +129,7 @@ export const notifyOrderReady = async (tableNumber: string, orderNumber: string)
         sound: 'order_alert.wav',
         data: { type: 'order_ready' },
       },
-      trigger: { channelId: 'order_alerts_v2' } as any,
+      trigger: orderTrigger(),
     });
   } catch {}
 };
