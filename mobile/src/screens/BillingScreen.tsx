@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
-  StyleSheet, TextInput, ActivityIndicator, Dimensions,
+  StyleSheet, TextInput, ActivityIndicator, useWindowDimensions,
   Modal, Linking, Vibration, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,11 +19,8 @@ import { getLocalCategories, getLocalProducts, saveCategories, saveProducts } fr
 import { printKOT } from '../utils/receipt';
 import { KOTOrderInput } from '../types';
 
-const { width: SW } = Dimensions.get('window');
-const IS_TABLET = SW >= 768;
-const CAT_W  = IS_TABLET ? 100 : 80;
-const CART_W = IS_TABLET ? 340 : SW;
-const COLS   = IS_TABLET ? 4 : 2;
+const CAT_W  = 100; // tablet landscape vertical sidebar width
+const CART_W = 340; // tablet landscape cart panel width
 
 type PayMethod = 'cash' | 'upi' | 'card' | 'split';
 type OrderSource = 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr';
@@ -62,6 +59,12 @@ const BillingScreen: React.FC = () => {
   const { settings } = useSettings();
   const { bottom } = useSafeAreaInsets();
 
+  const { width: winW, height: winH } = useWindowDimensions();
+  const isPortrait     = winH > winW;
+  const IS_TABLET      = Math.max(winW, winH) >= 768;
+  const tabletPortrait = IS_TABLET && isPortrait;
+  const COLS           = IS_TABLET && !tabletPortrait ? 4 : (tabletPortrait ? 3 : 2);
+
   const [categories,        setCategories]       = useState<Category[]>([]);
   const [products,          setProducts]         = useState<Product[]>([]);
   const [filtered,          setFiltered]         = useState<Product[]>([]);
@@ -70,7 +73,7 @@ const BillingScreen: React.FC = () => {
   const [loading,           setLoading]          = useState(true);
   const [placing,           setPlacing]          = useState(false);
   const [search,            setSearch]           = useState('');
-  const [showCart,          setShowCart]         = useState(IS_TABLET);
+  const [showCart,          setShowCart]         = useState(IS_TABLET && !tabletPortrait);
   const [showPayModal,      setShowPayModal]     = useState(false);
   const [discountInput,     setDiscountInput]    = useState('');
   const [discountType,      setDiscountType]     = useState<DiscountType>('percent');
@@ -129,6 +132,10 @@ const BillingScreen: React.FC = () => {
     if (!search.trim()) { handleCategorySelect(selectedCat); return; }
     setFiltered(products.filter(p => p.name.toLowerCase().includes(search.toLowerCase())));
   }, [search]);
+
+  useEffect(() => {
+    if (IS_TABLET) setShowCart(!isPortrait);
+  }, [isPortrait, IS_TABLET]);
 
   const applyDiscount = () => {
     const val = parseFloat(discountInput) || 0;
@@ -404,7 +411,7 @@ Thank you for dining with us! 🍽️`;
   return (
     <View style={styles.container}>
       {/* ── Header / Search — hidden when cart is open on mobile ── */}
-      {(!showCart || IS_TABLET) && (
+      {(!showCart || (IS_TABLET && !tabletPortrait)) && (
         <View style={styles.header}>
           <View style={styles.searchWrap}>
             <MaterialIcons name="search" size={20} color={Colors.textMuted} style={{ marginRight: 8 }} />
@@ -421,7 +428,7 @@ Thank you for dining with us! 🍽️`;
               </TouchableOpacity>
             )}
           </View>
-          {!IS_TABLET && (
+          {(!IS_TABLET || tabletPortrait) && (
             <TouchableOpacity style={[styles.cartToggle, itemCount > 0 && styles.cartToggleActive]} onPress={() => setShowCart(!showCart)}>
               <MaterialIcons name="shopping-cart" size={22} color={itemCount > 0 ? Colors.white : Colors.textSecondary} />
               {itemCount > 0 && <View style={styles.cartBadge}><Text style={styles.cartBadgeText}>{itemCount}</Text></View>}
@@ -431,19 +438,19 @@ Thank you for dining with us! 🍽️`;
       )}
 
       <View style={styles.body}>
-        {/* ── Categories — vertical list (tablets only) ── */}
-        {IS_TABLET && (
+        {/* ── Categories — vertical list (tablet landscape only) ── */}
+        {IS_TABLET && !tabletPortrait && (
           <ScrollView style={styles.catList} showsVerticalScrollIndicator={false}>
             {renderCat(null)}
             {categories.map(c => renderCat(c))}
           </ScrollView>
         )}
 
-        {/* ── Center column: chips (phone) + product grid ── */}
-        {(IS_TABLET || !showCart) && (
+        {/* ── Center column: chips (phone/portrait tablet) + product grid ── */}
+        {((IS_TABLET && !tabletPortrait) || !showCart) && (
           <View style={{ flex: 1, flexDirection: 'column' }}>
-            {/* Category chips — explicit-height wrapper fixes Android Yoga ambiguity */}
-            {!IS_TABLET && (
+            {/* Category chips — phone and portrait tablet */}
+            {(!IS_TABLET || tabletPortrait) && (
               <View style={styles.catChipWrap}>
                 <ScrollView
                   horizontal
@@ -474,12 +481,12 @@ Thank you for dining with us! 🍽️`;
         )}
 
         {/* ── Cart Panel ── */}
-        {(IS_TABLET || showCart) && (
-          <View style={[styles.cartPanel, !IS_TABLET && { width: '100%' }]}>
+        {((IS_TABLET && !tabletPortrait) || showCart) && (
+          <View style={[styles.cartPanel, (!IS_TABLET || tabletPortrait) && { width: '100%' }]}>
             {/* Cart header */}
             <View style={styles.cartHeader}>
               <Text style={styles.cartTitle}>Current Order</Text>
-              {!IS_TABLET && (
+              {(!IS_TABLET || tabletPortrait) && (
                 <TouchableOpacity onPress={() => setShowCart(false)} style={{ padding: 4 }}>
                   <MaterialIcons name="close" size={22} color={Colors.textSecondary} />
                 </TouchableOpacity>
