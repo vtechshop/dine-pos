@@ -23,7 +23,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
 import { useSettings } from '../context/SettingsContext';
 import { useCart } from '../context/CartContext';
-import { registerHotel, clearApiUrlCache, seedData } from '../services/api';
+import { registerHotel, clearApiUrlCache, seedData, uploadImage } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../types';
 import { getPairedDevices, connectPrinter, BluetoothDevice, BT_PERMISSION_DENIED } from '../utils/bluetoothPrint';
@@ -65,25 +65,44 @@ const SettingsScreen: React.FC = () => {
 
   // Role card images
   const [roleImgs, setRoleImgs] = useState({ customer: '', admin: '', staff: '' });
+  const [uploadingRoleImg, setUploadingRoleImg] = useState<string | null>(null);
+
   useEffect(() => {
+    // Load from AsyncStorage first (fast), fallback to server-synced URL from settings
     AsyncStorage.multiGet([ROLE_IMG_KEYS.customer, ROLE_IMG_KEYS.admin, ROLE_IMG_KEYS.staff])
-      .then(([[, c], [, a], [, s]]) => setRoleImgs({ customer: c || '', admin: a || '', staff: s || '' }))
+      .then(([[, c], [, a], [, s]]) => setRoleImgs({
+        customer: c || settings.roleImageCustomer || '',
+        admin:    a || settings.roleImageAdmin    || '',
+        staff:    s || settings.roleImageStaff    || '',
+      }))
       .catch(() => {});
-  }, []);
+  }, [settings.roleImageAdmin, settings.roleImageCustomer, settings.roleImageStaff]);
 
   const pickRoleImage = async (role: 'customer' | 'admin' | 'staff') => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') { showAlert('Permission needed', 'Allow photo library access to pick an image.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.7 });
     if (!result.canceled && result.assets[0]) {
-      const uri = result.assets[0].uri;
-      await AsyncStorage.setItem(ROLE_IMG_KEYS[role], uri);
-      setRoleImgs(prev => ({ ...prev, [role]: uri }));
+      setUploadingRoleImg(role);
+      try {
+        const url = await uploadImage(result.assets[0].uri);
+        // Save Cloudinary URL to AsyncStorage (fast local load) + server (cross-device sync)
+        await AsyncStorage.setItem(ROLE_IMG_KEYS[role], url);
+        const serverKey = role === 'admin' ? 'roleImageAdmin' : role === 'customer' ? 'roleImageCustomer' : 'roleImageStaff';
+        await saveSettings({ [serverKey]: url } as any);
+        setRoleImgs(prev => ({ ...prev, [role]: url }));
+      } catch (e: any) {
+        showAlert('Upload Failed', e.message || 'Could not upload image. Check your connection.');
+      } finally {
+        setUploadingRoleImg(null);
+      }
     }
   };
 
   const removeRoleImage = async (role: 'customer' | 'admin' | 'staff') => {
     await AsyncStorage.removeItem(ROLE_IMG_KEYS[role]);
+    const serverKey = role === 'admin' ? 'roleImageAdmin' : role === 'customer' ? 'roleImageCustomer' : 'roleImageStaff';
+    await saveSettings({ [serverKey]: '' } as any).catch(() => {});
     setRoleImgs(prev => ({ ...prev, [role]: '' }));
   };
   const [seeding, setSeeding] = useState(false);
@@ -315,14 +334,16 @@ const SettingsScreen: React.FC = () => {
             { role: 'staff'    as const, label: 'Staff Login',     emoji: '👥' },
           ]).map(({ role, label, emoji }) => (
             <View key={role} style={styles.roleImgRow}>
-              <TouchableOpacity style={styles.roleImgThumb} onPress={() => pickRoleImage(role)} activeOpacity={0.8}>
-                {roleImgs[role] ? (
+              <TouchableOpacity style={styles.roleImgThumb} onPress={uploadingRoleImg === role ? undefined : () => pickRoleImage(role)} activeOpacity={0.8}>
+                {uploadingRoleImg === role ? (
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                ) : roleImgs[role] ? (
                   <Image source={{ uri: roleImgs[role] }} style={styles.roleImgPreview} resizeMode="cover" />
                 ) : (
                   <Text style={{ fontSize: 28 }}>{emoji}</Text>
                 )}
                 <View style={styles.roleImgEditBadge}>
-                  <MaterialIcons name="edit" size={11} color={Colors.white} />
+                  <MaterialIcons name={uploadingRoleImg === role ? 'hourglass-empty' : 'edit'} size={11} color={Colors.white} />
                 </View>
               </TouchableOpacity>
               <View style={{ flex: 1 }}>

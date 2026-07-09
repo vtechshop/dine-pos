@@ -118,6 +118,9 @@ const SettingsSchema: Schema = new Schema(
       type: String,
       default: '',
     },
+    roleImageAdmin: { type: String, default: '' },
+    roleImageCustomer: { type: String, default: '' },
+    roleImageStaff: { type: String, default: '' },
   },
   { timestamps: true }
 );

@@ -46,10 +46,22 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
   });
 
   useEffect(() => {
+    // AsyncStorage = fast local load; server settings = cross-device fallback
     AsyncStorage.multiGet([ROLE_IMG_KEYS.customer, ROLE_IMG_KEYS.admin, ROLE_IMG_KEYS.staff])
-      .then(([[, c], [, a], [, s]]) => setRoleImgs({ customer: c || '', admin: a || '', staff: s || '' }))
+      .then(([[, c], [, a], [, s]]) => {
+        const merged = {
+          customer: c || settings.roleImageCustomer || '',
+          admin:    a || settings.roleImageAdmin    || '',
+          staff:    s || settings.roleImageStaff    || '',
+        };
+        setRoleImgs(merged);
+        // Cache server URLs locally so next load is instant
+        if (!c && merged.customer) AsyncStorage.setItem(ROLE_IMG_KEYS.customer, merged.customer).catch(() => {});
+        if (!a && merged.admin)    AsyncStorage.setItem(ROLE_IMG_KEYS.admin,    merged.admin).catch(() => {});
+        if (!s && merged.staff)    AsyncStorage.setItem(ROLE_IMG_KEYS.staff,    merged.staff).catch(() => {});
+      })
       .catch(() => {});
-  }, []);
+  }, [settings.roleImageAdmin, settings.roleImageCustomer, settings.roleImageStaff]);
 
   useEffect(() => {
     Animated.parallel([
