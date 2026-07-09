@@ -154,8 +154,13 @@
     });
 
     if (!res.ok) {
-      let msg = 'Order failed';
-      try { const e = await res.json(); if (e?.message) msg = e.message; } catch {}
+      let msg = `Server error (${res.status})`;
+      try {
+        const e = await res.json();
+        if (e?.message) msg = e.message;
+      } catch {
+        try { const t = await res.text(); if (t && t.length < 200 && !t.includes('<')) msg = t; } catch {}
+      }
       throw new Error(msg);
     }
     return res.json();
