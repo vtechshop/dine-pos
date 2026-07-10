@@ -95,7 +95,7 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
             body: `Table ${data.tableNumber || '—'} · ${data.orderNumber}`,
             data: { type: 'waiter_ready' },
           },
-          trigger: { channelId: 'order_alerts_v3' },
+          trigger: { channelId: 'order_alerts_v2' },
         }).catch(() => {});
         setReadyPopup({ orderNumber: data.orderNumber, tableNumber: data.tableNumber || '' });
         loadOrders();

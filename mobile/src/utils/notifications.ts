@@ -10,22 +10,22 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// ChannelAwareTriggerInput — immediate delivery, no AlarmManager, works on all Android versions
+// ChannelAwareTriggerInput — immediate delivery, no AlarmManager required
 const orderTrigger = (): Notifications.ChannelAwareTriggerInput => ({
-  channelId: 'order_alerts_v3',
+  channelId: 'order_alerts_v2',
 });
 
 const chatTrigger = (): Notifications.ChannelAwareTriggerInput => ({
   channelId: 'chat_alerts_v2',
 });
 
-export const setupNotifications = async (): Promise<void> => {
-  if (Platform.OS !== 'android') return;
+// Returns true if notifications are permitted, false if denied
+export const setupNotifications = async (): Promise<boolean> => {
+  if (Platform.OS !== 'android') return true;
 
-  // Create channels FIRST — Android allows this without POST_NOTIFICATIONS permission.
-  // Channel sound is locked after first creation, so bumping to v3 forces a fresh channel.
+  // Create channels first — Android permits this even without POST_NOTIFICATIONS
   try {
-    await Notifications.setNotificationChannelAsync('order_alerts_v3', {
+    await Notifications.setNotificationChannelAsync('order_alerts_v2', {
       name: 'New Order Alerts',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 200, 100, 300],
@@ -45,10 +45,12 @@ export const setupNotifications = async (): Promise<void> => {
     });
   } catch {}
 
-  // Request permission after channels exist
   try {
-    await Notifications.requestPermissionsAsync();
-  } catch {}
+    const { status } = await Notifications.requestPermissionsAsync();
+    return status === 'granted';
+  } catch {
+    return false;
+  }
 };
 
 export const notifyChatMessage = async (
@@ -82,6 +84,7 @@ export const notifyNewOrder = async (
       content: {
         title: '🍽 New Order!',
         body: `${table} · ${itemCount} item${itemCount !== 1 ? 's' : ''} · ${currency}${grandTotal.toFixed(0)}`,
+        sound: 'order_alert.wav',
       },
       trigger: orderTrigger(),
     });
@@ -96,6 +99,7 @@ export const notifyNewKitchenOrder = async (): Promise<void> => {
       content: {
         title: '🍽 New Order!',
         body: 'New order received in kitchen',
+        sound: 'order_alert.wav',
         data: { type: 'kitchen_new_order' },
       },
       trigger: orderTrigger(),
@@ -124,6 +128,7 @@ export const notifyOrderReady = async (tableNumber: string, orderNumber: string)
       content: {
         title: '✅ Order Ready!',
         body: `${label} is ready to serve`,
+        sound: 'order_alert.wav',
         data: { type: 'order_ready' },
       },
       trigger: orderTrigger(),

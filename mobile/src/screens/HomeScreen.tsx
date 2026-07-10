@@ -47,6 +47,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [notifUnread, setNotifUnread] = useState(0);
   const [printError, setPrintError] = useState(false);
   const [orderStatusAlert, setOrderStatusAlert] = useState<{ label: string; isReady: boolean; isServed: boolean; isCompleted: boolean } | null>(null);
+  const [notifBlocked, setNotifBlocked] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -87,7 +88,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   useFocusEffect(useCallback(() => { refreshSettings(); }, []));
 
   useEffect(() => {
-    setupNotifications();
+    setupNotifications().then(granted => { if (!granted) setNotifBlocked(true); });
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const type = response.notification.request.content.data?.type;
       if (type === 'chat') {
@@ -256,6 +257,22 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
             daysRemaining={trialDaysRemaining}
             onContactSupport={() => navigation.navigate('Support')}
           />
+        )}
+
+        {/* ── Notification Permission Blocked Warning ── */}
+        {notifBlocked && (
+          <TouchableOpacity
+            style={[styles.alertBanner, { backgroundColor: Colors.danger }]}
+            onPress={() => { const { Linking } = require('react-native'); Linking.openSettings(); }}
+            activeOpacity={0.88}
+          >
+            <MaterialIcons name="notifications-off" size={22} color={Colors.white} />
+            <View style={{ flex: 1, marginLeft: Spacing.md }}>
+              <Text style={styles.alertTitle}>Notifications blocked</Text>
+              <Text style={styles.alertSub}>Tap to open Settings and allow notifications</Text>
+            </View>
+            <MaterialIcons name="arrow-forward-ios" size={16} color={Colors.white} />
+          </TouchableOpacity>
         )}
 
         {/* ── Low Stock Alert ── */}

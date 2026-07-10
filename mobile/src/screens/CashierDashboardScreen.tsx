@@ -115,7 +115,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
             body: 'A new order requires payment collection.',
             data: { type: 'cashier_new' },
           },
-          trigger: { channelId: 'order_alerts_v3' },
+          trigger: { channelId: 'order_alerts_v2' },
         }).catch(() => {});
         setNewOrderPopup(true);
         loadOrders();
