@@ -117,6 +117,21 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       socket.on('connect', () => {
         socket.emit('join_hotel', hotelId);
       });
+
+      socket.on('connect_error', (err) => {
+        if (!mounted) return;
+        // Server rejected socket auth — stale admin token. The HTTP refresh
+        // mechanism (tryRefreshTokens) doesn't restart the socket, so we
+        // re-connect here with a fresh token after a short delay.
+        if (err.message?.includes('authentication')) {
+          setTimeout(async () => {
+            if (!mounted) return;
+            const freshToken = await getToken();
+            socket.auth = { token: freshToken || '' };
+            socket.connect();
+          }, 2000);
+        }
+      });
       socket.on('new_message', (msg: { sender: string; tableNumber: string; message: string }) => {
         if (!mounted || msg.sender !== 'customer') return;
         notifyChatMessage(msg.tableNumber, msg.message);

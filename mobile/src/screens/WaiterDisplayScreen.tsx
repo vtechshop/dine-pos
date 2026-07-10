@@ -83,6 +83,15 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
 
       socket.on('connect', () => socket.emit('join_hotel', hotelId));
 
+      socket.on('connect_error', (err) => {
+        if (!mountedRef.current) return;
+        if (err.message?.includes('authentication')) {
+          clearWaiterToken().then(() => {
+            if (mountedRef.current) navigation.replace('RoleSelect');
+          });
+        }
+      });
+
       socket.on('waiter_order_ready', (data: { orderId?: string; _id?: string; orderNumber: string; tableNumber: string }) => {
         if (!mountedRef.current) return;
         const id = data.orderId || data._id || '';

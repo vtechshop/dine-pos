@@ -68,6 +68,16 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         socket.emit('join_hotel', hotelId);
       });
 
+      socket.on('connect_error', (err) => {
+        if (!mountedRef.current) return;
+        // If the server rejected auth (expired token), clear token and re-login
+        if (err.message?.includes('authentication')) {
+          clearKitchenToken().then(() => {
+            if (mountedRef.current) navigation.replace('RoleSelect');
+          });
+        }
+      });
+
       // New order arrives — dedup, vibrate, play sound, reload
       socket.on('new_order', (data: { orderId?: string; _id?: string }) => {
         if (!mountedRef.current) return;

@@ -106,6 +106,15 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
       socket.on('connect', () => socket.emit('join_hotel', hotelId));
 
+      socket.on('connect_error', (err) => {
+        if (!mountedRef.current) return;
+        if (err.message?.includes('authentication')) {
+          clearCashierToken().then(() => {
+            if (mountedRef.current) navigation.replace('RoleSelect');
+          });
+        }
+      });
+
       socket.on('new_order', () => {
         if (!mountedRef.current) return;
         Vibration.vibrate([0, 200, 100, 200]);

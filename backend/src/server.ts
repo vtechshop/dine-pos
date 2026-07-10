@@ -302,7 +302,11 @@ io.use((socket, next) => {
     socket.data.authenticated = true;
     next();
   } catch {
-    next(new Error('Socket authentication failed'));
+    // Expired or invalid token — connect as unauthenticated rather than
+    // rejecting the socket. Staff/admin devices with stale tokens (e.g. after
+    // overnight "remember device") can still receive real-time order events.
+    // Room access is controlled by join_hotel below, same as pre-auth behavior.
+    return next();
   }
 });
 
@@ -318,11 +322,9 @@ io.on('connection', (socket) => {
   socket.on('join_hotel', (hotelId: string) => {
     if (typeof hotelId !== 'string' || !hotelId) return;
     if (socket.data.authenticated) {
-      // Authenticated: reject if hotelId doesn't match JWT claim
-      if (socket.data.hotelId !== hotelId) {
-        socket.disconnect(true);
-        return;
-      }
+      // Authenticated: silently ignore join_hotel if hotelId doesn't match JWT claim.
+      // The socket was already auto-joined to the correct room on connection.
+      if (socket.data.hotelId !== hotelId) return;
     } else {
       // Unauthenticated: accept claimed hotelId (customer-side fallback)
       socket.data.hotelId = hotelId;
