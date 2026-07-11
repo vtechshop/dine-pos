@@ -183,7 +183,7 @@ const RoleCard: React.FC<RoleCardProps> = ({ accentColor, emoji, imageUri, role,
         <View style={[styles.cardBody, { borderTopColor: accentColor }]}>
           <View style={{ flex: 1 }}>
             <Text style={styles.cardRole}>{role}</Text>
-            <Text style={styles.cardDesc} numberOfLines={2}>{desc}</Text>
+            <Text style={styles.cardDesc} numberOfLines={1}>{desc}</Text>
           </View>
           <View style={[styles.cardChip, { backgroundColor: accentColor + '18' }]}>
             <MaterialIcons name="arrow-forward" size={20} color={accentColor} />
@@ -236,6 +236,8 @@ const styles = StyleSheet.create({
   },
   cardHero: {
     flex: 1,
+    minHeight: 84,
+    maxHeight: 110,
     alignItems: 'center',
     justifyContent: 'center',
   },
