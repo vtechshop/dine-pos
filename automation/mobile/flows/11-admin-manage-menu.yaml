@@ -1,0 +1,63 @@
+appId: com.dinepos.app
+name: Admin Manage Menu Flow
+tags:
+  - admin
+  - menu
+
+env:
+  ADMIN_ID: ${ADMIN_ID}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+
+---
+- launchApp:
+    clearState: true
+
+- tapOn: "Admin Login"
+- tapOn:
+    text: "Admin ID"
+- inputText: ${ADMIN_ID}
+- tapOn:
+    text: "Password"
+- inputText: ${ADMIN_PASSWORD}
+- tapOn: "Login"
+
+- assertVisible:
+    text: "Dashboard"
+    timeout: 8000
+
+- tapOn: "Menu"
+
+- tapOn: "Categories"
+
+- tapOn: "Add Category"
+
+- tapOn:
+    text: "Category Name"
+- inputText: "Automation Category"
+
+- tapOn: "Save"
+
+- assertVisible:
+    text: "Automation Category"
+    timeout: 5000
+
+- tapOn: "Products"
+
+- tapOn: "Add Product"
+
+- tapOn:
+    text: "Product Name"
+- inputText: "Automation Dish"
+
+- tapOn:
+    text: "Price"
+- inputText: "199"
+
+- tapOn: "Save"
+
+- assertVisible:
+    text: "Automation Dish"
+    timeout: 5000
+
+- assertNotVisible:
+    text: "Error"

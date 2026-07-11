@@ -4,7 +4,7 @@ import Order from '../models/Order';
 import Product from '../models/Product';
 import Ingredient from '../models/Ingredient';
 import DailyCounter from '../models/DailyCounter';
-import { authMiddleware, requireAdmin, requireKitchenOrAdmin, requireWaiterOrAdmin, requireCashierOrAdmin, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, requireKitchenOrAdmin, requireWaiterOrAdmin, requireCashierOrAdmin, requireWaiterOrCashierOrAdmin, AuthRequest } from '../middleware/auth';
 import { requireActiveStaff } from '../middleware/staffAuth';
 import { logAudit } from '../utils/audit';
 import { io } from '../server';
@@ -103,6 +103,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
     res.json({
       date: dateStr,
       totalSales: r.totalSales,
+      totalRevenue: r.totalSales, // alias — clients may use either field name
       totalTax: r.totalTax,
       totalDiscount: r.totalDiscount,
       totalOrders: r.totalOrders,
@@ -124,8 +125,12 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
 // Range report (weekly / monthly) — same shape as daily
 router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const fromStr = (req.query.from as string) || new Date().toISOString().slice(0, 10);
-    const toStr   = (req.query.to   as string) || fromStr;
+    // Both from and to are required — a range without explicit bounds is ambiguous
+    if (!req.query.from || !req.query.to) {
+      return res.status(400).json({ message: 'Both from and to date params are required' });
+    }
+    const fromStr = req.query.from as string;
+    const toStr   = req.query.to   as string;
     const start   = new Date(fromStr); start.setHours(0, 0, 0, 0);
     const end     = new Date(toStr);   end.setHours(23, 59, 59, 999);
 
@@ -188,12 +193,12 @@ router.get('/reports/products', authMiddleware, requireAdmin, async (req: AuthRe
       { $unwind: '$items' },
       { $group: {
         _id: '$items.productName',
-        totalQty:     { $sum: '$items.quantity' },
-        totalRevenue: { $sum: { $multiply: ['$items.price', '$items.quantity'] } },
+        totalQuantity: { $sum: '$items.quantity' },
+        totalRevenue:  { $sum: { $multiply: ['$items.price', '$items.quantity'] } },
       }},
-      { $sort: { totalQty: -1 } },
+      { $sort: { totalQuantity: -1 } },
       { $limit: 20 },
-      { $project: { _id: 0, productName: '$_id', totalQty: 1, totalRevenue: 1 } },
+      { $project: { _id: 0, productName: '$_id', totalQuantity: 1, totalRevenue: 1 } },
     ]);
 
     res.json({ date: dateStr, products: results });
@@ -234,17 +239,13 @@ router.get('/waiter', requireWaiterOrAdmin, async (req: AuthRequest, res: Respon
   }
 });
 
-// GET /api/orders/cashier — today's orders for cashier dashboard (active + completed)
+// GET /api/orders/cashier — served orders awaiting payment completion
 router.get('/cashier', requireCashierOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const now = new Date();
-    const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay   = new Date(now); endOfDay.setHours(23, 59, 59, 999);
     const orders = await Order.find(
       {
         hotelId: req.hotelId,
-        status: { $nin: ['cancelled'] },
-        createdAt: { $gte: startOfDay, $lte: endOfDay },
+        status: 'served',
       },
       {
         orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1,
@@ -347,9 +348,17 @@ router.get('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST create order — idempotent, deducts stock, emits socket alert
-router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
+// POST create order — admin, waiter, and cashier can create orders; kitchen cannot
+router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
+    // Every order must have at least one item and at most 100 items
+    if (!Array.isArray(req.body.items) || req.body.items.length === 0) {
+      return res.status(400).json({ message: 'Order must contain at least one item' });
+    }
+    if (req.body.items.length > 100) {
+      return res.status(400).json({ message: 'Order cannot contain more than 100 items' });
+    }
+
     // ── Idempotency guard ────────────────────────────────────────────────────
     // offlineId is the client-generated queue item id. If the network dropped
     // after the server saved but before the client received the 201, the client
@@ -447,6 +456,20 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
   try {
     const existing = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId });
     if (!existing) return res.status(404).json({ message: 'Order not found' });
+
+    // State machine: enforce valid source-state for each role's allowed transition
+    // Kitchen:  can only act on pending/preparing orders
+    // Waiter:   can only serve a ready order
+    // Cashier:  can only complete a served order
+    if (role === 'kitchen' && !['pending', 'preparing'].includes(existing.status)) {
+      return res.status(400).json({ message: `Cannot update kitchen status from '${existing.status}'.` });
+    }
+    if (role === 'waiter' && existing.status !== 'ready') {
+      return res.status(400).json({ message: `Order must be ready before it can be served (current: ${existing.status}).` });
+    }
+    if (role === 'cashier' && existing.status !== 'served') {
+      return res.status(400).json({ message: `Order must be served before it can be completed (current: ${existing.status}).` });
+    }
 
     // Audit log for cancellation
     if (status === 'cancelled' && existing.status !== 'cancelled') {

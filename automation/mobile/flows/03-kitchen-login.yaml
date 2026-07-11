@@ -1,0 +1,31 @@
+appId: com.dinepos.app
+name: Kitchen Login Flow
+tags:
+  - auth
+  - kitchen
+
+env:
+  HOTEL_ID: ${HOTEL_ID}
+  KITCHEN_PIN: ${KITCHEN_PIN}
+
+---
+- launchApp:
+    clearState: true
+
+- tapOn: "Kitchen"
+
+- assertVisible:
+    text: "Kitchen PIN"
+
+- tapOn:
+    text: "Kitchen PIN"
+- inputText: ${KITCHEN_PIN}
+
+- tapOn: "Enter Kitchen"
+
+- assertVisible:
+    text: "Kitchen Orders"
+    timeout: 8000
+
+- assertNotVisible:
+    text: "Invalid PIN"

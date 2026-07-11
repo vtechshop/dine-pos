@@ -49,12 +49,12 @@ router.post('/register', async (req: Request, res: Response) => {
 
     const existingPhone = await Hotel.findOne({ phone: String(phone).trim() });
     if (existingPhone) {
-      return res.status(400).json({ message: 'A hotel with this phone number is already registered' });
+      return res.status(409).json({ message: 'A hotel with this phone number is already registered' });
     }
 
     const existingEmail = await Hotel.findOne({ email: String(email).trim().toLowerCase() });
     if (existingEmail) {
-      return res.status(400).json({ message: 'This email address is already registered' });
+      return res.status(409).json({ message: 'This email address is already registered' });
     }
 
     const hotel = await Hotel.create({

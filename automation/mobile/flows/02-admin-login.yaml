@@ -1,0 +1,41 @@
+appId: com.dinepos.app
+name: Admin Login Flow
+tags:
+  - auth
+  - admin
+
+env:
+  ADMIN_ID: ${ADMIN_ID}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+
+---
+- launchApp:
+    clearState: true
+
+- assertVisible:
+    text: "Login"
+
+- tapOn: "Admin Login"
+
+- assertVisible:
+    text: "Admin ID"
+
+- tapOn:
+    text: "Admin ID"
+- inputText: ${ADMIN_ID}
+
+- tapOn:
+    text: "Password"
+- inputText: ${ADMIN_PASSWORD}
+
+- tapOn: "Login"
+
+- assertVisible:
+    text: "Dashboard"
+    timeout: 8000
+
+- assertNotVisible:
+    text: "Invalid credentials"
+
+- assertNotVisible:
+    text: "Login"

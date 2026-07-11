@@ -1,0 +1,41 @@
+name: Security Scan (OWASP ZAP)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
+
+jobs:
+  zap-scan:
+    name: OWASP ZAP API Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create reports directory
+        run: mkdir -p automation/reports/security
+
+      - name: Run ZAP Scan
+        uses: zaproxy/action-api-scan@v0.7.0
+        with:
+          target: ${{ secrets.PERF_API_URL }}
+          format: openapi
+          fail_action: false
+          allow_issue_writing: false
+          artifact_name: zap-security-report
+        env:
+          ZAP_AUTH_HEADER: Authorization
+          ZAP_AUTH_HEADER_VALUE: Bearer ${{ secrets.ZAP_TEST_TOKEN }}
+
+      - name: Upload ZAP report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-security-report
+          path: |
+            report_html.html
+            report_json.json
+          retention-days: 30

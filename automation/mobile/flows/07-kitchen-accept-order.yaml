@@ -1,0 +1,45 @@
+appId: com.dinepos.app
+name: Kitchen Accept and Complete Order Flow
+tags:
+  - kitchen
+  - orders
+
+env:
+  KITCHEN_PIN: ${KITCHEN_PIN}
+
+---
+- launchApp:
+    clearState: false
+
+- tapOn: "Kitchen"
+- tapOn:
+    text: "Kitchen PIN"
+- inputText: ${KITCHEN_PIN}
+- tapOn: "Enter Kitchen"
+
+- assertVisible:
+    text: "Kitchen Orders"
+    timeout: 8000
+
+- assertVisible:
+    text: "pending"
+    timeout: 5000
+
+- tapOn:
+    index: 0
+    text: "Accept"
+
+- assertVisible:
+    text: "Preparing"
+    timeout: 4000
+
+- tapOn:
+    index: 0
+    text: "Ready"
+
+- assertVisible:
+    text: "Ready"
+    timeout: 4000
+
+- assertNotVisible:
+    text: "Error"

@@ -1,0 +1,35 @@
+appId: com.dinepos.app
+name: Waiter Login Flow
+tags:
+  - auth
+  - waiter
+
+env:
+  WAITER_CODE: ${WAITER_CODE}
+  WAITER_PIN: ${WAITER_PIN}
+
+---
+- launchApp:
+    clearState: true
+
+- tapOn: "Waiter"
+
+- assertVisible:
+    text: "Employee Code"
+
+- tapOn:
+    text: "Employee Code"
+- inputText: ${WAITER_CODE}
+
+- tapOn:
+    text: "PIN"
+- inputText: ${WAITER_PIN}
+
+- tapOn: "Login"
+
+- assertVisible:
+    text: "My Orders"
+    timeout: 8000
+
+- assertNotVisible:
+    text: "Invalid"

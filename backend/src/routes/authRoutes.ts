@@ -12,6 +12,7 @@ import { logAuditRaw } from '../utils/audit';
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
+  skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Too many login attempts. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -28,7 +29,7 @@ const trialDaysRemaining = (trialEndDate: Date | null): number => {
 // POST /api/auth/login
 router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   const { userId, password } = req.body;
-  if (!userId || !password) {
+  if (!userId || !password || typeof userId !== 'string' || typeof password !== 'string') {
     return res.status(400).json({ message: 'User ID and password required' });
   }
 

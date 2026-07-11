@@ -1,0 +1,49 @@
+appId: com.dinepos.app
+name: Cashier Complete and Bill Order Flow
+tags:
+  - cashier
+  - billing
+
+env:
+  CASHIER_CODE: ${CASHIER_CODE}
+  CASHIER_PIN: ${CASHIER_PIN}
+
+---
+- launchApp:
+    clearState: false
+
+- tapOn: "Cashier"
+- tapOn:
+    text: "Employee Code"
+- inputText: ${CASHIER_CODE}
+- tapOn:
+    text: "PIN"
+- inputText: ${CASHIER_PIN}
+- tapOn: "Login"
+
+- assertVisible:
+    text: "Billing"
+    timeout: 8000
+
+- assertVisible:
+    text: "Served"
+    timeout: 5000
+
+- tapOn:
+    index: 0
+    text: "Bill"
+
+- assertVisible:
+    text: "Grand Total"
+    timeout: 3000
+
+- tapOn: "Cash"
+
+- tapOn: "Complete"
+
+- assertVisible:
+    text: "Payment received"
+    timeout: 5000
+
+- assertNotVisible:
+    text: "Error"

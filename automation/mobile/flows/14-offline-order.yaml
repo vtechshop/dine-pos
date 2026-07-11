@@ -1,0 +1,59 @@
+appId: com.dinepos.app
+name: Offline Order Creation and Sync Flow
+tags:
+  - offline
+  - sync
+
+env:
+  ADMIN_ID: ${ADMIN_ID}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+
+---
+- launchApp:
+    clearState: true
+
+- tapOn: "Admin Login"
+- tapOn:
+    text: "Admin ID"
+- inputText: ${ADMIN_ID}
+- tapOn:
+    text: "Password"
+- inputText: ${ADMIN_PASSWORD}
+- tapOn: "Login"
+
+- assertVisible:
+    text: "Dashboard"
+    timeout: 8000
+
+# Simulate offline mode
+- setLocation:
+    lat: 0
+    long: 0
+
+- tapOn: "New Order"
+- tapOn: "T3"
+- tapOn: "Garlic Naan"
+- tapOn: "Place Order"
+
+# Order should be queued offline
+- assertVisible:
+    text: "Order saved offline"
+    timeout: 5000
+
+# Restore connectivity (re-launch triggers sync)
+- launchApp:
+    clearState: false
+
+- assertVisible:
+    text: "Dashboard"
+    timeout: 8000
+
+- tapOn: "Orders"
+
+# After sync, offline order should appear
+- assertVisible:
+    text: "Garlic Naan"
+    timeout: 10000
+
+- assertNotVisible:
+    text: "Sync failed"

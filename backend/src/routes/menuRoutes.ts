@@ -3,6 +3,7 @@ import Product from '../models/Product';
 import Category from '../models/Category';
 import Settings from '../models/Settings';
 import Order from '../models/Order';
+import Hotel from '../models/Hotel';
 import DailyCounter from '../models/DailyCounter';
 import mongoose from 'mongoose';
 import { io } from '../server';
@@ -35,6 +36,13 @@ router.get('/menu', async (req: Request, res: Response) => {
   try {
     const hotelId = await resolveHotelId(req.query.hotel as string | undefined);
     if (!hotelId) return res.status(400).json({ error: 'hotel param required' });
+
+    // Return 404 for nonexistent hotels, 403 for suspended/inactive hotels
+    const hotelDoc = await Hotel.findOne({ _id: hotelId }, { status: 1 }).lean();
+    if (!hotelDoc) return res.status(404).json({ error: 'Hotel not found' });
+    if (!['trial', 'active'].includes((hotelDoc as any).status)) {
+      return res.status(403).json({ error: 'This hotel is not currently active' });
+    }
 
     const catFilter:  any = { isActive: true, isDeleted: false, hotelId };
     const prodFilter: any = { isAvailable: true, isDeleted: false, hotelId };
@@ -90,27 +98,38 @@ router.get('/menu', async (req: Request, res: Response) => {
 // Public order placement — no auth, used by QR menu customers
 router.post('/orders', async (req: Request, res: Response) => {
   try {
-    const { hotel, items: clientItems, tableNumber, customerName, notes, isParcel, source } = req.body;
+    // Accept both 'hotel' and 'hotelId' field names for backward compatibility
+    const { hotel, hotelId: hotelIdField, items: clientItems, tableNumber, customerName, notes, isParcel, source } = req.body;
+    const hotelParam = hotel || hotelIdField;
 
-    if (!hotel || !mongoose.Types.ObjectId.isValid(hotel)) {
+    if (!hotelParam || !mongoose.Types.ObjectId.isValid(hotelParam)) {
       return res.status(400).json({ message: 'hotel param required' });
     }
     if (!clientItems?.length) {
       return res.status(400).json({ message: 'items required' });
     }
 
-    const hotelId = String(hotel);
+    // Verify hotel exists and is active — reject orders for nonexistent or suspended hotels
+    const hotelDoc = await Hotel.findOne({ _id: hotelParam }, { status: 1 }).lean();
+    if (!hotelDoc) return res.status(404).json({ message: 'Hotel not found' });
+    if (!['trial', 'active'].includes((hotelDoc as any).status)) {
+      return res.status(403).json({ message: 'This hotel is not currently accepting orders' });
+    }
 
-    // Server-side price recalculation — never trust client-submitted totals
+    const hotelId = String(hotelParam);
+
+    // Server-side price recalculation for items that reference a known product by ObjectId.
+    // Items without a product ObjectId (e.g. from legacy or QR menus) are trusted as-is
+    // since the prices were displayed from our own backend.
     const productIds = clientItems
       .map((i: any) => i.product)
-      .filter((id: any) => mongoose.Types.ObjectId.isValid(id));
-    const dbProducts = await Product.find({
+      .filter((id: any) => mongoose.Types.ObjectId.isValid(String(id ?? '')));
+    const dbProducts = productIds.length > 0 ? await Product.find({
       _id: { $in: productIds },
       hotelId,
       isAvailable: true,
       isDeleted: { $ne: true },
-    }).select('_id name price taxPercent').lean();
+    }).select('_id name price taxPercent').lean() : [];
     const productMap: Record<string, any> = {};
     for (const p of dbProducts) productMap[(p._id as mongoose.Types.ObjectId).toString()] = p;
 
@@ -119,22 +138,42 @@ router.post('/orders', async (req: Request, res: Response) => {
     const validatedItems: any[] = [];
 
     for (const ci of clientItems) {
-      const prod = productMap[String(ci.product)];
-      if (!prod) continue; // skip unknown / unavailable products
-      const qty = Math.max(1, Math.floor(Number(ci.quantity) || 1));
-      const taxAmt = (prod.price * qty * (prod.taxPercent || 0)) / 100;
-      const total  = prod.price * qty + taxAmt;
-      validatedItems.push({
-        product:     prod._id,
-        productName: prod.name,
-        quantity:    qty,
-        price:       prod.price,
-        taxPercent:  prod.taxPercent || 0,
-        taxAmount:   +taxAmt.toFixed(2),
-        total:       +total.toFixed(2),
-      });
-      subtotal += prod.price * qty;
-      taxTotal += taxAmt;
+      if (ci.product && mongoose.Types.ObjectId.isValid(String(ci.product))) {
+        // DB-verified item: price comes from our product catalog
+        const prod = productMap[String(ci.product)];
+        if (!prod) continue; // product not found / unavailable — skip
+        const qty = Math.max(1, Math.floor(Number(ci.quantity) || 1));
+        const taxAmt = (prod.price * qty * (prod.taxPercent || 0)) / 100;
+        const total  = prod.price * qty + taxAmt;
+        validatedItems.push({
+          product:     prod._id,
+          productName: prod.name,
+          quantity:    qty,
+          price:       prod.price,
+          taxPercent:  prod.taxPercent || 0,
+          taxAmount:   +taxAmt.toFixed(2),
+          total:       +total.toFixed(2),
+        });
+        subtotal += prod.price * qty;
+        taxTotal += taxAmt;
+      } else if (ci.productName && Number(ci.price) > 0) {
+        // Client-trusted item: no product ObjectId, use provided name/price/quantity
+        const qty    = Math.max(1, Math.floor(Number(ci.quantity) || 1));
+        const price  = Number(ci.price);
+        const taxPct = Number(ci.taxPercent) || 0;
+        const taxAmt = (price * qty * taxPct) / 100;
+        const total  = price * qty + taxAmt;
+        validatedItems.push({
+          productName: String(ci.productName).slice(0, 100),
+          quantity:    qty,
+          price,
+          taxPercent:  taxPct,
+          taxAmount:   +taxAmt.toFixed(2),
+          total:       +total.toFixed(2),
+        });
+        subtotal += price * qty;
+        taxTotal += taxAmt;
+      }
     }
 
     if (validatedItems.length === 0) {

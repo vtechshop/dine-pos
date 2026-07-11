@@ -69,6 +69,7 @@ const ProductSchema: Schema = new Schema(
       type: String,
       default: '',
       trim: true,
+      maxlength: [500, 'Description cannot exceed 500 characters'],
     },
     stock: {
       type: Number,

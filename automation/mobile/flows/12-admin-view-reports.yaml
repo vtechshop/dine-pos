@@ -1,0 +1,55 @@
+appId: com.dinepos.app
+name: Admin View Reports Flow
+tags:
+  - admin
+  - reports
+
+env:
+  ADMIN_ID: ${ADMIN_ID}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+
+---
+- launchApp:
+    clearState: true
+
+- tapOn: "Admin Login"
+- tapOn:
+    text: "Admin ID"
+- inputText: ${ADMIN_ID}
+- tapOn:
+    text: "Password"
+- inputText: ${ADMIN_PASSWORD}
+- tapOn: "Login"
+
+- assertVisible:
+    text: "Dashboard"
+    timeout: 8000
+
+- tapOn: "Reports"
+
+- assertVisible:
+    text: "Daily Report"
+    timeout: 5000
+
+- tapOn: "Daily Report"
+
+- assertVisible:
+    text: "Total Orders"
+    timeout: 5000
+
+- assertVisible:
+    text: "Revenue"
+
+- tapOn: "Back"
+
+- tapOn: "Range Report"
+
+- assertVisible:
+    text: "From"
+    timeout: 3000
+
+- assertVisible:
+    text: "To"
+
+- assertNotVisible:
+    text: "Error"

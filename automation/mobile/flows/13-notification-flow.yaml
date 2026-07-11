@@ -1,0 +1,51 @@
+appId: com.dinepos.app
+name: Real-Time Notification Flow (Full Order Lifecycle)
+tags:
+  - notifications
+  - socket
+  - e2e
+
+env:
+  ADMIN_ID: ${ADMIN_ID}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+  KITCHEN_PIN: ${KITCHEN_PIN}
+
+---
+- launchApp:
+    clearState: true
+
+- tapOn: "Admin Login"
+- tapOn:
+    text: "Admin ID"
+- inputText: ${ADMIN_ID}
+- tapOn:
+    text: "Password"
+- inputText: ${ADMIN_PASSWORD}
+- tapOn: "Login"
+
+- assertVisible:
+    text: "Dashboard"
+    timeout: 8000
+
+- tapOn: "New Order"
+- tapOn: "T2"
+- tapOn: "Dal Makhani"
+- tapOn: "Place Order"
+
+- assertVisible:
+    text: "Order placed"
+    timeout: 6000
+
+# Verify notification badge appears
+- assertVisible:
+    text: "New Order"
+    timeout: 5000
+
+- tapOn: "Notifications"
+
+- assertVisible:
+    text: "New order received"
+    timeout: 5000
+
+- assertNotVisible:
+    text: "Error"

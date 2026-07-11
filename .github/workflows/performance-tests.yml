@@ -1,0 +1,68 @@
+name: Performance Tests (k6)
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Test scenario to run'
+        required: true
+        default: 'smoke'
+        type: choice
+        options:
+          - smoke
+          - load-100
+          - load-500
+          - stress-1000
+          - orders-10k
+          - qr-concurrent
+          - spike
+  schedule:
+    # Run smoke test every night at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  k6-performance:
+    name: k6 Performance Test — ${{ github.event.inputs.scenario || 'smoke' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6 -y
+
+      - name: Create reports directory
+        run: mkdir -p automation/reports/performance
+
+      - name: Run k6 test
+        env:
+          API_URL: ${{ secrets.PERF_API_URL }}
+          ADMIN_ID: ${{ secrets.TEST_ADMIN_ID }}
+          ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+          HOTEL_ID: ${{ secrets.TEST_HOTEL_ID }}
+          SUPER_ADMIN_ID: ${{ secrets.SUPER_ADMIN_ID }}
+          SUPER_ADMIN_PASS: ${{ secrets.SUPER_ADMIN_PASS }}
+          SCENARIO: ${{ github.event.inputs.scenario || 'smoke' }}
+        run: |
+          k6 run \
+            --out json=automation/reports/performance/${SCENARIO}-results.json \
+            automation/performance/k6/${SCENARIO}-test.js \
+            -e API_URL=$API_URL \
+            -e ADMIN_ID=$ADMIN_ID \
+            -e ADMIN_PASSWORD=$ADMIN_PASSWORD \
+            -e HOTEL_ID=$HOTEL_ID
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-performance-${{ github.event.inputs.scenario || 'smoke' }}
+          path: automation/reports/performance/
+          retention-days: 30

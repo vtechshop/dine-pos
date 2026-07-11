@@ -6,6 +6,11 @@ node_modules/
 .env.local
 .env.production
 backend/.env
+automation/.env.test
+
+# Automation runtime artifacts (generated per-run, contain tokens/secrets)
+automation/.test-state.json
+automation/reports/
 
 # Build outputs
 dist/

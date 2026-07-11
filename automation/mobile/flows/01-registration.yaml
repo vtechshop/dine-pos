@@ -1,0 +1,62 @@
+appId: com.dinepos.app
+name: Hotel Registration Flow
+tags:
+  - registration
+  - onboarding
+
+---
+- launchApp:
+    clearState: true
+
+- assertVisible:
+    text: "Register"
+    enabled: true
+
+- tapOn: "Register"
+
+- assertVisible:
+    text: "Hotel Name"
+
+- tapOn:
+    text: "Hotel Name"
+- inputText: "Test Bistro Automation"
+
+- tapOn:
+    text: "Owner Name"
+- inputText: "John Automation"
+
+- tapOn:
+    text: "Phone"
+- inputText: "8500000001"
+
+- tapOn:
+    text: "Email"
+- inputText: "auto.reg@dinepos-test.com"
+
+- tapOn:
+    text: "Business Type"
+
+- assertVisible:
+    text: "Restaurant"
+- tapOn: "Restaurant"
+
+- tapOn:
+    text: "State"
+- inputText: "Maharashtra"
+
+- tapOn:
+    text: "City"
+- inputText: "Mumbai"
+
+- tapOn:
+    text: "Address"
+- inputText: "123 Test Street, Automation Nagar"
+
+- tapOn: "Submit Registration"
+
+- assertVisible:
+    text: "Registration submitted"
+    timeout: 5000
+
+- assertNotVisible:
+    text: "Error"

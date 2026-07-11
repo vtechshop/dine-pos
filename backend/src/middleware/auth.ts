@@ -176,7 +176,8 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
 
 // ── Role guard middleware ─────────────────────────────────────────────────────
 export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  if (req.role !== undefined) {
+  // Allow: role === undefined (legacy tokens before explicit role) OR role === 'admin' (new tokens)
+  if (req.role !== undefined && req.role !== 'admin') {
     res.status(403).json({ message: 'Access denied. Admin only.' });
     return;
   }
@@ -184,7 +185,7 @@ export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction
 };
 
 export const requireKitchenOrAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  if (req.role !== undefined && req.role !== 'kitchen') {
+  if (req.role !== undefined && req.role !== 'kitchen' && req.role !== 'admin') {
     res.status(403).json({ message: 'Access denied.' });
     return;
   }
@@ -192,7 +193,7 @@ export const requireKitchenOrAdmin = (req: AuthRequest, res: Response, next: Nex
 };
 
 export const requireWaiterOrAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  if (req.role !== undefined && req.role !== 'waiter') {
+  if (req.role !== undefined && req.role !== 'waiter' && req.role !== 'admin') {
     res.status(403).json({ message: 'Access denied.' });
     return;
   }
@@ -200,7 +201,16 @@ export const requireWaiterOrAdmin = (req: AuthRequest, res: Response, next: Next
 };
 
 export const requireCashierOrAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  if (req.role !== undefined && req.role !== 'cashier') {
+  if (req.role !== undefined && req.role !== 'cashier' && req.role !== 'admin') {
+    res.status(403).json({ message: 'Access denied.' });
+    return;
+  }
+  next();
+};
+
+// Waiter, cashier, or admin can create/manage orders — kitchen is read-only for orders
+export const requireWaiterOrCashierOrAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  if (req.role !== undefined && req.role !== 'waiter' && req.role !== 'cashier' && req.role !== 'admin') {
     res.status(403).json({ message: 'Access denied.' });
     return;
   }
@@ -208,7 +218,7 @@ export const requireCashierOrAdmin = (req: AuthRequest, res: Response, next: Nex
 };
 
 export const generateToken = (hotelId: string, hotelName: string): string => {
-  return jwt.sign({ hotelId, hotelName }, JWT_SECRET, { expiresIn: '24h' });
+  return jwt.sign({ hotelId, hotelName, role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
 };
 
 export const generateKitchenToken = (hotelId: string): string => {

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "start:test": "node start-test.js"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

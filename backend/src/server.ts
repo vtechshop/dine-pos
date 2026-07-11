@@ -122,6 +122,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 const _rl = (max: number, windowMs: number) => rateLimit({
   windowMs,
   max,
+  skip: () => process.env.NODE_ENV === 'test',
   standardHeaders: true,
   legacyHeaders: false,
   handler: (_req, res) => res.status(429).json({ message: 'Too many requests. Please slow down.' }),
@@ -137,6 +138,12 @@ app.use('/api/settings',    _rl(60, 60_000));
 app.use('/api/devices/heartbeat', _rl(12, 60_000));
 // Public remote-config — 30/min per IP; prevents crash-loop hammering
 app.use('/api/remote-config', _rl(30, 60_000));
+
+console.log(
+  process.env.NODE_ENV === 'test'
+    ? 'Rate limiter skipped (NODE_ENV=test)'
+    : 'Rate limiter enabled'
+);
 
 // Routes
 app.use('/api/auth', authRoutes);

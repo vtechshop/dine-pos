@@ -1,0 +1,25 @@
+flows:
+  - flows/*.yaml
+
+env:
+  ADMIN_ID: ADMIN_PLACEHOLDER
+  ADMIN_PASSWORD: PASS_PLACEHOLDER
+  HOTEL_ID: HOTELID_PLACEHOLDER
+  KITCHEN_PIN: "0000"
+  WAITER_CODE: WA001
+  WAITER_PIN: "1357"
+  CASHIER_CODE: CA001
+  CASHIER_PIN: "2468"
+  QR_BASE_URL: http://localhost:8081
+
+tags:
+  - auth
+  - orders
+  - kitchen
+  - waiter
+  - cashier
+  - menu
+  - reports
+  - notifications
+  - qr
+  - offline

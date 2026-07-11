@@ -1,0 +1,62 @@
+appId: com.dinepos.app
+name: Create New Order Flow
+tags:
+  - orders
+  - admin
+  - waiter
+
+env:
+  ADMIN_ID: ${ADMIN_ID}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+
+---
+- launchApp:
+    clearState: true
+
+- tapOn: "Admin Login"
+- tapOn:
+    text: "Admin ID"
+- inputText: ${ADMIN_ID}
+- tapOn:
+    text: "Password"
+- inputText: ${ADMIN_PASSWORD}
+- tapOn: "Login"
+
+- assertVisible:
+    text: "Dashboard"
+    timeout: 8000
+
+- tapOn: "New Order"
+
+- assertVisible:
+    text: "Select Table"
+
+- tapOn: "T1"
+
+- assertVisible:
+    text: "Menu"
+
+- tapOn: "Paneer Butter Masala"
+
+- assertVisible:
+    text: "1"
+
+- tapOn:
+    id: "quantity-plus"
+- assertVisible:
+    text: "2"
+
+- tapOn: "Naan"
+
+- tapOn: "Place Order"
+
+- assertVisible:
+    text: "Order placed"
+    timeout: 6000
+
+- assertVisible:
+    text: "ORD-"
+    timeout: 3000
+
+- assertNotVisible:
+    text: "Error"

@@ -1,0 +1,96 @@
+name: Web (Playwright) Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'web/**'
+      - 'automation/web/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'automation/web/**'
+
+jobs:
+  playwright:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ping: 1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install and start backend
+        working-directory: backend
+        env:
+          PORT: 5000
+          MONGODB_URI: mongodb://localhost:27017/dinepos_test
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SUPER_ADMIN_ID: ${{ secrets.SUPER_ADMIN_ID }}
+          SUPER_ADMIN_PASS: ${{ secrets.SUPER_ADMIN_PASS }}
+          NODE_ENV: test
+        run: |
+          npm ci
+          npm start &
+          timeout 30 bash -c 'until curl -s http://localhost:5000/health 2>/dev/null; do sleep 2; done'
+
+      - name: Install and build web app
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+          npm start &
+          timeout 30 bash -c 'until curl -s http://localhost:3000 2>/dev/null; do sleep 2; done'
+        env:
+          REACT_APP_API_URL: http://localhost:5000
+
+      - name: Install Playwright
+        working-directory: automation
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium firefox
+
+      - name: Create test env
+        working-directory: automation
+        run: |
+          cat > .env.test << EOF
+          WEB_BASE_URL=http://localhost:3000
+          TEST_API_URL=http://localhost:5000
+          SUPER_ADMIN_ID=${{ secrets.SUPER_ADMIN_ID }}
+          SUPER_ADMIN_PASS=${{ secrets.SUPER_ADMIN_PASS }}
+          ADMIN_ID=${{ secrets.TEST_ADMIN_ID }}
+          ADMIN_PASSWORD=${{ secrets.TEST_ADMIN_PASSWORD }}
+          EOF
+
+      - name: Run Playwright tests
+        working-directory: automation
+        run: npm run test:web
+
+      - name: Upload Playwright artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-reports
+          path: |
+            automation/reports/playwright-html/
+            automation/reports/playwright/
+          retention-days: 14

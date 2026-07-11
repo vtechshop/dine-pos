@@ -1,0 +1,46 @@
+appId: com.dinepos.app
+name: QR Customer Self-Order Flow
+tags:
+  - qr
+  - customer
+
+env:
+  QR_URL: ${QR_BASE_URL}
+  HOTEL_ID: ${HOTEL_ID}
+
+---
+- openLink: "${QR_BASE_URL}/menu/${HOTEL_ID}?table=T5"
+
+- assertVisible:
+    text: "Menu"
+    timeout: 8000
+
+- assertVisible:
+    text: "Paneer"
+    timeout: 5000
+
+- tapOn: "Paneer"
+
+- tapOn: "Add to Cart"
+
+- assertVisible:
+    text: "Cart"
+
+- tapOn: "View Cart"
+
+- assertVisible:
+    text: "Grand Total"
+
+- tapOn:
+    text: "Your Name"
+- inputText: "QR Customer"
+
+- tapOn: "Place Order"
+
+- assertVisible:
+    text: "Order placed successfully"
+    timeout: 8000
+
+- assertVisible:
+    text: "ORD-"
+    timeout: 3000

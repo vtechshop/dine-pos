@@ -1,0 +1,69 @@
+env:
+  contexts:
+    - name: DinePOS API
+      urls:
+        - "${API_URL}"
+      includePaths:
+        - "${API_URL}/api/.*"
+      excludePaths:
+        - "${API_URL}/api/public/.*"
+      authentication:
+        method: "http"
+        parameters:
+          loginUrl: "${API_URL}/api/auth/login"
+          loginRequestData: '{"userId":"${ADMIN_ID}","password":"${ADMIN_PASSWORD}"}'
+          loggedInIndicator: "accessToken|token"
+          loggedOutIndicator: "Unauthorized|Invalid"
+        verification:
+          method: response
+          loggedInRegex: "\"token\":"
+
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 10
+      scanOnlyInScope: true
+
+  - type: spider
+    parameters:
+      context: DinePOS API
+      url: "${API_URL}/api"
+      maxDuration: 2
+      acceptCookies: false
+
+  - type: openapi
+    parameters:
+      targetUrl: "${API_URL}"
+
+  - type: activeScan
+    parameters:
+      context: DinePOS API
+      policy: API-Scan
+      maxRuleDurationInMins: 5
+      maxScanDurationInMins: 60
+      scanHeadersAllRequests: true
+      threadPerHost: 2
+
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: "${REPORT_DIR}"
+      reportFile: zap-report.json
+    risks:
+      - high
+      - medium
+      - low
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: "${REPORT_DIR}"
+      reportFile: zap-report.html
+    risks:
+      - high
+      - medium

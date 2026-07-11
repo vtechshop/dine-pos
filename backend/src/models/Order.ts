@@ -80,7 +80,6 @@ const OrderSchema: Schema = new Schema(
     orderNumber: {
       type: String,
       required: true,
-      unique: true,
     },
     offlineId: {
       type: String,
@@ -124,18 +123,22 @@ const OrderSchema: Schema = new Schema(
     customerName: {
       type: String,
       default: '',
+      maxlength: [100, 'Customer name cannot exceed 100 characters'],
     },
     customerPhone: {
       type: String,
       default: '',
+      maxlength: [20, 'Phone number cannot exceed 20 characters'],
     },
     tableNumber: {
       type: String,
       default: '',
+      maxlength: [20, 'Table number cannot exceed 20 characters'],
     },
     notes: {
       type: String,
       default: '',
+      maxlength: [500, 'Notes cannot exceed 500 characters'],
     },
     orderSource: {
       type: String,
@@ -152,6 +155,7 @@ const OrderSchema: Schema = new Schema(
 );
 
 // Compound indexes for common query patterns
+OrderSchema.index({ hotelId: 1, orderNumber: 1 }, { unique: true });        // per-hotel unique order numbers — two hotels can share the same ORD-YYYYMMDD-NNN format without collision
 OrderSchema.index({ hotelId: 1, createdAt: -1 });                           // order list per hotel
 OrderSchema.index({ hotelId: 1, status: 1, createdAt: -1 });                // filtered order list
 OrderSchema.index({ hotelId: 1, orderSource: 1, createdAt: -1 });           // source filter (Swiggy/Zomato analytics)

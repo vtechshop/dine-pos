@@ -6,7 +6,7 @@ import { logAudit } from '../utils/audit';
 const router = Router();
 
 router.use(authMiddleware);
-router.use(requireAdmin);
+// requireAdmin is applied per write-route only — all authenticated roles can read categories
 
 // GET all categories for this hotel
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -22,7 +22,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET single category
+// GET single category — all authenticated roles
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const category = await Category.findOne({ _id: req.params.id, hotelId: req.hotelId });
@@ -33,8 +33,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST create category
-router.post('/', async (req: AuthRequest, res: Response) => {
+// POST create category — admin only
+router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const category = new Category({ ...req.body, hotelId: req.hotelId });
     await category.save();
@@ -45,8 +45,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// PUT update category
-router.put('/:id', async (req: AuthRequest, res: Response) => {
+// PUT update category — admin only
+router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const category = await Category.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
@@ -61,8 +61,8 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// DELETE category (soft delete)
-router.delete('/:id', async (req: AuthRequest, res: Response) => {
+// DELETE category (soft delete) — admin only
+router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const category = await Category.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },

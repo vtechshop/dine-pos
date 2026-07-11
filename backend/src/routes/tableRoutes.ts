@@ -5,9 +5,9 @@ import { logAudit } from '../utils/audit';
 
 const router = Router();
 router.use(authMiddleware);
-router.use(requireAdmin);
+// requireAdmin is applied per write-route — all authenticated roles can read tables (waiter/kitchen need to see layout)
 
-// GET all tables for hotel
+// GET all tables for hotel — waiter, kitchen, cashier, admin all need to read tables
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const tables = await Table.find({ hotelId: req.hotelId }).sort({ number: 1 });
@@ -17,8 +17,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST create table
-router.post('/', async (req: AuthRequest, res: Response) => {
+// POST create table — admin only
+router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const table = new Table({ ...req.body, hotelId: req.hotelId });
     await table.save();
@@ -30,8 +30,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// PUT update table (position, capacity, name, shape)
-router.put('/:id', async (req: AuthRequest, res: Response) => {
+// PUT update table — admin only
+router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const table = await Table.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
@@ -69,8 +69,8 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// DELETE table
-router.delete('/:id', async (req: AuthRequest, res: Response) => {
+// DELETE table — admin only
+router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const table = await Table.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });
     if (!table) return res.status(404).json({ message: 'Table not found' });

@@ -16,6 +16,7 @@ const router = Router();
 const adminLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
+  skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Too many login attempts. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,

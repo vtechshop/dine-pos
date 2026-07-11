@@ -1,0 +1,32 @@
+appId: com.dinepos.app
+name: Cashier Login Flow
+tags:
+  - auth
+  - cashier
+
+env:
+  CASHIER_CODE: ${CASHIER_CODE}
+  CASHIER_PIN: ${CASHIER_PIN}
+
+---
+- launchApp:
+    clearState: true
+
+- tapOn: "Cashier"
+
+- tapOn:
+    text: "Employee Code"
+- inputText: ${CASHIER_CODE}
+
+- tapOn:
+    text: "PIN"
+- inputText: ${CASHIER_PIN}
+
+- tapOn: "Login"
+
+- assertVisible:
+    text: "Billing"
+    timeout: 8000
+
+- assertNotVisible:
+    text: "Invalid"

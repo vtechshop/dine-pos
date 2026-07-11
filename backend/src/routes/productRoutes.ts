@@ -6,7 +6,7 @@ import { logAudit } from '../utils/audit';
 const router = Router();
 
 router.use(authMiddleware);
-router.use(requireAdmin);
+// requireAdmin is applied per write-route only — all authenticated roles can read products
 
 // GET all products for this hotel
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -55,8 +55,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST create product
-router.post('/', async (req: AuthRequest, res: Response) => {
+// POST create product — admin only
+router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const product = new Product({ ...req.body, hotelId: req.hotelId });
     await product.save();
@@ -68,8 +68,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// PUT update product
-router.put('/:id', async (req: AuthRequest, res: Response) => {
+// PUT update product — admin only
+router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const product = await Product.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
@@ -84,8 +84,8 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// DELETE product (soft delete — marks isDeleted, keeps data)
-router.delete('/:id', async (req: AuthRequest, res: Response) => {
+// DELETE product (soft delete) — admin only
+router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const product = await Product.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
