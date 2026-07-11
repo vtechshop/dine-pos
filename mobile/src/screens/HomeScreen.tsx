@@ -104,7 +104,11 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     let mounted = true;
     const connect = async () => {
       const [hotelId, url, token] = await Promise.all([getStoredHotelId(), getSocketUrl(), getToken()]);
-      if (!hotelId || !mounted) return;
+      console.log(`[SOCKET][Admin] hotelId=${hotelId} | url=${url} | hasToken=${!!token}`);
+      if (!hotelId || !mounted) {
+        console.log('[SOCKET][Admin] ABORT — hotelId missing, socket will not connect');
+        return;
+      }
       const socket = io(url, {
         transports: ['websocket'],
         auth: { token: token || '' },
@@ -115,10 +119,17 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       });
       socketRef.current = socket;
       socket.on('connect', () => {
+        console.log(`[SOCKET][Admin] Connected | socketId=${socket.id}`);
         socket.emit('join_hotel', hotelId);
+        console.log(`[SOCKET][Admin] join_hotel emitted | hotelId=${hotelId}`);
+      });
+
+      socket.on('disconnect', (reason) => {
+        console.log(`[SOCKET][Admin] Disconnected | reason=${reason}`);
       });
 
       socket.on('connect_error', (err) => {
+        console.log(`[SOCKET][Admin] connect_error: ${err.message}`);
         if (!mounted) return;
         // Server rejected socket auth — stale admin token. The HTTP refresh
         // mechanism (tryRefreshTokens) doesn't restart the socket, so we
@@ -160,6 +171,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         fetchStats();
       });
       socket.on('new_order', async (data: NewOrderAlert) => {
+        console.log(`[SOCKET][Admin] new_order received | data=${JSON.stringify(data)}`);
         if (!mounted) return;
         setNewOrderAlert(data);
         setPrintError(false);

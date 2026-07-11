@@ -1017,6 +1017,9 @@ export const kitchenLogin = async (hotelId: string, pin: string): Promise<string
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.message || 'Login failed');
+  // Persist hotelId so display screens can join the correct socket room
+  // even on dedicated devices where admin never logged in
+  await AsyncStorage.setItem(HOTEL_ID_STORAGE_KEY, hotelId);
   return data.token;
 };
 
@@ -1087,6 +1090,8 @@ export const waiterLogin = async (hotelId: string, employeeCode: string, pin: st
   });
   const data = await res.json();
   if (!res.ok) throw new Error((data as any).message || 'Login failed');
+  // Persist hotelId so display screens can join the correct socket room
+  await AsyncStorage.setItem(HOTEL_ID_STORAGE_KEY, hotelId);
   return data;
 };
 
@@ -1223,6 +1228,8 @@ export const cashierLogin = async (hotelId: string, employeeCode: string, pin: s
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.message || 'Login failed');
+  // Persist hotelId so display screens can join the correct socket room
+  await AsyncStorage.setItem(HOTEL_ID_STORAGE_KEY, hotelId);
   return data;
 };
 

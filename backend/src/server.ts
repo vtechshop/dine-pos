@@ -96,7 +96,9 @@ const io = new Server(httpServer, {
     origin: (origin, cb) => {
       // Allow requests with no origin (mobile apps, native clients)
       if (!origin) return cb(null, true);
-      if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) return cb(null, true);
+      // If ALLOWED_ORIGINS not configured, allow all (matches HTTP CORS behaviour)
+      if (allowedOrigins.length === 0) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
       cb(new Error(`Socket.io CORS: origin ${origin} not allowed`));
     },
     methods: ['GET', 'POST'],
@@ -319,25 +321,34 @@ io.use((socket, next) => {
 
 // ─── Socket.io ────────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
+  console.log(`[SOCKET] Connected | socketId=${socket.id} | authenticated=${!!socket.data.authenticated} | hotelId=${socket.data.hotelId || 'none'}`);
+
   // Auto-join authenticated admin sockets to their hotel rooms immediately
   if (socket.data.authenticated && socket.data.hotelId) {
     socket.join(`hotel_${socket.data.hotelId}`);
     socket.join(`admin_${socket.data.hotelId}`);
+    console.log(`[SOCKET] Auto-joined | socketId=${socket.id} | room=hotel_${socket.data.hotelId}`);
   }
 
   // join_hotel: admin app calls this on connect (backward-compat + unauthenticated fallback)
   socket.on('join_hotel', (hotelId: string) => {
+    console.log(`[SOCKET] join_hotel received | socketId=${socket.id} | hotelId=${hotelId} | authenticated=${!!socket.data.authenticated}`);
     if (typeof hotelId !== 'string' || !hotelId) return;
     if (socket.data.authenticated) {
       // Authenticated: silently ignore join_hotel if hotelId doesn't match JWT claim.
       // The socket was already auto-joined to the correct room on connection.
-      if (socket.data.hotelId !== hotelId) return;
+      if (socket.data.hotelId !== hotelId) {
+        console.log(`[SOCKET] join_hotel REJECTED | socketId=${socket.id} | claimed=${hotelId} | jwt=${socket.data.hotelId}`);
+        return;
+      }
     } else {
       // Unauthenticated: accept claimed hotelId (customer-side fallback)
       socket.data.hotelId = hotelId;
     }
     socket.join(`hotel_${hotelId}`);
     socket.join(`admin_${hotelId}`);
+    const roomSize = io.sockets.adapter.rooms.get(`hotel_${hotelId}`)?.size ?? 0;
+    console.log(`[SOCKET] Joined room | socketId=${socket.id} | room=hotel_${hotelId} | clientsInRoom=${roomSize}`);
   });
 
   // join: customer table room (e.g. socket.emit('join', 'table_5'))
@@ -381,6 +392,10 @@ io.on('connection', (socket) => {
     } catch (err) {
       logger.error('Socket admin_message error', { err: String(err) });
     }
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log(`[SOCKET] Disconnected | socketId=${socket.id} | reason=${reason}`);
   });
 
   socket.on('error', (err) => {

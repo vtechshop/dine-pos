@@ -37,12 +37,20 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const socketRef = useRef<Socket | null>(null);
   const mountedRef = useRef(true);
   const [tick, setTick] = useState(0);
-  const [newOrderPopup, setNewOrderPopup] = useState(false);
+  // Counter instead of boolean — every new order triggers a re-render
+  const [newOrderCount, setNewOrderCount] = useState(0);
 
   useEffect(() => {
     const t = setInterval(() => setTick(s => s + 1), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // Auto-dismiss popup after 5 seconds
+  useEffect(() => {
+    if (!newOrderCount) return;
+    const t = setTimeout(() => setNewOrderCount(0), 5000);
+    return () => clearTimeout(t);
+  }, [newOrderCount]);
 
   const elapsed = (createdAt: string) => {
     const secs = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
@@ -94,7 +102,11 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       const [hotelId, url, token] = await Promise.all([
         getStoredHotelId(), getSocketUrl(), getCashierToken(),
       ]);
-      if (!hotelId || !mountedRef.current) return;
+      console.log(`[SOCKET][Cashier] hotelId=${hotelId} | url=${url} | hasToken=${!!token}`);
+      if (!hotelId || !mountedRef.current) {
+        console.log('[SOCKET][Cashier] ABORT — hotelId missing, socket will not connect');
+        return;
+      }
 
       socket = io(url, {
         transports: ['websocket'],
@@ -104,9 +116,14 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       });
       socketRef.current = socket;
 
-      socket.on('connect', () => socket.emit('join_hotel', hotelId));
+      socket.on('connect', () => {
+        console.log(`[SOCKET][Cashier] Connected | socketId=${socket.id}`);
+        socket.emit('join_hotel', hotelId);
+        console.log(`[SOCKET][Cashier] join_hotel emitted | hotelId=${hotelId}`);
+      });
 
       socket.on('connect_error', (err) => {
+        console.log(`[SOCKET][Cashier] connect_error: ${err.message}`);
         if (!mountedRef.current) return;
         if (err.message?.includes('authentication')) {
           clearCashierToken().then(() => {
@@ -115,24 +132,35 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         }
       });
 
-      socket.on('new_order', () => {
+      socket.on('disconnect', (reason) => {
+        console.log(`[SOCKET][Cashier] Disconnected | reason=${reason}`);
+      });
+
+      socket.on('new_order', (data: { _id?: string; orderNumber?: string }) => {
+        console.log(`[SOCKET][Cashier] new_order received | data=${JSON.stringify(data)}`);
         if (!mountedRef.current) return;
         Vibration.vibrate([0, 200, 100, 200]);
         Notifications.scheduleNotificationAsync({
           content: {
-            title: '💰 New Order!',
-            body: 'A new order requires payment collection.',
+            title: '🆕 New Order!',
+            body: `Order ${data.orderNumber || ''} placed`,
             data: { type: 'cashier_new' },
           },
           trigger: { channelId: 'order_alerts_v2' },
         }).catch(() => {});
-        setNewOrderPopup(true);
+        setNewOrderCount(c => c + 1);
         loadOrders();
       });
 
       socket.on('order_completed',    () => { if (mountedRef.current) loadOrders(); });
-      socket.on('order_served',       () => { if (mountedRef.current) loadOrders(); });
-      socket.on('order_status_update',() => { if (mountedRef.current) loadOrders(); });
+      socket.on('order_served',       (data: any) => {
+        console.log(`[SOCKET][Cashier] order_served received | data=${JSON.stringify(data)}`);
+        if (mountedRef.current) loadOrders();
+      });
+      socket.on('order_status_update',(data: any) => {
+        console.log(`[SOCKET][Cashier] order_status_update received | status=${data?.status}`);
+        if (mountedRef.current) loadOrders();
+      });
     })();
 
     return () => {
@@ -412,23 +440,30 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* ── New Order Popup (floats over screen) ── */}
       <Modal
-        visible={newOrderPopup}
+        visible={newOrderCount > 0}
         transparent
         animationType="slide"
         statusBarTranslucent
-        onRequestClose={() => setNewOrderPopup(false)}
+        onRequestClose={() => setNewOrderCount(0)}
       >
         <TouchableOpacity
-          style={{ marginTop: (StatusBar.currentHeight || 0) + 8, marginHorizontal: 16 }}
-          onPress={() => setNewOrderPopup(false)}
+          style={{ marginTop: top + 8, marginHorizontal: 16 }}
+          onPress={() => setNewOrderCount(0)}
           activeOpacity={1}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.success, borderRadius: 14, padding: 16, gap: 12, overflow: 'hidden' }}>
             <MaterialIcons name="notifications-active" size={24} color={Colors.white} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: Colors.white, fontWeight: '700', fontSize: 16 }}>New Order!</Text>
-              <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, marginTop: 2 }}>A new order requires payment collection</Text>
+              <Text style={{ color: Colors.white, fontWeight: '700', fontSize: 16 }}>
+                {newOrderCount > 1 ? `${newOrderCount} New Orders!` : 'New Order!'}
+              </Text>
+              <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, marginTop: 2 }}>New order has been placed</Text>
             </View>
+            {newOrderCount > 1 && (
+              <View style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 12, minWidth: 26, height: 26, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 }}>
+                <Text style={{ color: Colors.white, fontWeight: '800', fontSize: 13 }}>{newOrderCount}</Text>
+              </View>
+            )}
             <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.8)" />
           </View>
         </TouchableOpacity>

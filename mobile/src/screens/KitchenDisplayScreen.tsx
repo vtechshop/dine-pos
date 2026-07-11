@@ -26,7 +26,9 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const socketRef = useRef<Socket | null>(null);
   const mountedRef = useRef(true);
   const seenOrderIds = useRef<Set<string>>(new Set());
-  const [newOrderPopup, setNewOrderPopup] = useState(false);
+  // Counter instead of boolean — ensures every new order triggers a re-render
+  // even if the popup is already visible (boolean setTrue on true = no re-render)
+  const [newOrderCount, setNewOrderCount] = useState(0);
 
   const pending   = orders.filter(o => o.status === 'pending');
   const preparing = orders.filter(o => o.status === 'preparing');
@@ -43,6 +45,13 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, []);
 
+  // Auto-dismiss popup after 5 seconds
+  useEffect(() => {
+    if (!newOrderCount) return;
+    const t = setTimeout(() => setNewOrderCount(0), 5000);
+    return () => clearTimeout(t);
+  }, [newOrderCount]);
+
   // ── Socket: real-time new orders + status changes ───────────────────────────
   useEffect(() => {
     mountedRef.current = true;
@@ -54,7 +63,11 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       const [hotelId, url, token] = await Promise.all([
         getStoredHotelId(), getSocketUrl(), getKitchenToken(),
       ]);
-      if (!hotelId || !mountedRef.current) return;
+      console.log(`[SOCKET][Kitchen] hotelId=${hotelId} | url=${url} | hasToken=${!!token}`);
+      if (!hotelId || !mountedRef.current) {
+        console.log('[SOCKET][Kitchen] ABORT — hotelId missing, socket will not connect');
+        return;
+      }
 
       socket = io(url, {
         transports: ['websocket'],
@@ -65,12 +78,14 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       socketRef.current = socket;
 
       socket.on('connect', () => {
+        console.log(`[SOCKET][Kitchen] Connected | socketId=${socket.id}`);
         socket.emit('join_hotel', hotelId);
+        console.log(`[SOCKET][Kitchen] join_hotel emitted | hotelId=${hotelId}`);
       });
 
       socket.on('connect_error', (err) => {
+        console.log(`[SOCKET][Kitchen] connect_error: ${err.message}`);
         if (!mountedRef.current) return;
-        // If the server rejected auth (expired token), clear token and re-login
         if (err.message?.includes('authentication')) {
           clearKitchenToken().then(() => {
             if (mountedRef.current) navigation.replace('RoleSelect');
@@ -78,15 +93,20 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         }
       });
 
+      socket.on('disconnect', (reason) => {
+        console.log(`[SOCKET][Kitchen] Disconnected | reason=${reason}`);
+      });
+
       // New order arrives — dedup, vibrate, play sound, reload
       socket.on('new_order', (data: { orderId?: string; _id?: string }) => {
+        console.log(`[SOCKET][Kitchen] new_order received | data=${JSON.stringify(data)}`);
         if (!mountedRef.current) return;
         const id = data.orderId || data._id || '';
         if (id && seenOrderIds.current.has(id)) return; // dedup
         if (id) seenOrderIds.current.add(id);
         Vibration.vibrate([0, 300, 150, 300, 150, 500]);
         notifyNewKitchenOrder();
-        setNewOrderPopup(true);
+        setNewOrderCount(c => c + 1);
         loadOrders();
       });
 
@@ -307,23 +327,30 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* ── New Order Popup (floats over screen) ── */}
       <Modal
-        visible={newOrderPopup}
+        visible={newOrderCount > 0}
         transparent
         animationType="slide"
         statusBarTranslucent
-        onRequestClose={() => setNewOrderPopup(false)}
+        onRequestClose={() => setNewOrderCount(0)}
       >
         <TouchableOpacity
-          style={{ marginTop: (StatusBar.currentHeight || 0) + 8, marginHorizontal: 16 }}
-          onPress={() => setNewOrderPopup(false)}
+          style={{ marginTop: top + 8, marginHorizontal: 16 }}
+          onPress={() => setNewOrderCount(0)}
           activeOpacity={1}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.warning, borderRadius: 14, padding: 16, gap: 12, overflow: 'hidden' }}>
             <MaterialIcons name="restaurant" size={24} color={Colors.white} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: Colors.white, fontWeight: '700', fontSize: 16 }}>New Order in Kitchen!</Text>
+              <Text style={{ color: Colors.white, fontWeight: '700', fontSize: 16 }}>
+                {newOrderCount > 1 ? `${newOrderCount} New Orders!` : 'New Order in Kitchen!'}
+              </Text>
               <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, marginTop: 2 }}>Tap to dismiss</Text>
             </View>
+            {newOrderCount > 1 && (
+              <View style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 12, minWidth: 26, height: 26, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 }}>
+                <Text style={{ color: Colors.white, fontWeight: '800', fontSize: 13 }}>{newOrderCount}</Text>
+              </View>
+            )}
             <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.8)" />
           </View>
         </TouchableOpacity>

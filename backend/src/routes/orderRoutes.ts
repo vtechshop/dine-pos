@@ -374,6 +374,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     const orderNumber = await generateOrderNumber(req.hotelId!);
     const order = new Order({ ...req.body, hotelId: req.hotelId, orderNumber });
     await order.save();
+    console.log(`[ORDER] Saved | orderId=${order._id} | orderNumber=${order.orderNumber} | hotelId=${req.hotelId}`);
 
     // ── Stock deduction ──────────────────────────────────────────────────────
     const stockItems = order.items.filter(i => i.product);
@@ -407,7 +408,10 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       }));
     }
 
-    io.to(`hotel_${req.hotelId}`).emit('new_order', {
+    const room = `hotel_${req.hotelId}`;
+    const roomClients = io.sockets.adapter.rooms.get(room)?.size ?? 0;
+    console.log(`[SOCKET] Emitting new_order | room=${room} | clientsInRoom=${roomClients} | orderId=${order._id}`);
+    io.to(room).emit('new_order', {
       _id: order._id,
       orderNumber: order.orderNumber,
       tableNumber: order.tableNumber,

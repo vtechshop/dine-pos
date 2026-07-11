@@ -71,7 +71,11 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
       const [hotelId, url, token] = await Promise.all([
         getStoredHotelId(), getSocketUrl(), getWaiterToken(),
       ]);
-      if (!hotelId || !mountedRef.current) return;
+      console.log(`[SOCKET][Waiter] hotelId=${hotelId} | url=${url} | hasToken=${!!token}`);
+      if (!hotelId || !mountedRef.current) {
+        console.log('[SOCKET][Waiter] ABORT — hotelId missing, socket will not connect');
+        return;
+      }
 
       socket = io(url, {
         transports: ['websocket'],
@@ -81,9 +85,14 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
       });
       socketRef.current = socket;
 
-      socket.on('connect', () => socket.emit('join_hotel', hotelId));
+      socket.on('connect', () => {
+        console.log(`[SOCKET][Waiter] Connected | socketId=${socket.id}`);
+        socket.emit('join_hotel', hotelId);
+        console.log(`[SOCKET][Waiter] join_hotel emitted | hotelId=${hotelId}`);
+      });
 
       socket.on('connect_error', (err) => {
+        console.log(`[SOCKET][Waiter] connect_error: ${err.message}`);
         if (!mountedRef.current) return;
         if (err.message?.includes('authentication')) {
           clearWaiterToken().then(() => {
@@ -92,7 +101,12 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
         }
       });
 
+      socket.on('disconnect', (reason) => {
+        console.log(`[SOCKET][Waiter] Disconnected | reason=${reason}`);
+      });
+
       socket.on('waiter_order_ready', (data: { orderId?: string; _id?: string; orderNumber: string; tableNumber: string }) => {
+        console.log(`[SOCKET][Waiter] waiter_order_ready received | data=${JSON.stringify(data)}`);
         if (!mountedRef.current) return;
         const id = data.orderId || data._id || '';
         if (id && seenReadyIds.current.has(id)) return;
@@ -112,6 +126,7 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
 
       // If order is served by another device or admin marks it, remove from list
       socket.on('order_served', (data: { orderId: string }) => {
+        console.log(`[SOCKET][Waiter] order_served received | orderId=${data?.orderId}`);
         if (!mountedRef.current) return;
         setOrders(prev => prev.filter(o => o._id !== data.orderId));
       });
