@@ -126,8 +126,11 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
 
     return () => {
       mountedRef.current = false;
-      socketRef.current?.disconnect();
-      socketRef.current = null;
+      if (socketRef.current) {
+        socketRef.current.off();
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
     };
   }, [loadOrders]);
 

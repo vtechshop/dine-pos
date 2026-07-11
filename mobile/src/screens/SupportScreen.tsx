@@ -10,11 +10,9 @@ import { io, Socket } from 'socket.io-client';
 import { RootStackParamList } from '../types';
 import { showAlert } from '../utils/alert';
 import { useSettings } from '../context/SettingsContext';
-import { raiseTicket, getMyTickets, replyToTicket, Ticket, getToken, getStoredHotelId } from '../services/api';
+import { raiseTicket, getMyTickets, replyToTicket, Ticket, getToken, getStoredHotelId, getSocketUrl } from '../services/api';
 import { Colors, FontSize, Spacing, BorderRadius, API_BASE_URL } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const SOCKET_URL = API_BASE_URL.replace('/api', '');
 
 interface ChatMsg {
   _id?: string;
@@ -86,28 +84,42 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
 
   // ── Chat socket — connect once, never reconnect on table change ──
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ['websocket'] });
-    socketRef.current = socket;
-    socket.emit('join', 'admin');
-    socket.on('new_message', (msg: ChatMsg) => {
-      setChatTables(prev => {
-        const exists = prev.find((t: any) => t._id === msg.tableNumber);
-        if (exists) return prev.map((t: any) => t._id === msg.tableNumber ? { ...t, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt, unread: msg.sender === 'customer' ? t.unread + 1 : t.unread } : t);
-        return [{ _id: msg.tableNumber, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt, unread: msg.sender === 'customer' ? 1 : 0 }, ...prev];
-      });
-      // Use ref to check the currently open table (avoids stale closure)
-      if (msg.tableNumber === selectedTableRef.current) {
-        setChatMessages(prev => [...prev, msg]);
-        if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-        scrollTimerRef.current = setTimeout(() => chatListRef.current?.scrollToEnd({ animated: true }), 100);
-      } else if (msg.sender === 'customer') {
-        setChatUnread(n => n + 1);
-      }
-    });
+    let mounted = true;
     fetchChatTables();
+    (async () => {
+      const [token, hotelId, url] = await Promise.all([getToken(), getStoredHotelId(), getSocketUrl()]);
+      if (!mounted) return;
+      const socket = io(url, {
+        transports: ['websocket'],
+        auth: { token: token || '' },
+      });
+      socketRef.current = socket;
+      socket.on('connect', () => {
+        if (hotelId) socket.emit('join_hotel', hotelId);
+      });
+      socket.on('new_message', (msg: ChatMsg) => {
+        setChatTables(prev => {
+          const exists = prev.find((t: any) => t._id === msg.tableNumber);
+          if (exists) return prev.map((t: any) => t._id === msg.tableNumber ? { ...t, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt, unread: msg.sender === 'customer' ? t.unread + 1 : t.unread } : t);
+          return [{ _id: msg.tableNumber, lastMessage: msg.message, lastSender: msg.sender, lastTime: msg.createdAt, unread: msg.sender === 'customer' ? 1 : 0 }, ...prev];
+        });
+        if (msg.tableNumber === selectedTableRef.current) {
+          setChatMessages(prev => [...prev, msg]);
+          if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+          scrollTimerRef.current = setTimeout(() => chatListRef.current?.scrollToEnd({ animated: true }), 100);
+        } else if (msg.sender === 'customer') {
+          setChatUnread(n => n + 1);
+        }
+      });
+    })();
     return () => {
+      mounted = false;
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-      socket.disconnect();
+      if (socketRef.current) {
+        socketRef.current.off();
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

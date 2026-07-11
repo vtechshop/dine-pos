@@ -99,8 +99,11 @@ const CustomerCartScreen: React.FC = () => {
     })();
     return () => {
       mounted = false;
-      statusSocketRef.current?.disconnect();
-      statusSocketRef.current = null;
+      if (statusSocketRef.current) {
+        statusSocketRef.current.off();
+        statusSocketRef.current.disconnect();
+        statusSocketRef.current = null;
+      }
     };
   }, [placedOrder?._id]);
 

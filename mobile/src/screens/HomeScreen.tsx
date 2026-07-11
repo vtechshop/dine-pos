@@ -194,7 +194,14 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       });
     };
     connect();
-    return () => { mounted = false; socketRef.current?.disconnect(); socketRef.current = null; };
+    return () => {
+      mounted = false;
+      if (socketRef.current) {
+        socketRef.current.off();
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
   }, [fetchStats]);
 
   // Auto-dismiss order-status banner after 8s
