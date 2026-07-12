@@ -31,7 +31,14 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const { count: kitchenBadge, increment: incKitchenBadge, reset: resetKitchenBadge } = useBadgeCount(BADGE_KEYS.kitchenOrders);
   const seenOrderIds = useRef<Set<string>>(new Set());
 
-  useFocusEffect(useCallback(() => { resetKitchenBadge(); }, [resetKitchenBadge]));
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    (async () => {
+      const ok = await loadOrders();
+      if (ok && active) resetKitchenBadge();
+    })();
+    return () => { active = false; };
+  }, [loadOrders, resetKitchenBadge]));
   // Counter instead of boolean — ensures every new order triggers a re-render
   // even if the popup is already visible (boolean setTrue on true = no re-render)
   const [newOrderCount, setNewOrderCount] = useState(0);
@@ -44,8 +51,9 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const data = await getKitchenOrders();
       if (mountedRef.current) setOrders(data);
+      return true;
     } catch {
-      // silently retry on next socket event
+      return false;
     } finally {
       if (mountedRef.current) setLoading(false);
     }

@@ -34,7 +34,14 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const seenReadyIds = useRef<Set<string>>(new Set());
   const { count: waiterBadge, increment: incWaiterBadge, reset: resetWaiterBadge } = useBadgeCount(BADGE_KEYS.waiterReady);
 
-  useFocusEffect(useCallback(() => { resetWaiterBadge(); }, [resetWaiterBadge]));
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    (async () => {
+      const ok = await loadOrders();
+      if (ok && active) resetWaiterBadge();
+    })();
+    return () => { active = false; };
+  }, [loadOrders, resetWaiterBadge]));
 
   const [readyPopup, setReadyPopup] = useState<{ orderNumber: string; tableNumber: string } | null>(null);
   const [tick, setTick] = useState(0);
@@ -54,8 +61,9 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const data = await getWaiterOrders();
       if (mountedRef.current) setOrders(data);
+      return true;
     } catch {
-      // silent
+      return false;
     } finally {
       if (mountedRef.current) setLoading(false);
     }

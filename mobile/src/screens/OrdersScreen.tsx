@@ -104,8 +104,10 @@ const OrdersScreen: React.FC = () => {
       setOrders(prev => append ? [...prev, ...data.orders] : data.orders);
       setPage(data.page);
       setTotalPages(data.pages);
+      return true;
     } catch (e: any) {
       showAlert('Error', e.message || 'Failed to load orders');
+      return false;
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -123,8 +125,12 @@ const OrdersScreen: React.FC = () => {
 
   // Runs on screen focus / return from other screen (never fires on filter change)
   useFocusEffect(useCallback(() => {
-    fetchOrders(1, activeTabRef.current, false, activeSourceRef.current);
-    resetAdminBadge();
+    let active = true;
+    (async () => {
+      const ok = await fetchOrders(1, activeTabRef.current, false, activeSourceRef.current);
+      if (ok && active) resetAdminBadge();
+    })();
+    return () => { active = false; };
   }, [fetchOrders, resetAdminBadge]));
 
   // Runs when tab or source filter changes, but NOT on the initial mount
