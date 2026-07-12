@@ -14,6 +14,8 @@ import {
   KitchenOrder,
 } from '../services/api';
 import { setupNotifications, notifyNewKitchenOrder } from '../utils/notifications';
+import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
+import UnreadBadge from '../components/UnreadBadge';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'KitchenDisplay'>;
@@ -25,6 +27,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const mountedRef = useRef(true);
+  const { count: kitchenBadge, increment: incKitchenBadge, reset: resetKitchenBadge } = useBadgeCount(BADGE_KEYS.kitchenOrders);
   const seenOrderIds = useRef<Set<string>>(new Set());
   // Counter instead of boolean — ensures every new order triggers a re-render
   // even if the popup is already visible (boolean setTrue on true = no re-render)
@@ -57,6 +60,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
     mountedRef.current = true;
     setupNotifications();
     loadOrders();
+    resetKitchenBadge();
 
     let socket: Socket;
     (async () => {
@@ -104,6 +108,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         const id = data.orderId || data._id || '';
         if (id && seenOrderIds.current.has(id)) return; // dedup
         if (id) seenOrderIds.current.add(id);
+        incKitchenBadge();
         Vibration.vibrate([0, 300, 150, 300, 150, 500]);
         notifyNewKitchenOrder();
         setNewOrderCount(c => c + 1);
@@ -267,7 +272,14 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={{ fontSize: 22 }}>👨‍🍳</Text>
+          <View style={{ position: 'relative' }}>
+            <Text style={{ fontSize: 22 }}>👨‍🍳</Text>
+            {kitchenBadge > 0 && (
+              <View style={{ position: 'absolute', top: -6, right: -8 }}>
+                <UnreadBadge count={kitchenBadge} />
+              </View>
+            )}
+          </View>
           <View>
             <Text style={styles.headerTitle}>Kitchen Display</Text>
             <Text style={styles.headerSub}>

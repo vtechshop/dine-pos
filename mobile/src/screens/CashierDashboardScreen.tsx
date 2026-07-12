@@ -17,6 +17,8 @@ import { CASHIER_PROFILE_KEY } from './CashierLoginScreen';
 import { setupNotifications } from '../utils/notifications';
 import * as Notifications from 'expo-notifications';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
+import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
+import UnreadBadge from '../components/UnreadBadge';
 import { printReceipt } from '../utils/receipt';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CashierDashboard'>;
@@ -37,6 +39,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const socketRef = useRef<Socket | null>(null);
   const mountedRef = useRef(true);
   const [tick, setTick] = useState(0);
+  const { count: cashierBadge, increment: incCashierBadge, reset: resetCashierBadge } = useBadgeCount(BADGE_KEYS.cashierPending);
   // Counter instead of boolean — every new order triggers a re-render
   const [newOrderCount, setNewOrderCount] = useState(0);
 
@@ -84,6 +87,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
     mountedRef.current = true;
     setupNotifications();
     loadOrders();
+    resetCashierBadge();
 
     AsyncStorage.getItem(CASHIER_PROFILE_KEY).then(raw => {
       if (raw && mountedRef.current) setCashierName((JSON.parse(raw) as { name?: string }).name || '');
@@ -155,7 +159,9 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       socket.on('order_completed',    () => { if (mountedRef.current) loadOrders(); });
       socket.on('order_served',       (data: any) => {
         console.log(`[SOCKET][Cashier] order_served received | data=${JSON.stringify(data)}`);
-        if (mountedRef.current) loadOrders();
+        if (!mountedRef.current) return;
+        incCashierBadge();
+        loadOrders();
       });
       socket.on('order_status_update',(data: any) => {
         console.log(`[SOCKET][Cashier] order_status_update received | status=${data?.status}`);
@@ -326,7 +332,14 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={{ fontSize: 22 }}>💰</Text>
+          <View style={{ position: 'relative' }}>
+            <Text style={{ fontSize: 22 }}>💰</Text>
+            {cashierBadge > 0 && (
+              <View style={{ position: 'absolute', top: -6, right: -8 }}>
+                <UnreadBadge count={cashierBadge} />
+              </View>
+            )}
+          </View>
           <View>
             <Text style={styles.headerTitle}>Cashier Screen</Text>
             <Text style={styles.headerSub}>

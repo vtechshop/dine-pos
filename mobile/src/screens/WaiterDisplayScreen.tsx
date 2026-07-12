@@ -15,6 +15,8 @@ import {
 } from '../services/api';
 import { WAITER_PROFILE_KEY } from './WaiterLoginScreen';
 import { setupNotifications } from '../utils/notifications';
+import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
+import UnreadBadge from '../components/UnreadBadge';
 import * as Notifications from 'expo-notifications';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 
@@ -29,6 +31,7 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const socketRef = useRef<Socket | null>(null);
   const mountedRef = useRef(true);
   const seenReadyIds = useRef<Set<string>>(new Set());
+  const { count: waiterBadge, increment: incWaiterBadge, reset: resetWaiterBadge } = useBadgeCount(BADGE_KEYS.waiterReady);
   const [readyPopup, setReadyPopup] = useState<{ orderNumber: string; tableNumber: string } | null>(null);
   const [tick, setTick] = useState(0);
 
@@ -58,6 +61,7 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
     mountedRef.current = true;
     setupNotifications();
     loadOrders();
+    resetWaiterBadge();
 
     AsyncStorage.getItem(WAITER_PROFILE_KEY).then(raw => {
       if (raw) {
@@ -111,6 +115,7 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
         const id = data.orderId || data._id || '';
         if (id && seenReadyIds.current.has(id)) return;
         if (id) seenReadyIds.current.add(id);
+        incWaiterBadge();
         Vibration.vibrate([0, 300, 150, 300, 150, 500]);
         Notifications.scheduleNotificationAsync({
           content: {
@@ -233,7 +238,14 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={{ fontSize: 22 }}>🛎️</Text>
+          <View style={{ position: 'relative' }}>
+            <Text style={{ fontSize: 22 }}>🛎️</Text>
+            {waiterBadge > 0 && (
+              <View style={{ position: 'absolute', top: -6, right: -8 }}>
+                <UnreadBadge count={waiterBadge} />
+              </View>
+            )}
+          </View>
           <View>
             <Text style={styles.headerTitle}>Waiter Screen</Text>
             <Text style={styles.headerSub}>

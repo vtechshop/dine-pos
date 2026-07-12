@@ -20,6 +20,7 @@ import { printReceipt, printKOT } from '../utils/receipt';
 import { setupNotifications, notifyNewOrder, notifyChatMessage, notifyOrderReady, notifyOrderPreparing } from '../utils/notifications';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 
 const BT_PRINTER_ADDRESS_KEY = '@hotel_pos_bt_printer_address';
 
@@ -35,6 +36,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { settings, refreshSettings } = useSettings();
   const { logout } = useAuth();
   const { clearCart } = useCart();
+  const { increment: incAdminBadge } = useBadgeCount(BADGE_KEYS.adminOrders);
   const [stats, setStats]           = useState<Stats>({ todayOrders: 0, todaySales: 0, totalProducts: 0, totalCategories: 0 });
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -173,6 +175,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       socket.on('new_order', async (data: NewOrderAlert) => {
         console.log(`[SOCKET][Admin] new_order received | data=${JSON.stringify(data)}`);
         if (!mounted) return;
+        incAdminBadge();
         setNewOrderAlert(data);
         setPrintError(false);
         setOrderBadge(p => p + 1);

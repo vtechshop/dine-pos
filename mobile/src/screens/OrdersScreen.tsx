@@ -10,6 +10,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Order } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
 import { getOrders, updateOrderStatus } from '../services/api';
+import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import { printReceipt, printKOT } from '../utils/receipt';
 import { useSettings } from '../context/SettingsContext';
 
@@ -71,6 +72,7 @@ const fmt = (iso: string) => {
 const OrdersScreen: React.FC = () => {
   const { settings } = useSettings();
   const { bottom } = useSafeAreaInsets();
+  const { reset: resetAdminBadge } = useBadgeCount(BADGE_KEYS.adminOrders);
   const cur = settings.currencySymbol || '₹';
 
   const [orders,       setOrders]       = useState<Order[]>([]);
@@ -122,7 +124,8 @@ const OrdersScreen: React.FC = () => {
   // Runs on screen focus / return from other screen (never fires on filter change)
   useFocusEffect(useCallback(() => {
     fetchOrders(1, activeTabRef.current, false, activeSourceRef.current);
-  }, [fetchOrders])); // fetchOrders is stable (empty deps in useCallback above)
+    resetAdminBadge();
+  }, [fetchOrders, resetAdminBadge]));
 
   // Runs when tab or source filter changes, but NOT on the initial mount
   // (useFocusEffect already handles that, avoiding a double fetch)

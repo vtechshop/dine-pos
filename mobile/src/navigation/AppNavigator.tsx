@@ -10,6 +10,7 @@ import { RootStackParamList, TabParamList, CustomerTabParamList } from '../types
 import { Colors } from '../utils/constants';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { useBadgeCount, BADGE_KEYS, formatBadge } from '../hooks/useBadgeCount';
 import { SyncProvider } from '../context/SyncContext';
 import { RemoteConfigProvider } from '../context/RemoteConfigContext';
 import { FeatureFlagsProvider } from '../context/FeatureFlagsContext';
@@ -73,6 +74,7 @@ const TabNavigator = () => {
   const { width } = useWindowDimensions();
   const { bottom } = useSafeAreaInsets();
   const isSmall = width < 380;
+  const { count: adminOrderBadge } = useBadgeCount(BADGE_KEYS.adminOrders);
 
   return (
     <Tab.Navigator
@@ -110,7 +112,23 @@ const TabNavigator = () => {
     >
       <Tab.Screen name="Home"     component={HomeScreen}     options={{ tabBarLabel: 'Home' }} />
       <Tab.Screen name="Billing"  component={BillingScreen} options={{ tabBarLabel: 'Billing' }} />
-      <Tab.Screen name="Orders"   component={OrdersScreen}   options={{ tabBarLabel: 'Orders' }} />
+      <Tab.Screen
+        name="Orders"
+        component={OrdersScreen}
+        options={{
+          tabBarLabel: 'Orders',
+          tabBarBadge: formatBadge(adminOrderBadge),
+          tabBarBadgeStyle: {
+            backgroundColor: '#E53935',
+            color: '#FFFFFF',
+            fontSize: 10,
+            fontWeight: '800',
+            minWidth: 18,
+            height: 18,
+            lineHeight: 18,
+          },
+        }}
+      />
       <Tab.Screen name="Reports"  component={ReportsScreen}  options={{ tabBarLabel: 'Reports' }} />
       <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarLabel: 'Settings' }} />
     </Tab.Navigator>
