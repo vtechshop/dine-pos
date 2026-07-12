@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { io, Socket } from 'socket.io-client';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import {
@@ -29,6 +30,8 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const mountedRef = useRef(true);
   const { count: kitchenBadge, increment: incKitchenBadge, reset: resetKitchenBadge } = useBadgeCount(BADGE_KEYS.kitchenOrders);
   const seenOrderIds = useRef<Set<string>>(new Set());
+
+  useFocusEffect(useCallback(() => { resetKitchenBadge(); }, [resetKitchenBadge]));
   // Counter instead of boolean — ensures every new order triggers a re-render
   // even if the popup is already visible (boolean setTrue on true = no re-render)
   const [newOrderCount, setNewOrderCount] = useState(0);
@@ -60,7 +63,6 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
     mountedRef.current = true;
     setupNotifications();
     loadOrders();
-    resetKitchenBadge();
 
     let socket: Socket;
     (async () => {

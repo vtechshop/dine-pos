@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { io, Socket } from 'socket.io-client';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList, Settings, Order } from '../types';
@@ -40,6 +41,9 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const mountedRef = useRef(true);
   const [tick, setTick] = useState(0);
   const { count: cashierBadge, increment: incCashierBadge, reset: resetCashierBadge } = useBadgeCount(BADGE_KEYS.cashierPending);
+
+  useFocusEffect(useCallback(() => { resetCashierBadge(); }, [resetCashierBadge]));
+
   // Counter instead of boolean — every new order triggers a re-render
   const [newOrderCount, setNewOrderCount] = useState(0);
 
@@ -87,7 +91,6 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
     mountedRef.current = true;
     setupNotifications();
     loadOrders();
-    resetCashierBadge();
 
     AsyncStorage.getItem(CASHIER_PROFILE_KEY).then(raw => {
       if (raw && mountedRef.current) setCashierName((JSON.parse(raw) as { name?: string }).name || '');

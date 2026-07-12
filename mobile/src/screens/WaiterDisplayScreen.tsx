@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { io, Socket } from 'socket.io-client';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList } from '../types';
@@ -32,6 +33,9 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const mountedRef = useRef(true);
   const seenReadyIds = useRef<Set<string>>(new Set());
   const { count: waiterBadge, increment: incWaiterBadge, reset: resetWaiterBadge } = useBadgeCount(BADGE_KEYS.waiterReady);
+
+  useFocusEffect(useCallback(() => { resetWaiterBadge(); }, [resetWaiterBadge]));
+
   const [readyPopup, setReadyPopup] = useState<{ orderNumber: string; tableNumber: string } | null>(null);
   const [tick, setTick] = useState(0);
 
@@ -61,7 +65,6 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
     mountedRef.current = true;
     setupNotifications();
     loadOrders();
-    resetWaiterBadge();
 
     AsyncStorage.getItem(WAITER_PROFILE_KEY).then(raw => {
       if (raw) {
