@@ -236,8 +236,6 @@ const styles = StyleSheet.create({
   },
   cardHero: {
     flex: 1,
-    minHeight: 84,
-    maxHeight: 110,
     alignItems: 'center',
     justifyContent: 'center',
   },
