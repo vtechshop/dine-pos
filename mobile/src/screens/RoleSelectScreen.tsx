@@ -223,10 +223,9 @@ const styles = StyleSheet.create({
   },
 
   // Cards
-  cards: { flex: 1, gap: Spacing.md },
-  cardOuter: { flex: 1 },
+  cards: { gap: Spacing.md },
+  cardOuter: {},
   card: {
-    flex: 1,
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.xl,
     borderWidth: 1.5,
@@ -235,7 +234,7 @@ const styles = StyleSheet.create({
     ...Shadows.sm,
   },
   cardHero: {
-    flex: 1,
+    height: 120,
     alignItems: 'center',
     justifyContent: 'center',
   },
