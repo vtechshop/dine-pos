@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, Image, ScrollView, useWindowDimensions,
-  StatusBar, Modal, Linking, Platform, Vibration,
+  StatusBar, Modal, Linking, Platform, Vibration, KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -394,7 +394,10 @@ const CustomerCartScreen: React.FC = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
 
       {/* Header */}
@@ -530,7 +533,7 @@ const CustomerCartScreen: React.FC = () => {
           </View>
         </>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
