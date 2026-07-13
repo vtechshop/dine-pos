@@ -12,7 +12,9 @@ import {
   Modal,
   StatusBar,
   useWindowDimensions,
+  Image,
 } from 'react-native';
+import { API_BASE_URL } from '../utils/constants';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +24,13 @@ import { getProducts, getCategories, deleteProduct, updateProduct } from '../ser
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+const NO_IMAGE_KEY = '__no_image__';
+const BASE_URL = API_BASE_URL.replace('/api', '');
+const getImageUri = (image?: string): string | null => {
+  if (!image) return null;
+  return image.startsWith('/uploads/') ? `${BASE_URL}${image}` : image;
+};
 
 const ProductsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -153,14 +162,19 @@ const ProductsScreen: React.FC = () => {
     return category._id;
   };
 
+  const noImageCount = products.filter(p => !p.image).length;
+
   const filteredProducts = products.filter((product) => {
-    const matchesCategory =
-      !selectedCategory || getCategoryId(product.category) === selectedCategory;
-    const matchesSearch =
-      !searchQuery ||
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.shortCode?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    if (selectedCategory === NO_IMAGE_KEY) {
+      if (product.image) return false;
+    } else if (selectedCategory) {
+      if (getCategoryId(product.category) !== selectedCategory) return false;
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (!product.name.toLowerCase().includes(q) && !product.shortCode?.toLowerCase().includes(q)) return false;
+    }
+    return true;
   });
 
   const getStockLabel = (product: Product): string => {
@@ -178,30 +192,30 @@ const ProductsScreen: React.FC = () => {
 
   const isMaterialIcon = (name?: string) => !!name && /^[a-z0-9-_]+$/.test(name);
 
-  const renderCategoryChip = ({ item }: { item: Category | { _id: null; name: string } }) => {
+  const renderCategoryChip = ({ item }: { item: Category | { _id: null | string; name: string } }) => {
     const isSelected = item._id === selectedCategory;
+    const isNoImage = item._id === NO_IMAGE_KEY;
     const iconName = 'icon' in item ? item.icon : undefined;
-    const iconColor = isSelected ? '#fff' : Colors.textSecondary;
+    const iconColor = isSelected ? '#fff' : isNoImage ? Colors.warning : Colors.textSecondary;
     return (
       <TouchableOpacity
-        style={[styles.categoryChip, isSelected && styles.categoryChipSelected]}
-        onPress={() =>
-          setSelectedCategory(item._id === selectedCategory ? null : item._id)
-        }
+        style={[
+          styles.categoryChip,
+          isNoImage && !isSelected && styles.categoryChipNoImage,
+          isSelected && (isNoImage ? styles.categoryChipNoImageSelected : styles.categoryChipSelected),
+        ]}
+        onPress={() => setSelectedCategory(item._id === selectedCategory ? null : item._id as string | null)}
         activeOpacity={0.7}
       >
-        {isMaterialIcon(iconName)
-          ? <MaterialIcons name={iconName as any} size={15} color={iconColor} />
-          : iconName
-            ? <Text style={{ fontSize: 13, lineHeight: 17 }}>{iconName}</Text>
-            : null
+        {isNoImage
+          ? <MaterialIcons name="no-photography" size={15} color={iconColor} />
+          : isMaterialIcon(iconName)
+            ? <MaterialIcons name={iconName as any} size={15} color={iconColor} />
+            : iconName
+              ? <Text style={{ fontSize: 13, lineHeight: 17 }}>{iconName}</Text>
+              : null
         }
-        <Text
-          style={[
-            styles.categoryChipText,
-            isSelected && styles.categoryChipTextSelected,
-          ]}
-        >
+        <Text style={[styles.categoryChipText, isSelected && styles.categoryChipTextSelected, isNoImage && !isSelected && { color: Colors.warning }]}>
           {item.name}
         </Text>
       </TouchableOpacity>
@@ -210,13 +224,26 @@ const ProductsScreen: React.FC = () => {
 
   const cardWidth = `${Math.floor(100 / numColumns) - 2}%` as any;
 
-  const renderProductCard = ({ item }: { item: Product }) => (
+  const renderProductCard = ({ item }: { item: Product }) => {
+    const imageUri = getImageUri(item.image);
+    return (
     <TouchableOpacity
       style={[styles.productCard, { width: cardWidth }]}
       onPress={() => handleEditProduct(item)}
       onLongPress={() => handleDeleteProduct(item)}
       activeOpacity={0.7}
     >
+      {/* Image thumbnail */}
+      {imageUri
+        ? <Image source={{ uri: imageUri }} style={styles.productThumb} resizeMode="cover" />
+        : (
+          <View style={styles.noImageThumb}>
+            <MaterialIcons name="add-a-photo" size={22} color={Colors.warning} />
+            <Text style={styles.noImageText}>Add Photo</Text>
+          </View>
+        )
+      }
+
       <View style={styles.productCardHeader}>
         <View
           style={[
@@ -303,7 +330,8 @@ const ProductsScreen: React.FC = () => {
         </View>
       )}
     </TouchableOpacity>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -314,8 +342,9 @@ const ProductsScreen: React.FC = () => {
     );
   }
 
-  const allChipData: Array<Category | { _id: null; name: string }> = [
+  const allChipData: Array<Category | { _id: null | string; name: string }> = [
     { _id: null, name: 'All' } as any,
+    { _id: NO_IMAGE_KEY, name: `No Image${noImageCount > 0 ? ` (${noImageCount})` : ''}` } as any,
     ...categories,
   ];
 
@@ -803,6 +832,42 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: FontSize.md,
     fontWeight: '700',
+  },
+
+  // Product image thumbnail
+  productThumb: {
+    width: '100%',
+    height: 80,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+  },
+  noImageThumb: {
+    width: '100%',
+    height: 80,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+    backgroundColor: Colors.warning + '18',
+    borderWidth: 1,
+    borderColor: Colors.warning + '40',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  noImageText: {
+    fontSize: FontSize.xs,
+    color: Colors.warning,
+    fontWeight: '600',
+  },
+
+  // No Image chip
+  categoryChipNoImage: {
+    borderColor: Colors.warning + '80',
+    backgroundColor: Colors.warning + '12',
+  },
+  categoryChipNoImageSelected: {
+    backgroundColor: Colors.warning,
+    borderColor: Colors.warning,
   },
 });
 
