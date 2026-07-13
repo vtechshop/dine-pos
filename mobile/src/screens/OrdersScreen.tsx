@@ -26,12 +26,12 @@ const SOURCE_CONFIG: Record<OrderSource, { label: string; emoji: string; color: 
 };
 
 const SOURCE_FILTER_OPTIONS = [
-  { key: 'all',       label: 'All Sources' },
-  { key: 'dine-in',   label: '🍴 Dine-in' },
-  { key: 'takeaway',  label: '🥡 Takeaway' },
-  { key: 'swiggy',    label: '🛵 Swiggy' },
-  { key: 'zomato',    label: '🍕 Zomato' },
-  { key: 'qr',        label: '📲 QR' },
+  { key: 'all',       emoji: '',    label: 'All Sources' },
+  { key: 'dine-in',   emoji: '🍴',  label: 'Dine-in' },
+  { key: 'takeaway',  emoji: '🥡',  label: 'Takeaway' },
+  { key: 'swiggy',    emoji: '🛵',  label: 'Swiggy' },
+  { key: 'zomato',    emoji: '🍕',  label: 'Zomato' },
+  { key: 'qr',        emoji: '📲',  label: 'QR' },
 ];
 
 const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bg: string; icon: string }> = {
@@ -392,16 +392,27 @@ const OrdersScreen: React.FC = () => {
 
       {/* Source Filter */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sourceTabs} contentContainerStyle={styles.sourceTabsContent}>
-        {SOURCE_FILTER_OPTIONS.map(s => (
-          <TouchableOpacity
-            key={s.key}
-            style={[styles.sourceFilterBtn, activeSource === s.key && styles.sourceFilterBtnActive]}
-            onPress={() => handleSourceFilter(s.key)}
-            activeOpacity={0.75}
-          >
-            <Text style={[styles.sourceFilterText, activeSource === s.key && styles.sourceFilterTextActive]}>{s.label}</Text>
-          </TouchableOpacity>
-        ))}
+        {SOURCE_FILTER_OPTIONS.map(s => {
+          const isActive = activeSource === s.key;
+          const textStyle = [styles.sourceFilterText, isActive && styles.sourceFilterTextActive];
+          return (
+            <TouchableOpacity
+              key={s.key}
+              style={[styles.sourceFilterBtn, isActive && styles.sourceFilterBtnActive]}
+              onPress={() => handleSourceFilter(s.key)}
+              activeOpacity={0.75}
+            >
+              {s.emoji ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                  <Text>{s.emoji}</Text>
+                  <Text style={textStyle}>{s.label}</Text>
+                </View>
+              ) : (
+                <Text style={textStyle}>{s.label}</Text>
+              )}
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
       {/* List */}
