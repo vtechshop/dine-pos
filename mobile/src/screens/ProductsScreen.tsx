@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../utils/alert';
 import {
   View,
@@ -49,6 +50,13 @@ const ProductsScreen: React.FC = () => {
   const [stockModalVisible, setStockModalVisible] = useState(false);
   const [stockProduct, setStockProduct] = useState<Product | null>(null);
   const [stockInput, setStockInput] = useState('');
+
+  // Auto-fill images (Pexels)
+  const [pexelsModalVisible, setPexelsModalVisible] = useState(false);
+  const [pexelsKey, setPexelsKey] = useState('');
+  const [autoFilling, setAutoFilling] = useState(false);
+  const [autoFillProgress, setAutoFillProgress] = useState('');
+  const [autoFillDone, setAutoFillDone] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -147,6 +155,64 @@ const ProductsScreen: React.FC = () => {
 
   const handleAddProduct = () => {
     navigation.navigate('AddProduct', {});
+  };
+
+  const openAutoFill = async () => {
+    const saved = await AsyncStorage.getItem('@pexels_api_key').catch(() => null);
+    if (saved) setPexelsKey(saved);
+    setAutoFillDone(false);
+    setAutoFillProgress('');
+    setPexelsModalVisible(true);
+  };
+
+  const runAutoFill = async () => {
+    const key = pexelsKey.trim();
+    if (!key) { showAlert('Pexels Key Required', 'Enter your free Pexels API key.'); return; }
+    await AsyncStorage.setItem('@pexels_api_key', key).catch(() => {});
+
+    const missing = products.filter(p => !p.image);
+    if (missing.length === 0) {
+      setAutoFillProgress('All products already have images!');
+      setAutoFillDone(true);
+      return;
+    }
+
+    setAutoFilling(true);
+    setAutoFillProgress(`Starting... (0 / ${missing.length})`);
+
+    let done = 0;
+
+    for (const product of missing) {
+      setAutoFillProgress(`Searching "${product.name}"…  (${done} / ${missing.length})`);
+      try {
+        // Try product name, then name + food, then generic
+        let imageUrl: string | null = null;
+        for (const q of [product.name, `${product.name} food`]) {
+          const res = await fetch(
+            `https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&per_page=3&orientation=square`,
+            { headers: { Authorization: key } }
+          );
+          const data = await res.json();
+          if (data.photos?.length > 0) {
+            imageUrl = data.photos[0].src.large;
+            break;
+          }
+        }
+        if (imageUrl) {
+          await updateProduct(product._id, { image: imageUrl });
+          setProducts(prev => prev.map(p => p._id === product._id ? { ...p, image: imageUrl! } : p));
+        }
+        done++;
+        setAutoFillProgress(`Done "${product.name}"  ✓  (${done} / ${missing.length})`);
+      } catch {
+        done++;
+      }
+      await new Promise(r => setTimeout(r, 400));
+    }
+
+    setAutoFillProgress(`✅  Finished! ${done} products updated.`);
+    setAutoFilling(false);
+    setAutoFillDone(true);
   };
 
   const getCategoryName = (category: Category | string): string => {
@@ -360,14 +426,24 @@ const ProductsScreen: React.FC = () => {
           <Text style={styles.headerTitle}>Menu Items</Text>
           <Text style={styles.headerSub}>{products.length} product{products.length !== 1 ? 's' : ''}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.catManageBtn}
-          onPress={() => navigation.navigate('Categories')}
-          activeOpacity={0.8}
-        >
-          <MaterialIcons name="category" size={16} color={Colors.primary} />
-          <Text style={styles.catManageBtnText}>Categories ({categories.length})</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+          <TouchableOpacity
+            style={styles.autoFillBtn}
+            onPress={openAutoFill}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="auto-fix-high" size={16} color={Colors.success} />
+            <Text style={styles.autoFillBtnText}>Auto Image</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.catManageBtn}
+            onPress={() => navigation.navigate('Categories')}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="category" size={16} color={Colors.primary} />
+            <Text style={styles.catManageBtnText}>Categories ({categories.length})</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search Bar */}
@@ -440,6 +516,65 @@ const ProductsScreen: React.FC = () => {
         <MaterialIcons name="add" size={22} color={Colors.white} />
         <Text style={styles.fabText}>Add Product</Text>
       </TouchableOpacity>
+
+      {/* Auto-fill Images (Pexels) Modal */}
+      <Modal
+        visible={pexelsModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => { if (!autoFilling) setPexelsModalVisible(false); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Auto-fill Product Images</Text>
+            <Text style={[styles.modalHint, { marginBottom: Spacing.md }]}>
+              Uses Pexels (free) to find food photos for all products without an image.{'\n'}
+              Get your free key at{' '}
+              <Text style={{ color: Colors.primary }}>pexels.com/api</Text>
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              value={pexelsKey}
+              onChangeText={setPexelsKey}
+              placeholder="Paste your Pexels API key here"
+              placeholderTextColor={Colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!autoFilling}
+            />
+
+            {!!autoFillProgress && (
+              <View style={styles.progressBox}>
+                {autoFilling && <ActivityIndicator size="small" color={Colors.success} style={{ marginRight: 8 }} />}
+                <Text style={styles.progressText} numberOfLines={2}>{autoFillProgress}</Text>
+              </View>
+            )}
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setPexelsModalVisible(false)}
+                disabled={autoFilling}
+              >
+                <Text style={styles.modalCancelText}>{autoFillDone ? 'Close' : 'Cancel'}</Text>
+              </TouchableOpacity>
+              {!autoFillDone && (
+                <TouchableOpacity
+                  style={[styles.autoFillRunBtn, autoFilling && { opacity: 0.6 }]}
+                  onPress={runAutoFill}
+                  disabled={autoFilling}
+                >
+                  {autoFilling
+                    ? <ActivityIndicator size="small" color={Colors.white} />
+                    : <Text style={styles.autoFillRunBtnText}>Start Auto-fill</Text>
+                  }
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Stock Edit Modal */}
       <Modal
@@ -859,6 +994,25 @@ const styles = StyleSheet.create({
     color: Colors.warning,
     fontWeight: '600',
   },
+
+  // Auto-fill button
+  autoFillBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.xs,
+    backgroundColor: Colors.success + '18', borderWidth: 1, borderColor: Colors.success + '50',
+    borderRadius: BorderRadius.round, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md,
+  },
+  autoFillBtnText: { color: Colors.success, fontSize: FontSize.sm, fontWeight: '700' },
+  autoFillRunBtn: {
+    flex: 1, paddingVertical: Spacing.md, borderRadius: BorderRadius.md,
+    backgroundColor: Colors.success, alignItems: 'center', justifyContent: 'center',
+  },
+  autoFillRunBtnText: { color: Colors.white, fontSize: FontSize.md, fontWeight: '700' },
+  progressBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.success + '15', borderRadius: BorderRadius.md,
+    padding: Spacing.md, marginBottom: Spacing.lg,
+  },
+  progressText: { flex: 1, fontSize: FontSize.sm, color: Colors.text, fontWeight: '500' },
 
   // No Image chip
   categoryChipNoImage: {
