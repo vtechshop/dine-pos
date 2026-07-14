@@ -108,6 +108,9 @@ router.post('/orders', async (req: Request, res: Response) => {
     if (!clientItems?.length) {
       return res.status(400).json({ message: 'items required' });
     }
+    if (!String(customerName || '').trim()) {
+      return res.status(400).json({ message: 'Customer name is required' });
+    }
 
     // Verify hotel exists and is active — reject orders for nonexistent or suspended hotels
     const hotelDoc = await Hotel.findOne({ _id: hotelParam }, { status: 1 }).lean();

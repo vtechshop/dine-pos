@@ -181,13 +181,16 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         setOrderBadge(p => p + 1);
         fetchStats();
         notifyNewOrder(data.tableNumber, data.grandTotal, data.itemCount, settingsRef.current.currencySymbol || '₹');
-        // Auto-print KOT if a Bluetooth printer is configured
+        // Auto-print KOT + bill if a Bluetooth printer is configured
         if (data._id) {
           try {
             const btAddress = await AsyncStorage.getItem(BT_PRINTER_ADDRESS_KEY);
             if (btAddress) {
               const order = await getOrder(data._id);
-              if (order && mounted) await printKOT(order as unknown as KOTOrderInput, settingsRef.current);
+              if (order && mounted) {
+                await printKOT(order as unknown as KOTOrderInput, settingsRef.current);
+                await printReceipt(order, settingsRef.current);
+              }
             }
           } catch {
             // Auto-print failed (printer off/out of range) — show red dot so admin can tap Print manually
