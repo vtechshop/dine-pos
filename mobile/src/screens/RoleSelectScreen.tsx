@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
   },
 
   // Cards
-  cards: { flex: 1, gap: Spacing.md },
+  cards: { flex: 1, gap: Spacing.lg },
   cardOuter: { flex: 1 },
   card: {
     flex: 1,
