@@ -171,8 +171,11 @@ const HotelSchema: Schema = new Schema(
   { timestamps: true }
 );
 
-HotelSchema.index({ phone: 1 });     // login + registration lookup
-HotelSchema.index({ status: 1 });    // super admin hotel list filter
-HotelSchema.index({ adminId: 1 });   // credential lookup on login
+HotelSchema.index({ phone: 1 });                    // login + registration lookup
+HotelSchema.index({ status: 1 });                   // super admin hotel list filter
+HotelSchema.index({ adminId: 1 });                  // credential lookup on login
+HotelSchema.index({ status: 1, trialEndDate: 1 });  // churn risk query
+HotelSchema.index({ status: 1, subscriptionEndDate: 1 }); // pending renewals query
+HotelSchema.index({ createdAt: -1 });               // latest registrations
 
 export default mongoose.model<IHotel>('Hotel', HotelSchema);

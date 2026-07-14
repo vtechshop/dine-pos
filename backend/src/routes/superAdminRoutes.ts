@@ -2,14 +2,35 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import { timingSafeEqual } from 'crypto';
+import os from 'os';
+import mongoose from 'mongoose';
 import Hotel from '../models/Hotel';
 import Order from '../models/Order';
 import Device from '../models/Device';
+import Ticket from '../models/Ticket';
+import Subscription from '../models/Subscription';
 import RefreshToken from '../models/RefreshToken';
 import Notification from '../models/Notification';
 import RemoteConfig from '../models/RemoteConfig';
+import { redisHealthCheck } from '../config/redis';
 import { generateAdminId, generatePassword } from '../utils/credentialGenerator';
 import { bootstrapNewHotel } from '../services/bootstrapHotel';
+
+// Subscription plan pricing (INR/month) — update when pricing changes
+const PLAN_PRICES: Record<string, number> = {
+  trial: 0,
+  starter: 999,
+  professional: 4999,
+  enterprise: 9999,
+};
+
+// Max devices allowed per hotel per plan
+const PLAN_DEVICE_LIMITS: Record<string, number> = {
+  trial: 3,
+  starter: 3,
+  professional: 8,
+  enterprise: 20,
+};
 
 const router = Router();
 
@@ -608,6 +629,462 @@ router.get('/health', superAdminAuth, async (_req: Request, res: Response) => {
       onlineDevices,
       checkedAt:    new Date(),
     });
+  } catch { return res.status(500).json({ message: 'Server error' }); }
+});
+
+// ── Super Admin Dashboard ─────────────────────────────────────────────────────
+//
+// GET /api/superadmin/dashboard
+// Single-call endpoint that assembles every Row 1-4 widget in parallel.
+// All DB queries run concurrently; slowest query sets the response time.
+//
+router.get('/dashboard', superAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const now          = new Date();
+    const todayStart   = new Date(now); todayStart.setHours(0, 0, 0, 0);
+    const monthStart   = new Date(now.getFullYear(), now.getMonth(), 1);
+    const in7Days      = new Date(now.getTime() + 7  * 86_400_000);
+    const in14Days     = new Date(now.getTime() + 14 * 86_400_000);
+    const onlineCutoff = new Date(now.getTime() - 5  * 60_000);   // 5-min heartbeat window
+
+    const [
+      hotelCounts,
+      todayRev,
+      monthRev,
+      totalDevices,
+      onlineDevices,
+      churnRisk,
+      openTickets,
+      latestRegistrations,
+      pendingRenewals,
+      recentTickets,
+      appVersionAgg,
+      remoteConfig,
+      mongoState,
+      redisState,
+    ] = await Promise.all([
+      // ── Row 1 ──
+      Hotel.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+
+      Order.aggregate([
+        { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: todayStart } } },
+        { $group: { _id: null, total: { $sum: '$grandTotal' } } },
+      ]),
+
+      Order.aggregate([
+        { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: monthStart } } },
+        { $group: { _id: null, total: { $sum: '$grandTotal' } } },
+      ]),
+
+      Device.countDocuments({ isActive: true }),
+      Device.countDocuments({ isActive: true, lastSeen: { $gte: onlineCutoff } }),
+
+      // ── Row 2 ──
+      Hotel.countDocuments({
+        status: 'trial',
+        trialEndDate: { $gte: now, $lte: in7Days },
+      }),
+
+      Ticket.countDocuments({ status: { $in: ['open', 'in-progress'] } }),
+
+      // ── Row 3: latest registrations (all statuses, newest first) ──
+      Hotel.find()
+        .select('hotelName ownerName phone city state status subscriptionType createdAt approvedAt')
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean(),
+
+      // ── Row 3: pending renewals (trial/active ending in 14 days) ──
+      Hotel.find({
+        status: { $in: ['trial', 'active'] },
+        $or: [
+          { trialEndDate:       { $gte: now, $lte: in14Days } },
+          { subscriptionEndDate: { $gte: now, $lte: in14Days } },
+          { planExpiryDate:      { $gte: now, $lte: in14Days } },
+        ],
+      })
+        .select('hotelName ownerName phone status subscriptionType trialEndDate subscriptionEndDate planExpiryDate')
+        .sort({ trialEndDate: 1, subscriptionEndDate: 1 })
+        .limit(20)
+        .lean(),
+
+      // ── Row 4: recent open tickets ──
+      Ticket.find({ status: { $in: ['open', 'in-progress'] } })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean(),
+
+      // ── Row 4: app version distribution ──
+      Device.aggregate([
+        { $match: { isActive: true, appVersion: { $ne: '' } } },
+        { $group: { _id: '$appVersion', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]),
+
+      RemoteConfig.findOne().select('minimumAppVersion forceUpdate').lean(),
+
+      // ── System health ──
+      Promise.resolve(mongoose.connection.readyState),
+      redisHealthCheck(),
+    ]);
+
+    // Build hotel status map
+    const sc: Record<string, number> = {};
+    for (const row of hotelCounts as any[]) sc[row._id] = row.count;
+
+    // App version distribution
+    const totalVersioned = (appVersionAgg as any[]).reduce((s: number, v: any) => s + v.count, 0);
+    const latestVersion  = (remoteConfig as any)?.minimumAppVersion || '';
+    const versionDist    = (appVersionAgg as any[]).map((v: any) => ({
+      version:    v._id || 'unknown',
+      count:      v.count,
+      percentage: totalVersioned > 0 ? Math.round((v.count / totalVersioned) * 100) : 0,
+      isLatest:   latestVersion ? v._id === latestVersion : false,
+    }));
+    const outdatedDeviceCount = latestVersion
+      ? (appVersionAgg as any[]).filter((v: any) => v._id && v._id !== latestVersion).reduce((s: number, v: any) => s + v.count, 0)
+      : 0;
+
+    // Memory stats
+    const mem = process.memoryUsage();
+
+    return res.json({
+      // Row 1
+      hotelStats: {
+        total:     Object.values(sc).reduce((s, n) => s + n, 0),
+        pending:   sc.pending   || 0,
+        trial:     sc.trial     || 0,
+        active:    sc.active    || 0,
+        expired:   sc.expired   || 0,
+        suspended: sc.suspended || 0,
+        rejected:  sc.rejected  || 0,
+      },
+      devices: { total: totalDevices, online: onlineDevices },
+
+      // Row 2
+      todayRevenue:   (todayRev as any[])[0]?.total  || 0,
+      monthlyRevenue: (monthRev as any[])[0]?.total  || 0,
+      churnRisk,
+      openTickets,
+
+      // Row 3
+      latestRegistrations,
+      pendingRenewals,
+
+      // Row 4
+      recentTickets,
+      systemHealth: {
+        mongo:  mongoState === 1 ? 'ok' : 'error',
+        redis:  redisState,
+        api:    'ok',
+        memory: {
+          usedMB:     Math.round(mem.heapUsed  / 1_048_576),
+          totalMB:    Math.round(mem.heapTotal / 1_048_576),
+          rssMB:      Math.round(mem.rss       / 1_048_576),
+          percentage: Math.round((mem.heapUsed / mem.heapTotal) * 100),
+        },
+        uptimeSeconds: Math.round(process.uptime()),
+        loadAvg:       os.loadavg()[0],
+      },
+      appVersions: {
+        latestVersion,
+        forceUpdateEnabled:  (remoteConfig as any)?.forceUpdate || false,
+        totalDevices,
+        outdatedDeviceCount,
+        distribution: versionDist,
+      },
+
+      generatedAt: now,
+    });
+  } catch { return res.status(500).json({ message: 'Server error' }); }
+});
+
+// ── Subscription Revenue ───────────────────────────────────────────────────────
+//
+// GET /api/superadmin/dashboard/subscription-revenue
+// MRR, ARR, and expected renewal revenue derived from active hotel plans.
+//
+router.get('/dashboard/subscription-revenue', superAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const now         = new Date();
+    const in30Days    = new Date(now.getTime() + 30 * 86_400_000);
+
+    const [planAgg, renewingHotels, recentSubs] = await Promise.all([
+      // Active/trial hotels by subscription type
+      Hotel.aggregate([
+        { $match: { status: { $in: ['active', 'trial'] } } },
+        { $group: { _id: '$subscriptionType', count: { $sum: 1 } } },
+      ]),
+
+      // Hotels whose subscription renews within 30 days
+      Hotel.find({
+        status: { $in: ['active', 'trial'] },
+        $or: [
+          { trialEndDate:       { $gte: now, $lte: in30Days } },
+          { subscriptionEndDate: { $gte: now, $lte: in30Days } },
+          { planExpiryDate:      { $gte: now, $lte: in30Days } },
+        ],
+      }).select('hotelName subscriptionType trialEndDate subscriptionEndDate').lean(),
+
+      // Last 5 paid subscription records for "recent payments" display
+      Subscription.find({ status: 'active' })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
+    ]);
+
+    let mrr = 0;
+    const breakdown: { plan: string; count: number; monthlyPrice: number; contribution: number }[] = [];
+
+    for (const row of planAgg as any[]) {
+      const plan  = row._id || 'trial';
+      const price = PLAN_PRICES[plan] || 0;
+      const contrib = price * row.count;
+      mrr += contrib;
+      breakdown.push({ plan, count: row.count, monthlyPrice: price, contribution: contrib });
+    }
+
+    const expectedRenewalRevenue = (renewingHotels as any[]).reduce((sum, h) => {
+      return sum + (PLAN_PRICES[h.subscriptionType] || 0);
+    }, 0);
+
+    return res.json({
+      mrr,
+      arr:                    mrr * 12,
+      expectedRenewalRevenue,
+      renewingCount:          renewingHotels.length,
+      breakdown:              breakdown.sort((a, b) => b.contribution - a.contribution),
+      recentSubscriptions:    recentSubs,
+    });
+  } catch { return res.status(500).json({ message: 'Server error' }); }
+});
+
+// ── Hotel Growth ──────────────────────────────────────────────────────────────
+//
+// GET /api/superadmin/dashboard/hotel-growth?period=7d|30d|12m
+// Time-bucketed hotel registration counts for the growth graph.
+//
+router.get('/dashboard/hotel-growth', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const period = (['7d', '30d', '12m'].includes(req.query.period as string)
+      ? req.query.period as string
+      : '30d');
+
+    const now = new Date();
+    let startDate: Date;
+    let groupId: Record<string, any>;
+
+    if (period === '7d') {
+      startDate = new Date(now.getTime() - 7 * 86_400_000);
+      groupId   = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' }, day: { $dayOfMonth: '$createdAt' } };
+    } else if (period === '30d') {
+      startDate = new Date(now.getTime() - 30 * 86_400_000);
+      groupId   = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' }, day: { $dayOfMonth: '$createdAt' } };
+    } else {
+      // 12 months
+      startDate = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+      groupId   = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } };
+    }
+
+    const data = await Hotel.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      {
+        $group: {
+          _id:      groupId,
+          total:    { $sum: 1 },
+          approved: { $sum: { $cond: [{ $ne: ['$status', 'pending'] }, 1, 0] } },
+          trial:    { $sum: { $cond: [{ $eq: ['$status', 'trial'] }, 1, 0] } },
+          active:   { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
+        },
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } },
+    ]);
+
+    const totalInPeriod = (data as any[]).reduce((s, d) => s + d.total, 0);
+
+    return res.json({ period, data, totalInPeriod });
+  } catch { return res.status(500).json({ message: 'Server error' }); }
+});
+
+// ── Failed Payments ───────────────────────────────────────────────────────────
+//
+// GET /api/superadmin/dashboard/failed-payments
+// Counts from the Subscription model + overdue active hotels.
+//
+router.get('/dashboard/failed-payments', superAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const now = new Date();
+
+    const [pending, failed, overdue, recent] = await Promise.all([
+      Subscription.countDocuments({ status: 'pending' }),
+      Subscription.countDocuments({ status: 'expired' }),
+
+      // Overdue: paid-plan hotels whose subscription end date has passed
+      Hotel.countDocuments({
+        status: 'active',
+        subscriptionType: { $in: ['starter', 'professional', 'enterprise'] },
+        $or: [
+          { subscriptionEndDate: { $lt: now } },
+          { planExpiryDate:       { $lt: now } },
+        ],
+      }),
+
+      // Last 10 failed/pending subscriptions for detail view
+      Subscription.find({ status: { $in: ['pending', 'expired', 'cancelled'] } })
+        .sort({ updatedAt: -1 })
+        .limit(10)
+        .lean(),
+    ]);
+
+    return res.json({
+      pending,
+      failed,
+      overdue,
+      total:  pending + failed + overdue,
+      recent,
+    });
+  } catch { return res.status(500).json({ message: 'Server error' }); }
+});
+
+// ── Device Licensing ──────────────────────────────────────────────────────────
+//
+// GET /api/superadmin/dashboard/device-licensing
+// Platform-wide device slot usage grouped by subscription plan.
+//
+router.get('/dashboard/device-licensing', superAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const [totalDevices, activeDevices, blockedDevices, planAgg, deviceVersionAgg] = await Promise.all([
+      Device.countDocuments(),
+      Device.countDocuments({ isActive: true }),
+      Device.countDocuments({ isActive: false }),
+
+      // Hotels by plan (to compute total allowed slots)
+      Hotel.aggregate([
+        { $match: { status: { $in: ['active', 'trial'] } } },
+        { $group: { _id: '$subscriptionType', hotelCount: { $sum: 1 } } },
+      ]),
+
+      // Active devices per plan (via hotel join)
+      Device.aggregate([
+        { $match: { isActive: true } },
+        {
+          $lookup: {
+            from:         'hotels',
+            localField:   'hotelId',
+            foreignField: '_id',
+            as:           'hotel',
+          },
+        },
+        { $unwind: { path: '$hotel', preserveNullAndEmptyArrays: true } },
+        { $group: { _id: '$hotel.subscriptionType', activeCount: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const activeByPlan: Record<string, number> = {};
+    for (const row of deviceVersionAgg as any[]) activeByPlan[row._id || 'unknown'] = row.activeCount;
+
+    const byPlan = (planAgg as any[]).map((row: any) => {
+      const plan          = row._id || 'trial';
+      const allowedPerHotel = PLAN_DEVICE_LIMITS[plan] || 3;
+      return {
+        plan,
+        allowedPerHotel,
+        hotelCount:    row.hotelCount,
+        totalAllowed:  allowedPerHotel * row.hotelCount,
+        activeDevices: activeByPlan[plan] || 0,
+      };
+    });
+
+    return res.json({
+      total:   totalDevices,
+      active:  activeDevices,
+      blocked: blockedDevices,
+      byPlan:  byPlan.sort((a, b) => b.activeDevices - a.activeDevices),
+    });
+  } catch { return res.status(500).json({ message: 'Server error' }); }
+});
+
+// ── Top Hotels ────────────────────────────────────────────────────────────────
+//
+// GET /api/superadmin/dashboard/top-hotels?by=revenue|orders|activity&period=today|week|month&limit=10
+// Leaderboard for the three "Top Hotels" tabs.
+//
+router.get('/dashboard/top-hotels', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const by     = (['revenue', 'orders', 'activity'].includes(req.query.by as string) ? req.query.by as string : 'revenue');
+    const period = (['today', 'week', 'month'].includes(req.query.period as string)    ? req.query.period as string : 'today');
+    const limit  = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 10));
+
+    const now = new Date();
+    let startDate: Date;
+    if (period === 'today') {
+      startDate = new Date(now); startDate.setHours(0, 0, 0, 0);
+    } else if (period === 'week') {
+      startDate = new Date(now.getTime() - 7 * 86_400_000);
+    } else {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    if (by === 'activity') {
+      const results = await Device.aggregate([
+        { $match: { isActive: true } },
+        { $group: { _id: '$hotelId', lastSeen: { $max: '$lastSeen' }, deviceCount: { $sum: 1 } } },
+        { $sort: { lastSeen: -1 } },
+        { $limit: limit },
+        {
+          $lookup: {
+            from:         'hotels',
+            localField:   '_id',
+            foreignField: '_id',
+            as:           'hotel',
+          },
+        },
+        { $unwind: '$hotel' },
+        {
+          $project: {
+            hotelId:      '$_id',
+            hotelName:    '$hotel.hotelName',
+            city:         '$hotel.city',
+            plan:         '$hotel.subscriptionType',
+            lastSeen:     1,
+            deviceCount:  1,
+          },
+        },
+      ]);
+      return res.json({ by, period, hotels: results });
+    }
+
+    // Revenue or orders — aggregate from Order collection
+    const valueExpr = by === 'revenue'
+      ? { $sum: '$grandTotal' }
+      : { $sum: 1 };
+
+    const results = await Order.aggregate([
+      { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: startDate } } },
+      { $group: { _id: '$hotelId', value: valueExpr } },
+      { $sort: { value: -1 } },
+      { $limit: limit },
+      {
+        $lookup: {
+          from:         'hotels',
+          localField:   '_id',
+          foreignField: '_id',
+          as:           'hotel',
+        },
+      },
+      { $unwind: '$hotel' },
+      {
+        $project: {
+          hotelId:   '$_id',
+          hotelName: '$hotel.hotelName',
+          city:      '$hotel.city',
+          plan:      '$hotel.subscriptionType',
+          value:     1,
+        },
+      },
+    ]);
+
+    return res.json({ by, period, hotels: results });
   } catch { return res.status(500).json({ message: 'Server error' }); }
 });
 

@@ -646,6 +646,104 @@ export const superAdminLogin = (userId: string, password: string): Promise<{ suc
   return fetchAPI('/superadmin/login', { method: 'POST', body: JSON.stringify({ userId, password }) }, true);
 };
 
+// ── Super Admin Dashboard DTOs ────────────────────────────────────────────────
+
+export interface SADashboard {
+  hotelStats: {
+    total: number; pending: number; trial: number;
+    active: number; expired: number; suspended: number; rejected: number;
+  };
+  devices: { total: number; online: number };
+  todayRevenue: number;
+  monthlyRevenue: number;
+  churnRisk: number;
+  openTickets: number;
+  latestRegistrations: {
+    _id: string; hotelName: string; ownerName: string;
+    phone: string; city: string; state: string;
+    status: string; subscriptionType: string; createdAt: string;
+  }[];
+  pendingRenewals: {
+    _id: string; hotelName: string; ownerName: string; phone: string;
+    status: string; subscriptionType: string;
+    trialEndDate?: string; subscriptionEndDate?: string;
+  }[];
+  recentTickets: {
+    _id: string; hotelName: string; hotelPhone: string;
+    subject: string; category: string; priority: string;
+    status: string; createdAt: string;
+  }[];
+  systemHealth: {
+    mongo: string; redis: string; api: string;
+    memory: { usedMB: number; totalMB: number; rssMB: number; percentage: number };
+    uptimeSeconds: number; loadAvg: number;
+  };
+  appVersions: {
+    latestVersion: string; forceUpdateEnabled: boolean;
+    totalDevices: number; outdatedDeviceCount: number;
+    distribution: { version: string; count: number; percentage: number; isLatest: boolean }[];
+  };
+  generatedAt: string;
+}
+
+export interface SASubscriptionRevenue {
+  mrr: number;
+  arr: number;
+  expectedRenewalRevenue: number;
+  renewingCount: number;
+  breakdown: { plan: string; count: number; monthlyPrice: number; contribution: number }[];
+  recentSubscriptions: { _id: string; plan: string; amount: number; status: string; createdAt: string }[];
+}
+
+export interface SAHotelGrowth {
+  period: string;
+  totalInPeriod: number;
+  data: { _id: Record<string, number>; total: number; approved: number; trial: number; active: number }[];
+}
+
+export interface SAFailedPayments {
+  pending: number; failed: number; overdue: number; total: number;
+  recent: { _id: string; plan: string; amount: number; status: string; updatedAt: string }[];
+}
+
+export interface SADeviceLicensing {
+  total: number; active: number; blocked: number;
+  byPlan: { plan: string; allowedPerHotel: number; hotelCount: number; totalAllowed: number; activeDevices: number }[];
+}
+
+export interface SATopHotel {
+  hotelId: string; hotelName: string; city: string; plan: string;
+  value?: number; lastSeen?: string; deviceCount?: number;
+}
+
+export interface SATopHotels {
+  by: string; period: string; hotels: SATopHotel[];
+}
+
+// ── Super Admin Dashboard API calls ──────────────────────────────────────────
+
+export const getSADashboard = (): Promise<SADashboard> =>
+  superAdminFetch('/superadmin/dashboard');
+
+export const getSASubscriptionRevenue = (): Promise<SASubscriptionRevenue> =>
+  superAdminFetch('/superadmin/dashboard/subscription-revenue');
+
+export const getSAHotelGrowth = (period: '7d' | '30d' | '12m' = '30d'): Promise<SAHotelGrowth> =>
+  superAdminFetch(`/superadmin/dashboard/hotel-growth?period=${period}`);
+
+export const getSAFailedPayments = (): Promise<SAFailedPayments> =>
+  superAdminFetch('/superadmin/dashboard/failed-payments');
+
+export const getSADeviceLicensing = (): Promise<SADeviceLicensing> =>
+  superAdminFetch('/superadmin/dashboard/device-licensing');
+
+export const getSATopHotels = (
+  by: 'revenue' | 'orders' | 'activity' = 'revenue',
+  period: 'today' | 'week' | 'month' = 'today',
+  limit = 10,
+): Promise<SATopHotels> =>
+  superAdminFetch(`/superadmin/dashboard/top-hotels?by=${by}&period=${period}&limit=${limit}`);
+
 export const getSuperAdminStats = (): Promise<SuperAdminStats> => {
   return superAdminFetch('/superadmin/stats');
 };
