@@ -42,7 +42,7 @@ interface PlacedOrder {
 
 const CustomerCartScreen: React.FC = () => {
   const { bottom } = useSafeAreaInsets();
-  const { cart, increment, decrement, removeItem, setCustomer, setPhone, setTable, setNotes, clearCart, itemCount } = useCart();
+  const { cart, increment, decrement, removeItem, setCustomer, setPhone, setTable, setNotes, setParcel, clearCart, itemCount } = useCart();
   const { settings } = useSettings();
   const navigation = useNavigation<NavProp>();
   const [placing, setPlacing] = useState(false);
@@ -133,6 +133,7 @@ const CustomerCartScreen: React.FC = () => {
       tableNumber: cart.tableNumber,
       customerName: cart.customerName,
       notes: cart.notes,
+      isParcel: cart.isParcel,
       subtotal: cart.subtotal,
       taxTotal: cart.taxTotal,
       grandTotal: cart.grandTotal,
@@ -437,6 +438,29 @@ const CustomerCartScreen: React.FC = () => {
               {cart.items.map(renderItem)}
             </View>
 
+            {/* Order Type */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Order Type</Text>
+              <View style={styles.orderTypeRow}>
+                <TouchableOpacity
+                  style={[styles.orderTypeBtn, !cart.isParcel && styles.orderTypeBtnActive]}
+                  onPress={() => setParcel(false)}
+                  activeOpacity={0.85}
+                >
+                  <MaterialIcons name="restaurant" size={22} color={!cart.isParcel ? Colors.white : Colors.textSecondary} />
+                  <Text style={[styles.orderTypeBtnText, !cart.isParcel && styles.orderTypeBtnTextActive]}>Dine In</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.orderTypeBtn, cart.isParcel && styles.orderTypeBtnActive]}
+                  onPress={() => setParcel(true)}
+                  activeOpacity={0.85}
+                >
+                  <MaterialIcons name="shopping-bag" size={22} color={cart.isParcel ? Colors.white : Colors.textSecondary} />
+                  <Text style={[styles.orderTypeBtnText, cart.isParcel && styles.orderTypeBtnTextActive]}>Takeaway</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
             {/* Your Details */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Your Details</Text>
@@ -573,6 +597,15 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.xl, padding: Spacing.lg, borderWidth: 1, borderColor: Colors.border,
   },
   sectionTitle: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.text, marginBottom: Spacing.md },
+  orderTypeRow: { flexDirection: 'row', gap: Spacing.md },
+  orderTypeBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+    paddingVertical: 14, borderRadius: BorderRadius.lg,
+    borderWidth: 2, borderColor: Colors.border, backgroundColor: Colors.surface,
+  },
+  orderTypeBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  orderTypeBtnText: { fontSize: FontSize.md, fontWeight: '800', color: Colors.textSecondary },
+  orderTypeBtnTextActive: { color: Colors.white },
 
   // Cart items
   cartItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border },
