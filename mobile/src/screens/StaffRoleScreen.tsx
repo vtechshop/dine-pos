@@ -136,9 +136,10 @@ const styles = StyleSheet.create({
   },
 
   // Cards
-  cards: { gap: Spacing.md },
-  cardOuter: {},
+  cards: { flex: 1, gap: Spacing.md },
+  cardOuter: { flex: 1 },
   card: {
+    flex: 1,
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.xl,
     borderWidth: 1.5,
@@ -147,15 +148,15 @@ const styles = StyleSheet.create({
     ...Shadows.sm,
   },
   cardHero: {
-    height: 120,
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconCircle: {
-    width: 76, height: 76, borderRadius: 38,
+    width: 96, height: 96, borderRadius: 48,
     alignItems: 'center', justifyContent: 'center',
   },
-  iconEmoji: { fontSize: 36 },
+  iconEmoji: { fontSize: 44 },
   cardBody: {
     flexDirection: 'row',
     alignItems: 'center',
