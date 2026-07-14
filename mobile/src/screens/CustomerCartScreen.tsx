@@ -442,17 +442,20 @@ const CustomerCartScreen: React.FC = () => {
               <Text style={styles.sectionTitle}>Your Details</Text>
 
               {/* Name — required */}
+              <View style={styles.fieldLabelRow}>
+                <Text style={styles.fieldLabel}>Name</Text>
+                <Text style={styles.fieldRequired}> * required</Text>
+              </View>
               <View style={[styles.inputWrap, nameError && styles.inputWrapError]}>
                 <MaterialIcons name="person-outline" size={18} color={nameError ? Colors.danger : Colors.textMuted} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Your name (required)"
+                  placeholder="Enter your name"
                   placeholderTextColor={nameError ? Colors.danger + '99' : Colors.textMuted}
                   value={cart.customerName}
                   onChangeText={(v) => { setCustomer(v); if (v.trim()) setNameError(false); }}
                   autoFocus={!cart.customerName}
                 />
-                <Text style={styles.requiredStar}>*</Text>
               </View>
               {nameError && (
                 <Text style={styles.nameErrorText}>Please enter your name to place the order</Text>
@@ -591,7 +594,9 @@ const styles = StyleSheet.create({
   },
   inputWrapError: { borderColor: Colors.danger, backgroundColor: Colors.dangerBg },
   input: { flex: 1, paddingVertical: 12, fontSize: FontSize.md, color: Colors.text },
-  requiredStar: { color: Colors.danger, fontSize: FontSize.lg, fontWeight: '900' },
+  fieldLabelRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 6, marginLeft: 2 },
+  fieldLabel: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary },
+  fieldRequired: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.danger },
   nameErrorText: { color: Colors.danger, fontSize: FontSize.sm, fontWeight: '600', marginBottom: Spacing.sm, marginLeft: 4 },
 
   // Bill summary (pre-order)
