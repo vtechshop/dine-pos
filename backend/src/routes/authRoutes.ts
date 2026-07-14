@@ -9,11 +9,24 @@ import Waiter from '../models/Waiter';
 import Cashier from '../models/Cashier';
 import { logAuditRaw } from '../utils/audit';
 
+// Admin login — strict: 10 attempts / 15 min per IP (protects full account access)
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Too many login attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Staff PIN login — generous: 120 attempts / 15 min per IP.
+// All restaurant tablets share one public IP, and PIN logins carry no admin
+// privileges, so a high ceiling here prevents false lockouts during shift changes.
+const staffPinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { message: 'Too many PIN attempts. Please wait a moment and try again.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -131,7 +144,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/kitchen — validate kitchen PIN, return short-lived kitchen JWT
-router.post('/kitchen', loginLimiter, async (req: Request, res: Response) => {
+router.post('/kitchen', staffPinLimiter, async (req: Request, res: Response) => {
   const { hotelId, pin } = req.body;
   if (!hotelId || !pin) {
     return res.status(400).json({ message: 'Hotel ID and PIN required' });
@@ -153,7 +166,7 @@ router.post('/kitchen', loginLimiter, async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/waiter — login with hotelId + employeeCode + PIN
-router.post('/waiter', loginLimiter, async (req: Request, res: Response) => {
+router.post('/waiter', staffPinLimiter, async (req: Request, res: Response) => {
   const { hotelId, employeeCode, pin } = req.body;
   if (!hotelId || !employeeCode || !pin) {
     return res.status(400).json({ message: 'Hotel ID, employee code and PIN required' });
@@ -190,7 +203,7 @@ router.post('/waiter', loginLimiter, async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/cashier — login with hotelId + employeeCode + PIN
-router.post('/cashier', loginLimiter, async (req: Request, res: Response) => {
+router.post('/cashier', staffPinLimiter, async (req: Request, res: Response) => {
   const { hotelId, employeeCode, pin } = req.body;
   if (!hotelId || !employeeCode || !pin) {
     return res.status(400).json({ message: 'Hotel ID, employee code and PIN required' });
