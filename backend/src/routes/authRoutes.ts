@@ -19,13 +19,19 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Staff PIN login — generous: 120 attempts / 15 min per IP.
-// All restaurant tablets share one public IP, and PIN logins carry no admin
-// privileges, so a high ceiling here prevents false lockouts during shift changes.
+// Staff PIN login — keyed by hotelId:employeeCode (not by IP) so tablets that
+// share a restaurant's public IP never burn each other's counter.
+// Kitchen route has no employeeCode so it keys by hotelId alone.
 const staffPinLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 120,
+  max: 30,
   skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    const { hotelId, employeeCode } = req.body || {};
+    if (hotelId && employeeCode) return `pin:${hotelId}:${String(employeeCode).toUpperCase()}`;
+    if (hotelId) return `pin:${hotelId}`;
+    return req.ip || 'unknown';
+  },
   message: { message: 'Too many PIN attempts. Please wait a moment and try again.' },
   standardHeaders: true,
   legacyHeaders: false,
