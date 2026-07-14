@@ -46,6 +46,7 @@ const CustomerCartScreen: React.FC = () => {
   const { settings } = useSettings();
   const navigation = useNavigation<NavProp>();
   const [placing, setPlacing] = useState(false);
+  const [nameError, setNameError] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
   const [countdown, setCountdown] = useState(6);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -109,7 +110,7 @@ const CustomerCartScreen: React.FC = () => {
 
   const handlePlaceOrder = async () => {
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items from the menu first.'); return; }
-    if (!cart.customerName.trim()) { showAlert('Name Required', 'Please enter your name.'); return; }
+    if (!cart.customerName.trim()) { setNameError(true); return; }
 
     const hotelId = await getStoredHotelId();
     if (!hotelId) { showAlert('Error', 'Hotel not found. Please scan the QR code again.'); return; }
@@ -441,16 +442,21 @@ const CustomerCartScreen: React.FC = () => {
               <Text style={styles.sectionTitle}>Your Details</Text>
 
               {/* Name — required */}
-              <View style={styles.inputWrap}>
-                <MaterialIcons name="person-outline" size={18} color={Colors.textMuted} />
+              <View style={[styles.inputWrap, nameError && styles.inputWrapError]}>
+                <MaterialIcons name="person-outline" size={18} color={nameError ? Colors.danger : Colors.textMuted} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Your name *"
-                  placeholderTextColor={Colors.textMuted}
+                  placeholder="Your name (required)"
+                  placeholderTextColor={nameError ? Colors.danger + '99' : Colors.textMuted}
                   value={cart.customerName}
-                  onChangeText={setCustomer}
+                  onChangeText={(v) => { setCustomer(v); if (v.trim()) setNameError(false); }}
+                  autoFocus={!cart.customerName}
                 />
+                <Text style={styles.requiredStar}>*</Text>
               </View>
+              {nameError && (
+                <Text style={styles.nameErrorText}>Please enter your name to place the order</Text>
+              )}
 
               {/* Phone — optional */}
               <View style={styles.inputWrap}>
@@ -583,7 +589,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, marginBottom: Spacing.sm,
     borderWidth: 1, borderColor: Colors.border,
   },
+  inputWrapError: { borderColor: Colors.danger, backgroundColor: Colors.dangerBg },
   input: { flex: 1, paddingVertical: 12, fontSize: FontSize.md, color: Colors.text },
+  requiredStar: { color: Colors.danger, fontSize: FontSize.lg, fontWeight: '900' },
+  nameErrorText: { color: Colors.danger, fontSize: FontSize.sm, fontWeight: '600', marginBottom: Spacing.sm, marginLeft: 4 },
 
   // Bill summary (pre-order)
   billRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
