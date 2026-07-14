@@ -220,7 +220,6 @@ const CustomerMenuScreen: React.FC = () => {
     if (!detailProduct) return null;
     const item = detailProduct;
     const qty = getQty(item._id);
-    const taxLine = item.taxPercent > 0 ? ` + ${item.taxPercent}% GST` : '';
 
     return (
       <Modal
@@ -277,41 +276,58 @@ const CustomerMenuScreen: React.FC = () => {
                 <Text style={styles.modalDesc}>{item.description}</Text>
               ) : null}
 
-              {/* Price */}
-              <View style={styles.modalPriceRow}>
-                <View>
-                  <Text style={styles.modalPrice}>{cur}{item.price.toFixed(0)}</Text>
-                  {taxLine ? <Text style={styles.modalPriceSub}>per plate{taxLine}</Text> : null}
-                </View>
-
-                {/* Add to cart controls */}
-                {qty === 0
-                  ? (
-                    <TouchableOpacity
-                      style={styles.modalAddBtn}
-                      onPress={() => { addItem(item); setDetailProduct(null); }}
-                      activeOpacity={0.85}
-                    >
-                      <MaterialIcons name="add-shopping-cart" size={18} color={Colors.white} />
-                      <Text style={styles.modalAddBtnText}>Add to Cart</Text>
-                    </TouchableOpacity>
-                  )
-                  : (
-                    <View style={styles.modalQtyRow}>
-                      <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item._id)}>
-                        <MaterialIcons name="remove" size={18} color={Colors.white} />
-                      </TouchableOpacity>
-                      <Text style={styles.modalQtyNum}>{qty}</Text>
-                      <TouchableOpacity style={styles.qtyBtn} onPress={() => {
-                        if (item.stock > 0 && qty >= item.stock) { showAlert('Stock Limit', `Only ${item.stock} available`); return; }
-                        increment(item._id);
-                      }}>
-                        <MaterialIcons name="add" size={18} color={Colors.white} />
-                      </TouchableOpacity>
+              {/* Price breakdown */}
+              {(() => {
+                const gst = item.taxPercent > 0 ? (item.price * item.taxPercent) / 100 : 0;
+                const total = item.price + gst;
+                return (
+                  <View style={styles.priceBox}>
+                    <View style={styles.priceRow}>
+                      <Text style={styles.priceLabel}>Menu Price</Text>
+                      <Text style={styles.priceValue}>{cur}{item.price.toFixed(2)}</Text>
                     </View>
-                  )
-                }
-              </View>
+                    {gst > 0 && (
+                      <View style={styles.priceRow}>
+                        <Text style={styles.priceLabel}>GST ({item.taxPercent}%)</Text>
+                        <Text style={styles.priceValue}>+ {cur}{gst.toFixed(2)}</Text>
+                      </View>
+                    )}
+                    <View style={styles.priceDivider} />
+                    <View style={styles.priceRow}>
+                      <Text style={styles.priceTotalLabel}>Total</Text>
+                      <Text style={styles.priceTotalValue}>{cur}{total.toFixed(2)}</Text>
+                    </View>
+                  </View>
+                );
+              })()}
+
+              {/* Add to cart controls */}
+              {qty === 0
+                ? (
+                  <TouchableOpacity
+                    style={styles.modalAddBtn}
+                    onPress={() => { addItem(item); setDetailProduct(null); }}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialIcons name="add-shopping-cart" size={18} color={Colors.white} />
+                    <Text style={styles.modalAddBtnText}>Add to Cart</Text>
+                  </TouchableOpacity>
+                )
+                : (
+                  <View style={styles.modalQtyRow}>
+                    <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item._id)}>
+                      <MaterialIcons name="remove" size={18} color={Colors.white} />
+                    </TouchableOpacity>
+                    <Text style={styles.modalQtyNum}>{qty}</Text>
+                    <TouchableOpacity style={styles.qtyBtn} onPress={() => {
+                      if (item.stock > 0 && qty >= item.stock) { showAlert('Stock Limit', `Only ${item.stock} available`); return; }
+                      increment(item._id);
+                    }}>
+                      <MaterialIcons name="add" size={18} color={Colors.white} />
+                    </TouchableOpacity>
+                  </View>
+                )
+              }
             </View>
 
             {/* Close button */}
@@ -633,20 +649,25 @@ const styles = StyleSheet.create({
   modalTag: { paddingHorizontal: Spacing.md, paddingVertical: 5, borderRadius: BorderRadius.round },
   modalTagText: { fontSize: FontSize.xs, fontWeight: '700' },
   modalDesc: { fontSize: FontSize.md, color: '#666', lineHeight: 22, marginBottom: Spacing.lg },
-  modalPriceRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingTop: Spacing.lg, borderTopWidth: 1, borderTopColor: '#EEE',
+  priceBox: {
+    backgroundColor: Colors.surface, borderRadius: BorderRadius.lg,
+    borderWidth: 1, borderColor: Colors.border,
+    padding: Spacing.md, marginBottom: Spacing.lg,
   },
-  modalPrice: { fontSize: FontSize.xxxl, fontWeight: '900', color: Colors.primary },
-  modalPriceSub: { fontSize: FontSize.xs, color: '#999', marginTop: 2 },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5 },
+  priceLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '500' },
+  priceValue: { fontSize: FontSize.sm, color: Colors.text, fontWeight: '700' },
+  priceDivider: { height: 1, backgroundColor: Colors.border, marginVertical: 6 },
+  priceTotalLabel: { fontSize: FontSize.md, color: Colors.text, fontWeight: '800' },
+  priceTotalValue: { fontSize: FontSize.xl, color: Colors.primary, fontWeight: '900' },
   modalAddBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
     backgroundColor: Colors.primary, borderRadius: 12,
-    paddingVertical: 13, paddingHorizontal: Spacing.xxl,
+    paddingVertical: 14,
     shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5,
   },
   modalAddBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '900' },
-  modalQtyRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg },
+  modalQtyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xxl },
   modalQtyNum: { color: Colors.text, fontSize: FontSize.xxl, fontWeight: '900', minWidth: 32, textAlign: 'center' },
   modalCloseBtn: {
     position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: 18,
