@@ -155,10 +155,12 @@ const CustomerMenuScreen: React.FC = () => {
             ? <Image source={{ uri: item.image }} style={[styles.prodImg, { height: IMG_H }]} resizeMode="cover" />
             : <View style={[styles.prodImgPlaceholder, { height: IMG_H }]}><MaterialIcons name="fastfood" size={Math.round(IMG_H * 0.28)} color={Colors.textMuted} /></View>
           }
-          {/* Veg/NonVeg badge (FSSAI style) */}
-          <View style={[styles.vegBadge, { borderColor: item.isVeg ? Colors.veg : Colors.nonVeg }]}>
-            <View style={[styles.vegDot, { backgroundColor: item.isVeg ? Colors.veg : Colors.nonVeg }]} />
-          </View>
+          {/* Non-veg warning badge only */}
+          {!item.isVeg && (
+            <View style={[styles.vegBadge, { borderColor: Colors.nonVeg }]}>
+              <View style={[styles.vegDot, { backgroundColor: Colors.nonVeg }]} />
+            </View>
+          )}
           {/* Popular badge */}
           {isPopular && !unavailable && (
             <View style={styles.popularBadge}>

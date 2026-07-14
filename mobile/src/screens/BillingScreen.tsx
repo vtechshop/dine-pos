@@ -329,10 +329,12 @@ Thank you for dining with us! 🍽️`;
                 <MaterialIcons name="restaurant" size={22} color={accentColor} />
               </View>
           }
-          {/* Veg indicator — pinned top-left */}
-          <View style={[styles.vegPill, { borderColor: accentColor }]}>
-            <View style={[styles.vegDot, { backgroundColor: accentColor }]} />
-          </View>
+          {/* Non-veg warning only */}
+          {!item.isVeg && (
+            <View style={[styles.vegPill, { borderColor: Colors.nonVeg }]}>
+              <View style={[styles.vegDot, { backgroundColor: Colors.nonVeg }]} />
+            </View>
+          )}
           {/* Qty badge — pinned top-right */}
           {qty > 0 && (
             <View style={styles.qtyBadge}>

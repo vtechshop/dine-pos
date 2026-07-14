@@ -46,7 +46,7 @@ const WaiterLoginScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         contentContainerStyle={[styles.container, { paddingTop: top, paddingBottom: bottom + Spacing.xl }]}
         keyboardShouldPersistTaps="handled"

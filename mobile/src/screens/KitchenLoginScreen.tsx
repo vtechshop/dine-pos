@@ -46,7 +46,7 @@ const KitchenLoginScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={[styles.container, { paddingTop: top }]}>
         <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 

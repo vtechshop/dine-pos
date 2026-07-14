@@ -368,7 +368,7 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
   const renderChatTab = () => {
     if (selectedChatTable) {
       return (
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={120}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={120}>
           <View style={styles.chatTableHeader}>
             <TouchableOpacity onPress={() => { selectedTableRef.current = null; setSelectedChatTable(null); }}>
               <MaterialIcons name="arrow-back" size={22} color={Colors.text} />
