@@ -30,9 +30,13 @@ export const bootstrapNewHotel = async (
   );
 
   const defaultCategories = [
-    { name: 'Main Course', icon: 'restaurant', color: '#FF6B35', sortOrder: 1 },
-    { name: 'Beverages',   icon: 'local-cafe',  color: '#4ECDC4', sortOrder: 2 },
-    { name: 'Snacks',      icon: 'fastfood',    color: '#FFE66D', sortOrder: 3 },
+    { name: 'Meals',          icon: 'restaurant',            color: '#FF6B35', sortOrder: 1 },
+    { name: 'Biryani',        icon: 'lunch-dining',          color: '#E91E63', sortOrder: 2 },
+    { name: 'Starters',       icon: 'local-fire-department', color: '#FF5722', sortOrder: 3 },
+    { name: 'Drinks',         icon: 'local-cafe',            color: '#4CAF50', sortOrder: 4 },
+    { name: 'Snacks',         icon: 'fastfood',              color: '#FF9800', sortOrder: 5 },
+    { name: 'Desserts',       icon: 'cake',                  color: '#9C27B0', sortOrder: 6 },
+    { name: 'Juice & Shakes', icon: 'local-bar',             color: '#00BCD4', sortOrder: 7 },
   ];
 
   for (const cat of defaultCategories) {

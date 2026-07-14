@@ -236,7 +236,7 @@ const CustomerMenuScreen: React.FC = () => {
 
             {/* Product image */}
             {item.image
-              ? <Image source={{ uri: item.image }} style={styles.modalImage} resizeMode="cover" />
+              ? <Image source={{ uri: item.image }} style={styles.modalImage} resizeMode="contain" />
               : (
                 <View style={styles.modalImagePlaceholder}>
                   <MaterialIcons name="fastfood" size={64} color={Colors.textMuted} />
@@ -620,7 +620,7 @@ const styles = StyleSheet.create({
     width: 44, height: 5, borderRadius: 3, backgroundColor: '#DDD',
     alignSelf: 'center', position: 'absolute', top: 10, zIndex: 10,
   },
-  modalImage: { width: '100%', height: 240 },
+  modalImage: { width: '100%', aspectRatio: 4 / 3, backgroundColor: '#f5f5f5' },
   modalImagePlaceholder: { width: '100%', height: 200, backgroundColor: '#FFF3EE', alignItems: 'center', justifyContent: 'center' },
   modalBody: { padding: Spacing.xl, paddingTop: Spacing.lg },
   modalNameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm },

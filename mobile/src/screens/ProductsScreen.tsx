@@ -15,13 +15,14 @@ import {
   useWindowDimensions,
   Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { API_BASE_URL } from '../utils/constants';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList, Product, Category } from '../types';
 import { MaterialIcons } from '@expo/vector-icons';
-import { getProducts, getCategories, deleteProduct, updateProduct } from '../services/api';
+import { getProducts, getCategories, deleteProduct, updateProduct, uploadImage } from '../services/api';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -50,6 +51,34 @@ const ProductsScreen: React.FC = () => {
   const [stockModalVisible, setStockModalVisible] = useState(false);
   const [stockProduct, setStockProduct] = useState<Product | null>(null);
   const [stockInput, setStockInput] = useState('');
+
+  // Inline image upload per product
+  const [uploadingProductId, setUploadingProductId] = useState<string | null>(null);
+
+  const handlePickProductImage = async (product: Product) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      showAlert('Permission needed', 'Please allow access to your photo library.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    setUploadingProductId(product._id);
+    try {
+      const url = await uploadImage(result.assets[0].uri);
+      await updateProduct(product._id, { image: url });
+      setProducts(prev => prev.map(p => p._id === product._id ? { ...p, image: url } : p));
+    } catch (e: any) {
+      showAlert('Upload Failed', e.message || 'Could not upload image.');
+    } finally {
+      setUploadingProductId(null);
+    }
+  };
 
   // Auto-fill images (Pexels)
   const [pexelsModalVisible, setPexelsModalVisible] = useState(false);
@@ -303,10 +332,19 @@ const ProductsScreen: React.FC = () => {
       {imageUri
         ? <Image source={{ uri: imageUri }} style={styles.productThumb} resizeMode="cover" />
         : (
-          <View style={styles.noImageThumb}>
-            <MaterialIcons name="add-a-photo" size={22} color={Colors.warning} />
-            <Text style={styles.noImageText}>Add Photo</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.noImageThumb}
+            onPress={() => handlePickProductImage(item)}
+            activeOpacity={0.7}
+          >
+            {uploadingProductId === item._id
+              ? <ActivityIndicator size="small" color={Colors.warning} />
+              : <>
+                  <MaterialIcons name="add-a-photo" size={22} color={Colors.warning} />
+                  <Text style={styles.noImageText}>Add Photo</Text>
+                </>
+            }
+          </TouchableOpacity>
         )
       }
 
