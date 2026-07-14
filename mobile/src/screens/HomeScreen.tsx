@@ -29,7 +29,7 @@ type Props = CompositeScreenProps<
   NativeStackScreenProps<RootStackParamList>
 >;
 
-interface Stats { todayOrders: number; todaySales: number; totalProducts: number; totalCategories: number }
+interface Stats { todayOrders: number; todaySales: number; totalProducts: number; totalCategories: number; parcelOrders: number }
 interface NewOrderAlert { _id?: string; orderNumber: string; tableNumber: string; customerName: string; grandTotal: number; itemCount: number }
 
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
@@ -37,7 +37,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { logout } = useAuth();
   const { clearCart } = useCart();
   const { increment: incAdminBadge } = useBadgeCount(BADGE_KEYS.adminOrders);
-  const [stats, setStats]           = useState<Stats>({ todayOrders: 0, todaySales: 0, totalProducts: 0, totalCategories: 0 });
+  const [stats, setStats]           = useState<Stats>({ todayOrders: 0, todaySales: 0, totalProducts: 0, totalCategories: 0, parcelOrders: 0 });
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError]           = useState<string | null>(null);
@@ -68,7 +68,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         getLowStockIngredients().catch(() => ({ ingredients: [] })),
         getNotifications().catch(() => ({ notifications: [], unreadCount: 0 })),
       ]);
-      setStats({ todayOrders: report.totalOrders, todaySales: report.totalSales, totalProducts: products.length, totalCategories: categories.length });
+      setStats({ todayOrders: report.totalOrders, todaySales: report.totalSales, totalProducts: products.length, totalCategories: categories.length, parcelOrders: report.parcelOrders ?? 0 });
       setLowStockCount(lowStock.products.length);
       setLowIngredientCount(lowIngredients.ingredients.length);
       setNotifUnread(notifs.unreadCount);
@@ -449,6 +449,22 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           ))}
         </View>
 
+        {/* ── Order Type Breakdown ── */}
+        {stats.todayOrders > 0 && (
+          <View style={styles.orderTypeRow}>
+            <View style={[styles.orderTypeCard, { borderColor: Colors.primary + '40' }]}>
+              <MaterialIcons name="restaurant" size={18} color={Colors.primary} />
+              <Text style={[styles.orderTypeCount, { color: Colors.primary }]}>{stats.todayOrders - stats.parcelOrders}</Text>
+              <Text style={styles.orderTypeLabel}>Dine In</Text>
+            </View>
+            <View style={[styles.orderTypeCard, { borderColor: Colors.warning + '40' }]}>
+              <MaterialIcons name="shopping-bag" size={18} color={Colors.warning} />
+              <Text style={[styles.orderTypeCount, { color: Colors.warning }]}>{stats.parcelOrders}</Text>
+              <Text style={styles.orderTypeLabel}>Takeaway</Text>
+            </View>
+          </View>
+        )}
+
         {/* ── Quick Actions ── */}
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
@@ -578,6 +594,16 @@ const styles = StyleSheet.create({
   statIconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.md },
   statValue: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.text, marginBottom: 2 },
   statTitle: { fontSize: FontSize.xs, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  // Order type breakdown
+  orderTypeRow: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.xl, marginTop: -Spacing.sm },
+  orderTypeCard: {
+    flex: 1, flexDirection: 'column', alignItems: 'center', gap: 4,
+    backgroundColor: Colors.card, borderRadius: BorderRadius.lg,
+    padding: Spacing.md, borderWidth: 1.5, ...Shadows.sm,
+  },
+  orderTypeCount: { fontSize: FontSize.xl, fontWeight: '800' },
+  orderTypeLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   // Actions
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginBottom: Spacing.xl },

@@ -126,6 +126,7 @@ export interface DailyReport {
   totalTax: number;
   totalOrders: number;
   parcelOrders?: number;
+  parcelRevenue?: number;
   totalDiscount?: number;
   paymentBreakdown: {
     cash: number;

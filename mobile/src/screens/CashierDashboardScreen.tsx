@@ -242,6 +242,13 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
     const token = item.orderNumber.split('-').pop() || '?';
     return (
       <View style={styles.card}>
+        {/* Order type banner */}
+        <View style={[styles.orderTypeBanner, item.isParcel ? styles.orderTypeBannerTakeaway : styles.orderTypeBannerDineIn]}>
+          <MaterialIcons name={item.isParcel ? 'shopping-bag' : 'restaurant'} size={14} color={item.isParcel ? Colors.warning : Colors.primary} />
+          <Text style={[styles.orderTypeBannerText, { color: item.isParcel ? Colors.warning : Colors.primary }]}>
+            {item.isParcel ? '🛍 TAKEAWAY' : '🍽 DINE IN'}
+          </Text>
+        </View>
         <View style={styles.cardHeader}>
           <View style={styles.tokenBadge}>
             <Text style={styles.tokenText}>#{token}</Text>
@@ -533,8 +540,16 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: Colors.surface, borderRadius: BorderRadius.xl,
     padding: Spacing.lg, marginBottom: Spacing.md, ...Shadows.sm,
-    borderWidth: 1, borderColor: Colors.border,
+    borderWidth: 1, borderColor: Colors.border, overflow: 'hidden',
   },
+  orderTypeBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginHorizontal: -Spacing.lg, marginTop: -Spacing.lg,
+    paddingHorizontal: Spacing.lg, paddingVertical: 6, marginBottom: Spacing.md,
+  },
+  orderTypeBannerDineIn:   { backgroundColor: Colors.primaryBg },
+  orderTypeBannerTakeaway: { backgroundColor: Colors.warningBg },
+  orderTypeBannerText: { fontSize: FontSize.sm, fontWeight: '800', letterSpacing: 0.3 },
   cardHeader:  { flexDirection: 'row', alignItems: 'flex-start', marginBottom: Spacing.md },
   tokenBadge: {
     width: 44, height: 44, borderRadius: 12,

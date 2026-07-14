@@ -223,6 +223,14 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Order type pill */}
+        <View style={[styles.orderTypePill, order.isParcel ? styles.orderTypePillTakeaway : styles.orderTypePillDineIn]}>
+          <MaterialIcons name={order.isParcel ? 'shopping-bag' : 'restaurant'} size={12} color={order.isParcel ? Colors.warning : Colors.primary} />
+          <Text style={[styles.orderTypePillText, { color: order.isParcel ? Colors.warning : Colors.primary }]}>
+            {order.isParcel ? 'TAKEAWAY' : 'DINE IN'}
+          </Text>
+        </View>
+
         {/* Items */}
         <View style={styles.itemsWrap}>
           {order.items.map((item, i) => (
@@ -452,6 +460,15 @@ const styles = StyleSheet.create({
   timeBadgeUrgent: { backgroundColor: Colors.dangerBg },
   timeText: { fontSize: 11, color: Colors.textMuted, fontWeight: '600' },
   timeTextUrgent: { color: Colors.danger },
+
+  orderTypePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 6, marginBottom: Spacing.sm, borderWidth: 1,
+  },
+  orderTypePillDineIn:    { backgroundColor: Colors.primaryBg, borderColor: Colors.primary + '40' },
+  orderTypePillTakeaway:  { backgroundColor: Colors.warningBg, borderColor: Colors.warning + '40' },
+  orderTypePillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
 
   itemsWrap: { marginBottom: Spacing.sm },
   itemRow: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.sm, paddingVertical: 3 },

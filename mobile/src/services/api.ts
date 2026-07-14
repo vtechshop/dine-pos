@@ -1031,6 +1031,7 @@ export interface KitchenOrder {
   customerName: string;
   notes: string;
   status: 'pending' | 'preparing';
+  isParcel: boolean;
   createdAt: string;
   items: KitchenOrderItem[];
 }
@@ -1172,6 +1173,7 @@ export interface WaiterOrder {
   customerName: string;
   notes: string;
   status: 'ready';
+  isParcel: boolean;
   createdAt: string;
   items: WaiterOrderItem[];
 }

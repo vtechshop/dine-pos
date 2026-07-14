@@ -569,6 +569,34 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
                 </View>
               )}
 
+              {/* Order type breakdown — Dine In vs Takeaway */}
+              {report && report.totalOrders > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Order Type Summary</Text>
+                  {[
+                    {
+                      label: '🍽 Dine In',
+                      orders: report.totalOrders - (report.parcelOrders ?? 0),
+                      revenue: report.totalSales - (report.parcelRevenue ?? 0),
+                      color: Colors.primary,
+                    },
+                    {
+                      label: '🛍 Takeaway',
+                      orders: report.parcelOrders ?? 0,
+                      revenue: report.parcelRevenue ?? 0,
+                      color: Colors.warning,
+                    },
+                  ].map(t => (
+                    <View key={t.label} style={styles.payRow}>
+                      <View style={[styles.payDot, { backgroundColor: t.color }]} />
+                      <Text style={styles.payLabel}>{t.label}</Text>
+                      <Text style={[styles.payLabel, { color: Colors.textMuted, marginLeft: 4 }]}>{t.orders} orders</Text>
+                      <Text style={[styles.payValue, { color: t.color }]}>{cur}{t.revenue.toFixed(2)}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               {/* Order source breakdown */}
               {report?.sourceBreakdown && Object.values(report.sourceBreakdown).some(s => s.revenue > 0) && (
                 <View style={styles.section}>

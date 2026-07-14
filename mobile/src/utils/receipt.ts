@@ -165,9 +165,13 @@ export const generateReceiptHTML = (order: Order, settings: Settings): string =>
 
     <hr class="line">
 
+    <div style="text-align:center; font-weight:900; font-size:${fs.bill}px; border:1px solid #000; padding:4px; margin-bottom:6px; letter-spacing:1px;">
+      ${order.isParcel ? '\u{1F6CD} TAKEAWAY' : '\u{1F37D} DINE IN'}
+    </div>
+
     <div class="bill-info"><strong>Bill No:</strong> ${order.orderNumber}</div>
     <div class="bill-info"><strong>Date:</strong> ${dateStr} | ${timeStr}</div>
-    ${order.tableNumber ? `<div class="bill-info"><strong>Table:</strong> ${order.tableNumber}</div>` : ''}
+    ${!order.isParcel && order.tableNumber ? `<div class="bill-info"><strong>Table:</strong> ${order.tableNumber}</div>` : ''}
     ${order.customerName ? `<div class="bill-info"><strong>Customer:</strong> ${order.customerName}</div>` : ''}
 
     <hr class="line">

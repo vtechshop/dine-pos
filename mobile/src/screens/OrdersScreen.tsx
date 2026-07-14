@@ -82,6 +82,7 @@ const OrdersScreen: React.FC = () => {
   const [totalPages,   setTotalPages]   = useState(1);
   const [activeTab,    setActiveTab]    = useState('active');
   const [activeSource, setActiveSource] = useState('all');
+  const [typeFilter,   setTypeFilter]   = useState<'all' | 'dine-in' | 'takeaway'>('all');
   const [selected,     setSelected]     = useState<Order | null>(null);
   const [updating,     setUpdating]     = useState(false);
   const [reprinting,   setReprinting]   = useState(false);
@@ -142,6 +143,10 @@ const OrdersScreen: React.FC = () => {
 
   const handleTabChange    = (tab: string) => setActiveTab(tab);
   const handleSourceFilter = (src: string) => setActiveSource(src);
+
+  const displayedOrders = typeFilter === 'all' ? orders
+    : typeFilter === 'takeaway' ? orders.filter(o => o.isParcel)
+    : orders.filter(o => !o.isParcel);
 
   const handleStatusUpdate = async (order: Order, newStatus: OrderStatus) => {
     setUpdating(true);
@@ -222,7 +227,12 @@ const OrdersScreen: React.FC = () => {
               </View>
             );
           })()}
-          {item.isParcel && !item.orderSource && <Text style={styles.parcelTag}>📦 Parcel</Text>}
+          <View style={[styles.orderTypePill, item.isParcel ? styles.orderTypePillTakeaway : styles.orderTypePillDineIn]}>
+            <MaterialIcons name={item.isParcel ? 'shopping-bag' : 'restaurant'} size={11} color={item.isParcel ? Colors.warning : Colors.primary} />
+            <Text style={[styles.orderTypePillText, { color: item.isParcel ? Colors.warning : Colors.primary }]}>
+              {item.isParcel ? 'Takeaway' : 'Dine In'}
+            </Text>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -415,13 +425,31 @@ const OrdersScreen: React.FC = () => {
         })}
       </ScrollView>
 
+      {/* Order Type Filter */}
+      <View style={styles.typeFilterRow}>
+        {([
+          { key: 'all',      label: 'All Types' },
+          { key: 'dine-in',  label: '🍽 Dine In' },
+          { key: 'takeaway', label: '🛍 Takeaway' },
+        ] as const).map(f => (
+          <TouchableOpacity
+            key={f.key}
+            style={[styles.typeFilterBtn, typeFilter === f.key && styles.typeFilterBtnActive]}
+            onPress={() => setTypeFilter(f.key)}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.typeFilterText, typeFilter === f.key && styles.typeFilterTextActive]}>{f.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {/* List */}
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading orders...</Text>
         </View>
-      ) : orders.length === 0 ? (
+      ) : displayedOrders.length === 0 ? (
         <View style={styles.centered}>
           <MaterialIcons name="receipt-long" size={56} color={Colors.border} />
           <Text style={styles.emptyText}>No orders</Text>
@@ -431,7 +459,7 @@ const OrdersScreen: React.FC = () => {
         </View>
       ) : (
         <FlatList
-          data={orders}
+          data={displayedOrders}
           keyExtractor={o => o._id}
           renderItem={renderCard}
           style={{ flex: 1 }}
@@ -507,6 +535,24 @@ const styles = StyleSheet.create({
   },
   statusText: { fontSize: FontSize.sm, fontWeight: '700' },
   parcelTag: { fontSize: FontSize.xs, color: Colors.textSecondary, marginLeft: Spacing.sm },
+  typeFilterRow: {
+    flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: 8,
+    backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  typeFilterBtn: {
+    flex: 1, alignItems: 'center', paddingVertical: 6, borderRadius: BorderRadius.round,
+    borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.background,
+  },
+  typeFilterBtnActive: { backgroundColor: Colors.primaryBg, borderColor: Colors.primary },
+  typeFilterText: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.textMuted },
+  typeFilterTextActive: { color: Colors.primary },
+  orderTypePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, borderWidth: 1,
+  },
+  orderTypePillDineIn:   { backgroundColor: Colors.primaryBg, borderColor: Colors.primary + '40' },
+  orderTypePillTakeaway: { backgroundColor: Colors.warningBg, borderColor: Colors.warning + '40' },
+  orderTypePillText: { fontSize: 10, fontWeight: '700' },
   sourceBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: Spacing.sm, paddingVertical: 4,

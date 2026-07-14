@@ -74,6 +74,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
         totalDiscount:  { $sum: { $ifNull: ['$discountAmount', 0] } },
         totalOrders:    { $sum: 1 },
         parcelOrders:   { $sum: { $cond: ['$isParcel', 1, 0] } },
+        parcelRevenue:  { $sum: { $cond: ['$isParcel', '$grandTotal', 0] } },
         cashTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash']  }, '$grandTotal', 0] } },
         upiTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi']   }, '$grandTotal', 0] } },
         cardTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card']  }, '$grandTotal', 0] } },
@@ -92,7 +93,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
     ]);
 
     const empty = {
-      totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0,
+      totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0,
       cashTotal: 0, upiTotal: 0, cardTotal: 0, splitTotal: 0,
       dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0,
       swiggyOrders: 0, swiggyTotal: 0, zomatoOrders: 0, zomatoTotal: 0,
@@ -103,11 +104,12 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
     res.json({
       date: dateStr,
       totalSales: r.totalSales,
-      totalRevenue: r.totalSales, // alias — clients may use either field name
+      totalRevenue: r.totalSales,
       totalTax: r.totalTax,
       totalDiscount: r.totalDiscount,
       totalOrders: r.totalOrders,
       parcelOrders: r.parcelOrders,
+      parcelRevenue: r.parcelRevenue,
       paymentBreakdown: { cash: r.cashTotal, upi: r.upiTotal, card: r.cardTotal, split: r.splitTotal },
       sourceBreakdown: {
         'dine-in':  { orders: r.dineInOrders,    revenue: r.dineInTotal },
@@ -143,6 +145,7 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
         totalDiscount:  { $sum: { $ifNull: ['$discountAmount', 0] } },
         totalOrders:    { $sum: 1 },
         parcelOrders:   { $sum: { $cond: ['$isParcel', 1, 0] } },
+        parcelRevenue:  { $sum: { $cond: ['$isParcel', '$grandTotal', 0] } },
         cashTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash']  }, '$grandTotal', 0] } },
         upiTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi']   }, '$grandTotal', 0] } },
         cardTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card']  }, '$grandTotal', 0] } },
@@ -160,12 +163,12 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
       }},
     ]);
 
-    const empty = { totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, cashTotal: 0, upiTotal: 0, cardTotal: 0, splitTotal: 0, dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0, swiggyOrders: 0, swiggyTotal: 0, zomatoOrders: 0, zomatoTotal: 0, qrOrders: 0, qrTotal: 0 };
+    const empty = { totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0, cashTotal: 0, upiTotal: 0, cardTotal: 0, splitTotal: 0, dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0, swiggyOrders: 0, swiggyTotal: 0, zomatoOrders: 0, zomatoTotal: 0, qrOrders: 0, qrTotal: 0 };
     const r = result || empty;
     res.json({
       from: fromStr, to: toStr,
       totalSales: r.totalSales, totalTax: r.totalTax, totalDiscount: r.totalDiscount,
-      totalOrders: r.totalOrders, parcelOrders: r.parcelOrders,
+      totalOrders: r.totalOrders, parcelOrders: r.parcelOrders, parcelRevenue: r.parcelRevenue,
       paymentBreakdown: { cash: r.cashTotal, upi: r.upiTotal, card: r.cardTotal, split: r.splitTotal },
       sourceBreakdown: {
         'dine-in':  { orders: r.dineInOrders,    revenue: r.dineInTotal },
@@ -216,7 +219,7 @@ router.get('/kitchen', requireKitchenOrAdmin, async (req: AuthRequest, res: Resp
   try {
     const orders = await Order.find(
       { hotelId: req.hotelId, status: { $in: ['pending', 'preparing'] } },
-      { orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1, status: 1, createdAt: 1,
+      { orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1, status: 1, isParcel: 1, createdAt: 1,
         'items.productName': 1, 'items.quantity': 1 },
     ).sort({ createdAt: 1 }).lean();
     res.json(orders);
@@ -230,7 +233,7 @@ router.get('/waiter', requireWaiterOrAdmin, async (req: AuthRequest, res: Respon
   try {
     const orders = await Order.find(
       { hotelId: req.hotelId, status: 'ready' },
-      { orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1, status: 1, createdAt: 1,
+      { orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1, status: 1, isParcel: 1, createdAt: 1,
         'items.productName': 1, 'items.quantity': 1 },
     ).sort({ createdAt: 1 }).lean();
     res.json(orders);

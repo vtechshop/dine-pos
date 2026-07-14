@@ -176,6 +176,8 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
     navigation.replace('RoleSelect');
   };
 
+  const dineInOrders = orders.filter(o => !o.isParcel);
+
   const renderOrder = ({ item }: { item: WaiterOrder }) => {
     void tick;
     const isServing = servingId === item._id;
@@ -260,7 +262,7 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
           <View>
             <Text style={styles.headerTitle}>Waiter Screen</Text>
             <Text style={styles.headerSub}>
-              {waiterName ? `${waiterName} · ` : ''}{orders.length} order{orders.length !== 1 ? 's' : ''} ready
+              {waiterName ? `${waiterName} · ` : ''}{dineInOrders.length} dine-in order{dineInOrders.length !== 1 ? 's' : ''} ready
             </Text>
           </View>
         </View>
@@ -274,15 +276,15 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       </View>
 
-      {orders.length === 0 ? (
+      {dineInOrders.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={{ fontSize: 64, marginBottom: Spacing.lg }}>✅</Text>
           <Text style={styles.emptyTitle}>Nothing to serve</Text>
-          <Text style={styles.emptySubtitle}>Orders marked Ready will appear here</Text>
+          <Text style={styles.emptySubtitle}>Dine-in orders marked Ready will appear here</Text>
         </View>
       ) : (
         <FlatList
-          data={orders}
+          data={dineInOrders}
           keyExtractor={o => o._id}
           renderItem={renderOrder}
           contentContainerStyle={{ padding: Spacing.md, paddingBottom: bottom + 20 }}
