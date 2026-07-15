@@ -6,6 +6,7 @@ import { logAudit } from '../utils/audit';
 import mongoose from 'mongoose';
 import { sendError } from '../utils/sendError';
 import { requireFeature } from '../middleware/requireFeature';
+import { isValidDateParam } from '../utils/dateParam';
 
 const router = Router();
 router.use(authMiddleware);
@@ -17,13 +18,20 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const filter: any = { hotelId: req.hotelId };
     if (req.query.date) {
-      const date = new Date(req.query.date as string);
+      const raw = req.query.date as string;
+      if (!isValidDateParam(raw)) return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' });
+      const date = new Date(raw);
       const start = new Date(date); start.setHours(0, 0, 0, 0);
       const end   = new Date(date); end.setHours(23, 59, 59, 999);
       filter.date = { $gte: start, $lte: end };
     } else if (req.query.from && req.query.to) {
-      const from = new Date(req.query.from as string);
-      const to   = new Date(req.query.to as string); to.setHours(23, 59, 59, 999);
+      const rawFrom = req.query.from as string;
+      const rawTo   = req.query.to as string;
+      if (!isValidDateParam(rawFrom) || !isValidDateParam(rawTo)) {
+        return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' });
+      }
+      const from = new Date(rawFrom);
+      const to   = new Date(rawTo); to.setHours(23, 59, 59, 999);
       filter.date = { $gte: from, $lte: to };
     }
     const expenses = await Expense.find(filter).sort({ date: -1 });
@@ -37,6 +45,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.get('/pnl', async (req: AuthRequest, res: Response) => {
   try {
     const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+    if (!isValidDateParam(dateStr)) return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' });
     const date  = new Date(dateStr);
     const start = new Date(date); start.setHours(0, 0, 0, 0);
     const end   = new Date(date); end.setHours(23, 59, 59, 999);

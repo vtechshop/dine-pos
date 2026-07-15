@@ -4,6 +4,7 @@ import Order from '../models/Order';
 import Settings from '../models/Settings';
 import mongoose from 'mongoose';
 import { sendError } from '../utils/sendError';
+import { isValidDateParam } from '../utils/dateParam';
 
 const router = Router();
 router.use(authMiddleware);
@@ -14,6 +15,8 @@ router.use(requireAdmin);
 router.get('/gst', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { from, to } = req.query as { from?: string; to?: string };
+    if (from && !isValidDateParam(from)) return res.status(400).json({ message: 'Invalid from date. Use YYYY-MM-DD.' });
+    if (to   && !isValidDateParam(to))   return res.status(400).json({ message: 'Invalid to date. Use YYYY-MM-DD.' });
     const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
 
     const today = new Date();
@@ -74,6 +77,8 @@ router.get('/gst', authMiddleware, async (req: AuthRequest, res: Response) => {
 router.get('/tally', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { from, to } = req.query as { from?: string; to?: string };
+    if (from && !isValidDateParam(from)) return res.status(400).json({ message: 'Invalid from date. Use YYYY-MM-DD.' });
+    if (to   && !isValidDateParam(to))   return res.status(400).json({ message: 'Invalid to date. Use YYYY-MM-DD.' });
     const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
 
     const today = new Date();
@@ -132,6 +137,8 @@ router.get('/tally', authMiddleware, async (req: AuthRequest, res: Response) => 
 router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { from, to } = req.query as { from?: string; to?: string };
+    if (from && !isValidDateParam(from)) return res.status(400).json({ message: 'Invalid from date. Use YYYY-MM-DD.' });
+    if (to   && !isValidDateParam(to))   return res.status(400).json({ message: 'Invalid to date. Use YYYY-MM-DD.' });
     const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
 
     const today = new Date();
