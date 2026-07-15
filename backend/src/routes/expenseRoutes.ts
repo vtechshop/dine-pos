@@ -34,8 +34,13 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       const to   = new Date(rawTo); to.setHours(23, 59, 59, 999);
       filter.date = { $gte: from, $lte: to };
     }
-    const expenses = await Expense.find(filter).sort({ date: -1 });
-    res.json(expenses);
+    const limit  = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const skip   = Math.max(parseInt(req.query.skip  as string) || 0,  0);
+    const [expenses, total] = await Promise.all([
+      Expense.find(filter).sort({ date: -1 }).skip(skip).limit(limit),
+      Expense.countDocuments(filter),
+    ]);
+    res.json({ expenses, total, limit, skip });
   } catch (error) {
     sendError(res, 500, 'Server error', error);
   }
