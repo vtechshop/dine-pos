@@ -8,6 +8,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { showAlert } from '../utils/alert';
 import { superAdminLogin, setSuperAdminCredentials } from '../services/api';
+// setSuperAdminCredentials kept as legacy fallback for the backend raw-header path
 import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SuperAdminLogin'>;

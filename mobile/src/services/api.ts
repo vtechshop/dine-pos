@@ -112,8 +112,28 @@ export const getStoredHotelId = async (): Promise<string | null> => {
   }
 };
 
-// ── Super admin credentials ──────────────────────────────────────────────────
+// ── Super admin session token (SecureStore) ──────────────────────────────────
 
+const SEC_SUPER_ADMIN_KEY = 'hotel_pos_super_admin_token';
+let _cachedSuperAdminToken: string | null = null;
+
+export const saveSuperAdminToken = async (token: string): Promise<void> => {
+  _cachedSuperAdminToken = token;
+  try { await SecureStore.setItemAsync(SEC_SUPER_ADMIN_KEY, token); } catch { /* in-memory only on failure */ }
+};
+
+export const getSuperAdminToken = async (): Promise<string | null> => {
+  if (_cachedSuperAdminToken) return _cachedSuperAdminToken;
+  try { _cachedSuperAdminToken = await SecureStore.getItemAsync(SEC_SUPER_ADMIN_KEY); } catch { _cachedSuperAdminToken = null; }
+  return _cachedSuperAdminToken;
+};
+
+export const clearSuperAdminToken = async (): Promise<void> => {
+  _cachedSuperAdminToken = null;
+  try { await SecureStore.deleteItemAsync(SEC_SUPER_ADMIN_KEY); } catch { /* ignore */ }
+};
+
+// Legacy credential store — kept for backward compat during rollout
 let superAdminCredentials = { id: '', pass: '' };
 export const setSuperAdminCredentials = (id: string, pass: string) => {
   superAdminCredentials = { id, pass };
@@ -648,16 +668,17 @@ export const verifyFSSAI = (fssai: string): Promise<{ valid: boolean; state?: st
 // ==================== SUPER ADMIN ====================
 
 const superAdminFetch = async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
-  const baseUrl = await getBaseUrl();
+  const [baseUrl, token] = await Promise.all([getBaseUrl(), getSuperAdminToken()]);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  } else {
+    // Legacy fallback: raw credential headers for backward compat
+    headers['x-super-admin-id']   = superAdminCredentials.id;
+    headers['x-super-admin-pass'] = superAdminCredentials.pass;
+  }
   try {
-    const response = await fetch(`${baseUrl}${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'x-super-admin-id': superAdminCredentials.id,
-        'x-super-admin-pass': superAdminCredentials.pass,
-      },
-      ...options,
-    });
+    const response = await fetch(`${baseUrl}${endpoint}`, { headers, ...options });
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message || 'Request failed');
@@ -669,8 +690,12 @@ const superAdminFetch = async <T>(endpoint: string, options?: RequestInit): Prom
   }
 };
 
-export const superAdminLogin = (userId: string, password: string): Promise<{ success: boolean }> => {
-  return fetchAPI('/superadmin/login', { method: 'POST', body: JSON.stringify({ userId, password }) }, true);
+export const superAdminLogin = async (userId: string, password: string): Promise<{ success: boolean }> => {
+  const result = await fetchAPI<{ success: boolean; token?: string }>(
+    '/superadmin/login', { method: 'POST', body: JSON.stringify({ userId, password }) }, true,
+  );
+  if (result.token) await saveSuperAdminToken(result.token);
+  return result;
 };
 
 // ── Super Admin Dashboard DTOs ────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import { timingSafeEqual } from 'crypto';
+import jwt from 'jsonwebtoken';
 import os from 'os';
 import mongoose from 'mongoose';
 import Hotel from '../models/Hotel';
@@ -52,12 +53,25 @@ const safeEqual = (a: string, b: string): boolean => {
   }
 };
 
+const SUPER_ADMIN_JWT_SECRET = process.env.SUPER_ADMIN_JWT_SECRET || process.env.JWT_SECRET!;
+
 const superAdminAuth = (req: Request, res: Response, next: Function) => {
+  // Primary: verify short-lived JWT issued by /superadmin/login
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const payload = jwt.verify(authHeader.slice(7), SUPER_ADMIN_JWT_SECRET) as any;
+      if (payload?.role === 'superadmin') return next();
+    } catch { /* fall through to credential check */ }
+  }
+
+  // Legacy fallback: raw credential headers (kept for backward-compat during rollout)
   const id   = (req.headers['x-super-admin-id']   as string) || '';
   const pass = (req.headers['x-super-admin-pass'] as string) || '';
   const expectedId   = process.env.SUPER_ADMIN_ID   || 'superadmin';
   const expectedPass = process.env.SUPER_ADMIN_PASS || 'super1234';
-  if (safeEqual(id, expectedId) && safeEqual(pass, expectedPass)) return next();
+  if (id && pass && safeEqual(id, expectedId) && safeEqual(pass, expectedPass)) return next();
+
   return res.status(401).json({ message: 'Unauthorized' });
 };
 
@@ -71,7 +85,8 @@ router.post('/login', adminLoginLimiter, (req: Request, res: Response) => {
   const adminPass = process.env.SUPER_ADMIN_PASS || 'super1234';
   if (!userId || !password) return res.status(400).json({ message: 'Credentials required' });
   if (safeEqual(String(userId), adminId) && safeEqual(String(password), adminPass)) {
-    return res.json({ success: true, role: 'superadmin' });
+    const token = jwt.sign({ role: 'superadmin' }, SUPER_ADMIN_JWT_SECRET, { expiresIn: '4h' });
+    return res.json({ success: true, role: 'superadmin', token });
   }
   return res.status(401).json({ message: 'Invalid super admin credentials' });
 });
