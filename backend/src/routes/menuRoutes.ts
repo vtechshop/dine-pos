@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import Product from '../models/Product';
 import Category from '../models/Category';
 import Settings from '../models/Settings';
@@ -10,6 +11,25 @@ import { io } from '../server';
 import { sendError } from '../utils/sendError';
 
 const router = Router();
+
+// Public API rate limits — unauthenticated endpoints, per-IP
+const publicReadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { message: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const publicWriteLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { message: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // ─── Helper: resolve hotelId from query param ─────────────────────────────────
 const resolveHotelId = async (hotelParam?: string): Promise<mongoose.Types.ObjectId | undefined> => {
@@ -33,7 +53,7 @@ const generateOrderNumber = async (hotelId: string): Promise<string> => {
 
 // GET /api/public/menu?hotel=<hotelId>
 // Public menu — no auth needed, used by customer kiosk / QR menu
-router.get('/menu', async (req: Request, res: Response) => {
+router.get('/menu', publicReadLimiter, async (req: Request, res: Response) => {
   try {
     const hotelId = await resolveHotelId(req.query.hotel as string | undefined);
     if (!hotelId) return res.status(400).json({ error: 'hotel param required' });
@@ -97,7 +117,7 @@ router.get('/menu', async (req: Request, res: Response) => {
 
 // POST /api/public/orders
 // Public order placement — no auth, used by QR menu customers
-router.post('/orders', async (req: Request, res: Response) => {
+router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) => {
   try {
     // Accept both 'hotel' and 'hotelId' field names for backward compatibility
     const { hotel, hotelId: hotelIdField, items: clientItems, tableNumber, customerName, notes, isParcel, source } = req.body;
@@ -232,7 +252,7 @@ router.post('/orders', async (req: Request, res: Response) => {
 
 // GET /api/public/bill?table=<tableNumber>&hotel=<hotelId>
 // Returns running bill for a table (all today's non-cancelled orders)
-router.get('/bill', async (req: Request, res: Response) => {
+router.get('/bill', publicReadLimiter, async (req: Request, res: Response) => {
   try {
     const { table, hotel } = req.query as { table?: string; hotel?: string };
     if (!table) return res.status(400).json({ message: 'table param required' });
