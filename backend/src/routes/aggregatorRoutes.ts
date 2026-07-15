@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { timingSafeEqual } from 'crypto';
 import Order from '../models/Order';
 import Hotel from '../models/Hotel';
 import DailyCounter from '../models/DailyCounter';
@@ -31,6 +32,12 @@ const WEBHOOK_SECRET = process.env.AGGREGATOR_SECRET;
 if (!WEBHOOK_SECRET || WEBHOOK_SECRET === 'agg-secret-changeme') {
   console.warn('⚠️  WARNING: AGGREGATOR_SECRET is not set or is using the default value. Set a strong secret in .env to prevent fake webhook orders.');
 }
+
+const safeEqualSecret = (a: string, b: string): boolean => {
+  try {
+    return a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  } catch { return false; }
+};
 
 // Shared order creation logic used by all source webhooks
 const createAggregatorOrder = async (
@@ -101,7 +108,7 @@ const createAggregatorOrder = async (
 // Header: X-Webhook-Secret must match AGGREGATOR_SECRET env var
 router.post('/order', async (req: Request, res: Response) => {
   const incomingSecret = req.headers['x-webhook-secret'] as string | undefined;
-  if (!WEBHOOK_SECRET || !incomingSecret || incomingSecret !== WEBHOOK_SECRET) {
+  if (!WEBHOOK_SECRET || !incomingSecret || !safeEqualSecret(incomingSecret, WEBHOOK_SECRET)) {
     return res.status(401).json({ message: 'Unauthorized: invalid webhook secret' });
   }
 
@@ -122,7 +129,7 @@ router.post('/order', async (req: Request, res: Response) => {
 // Future: verify Swiggy HMAC signature from X-Swiggy-Signature header
 router.post('/swiggy', async (req: Request, res: Response) => {
   const incomingSecret = req.headers['x-webhook-secret'] as string | undefined;
-  if (!incomingSecret || incomingSecret !== WEBHOOK_SECRET) {
+  if (!WEBHOOK_SECRET || !incomingSecret || !safeEqualSecret(incomingSecret, WEBHOOK_SECRET)) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
   try {
@@ -139,7 +146,7 @@ router.post('/swiggy', async (req: Request, res: Response) => {
 // Future: verify Zomato HMAC signature from X-Zomato-Signature header
 router.post('/zomato', async (req: Request, res: Response) => {
   const incomingSecret = req.headers['x-webhook-secret'] as string | undefined;
-  if (!incomingSecret || incomingSecret !== WEBHOOK_SECRET) {
+  if (!WEBHOOK_SECRET || !incomingSecret || !safeEqualSecret(incomingSecret, WEBHOOK_SECRET)) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
   try {
