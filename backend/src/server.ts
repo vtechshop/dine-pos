@@ -321,10 +321,12 @@ if (process.env.SENTRY_DSN) {
   Sentry.setupExpressErrorHandler(app);
 }
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled error:', err);
-  res.status(err.status || 500).json({
+  const status = typeof err.status === 'number' ? err.status : (typeof err.statusCode === 'number' ? err.statusCode : 500);
+  logger.error('Unhandled error', { status, err: err?.message, stack: err?.stack });
+  const isClientError = status >= 400 && status < 500;
+  res.status(status).json({
     success: false,
-    message: err.message || 'Internal server error',
+    message: isClientError ? (err.message || 'Bad request') : 'Internal server error',
   });
 });
 
