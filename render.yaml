@@ -47,3 +47,42 @@ services:
       maxInstances: 3       # Scale to 3 at peak; each handles ~200 concurrent hotels
       targetMemoryPercent: 80
       targetCPUPercent: 75
+
+  - type: web
+    name: dine-pos-api-staging
+    runtime: node
+    plan: starter             # Low traffic — single instance is fine for QA
+    region: singapore
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server.js
+    healthCheckPath: /api/health
+    autoDeploy: false         # Manual deploys only — don't auto-promote to staging
+
+    envVars:
+      - key: NODE_ENV
+        value: staging
+
+      - key: PORT
+        value: 5000
+
+      - key: JWT_SECRET
+        sync: false
+
+      - key: MONGODB_URI
+        sync: false           # Point to a separate staging Atlas cluster
+
+      - key: REDIS_URL
+        sync: false
+
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      - key: SUPER_ADMIN_ID
+        sync: false
+
+      - key: SUPER_ADMIN_PASS
+        sync: false
+
+      - key: AGGREGATOR_SECRET
+        sync: false
