@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import Hotel from '../models/Hotel';
 import RefreshToken from '../models/RefreshToken';
+import { getRedisClient } from '../config/redis';
 
 export interface AuthRequest extends Request {
   hotelId?: string;
@@ -18,6 +19,8 @@ const JWT_SECRET = process.env.JWT_SECRET!;
 
 // ── Per-hotel status cache ────────────────────────────────────────────────────
 // Short TTL (45 s) so suspensions / plan changes take effect quickly.
+// Primary store: Redis (shared across instances). Falls back to in-process Map
+// when REDIS_URL is not configured (single-instance or dev environments).
 interface StatusEntry {
   status: string;
   expiresAt: number;
@@ -26,14 +29,41 @@ interface StatusEntry {
   subscriptionType: string;
 }
 
-const _statusCache = new Map<string, StatusEntry>();
+const _localCache = new Map<string, StatusEntry>();
 const STATUS_TTL_MS = 45_000;
+const STATUS_TTL_S  = 45;
+const CACHE_PREFIX  = 'hotel:status:';
+
+async function getCachedStatus(hotelId: string): Promise<StatusEntry | null> {
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const raw = await redis.get(CACHE_PREFIX + hotelId);
+      if (raw) return JSON.parse(raw) as StatusEntry;
+      return null;
+    } catch { /* Redis error — fall through to in-memory */ }
+  }
+  const now = Date.now();
+  const cached = _localCache.get(hotelId);
+  return cached && cached.expiresAt > now ? cached : null;
+}
+
+async function setCachedStatus(hotelId: string, entry: StatusEntry): Promise<void> {
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      await redis.set(CACHE_PREFIX + hotelId, JSON.stringify(entry), 'EX', STATUS_TTL_S);
+      return;
+    } catch { /* Redis error — fall through to in-memory */ }
+  }
+  _localCache.set(hotelId, entry);
+}
 
 async function resolveHotelStatus(hotelId: string): Promise<StatusEntry> {
-  const now = Date.now();
-  const cached = _statusCache.get(hotelId);
-  if (cached && cached.expiresAt > now) return cached;
+  const cached = await getCachedStatus(hotelId);
+  if (cached) return cached;
 
+  const now = Date.now();
   const hotel = await Hotel.findById(hotelId)
     .select('status trialEndDate subscriptionType subscriptionEndDate hotelName')
     .lean();
@@ -80,14 +110,18 @@ async function resolveHotelStatus(hotelId: string): Promise<StatusEntry> {
     subscriptionType: h.subscriptionType || 'trial',
   };
 
-  _statusCache.set(hotelId, entry);
+  await setCachedStatus(hotelId, entry);
   return entry;
 }
 
 // Call this after any super-admin action that changes hotel status so the
 // new status takes effect immediately rather than waiting for TTL expiry.
-export const invalidateStatusCache = (hotelId: string): void => {
-  _statusCache.delete(hotelId);
+export const invalidateStatusCache = async (hotelId: string): Promise<void> => {
+  _localCache.delete(hotelId);
+  const redis = getRedisClient();
+  if (redis) {
+    try { await redis.del(CACHE_PREFIX + hotelId); } catch { /* ignore */ }
+  }
 };
 
 // ── Auth middleware ───────────────────────────────────────────────────────────
