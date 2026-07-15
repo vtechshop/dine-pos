@@ -101,10 +101,17 @@ router.put('/resubmit/:phone', async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Only rejected registrations can be resubmitted' });
     }
 
+    const { hotelName, ownerName, email, businessType, state, city, address } = req.body;
     const updated = await Hotel.findOneAndUpdate(
       { phone: req.params.phone },
       {
-        ...req.body,
+        ...(hotelName     && { hotelName:    String(hotelName).trim() }),
+        ...(ownerName     && { ownerName:    String(ownerName).trim() }),
+        ...(email         && { email:        String(email).trim().toLowerCase() }),
+        ...(businessType  && { businessType }),
+        ...(state         && { state:        String(state).trim() }),
+        ...(city          && { city:         String(city).trim() }),
+        ...(typeof address === 'string' && { address: address.trim() }),
         status: 'pending',
         rejectionReason: '',
         approvedAt: null,
