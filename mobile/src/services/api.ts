@@ -169,6 +169,28 @@ export const getJwtExpiryMs = async (): Promise<number | null> => {
 
 let _refreshing: Promise<boolean> | null = null;
 
+// ── Proactive token refresh scheduler ───────────────────────────────────────
+// Fires 5 minutes before the JWT expires so the user never hits a 401 mid-session.
+let _proactiveRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+const scheduleProactiveRefresh = (expiryMs: number): void => {
+  if (_proactiveRefreshTimer) clearTimeout(_proactiveRefreshTimer);
+  const delay = expiryMs - Date.now() - 5 * 60 * 1000; // 5 min before expiry
+  if (delay <= 0) return; // already expired or <5 min left — let reactive path handle it
+  _proactiveRefreshTimer = setTimeout(async () => {
+    _proactiveRefreshTimer = null;
+    const ok = await tryRefreshTokens();
+    if (ok) {
+      const newExp = await getJwtExpiryMs();
+      if (newExp) scheduleProactiveRefresh(newExp);
+    }
+  }, delay);
+};
+
+export const cancelProactiveRefresh = (): void => {
+  if (_proactiveRefreshTimer) { clearTimeout(_proactiveRefreshTimer); _proactiveRefreshTimer = null; }
+};
+
 const _doRefresh = async (): Promise<boolean> => {
   const refreshToken = await getRefreshToken();
   if (!refreshToken) return false;
@@ -180,6 +202,8 @@ const _doRefresh = async (): Promise<boolean> => {
       0,    // no retries on the refresh call itself
     );
     await Promise.all([saveToken(result.token), saveRefreshToken(result.refreshToken)]);
+    const expMs = await getJwtExpiryMs();
+    if (expMs) scheduleProactiveRefresh(expMs);
     return true;
   } catch {
     await Promise.all([clearToken(), clearRefreshToken()]);
@@ -345,7 +369,11 @@ export const adminLogin = async (
     { method: 'POST', body: JSON.stringify({ userId, password }) },
     true // skip auth header on login
   );
-  if (result.token) await saveToken(result.token);
+  if (result.token) {
+    await saveToken(result.token);
+    const expMs = await getJwtExpiryMs();
+    if (expMs) scheduleProactiveRefresh(expMs);
+  }
   if (result.refreshToken) await saveRefreshToken(result.refreshToken);
   if (result.hotelId) await AsyncStorage.setItem(HOTEL_ID_STORAGE_KEY, result.hotelId);
   return result;
@@ -360,6 +388,7 @@ export const logout = async (): Promise<void> => {
       body: JSON.stringify({ refreshToken }),
     }, true, 0).catch(() => {});
   }
+  cancelProactiveRefresh();
   await Promise.all([clearToken(), clearRefreshToken()]);
 };
 
