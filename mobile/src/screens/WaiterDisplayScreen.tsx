@@ -71,6 +71,10 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => {
     mountedRef.current = true;
+    // Per-effect cancellation flag — guards against fast unmount/remount races
+    // where mountedRef.current is reset to true by the new effect before the
+    // old async IIFE checks it, which would create a duplicate socket.
+    let cancelled = false;
     setupNotifications();
     loadOrders();
 
@@ -87,8 +91,8 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
         getStoredHotelId(), getSocketUrl(), getWaiterToken(),
       ]);
       console.log(`[SOCKET][Waiter] hotelId=${hotelId} | url=${url} | hasToken=${!!token}`);
-      if (!hotelId || !mountedRef.current) {
-        console.log('[SOCKET][Waiter] ABORT — hotelId missing, socket will not connect');
+      if (cancelled || !hotelId) {
+        console.log('[SOCKET][Waiter] ABORT — cancelled or hotelId missing');
         return;
       }
 
@@ -150,6 +154,7 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
     })();
 
     return () => {
+      cancelled = true;
       mountedRef.current = false;
       if (socketRef.current) {
         socketRef.current.off();
