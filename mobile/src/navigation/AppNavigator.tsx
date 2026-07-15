@@ -8,6 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList, TabParamList, CustomerTabParamList } from '../types';
 import { Colors } from '../utils/constants';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useBadgeCount, BADGE_KEYS, formatBadge } from '../hooks/useBadgeCount';
@@ -234,11 +235,11 @@ const AppNavigator = () => {
             <Stack.Screen name="CustomerTabs"         component={CustomerTabNavigator}       options={{ contentStyle: safeTop }} />
             <Stack.Screen name="CustomerOrderConfirm" component={CustomerOrderConfirmScreen} options={{ contentStyle: safeTop }} />
             <Stack.Screen name="KitchenLogin"         component={KitchenLoginScreen}         options={{ contentStyle: safeTop }} />
-            <Stack.Screen name="KitchenDisplay"       component={KitchenDisplayScreen}       options={{ contentStyle: safeTop, gestureEnabled: false }} />
+            <Stack.Screen name="KitchenDisplay"       component={(p: any) => <ErrorBoundary><KitchenDisplayScreen {...p} /></ErrorBoundary>}       options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="WaiterLogin"          component={WaiterLoginScreen}          options={{ contentStyle: safeTop }} />
-            <Stack.Screen name="WaiterDisplay"        component={WaiterDisplayScreen}        options={{ contentStyle: safeTop, gestureEnabled: false }} />
+            <Stack.Screen name="WaiterDisplay"        component={(p: any) => <ErrorBoundary><WaiterDisplayScreen {...p} /></ErrorBoundary>}        options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="CashierLogin"         component={CashierLoginScreen}         options={{ contentStyle: safeTop }} />
-            <Stack.Screen name="CashierDashboard"     component={CashierDashboardScreen}     options={{ contentStyle: safeTop, gestureEnabled: false }} />
+            <Stack.Screen name="CashierDashboard"     component={(p: any) => <ErrorBoundary><CashierDashboardScreen {...p} /></ErrorBoundary>}     options={{ contentStyle: safeTop, gestureEnabled: false }} />
           </>
         ) : (
           <>

@@ -7,6 +7,7 @@ import { CartProvider } from './src/context/CartContext';
 import { SettingsProvider } from './src/context/SettingsContext';
 import { AuthProvider } from './src/context/AuthContext';
 import AppNavigator from './src/navigation/AppNavigator';
+import ErrorBoundary from './src/components/ErrorBoundary';
 
 // Suppress benign Expo keep-awake native errors during screen transitions
 const EU = (global as any).ErrorUtils;
@@ -22,14 +23,16 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <SettingsProvider>
-            <CartProvider>
-              <StatusBar style="dark" />
-              <AppNavigator />
-            </CartProvider>
-          </SettingsProvider>
-        </AuthProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <SettingsProvider>
+              <CartProvider>
+                <StatusBar style="dark" />
+                <AppNavigator />
+              </CartProvider>
+            </SettingsProvider>
+          </AuthProvider>
+        </ErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
