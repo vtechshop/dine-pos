@@ -42,8 +42,17 @@ import notificationRoutes from './routes/notificationRoutes';
 import waiterRoutes from './routes/waiterRoutes';
 import cashierRoutes from './routes/cashierRoutes';
 import auditRoutes from './routes/auditRoutes';
+import * as Sentry from '@sentry/node';
 
 dotenv.config();
+
+// TODO: Set SENTRY_DSN in production environment (e.g., via Render environment variables)
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+  });
+}
 
 // ── Validate required env vars at startup ─────────────────────────────────────
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -291,6 +300,9 @@ app.use((_req, res) => {
 });
 
 // ── Global error handler ──────────────────────────────────────────────────────
+if (process.env.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app);
+}
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Unhandled error:', err);
   res.status(err.status || 500).json({

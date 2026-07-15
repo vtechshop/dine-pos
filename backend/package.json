@@ -10,6 +10,7 @@
     "start:test": "node start-test.js"
   },
   "dependencies": {
+    "@sentry/node": "^10.65.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
