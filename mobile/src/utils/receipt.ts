@@ -9,6 +9,10 @@ import { printReceiptBluetooth, printKOTBluetooth, connectPrinter } from './blue
 const BT_PRINTER_KEY = '@hotel_pos_bt_printer';
 const BT_PRINTER_ADDRESS_KEY = '@hotel_pos_bt_printer_address';
 
+const escHtml = (s: unknown): string =>
+  String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+
 // mm to points (1pt = 0.3528mm)
 const mmToPt = (mm: number) => Math.round(mm / 0.3528);
 
@@ -38,7 +42,7 @@ export const generateReceiptHTML = (order: Order, settings: Settings): string =>
     .map(
       (item) => `
       <tr>
-        <td style="text-align:left; padding:3px 2px;">${item.productName}</td>
+        <td style="text-align:left; padding:3px 2px;">${escHtml(item.productName)}</td>
         <td style="text-align:center; padding:3px 2px;">${item.quantity}</td>
         <td style="text-align:right; padding:3px 2px;">${settings.currencySymbol}${item.price.toFixed(2)}</td>
         <td style="text-align:right; padding:3px 2px;">${settings.currencySymbol}${(item.price * item.quantity).toFixed(2)}</td>
@@ -158,10 +162,10 @@ export const generateReceiptHTML = (order: Order, settings: Settings): string =>
     </style>
   </head>
   <body>
-    <div class="hotel-name">${settings.hotelName}</div>
-    ${settings.address ? `<div class="hotel-info">${settings.address}</div>` : ''}
-    ${settings.phone ? `<div class="hotel-info">Ph: ${settings.phone}</div>` : ''}
-    ${settings.gstNumber ? `<div class="hotel-info">GST: ${settings.gstNumber}</div>` : ''}
+    <div class="hotel-name">${escHtml(settings.hotelName)}</div>
+    ${settings.address ? `<div class="hotel-info">${escHtml(settings.address)}</div>` : ''}
+    ${settings.phone ? `<div class="hotel-info">Ph: ${escHtml(settings.phone)}</div>` : ''}
+    ${settings.gstNumber ? `<div class="hotel-info">GST: ${escHtml(settings.gstNumber)}</div>` : ''}
 
     <hr class="line">
 
@@ -171,8 +175,8 @@ export const generateReceiptHTML = (order: Order, settings: Settings): string =>
 
     <div class="bill-info"><strong>Bill No:</strong> ${order.orderNumber}</div>
     <div class="bill-info"><strong>Date:</strong> ${dateStr} | ${timeStr}</div>
-    ${!order.isParcel && order.tableNumber ? `<div class="bill-info"><strong>Table:</strong> ${order.tableNumber}</div>` : ''}
-    ${order.customerName ? `<div class="bill-info"><strong>Customer:</strong> ${order.customerName}</div>` : ''}
+    ${!order.isParcel && order.tableNumber ? `<div class="bill-info"><strong>Table:</strong> ${escHtml(order.tableNumber)}</div>` : ''}
+    ${order.customerName ? `<div class="bill-info"><strong>Customer:</strong> ${escHtml(order.customerName)}</div>` : ''}
 
     <hr class="line">
 
@@ -221,7 +225,7 @@ export const generateReceiptHTML = (order: Order, settings: Settings): string =>
 
     <hr class="line">
 
-    <div class="footer">${settings.footerText}</div>
+    <div class="footer">${escHtml(settings.footerText)}</div>
   </body>
 </html>`;
 };
