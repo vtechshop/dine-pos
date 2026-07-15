@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import Hotel from '../models/Hotel';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'hotelbillingpos_secret_key_change_in_production';
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 // Verifies JWT only — does NOT enforce subscription status.
 // Used for endpoints that expired hotels still need to access.

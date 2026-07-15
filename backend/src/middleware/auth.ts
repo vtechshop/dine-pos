@@ -14,7 +14,7 @@ export interface AuthRequest extends Request {
   cashierName?: string;
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'hotelbillingpos_secret_key_change_in_production';
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 // ── Per-hotel status cache ────────────────────────────────────────────────────
 // Short TTL (45 s) so suspensions / plan changes take effect quickly.
