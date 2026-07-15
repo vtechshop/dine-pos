@@ -58,9 +58,14 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     const hotel = await Hotel.create({
-      ...req.body,
+      hotelName: String(hotelName).trim(),
+      ownerName: String(ownerName).trim(),
       phone: String(phone).trim(),
       email: String(email).trim().toLowerCase(),
+      businessType,
+      state: String(state).trim(),
+      city: String(city).trim(),
+      address: typeof req.body.address === 'string' ? req.body.address.trim() : undefined,
       status: 'pending',
     });
 
