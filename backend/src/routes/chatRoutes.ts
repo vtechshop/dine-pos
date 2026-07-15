@@ -12,10 +12,14 @@ router.use(requireFeature('customerChat'));
 router.get('/:tableNumber', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const hotelId = req.hotelId!;
-    const messages = await ChatMessage.find({ hotelId, tableNumber: req.params.tableNumber })
-      .sort({ createdAt: 1 })
-      .limit(100);
-    res.json(messages);
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 200);
+    const skip  = Math.max(parseInt(req.query.skip  as string) || 0,   0);
+    const [messages, total] = await Promise.all([
+      ChatMessage.find({ hotelId, tableNumber: req.params.tableNumber })
+        .sort({ createdAt: 1 }).skip(skip).limit(limit),
+      ChatMessage.countDocuments({ hotelId, tableNumber: req.params.tableNumber }),
+    ]);
+    res.json({ messages, total, limit, skip });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch messages' });
   }
