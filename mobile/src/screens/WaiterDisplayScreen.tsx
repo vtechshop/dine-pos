@@ -29,6 +29,7 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [servingId, setServingId] = useState<string | null>(null);
   const [waiterName, setWaiterName] = useState('');
+  const [socketLost, setSocketLost] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const mountedRef = useRef(true);
   const seenReadyIds = useRef<Set<string>>(new Set());
@@ -123,6 +124,11 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
 
       socket.on('disconnect', (reason) => {
         console.log(`[SOCKET][Waiter] Disconnected | reason=${reason}`);
+      });
+
+      socket.on('reconnect_failed', () => {
+        console.log('[SOCKET][Waiter] reconnect_failed — showing connection lost overlay');
+        if (mountedRef.current) setSocketLost(true);
       });
 
       socket.on('waiter_order_ready', (data: { orderId?: string; _id?: string; orderNumber: string; tableNumber: string }) => {
@@ -325,6 +331,22 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Connection lost overlay — shown after socket.io exhausts reconnection attempts */}
+      {socketLost && (
+        <View style={styles.connectionLostOverlay}>
+          <MaterialIcons name="wifi-off" size={52} color={Colors.danger} />
+          <Text style={styles.connectionLostTitle}>Connection Lost</Text>
+          <Text style={styles.connectionLostText}>Could not reconnect to server. Check your internet connection.</Text>
+          <TouchableOpacity
+            style={styles.connectionLostBtn}
+            onPress={() => { setSocketLost(false); socketRef.current?.connect(); }}
+          >
+            <MaterialIcons name="refresh" size={18} color={Colors.white} />
+            <Text style={styles.connectionLostBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -391,6 +413,21 @@ const styles = StyleSheet.create({
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xxl },
   emptyTitle:    { fontSize: FontSize.xxl, fontWeight: '900', color: Colors.text, marginBottom: Spacing.sm },
   emptySubtitle: { fontSize: FontSize.md, color: Colors.textMuted, textAlign: 'center' },
+
+  // Connection lost overlay
+  connectionLostOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    alignItems: 'center', justifyContent: 'center', padding: Spacing.xxl,
+  },
+  connectionLostTitle: { fontSize: FontSize.xxl, fontWeight: '900', color: Colors.white, marginTop: Spacing.lg, marginBottom: Spacing.sm },
+  connectionLostText: { fontSize: FontSize.md, color: 'rgba(255,255,255,0.75)', textAlign: 'center', marginBottom: Spacing.xl },
+  connectionLostBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.primary, borderRadius: BorderRadius.lg,
+    paddingVertical: 12, paddingHorizontal: 28,
+  },
+  connectionLostBtnText: { color: Colors.white, fontSize: FontSize.md, fontWeight: '800' },
 });
 
 export default WaiterDisplayScreen;

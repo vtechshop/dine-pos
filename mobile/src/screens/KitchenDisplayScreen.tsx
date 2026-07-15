@@ -26,6 +26,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [socketLost, setSocketLost] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const mountedRef = useRef(true);
   const { count: kitchenBadge, increment: incKitchenBadge, reset: resetKitchenBadge } = useBadgeCount(BADGE_KEYS.kitchenOrders);
@@ -115,6 +116,11 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
 
       socket.on('disconnect', (reason) => {
         console.log(`[SOCKET][Kitchen] Disconnected | reason=${reason}`);
+      });
+
+      socket.on('reconnect_failed', () => {
+        console.log('[SOCKET][Kitchen] reconnect_failed — showing connection lost overlay');
+        if (mountedRef.current) setSocketLost(true);
       });
 
       // New order arrives — dedup, vibrate, play sound, reload
@@ -395,6 +401,22 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Connection lost overlay — shown after socket.io exhausts reconnection attempts */}
+      {socketLost && (
+        <View style={styles.connectionLostOverlay}>
+          <MaterialIcons name="wifi-off" size={52} color={Colors.danger} />
+          <Text style={styles.connectionLostTitle}>Connection Lost</Text>
+          <Text style={styles.connectionLostText}>Could not reconnect to server. Check your internet connection.</Text>
+          <TouchableOpacity
+            style={styles.connectionLostBtn}
+            onPress={() => { setSocketLost(false); socketRef.current?.connect(); }}
+          >
+            <MaterialIcons name="refresh" size={18} color={Colors.white} />
+            <Text style={styles.connectionLostBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -502,6 +524,21 @@ const styles = StyleSheet.create({
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xxl },
   emptyTitle: { fontSize: FontSize.xxl, fontWeight: '900', color: Colors.text, marginBottom: Spacing.sm },
   emptySubtitle: { fontSize: FontSize.md, color: Colors.textMuted, textAlign: 'center' },
+
+  // Connection lost overlay
+  connectionLostOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    alignItems: 'center', justifyContent: 'center', padding: Spacing.xxl,
+  },
+  connectionLostTitle: { fontSize: FontSize.xxl, fontWeight: '900', color: Colors.white, marginTop: Spacing.lg, marginBottom: Spacing.sm },
+  connectionLostText: { fontSize: FontSize.md, color: 'rgba(255,255,255,0.75)', textAlign: 'center', marginBottom: Spacing.xl },
+  connectionLostBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.primary, borderRadius: BorderRadius.lg,
+    paddingVertical: 12, paddingHorizontal: 28,
+  },
+  connectionLostBtnText: { color: Colors.white, fontSize: FontSize.md, fontWeight: '800' },
 });
 
 export default KitchenDisplayScreen;
