@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import Product from '../models/Product';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
+import { sendError } from '../utils/sendError';
 
 const router = Router();
 
@@ -24,7 +25,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       .sort({ name: 1 });
     res.json(products);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -39,7 +40,7 @@ router.get('/alerts/low-stock', async (req: AuthRequest, res: Response) => {
     }).populate('category', 'name color').sort({ stock: 1 });
     res.json({ products, threshold });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -51,7 +52,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
     if (!product) return res.status(404).json({ message: 'Product not found' });
     res.json(product);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -64,7 +65,7 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
     logAudit(req, 'product.created', 'product', String((product as any)._id), { name: (product as any).name });
     res.status(201).json(populated);
   } catch (error) {
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
@@ -80,7 +81,7 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     logAudit(req, 'product.updated', 'product', req.params.id, { name: (product as any).name });
     res.json(product);
   } catch (error) {
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
@@ -96,7 +97,7 @@ router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     logAudit(req, 'product.deleted', 'product', req.params.id, { name: (product as any).name });
     res.json({ message: 'Product deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 

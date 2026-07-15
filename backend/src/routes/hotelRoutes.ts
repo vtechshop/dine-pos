@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import Hotel from '../models/Hotel';
+import { sendError } from '../utils/sendError';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
@@ -74,7 +75,7 @@ router.post('/register', async (req: Request, res: Response) => {
       hotelId: hotel._id,
     });
   } catch (error: any) {
-    return res.status(400).json({ message: error.message || 'Registration failed' });
+    return sendError(res, 400, error.message || 'Registration failed', error);
   }
 });
 
@@ -87,7 +88,7 @@ router.get('/status/:phone', async (req: Request, res: Response) => {
     if (!hotel) return res.status(404).json({ message: 'No registration found for this phone' });
     return res.json(hotel);
   } catch (error) {
-    return res.status(500).json({ message: 'Server error' });
+    return sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -121,7 +122,7 @@ router.put('/resubmit/:phone', async (req: Request, res: Response) => {
 
     return res.json({ message: 'Resubmission successful! Awaiting super admin approval.', hotel: updated });
   } catch (error: any) {
-    return res.status(400).json({ message: error.message || 'Resubmission failed' });
+    return sendError(res, 400, error.message || 'Resubmission failed', error);
   }
 });
 
@@ -140,7 +141,7 @@ router.post('/reset-request', async (req: Request, res: Response) => {
     await Hotel.findByIdAndUpdate(hotel._id, { resetRequested: true, resetRequestedAt: new Date() });
     return res.json({ message: 'Reset request submitted. The super admin will update your credentials shortly.' });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error' });
+    return sendError(res, 500, 'Server error');
   }
 });
 
@@ -153,7 +154,7 @@ router.get('/reset-status/:phone', async (req: Request, res: Response) => {
     if (!hotel) return res.status(404).json({ message: 'No hotel found' });
     return res.json(hotel);
   } catch (error) {
-    return res.status(500).json({ message: 'Server error' });
+    return sendError(res, 500, 'Server error');
   }
 });
 
@@ -184,7 +185,7 @@ router.get('/subscription', jwtOnlyAuth, async (req: Request, res: Response) => 
       hotelName: h.hotelName,
     });
   } catch {
-    return res.status(500).json({ message: 'Server error' });
+    return sendError(res, 500, 'Server error');
   }
 });
 

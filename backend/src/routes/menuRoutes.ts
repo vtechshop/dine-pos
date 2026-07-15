@@ -7,6 +7,7 @@ import Hotel from '../models/Hotel';
 import DailyCounter from '../models/DailyCounter';
 import mongoose from 'mongoose';
 import { io } from '../server';
+import { sendError } from '../utils/sendError';
 
 const router = Router();
 
@@ -90,7 +91,7 @@ router.get('/menu', async (req: Request, res: Response) => {
       cachedAt: new Date().toISOString(),
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to load menu' });
+    sendError(res, 500, 'Failed to load menu', err);
   }
 });
 
@@ -225,8 +226,7 @@ router.post('/orders', async (req: Request, res: Response) => {
 
     res.status(201).json(order);
   } catch (error: any) {
-    console.error('Public order error:', error?.message || error);
-    res.status(400).json({ message: error?.message || 'Invalid order data', error });
+    sendError(res, 400, error?.message || 'Invalid order data', error);
   }
 });
 
@@ -289,7 +289,7 @@ router.get('/bill', async (req: Request, res: Response) => {
       fetchedAt:  new Date().toISOString(),
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to load bill' });
+    sendError(res, 500, 'Failed to load bill', err);
   }
 });
 

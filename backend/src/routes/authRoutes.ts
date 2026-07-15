@@ -8,6 +8,7 @@ import { generateToken, generateRefreshToken, generateKitchenToken, generateWait
 import Waiter from '../models/Waiter';
 import Cashier from '../models/Cashier';
 import { logAuditRaw } from '../utils/audit';
+import { sendError } from '../utils/sendError';
 
 // Admin login — strict: 10 attempts / 15 min per IP (protects full account access)
 const loginLimiter = rateLimit({
@@ -110,8 +111,8 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       subscriptionPlan: hotel.subscriptionPlan,
       features: hotel.features,
     });
-  } catch {
-    return res.status(500).json({ message: 'Server error during login' });
+  } catch (error) {
+    return sendError(res, 500, 'Server error during login', error);
   }
 });
 
@@ -144,8 +145,8 @@ router.post('/refresh', async (req: Request, res: Response) => {
     ]);
 
     return res.json({ token: newToken, refreshToken: newRefreshToken });
-  } catch {
-    return res.status(500).json({ message: 'Server error during token refresh' });
+  } catch (error) {
+    return sendError(res, 500, 'Server error during token refresh', error);
   }
 });
 
@@ -166,8 +167,8 @@ router.post('/kitchen', staffPinLimiter, async (req: Request, res: Response) => 
     }
     logAuditRaw({ hotelId, action: 'kitchen.login.success', targetType: 'kitchen', ip: req.ip });
     return res.json({ token: generateKitchenToken(hotelId) });
-  } catch {
-    return res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    return sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -203,8 +204,8 @@ router.post('/waiter', staffPinLimiter, async (req: Request, res: Response) => {
         mobile:       waiter.mobile,
       },
     });
-  } catch {
-    return res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    return sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -240,8 +241,8 @@ router.post('/cashier', staffPinLimiter, async (req: Request, res: Response) => 
         mobile:       cashier.mobile,
       },
     });
-  } catch {
-    return res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    return sendError(res, 500, 'Server error', error);
   }
 });
 

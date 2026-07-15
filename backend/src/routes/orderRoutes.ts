@@ -8,6 +8,7 @@ import { authMiddleware, requireAdmin, requireKitchenOrAdmin, requireWaiterOrAdm
 import { requireActiveStaff } from '../middleware/staffAuth';
 import { logAudit } from '../utils/audit';
 import { io } from '../server';
+import { sendError } from '../utils/sendError';
 
 const router = Router();
 
@@ -120,7 +121,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
       },
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -179,7 +180,7 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
       },
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -206,7 +207,7 @@ router.get('/reports/products', authMiddleware, requireAdmin, async (req: AuthRe
 
     res.json({ date: dateStr, products: results });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -224,7 +225,7 @@ router.get('/kitchen', requireKitchenOrAdmin, async (req: AuthRequest, res: Resp
     ).sort({ createdAt: 1 }).lean();
     res.json(orders);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -238,7 +239,7 @@ router.get('/waiter', requireWaiterOrAdmin, async (req: AuthRequest, res: Respon
     ).sort({ createdAt: 1 }).lean();
     res.json(orders);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -259,7 +260,7 @@ router.get('/cashier', requireCashierOrAdmin, async (req: AuthRequest, res: Resp
     ).sort({ createdAt: -1 }).lean();
     res.json(orders);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -294,7 +295,7 @@ router.get('/', requireAdmin, async (req: AuthRequest, res: Response) => {
     ]);
     res.json({ orders, total, page, pages: Math.ceil(total / limit) });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -336,7 +337,7 @@ router.get('/customers', requireAdmin, async (req: AuthRequest, res: Response) =
 
     res.json({ customers, total: customers.length });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -347,7 +348,7 @@ router.get('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     if (!order) return res.status(404).json({ message: 'Order not found' });
     res.json(order);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -551,7 +552,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
 
     res.json(existing);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
