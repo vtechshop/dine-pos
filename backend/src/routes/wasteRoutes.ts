@@ -23,8 +23,13 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       const to   = new Date(req.query.to as string); to.setHours(23, 59, 59, 999);
       filter.date = { $gte: from, $lte: to };
     }
-    const logs = await WasteLog.find(filter).sort({ date: -1 });
-    res.json(logs);
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const skip  = Math.max(parseInt(req.query.skip  as string) || 0,  0);
+    const [logs, total] = await Promise.all([
+      WasteLog.find(filter).sort({ date: -1 }).skip(skip).limit(limit),
+      WasteLog.countDocuments(filter),
+    ]);
+    res.json({ logs, total, limit, skip });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }

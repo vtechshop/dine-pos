@@ -18,8 +18,13 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       const end   = new Date(date); end.setHours(23, 59, 59, 999);
       filter.date = { $gte: start, $lte: end };
     }
-    const reservations = await Reservation.find(filter).sort({ date: 1, time: 1 });
-    res.json(reservations);
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const skip  = Math.max(parseInt(req.query.skip  as string) || 0,  0);
+    const [reservations, total] = await Promise.all([
+      Reservation.find(filter).sort({ date: 1, time: 1 }).skip(skip).limit(limit),
+      Reservation.countDocuments(filter),
+    ]);
+    res.json({ reservations, total, limit, skip });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }

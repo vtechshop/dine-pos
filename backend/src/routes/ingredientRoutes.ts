@@ -12,8 +12,13 @@ router.use(requireFeature('ingredients'));
 // GET all ingredients for this hotel
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const ingredients = await Ingredient.find({ hotelId: req.hotelId }).sort({ name: 1 });
-    res.json(ingredients);
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const skip  = Math.max(parseInt(req.query.skip  as string) || 0,  0);
+    const [ingredients, total] = await Promise.all([
+      Ingredient.find({ hotelId: req.hotelId }).sort({ name: 1 }).skip(skip).limit(limit),
+      Ingredient.countDocuments({ hotelId: req.hotelId }),
+    ]);
+    res.json({ ingredients, total, limit, skip });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }
