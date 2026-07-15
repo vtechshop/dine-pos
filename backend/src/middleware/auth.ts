@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import Hotel from '../models/Hotel';
+import Hotel, { IFeatureFlags } from '../models/Hotel';
 import RefreshToken from '../models/RefreshToken';
 import { getRedisClient } from '../config/redis';
 
@@ -27,6 +27,7 @@ interface StatusEntry {
   hotelName: string;
   expiredOn: string | null;
   subscriptionType: string;
+  features?: Partial<IFeatureFlags>;
 }
 
 const _localCache = new Map<string, StatusEntry>();
@@ -34,7 +35,7 @@ const STATUS_TTL_MS = 45_000;
 const STATUS_TTL_S  = 45;
 const CACHE_PREFIX  = 'hotel:status:';
 
-async function getCachedStatus(hotelId: string): Promise<StatusEntry | null> {
+export async function getCachedStatus(hotelId: string): Promise<StatusEntry | null> {
   const redis = getRedisClient();
   if (redis) {
     try {
@@ -59,13 +60,13 @@ async function setCachedStatus(hotelId: string, entry: StatusEntry): Promise<voi
   _localCache.set(hotelId, entry);
 }
 
-async function resolveHotelStatus(hotelId: string): Promise<StatusEntry> {
+export async function resolveHotelStatus(hotelId: string): Promise<StatusEntry> {
   const cached = await getCachedStatus(hotelId);
   if (cached) return cached;
 
   const now = Date.now();
   const hotel = await Hotel.findById(hotelId)
-    .select('status trialEndDate subscriptionType subscriptionEndDate hotelName')
+    .select('status trialEndDate subscriptionType subscriptionEndDate hotelName features')
     .lean();
 
   if (!hotel) {
@@ -108,6 +109,7 @@ async function resolveHotelStatus(hotelId: string): Promise<StatusEntry> {
     hotelName: h.hotelName || '',
     expiredOn,
     subscriptionType: h.subscriptionType || 'trial',
+    features: h.features || {},
   };
 
   await setCachedStatus(hotelId, entry);
