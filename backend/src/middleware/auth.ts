@@ -176,8 +176,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
 
 // ── Role guard middleware ─────────────────────────────────────────────────────
 export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  // Allow: role === undefined (legacy tokens before explicit role) OR role === 'admin' (new tokens)
-  if (req.role !== undefined && req.role !== 'admin') {
+  if (req.role !== 'admin') {
     res.status(403).json({ message: 'Access denied. Admin only.' });
     return;
   }
@@ -185,7 +184,7 @@ export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction
 };
 
 export const requireKitchenOrAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  if (req.role !== undefined && req.role !== 'kitchen' && req.role !== 'admin') {
+  if (req.role !== 'kitchen' && req.role !== 'admin') {
     res.status(403).json({ message: 'Access denied.' });
     return;
   }
@@ -193,7 +192,7 @@ export const requireKitchenOrAdmin = (req: AuthRequest, res: Response, next: Nex
 };
 
 export const requireWaiterOrAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  if (req.role !== undefined && req.role !== 'waiter' && req.role !== 'admin') {
+  if (req.role !== 'waiter' && req.role !== 'admin') {
     res.status(403).json({ message: 'Access denied.' });
     return;
   }
@@ -201,7 +200,7 @@ export const requireWaiterOrAdmin = (req: AuthRequest, res: Response, next: Next
 };
 
 export const requireCashierOrAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  if (req.role !== undefined && req.role !== 'cashier' && req.role !== 'admin') {
+  if (req.role !== 'cashier' && req.role !== 'admin') {
     res.status(403).json({ message: 'Access denied.' });
     return;
   }
@@ -210,7 +209,7 @@ export const requireCashierOrAdmin = (req: AuthRequest, res: Response, next: Nex
 
 // Waiter, cashier, or admin can create/manage orders — kitchen is read-only for orders
 export const requireWaiterOrCashierOrAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
-  if (req.role !== undefined && req.role !== 'waiter' && req.role !== 'cashier' && req.role !== 'admin') {
+  if (req.role !== 'waiter' && req.role !== 'cashier' && req.role !== 'admin') {
     res.status(403).json({ message: 'Access denied.' });
     return;
   }
