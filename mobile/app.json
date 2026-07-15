@@ -42,7 +42,19 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a47ae552-a621-43e5-a8f2-c5d42c101b00"
+    },
     "plugins": [
+      [
+        "expo-updates",
+        {
+          "launchScreen": null
+        }
+      ],
       "expo-sharing",
       [
         "expo-image-picker",
@@ -51,7 +63,8 @@
           "cameraPermission": "Allow Dine POS to use your camera for product images."
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {

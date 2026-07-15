@@ -17,9 +17,15 @@
       }
     },
     "production": {
+      "channel": "production",
       "android": {
         "buildType": "app-bundle"
       }
+    }
+  },
+  "update": {
+    "production": {
+      "channel": "production"
     }
   },
   "submit": {
