@@ -1,7 +1,18 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import Hotel from '../models/Hotel';
 import { sendError } from '../utils/sendError';
+
+// 5 registration / resubmit attempts per hour per IP — prevents registration spam
+const registrationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { message: 'Too many registration attempts. Please try again after an hour.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
@@ -28,7 +39,7 @@ const VALID_BUSINESS_TYPES = [
 ];
 
 // POST /api/hotels/register — Hotel registers for the platform
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', registrationLimiter, async (req: Request, res: Response) => {
   try {
     const { hotelName, ownerName, phone, email, businessType, state, city } = req.body;
 
@@ -93,7 +104,7 @@ router.get('/status/:phone', async (req: Request, res: Response) => {
 });
 
 // PUT /api/hotels/resubmit/:phone — Update details and reset status to pending
-router.put('/resubmit/:phone', async (req: Request, res: Response) => {
+router.put('/resubmit/:phone', registrationLimiter, async (req: Request, res: Response) => {
   try {
     const hotel = await Hotel.findOne({ phone: req.params.phone });
     if (!hotel) return res.status(404).json({ message: 'No registration found for this phone' });
