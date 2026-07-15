@@ -135,6 +135,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         console.log(`[SOCKET][Cashier] Connected | socketId=${socket.id}`);
         socket.emit('join_hotel', hotelId);
         console.log(`[SOCKET][Cashier] join_hotel emitted | hotelId=${hotelId}`);
+        loadOrders();
       });
 
       socket.on('connect_error', (err) => {

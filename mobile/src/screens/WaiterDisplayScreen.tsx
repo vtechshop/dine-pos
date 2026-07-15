@@ -104,6 +104,7 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
         console.log(`[SOCKET][Waiter] Connected | socketId=${socket.id}`);
         socket.emit('join_hotel', hotelId);
         console.log(`[SOCKET][Waiter] join_hotel emitted | hotelId=${hotelId}`);
+        loadOrders();
       });
 
       socket.on('connect_error', (err) => {

@@ -95,6 +95,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         console.log(`[SOCKET][Kitchen] Connected | socketId=${socket.id}`);
         socket.emit('join_hotel', hotelId);
         console.log(`[SOCKET][Kitchen] join_hotel emitted | hotelId=${hotelId}`);
+        loadOrders();
       });
 
       socket.on('connect_error', (err) => {
