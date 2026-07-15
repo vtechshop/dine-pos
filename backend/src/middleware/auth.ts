@@ -119,7 +119,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
       entry = await resolveHotelStatus(decoded.hotelId);
     } catch {
       console.error('[authMiddleware] status cache lookup failed for', decoded.hotelId);
-      next(); // fail open on DB hiccup so paying customers aren't locked out
+      res.status(503).json({ message: 'Service temporarily unavailable. Please try again.' });
       return;
     }
 

@@ -6,7 +6,7 @@ import Settings from '../models/Settings';
 
 // Verifies the staff account is still active in the database.
 // Must run AFTER authMiddleware (needs req.role, req.hotelId, req.waiterId, req.cashierId).
-// Admin tokens (role === undefined) are skipped — hotel status is already checked by authMiddleware.
+// Admin tokens (role === 'admin') are skipped — hotel status is already checked by authMiddleware.
 // On DB error, fails open so a transient outage doesn't lock out operating staff.
 export const requireActiveStaff = async (
   req: AuthRequest,
@@ -44,6 +44,6 @@ export const requireActiveStaff = async (
     }
     next();
   } catch {
-    next(); // DB hiccup — fail open, same pattern as hotel status cache
+    res.status(503).json({ message: 'Service temporarily unavailable. Please try again.' });
   }
 };
