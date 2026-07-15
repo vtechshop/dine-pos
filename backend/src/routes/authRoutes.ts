@@ -10,6 +10,16 @@ import Cashier from '../models/Cashier';
 import { logAuditRaw } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 
+// Token refresh — 20 requests / 15 min per IP (prevents refresh-token brute-force)
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { message: 'Too many token refresh requests. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Admin login — strict: 10 attempts / 15 min per IP (protects full account access)
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -117,7 +127,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/refresh — exchange a valid refresh token for new token pair
-router.post('/refresh', async (req: Request, res: Response) => {
+router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
   if (!refreshToken || typeof refreshToken !== 'string') {
     return res.status(400).json({ message: 'Refresh token required' });
