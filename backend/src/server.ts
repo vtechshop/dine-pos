@@ -68,6 +68,11 @@ if (!SUPER_ADMIN_PASS) {
   process.exit(1);
 }
 
+if (!process.env.SUPER_ADMIN_ID) {
+  console.error('❌ FATAL: SUPER_ADMIN_ID is not set. Add it to your .env file.');
+  process.exit(1);
+}
+
 if (!process.env.MONGODB_URI) {
   console.error('❌ FATAL: MONGODB_URI is not set. Add it to your .env file.');
   process.exit(1);

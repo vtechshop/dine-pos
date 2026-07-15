@@ -68,8 +68,8 @@ const superAdminAuth = (req: Request, res: Response, next: Function) => {
   // Legacy fallback: raw credential headers (kept for backward-compat during rollout)
   const id   = (req.headers['x-super-admin-id']   as string) || '';
   const pass = (req.headers['x-super-admin-pass'] as string) || '';
-  const expectedId   = process.env.SUPER_ADMIN_ID   || 'superadmin';
-  const expectedPass = process.env.SUPER_ADMIN_PASS || 'super1234';
+  const expectedId   = process.env.SUPER_ADMIN_ID!;
+  const expectedPass = process.env.SUPER_ADMIN_PASS!;
   if (id && pass && safeEqual(id, expectedId) && safeEqual(pass, expectedPass)) return next();
 
   return res.status(401).json({ message: 'Unauthorized' });
@@ -81,8 +81,8 @@ const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 router.post('/login', adminLoginLimiter, (req: Request, res: Response) => {
   const { userId, password } = req.body;
-  const adminId   = process.env.SUPER_ADMIN_ID   || 'superadmin';
-  const adminPass = process.env.SUPER_ADMIN_PASS || 'super1234';
+  const adminId   = process.env.SUPER_ADMIN_ID!;
+  const adminPass = process.env.SUPER_ADMIN_PASS!;
   if (!userId || !password) return res.status(400).json({ message: 'Credentials required' });
   if (safeEqual(String(userId), adminId) && safeEqual(String(password), adminPass)) {
     const token = jwt.sign({ role: 'superadmin' }, SUPER_ADMIN_JWT_SECRET, { expiresIn: '4h' });
