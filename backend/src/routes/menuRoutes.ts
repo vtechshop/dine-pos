@@ -133,11 +133,14 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
       return res.status(400).json({ message: 'Customer name is required' });
     }
 
-    // Verify hotel exists and is active — reject orders for nonexistent or suspended hotels
-    const hotelDoc = await Hotel.findOne({ _id: hotelParam }, { status: 1 }).lean();
+    // Verify hotel exists, is active, and has qrOrdering enabled
+    const hotelDoc = await Hotel.findOne({ _id: hotelParam }, { status: 1, features: 1 }).lean();
     if (!hotelDoc) return res.status(404).json({ message: 'Hotel not found' });
     if (!['trial', 'active'].includes((hotelDoc as any).status)) {
       return res.status(403).json({ message: 'This hotel is not currently accepting orders' });
+    }
+    if ((hotelDoc as any).features?.qrOrdering === false) {
+      return res.status(403).json({ code: 'FEATURE_DISABLED', message: 'QR ordering is not enabled for this hotel.' });
     }
 
     const hotelId = String(hotelParam);

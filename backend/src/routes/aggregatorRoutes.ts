@@ -42,9 +42,12 @@ const createAggregatorOrder = async (
   address: string,
   notes: string,
 ) => {
-  const hotel = await Hotel.findById(hotelId);
+  const hotel = await Hotel.findById(hotelId).select('status features hotelName');
   if (!hotel || hotel.status !== 'active') {
     throw Object.assign(new Error('Hotel not found or inactive'), { statusCode: 404 });
+  }
+  if (!(hotel as any).features?.aggregator) {
+    throw Object.assign(new Error('Aggregator feature is not enabled for this hotel'), { statusCode: 403 });
   }
 
   const normalizedItems = items.map((item: any) => ({

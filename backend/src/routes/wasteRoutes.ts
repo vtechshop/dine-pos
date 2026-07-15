@@ -2,10 +2,12 @@ import { Router, Response } from 'express';
 import WasteLog from '../models/WasteLog';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import mongoose from 'mongoose';
+import { requireFeature } from '../middleware/requireFeature';
 
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('waste'));
 
 // GET waste logs with optional date filter
 router.get('/', async (req: AuthRequest, res: Response) => {

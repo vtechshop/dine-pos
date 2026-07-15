@@ -1,10 +1,12 @@
 import { Router, Response } from 'express';
 import ChatMessage from '../models/ChatMessage';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('customerChat'));
 
 // GET messages for a table
 router.get('/:tableNumber', authMiddleware, async (req: AuthRequest, res: Response) => {

@@ -5,10 +5,12 @@ import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 import mongoose from 'mongoose';
 import { sendError } from '../utils/sendError';
+import { requireFeature } from '../middleware/requireFeature';
 
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('expenses'));
 
 // GET expenses with optional date range
 router.get('/', async (req: AuthRequest, res: Response) => {
