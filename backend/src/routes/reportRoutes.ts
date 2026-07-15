@@ -3,6 +3,7 @@ import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import Order from '../models/Order';
 import Settings from '../models/Settings';
 import mongoose from 'mongoose';
+import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
@@ -64,7 +65,7 @@ router.get('/gst', authMiddleware, async (req: AuthRequest, res: Response) => {
     });
   } catch (err) {
     console.error('GST report error:', err);
-    res.status(500).json({ error: 'Failed to generate GST report' });
+    sendError(res, 500, 'Failed to generate GST report', err);
   }
 });
 
@@ -120,7 +121,7 @@ router.get('/tally', authMiddleware, async (req: AuthRequest, res: Response) => 
     });
   } catch (err) {
     console.error('Tally export error:', err);
-    res.status(500).json({ error: 'Failed to generate Tally export' });
+    sendError(res, 500, 'Failed to generate Tally export', err);
   }
 });
 
@@ -224,7 +225,7 @@ router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response
     });
   } catch (err) {
     console.error('GSTR-1 JSON error:', err);
-    res.status(500).json({ error: 'Failed to generate GSTR-1 JSON' });
+    sendError(res, 500, 'Failed to generate GSTR-1 JSON', err);
   }
 });
 

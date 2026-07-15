@@ -4,6 +4,7 @@ import RefreshToken from '../models/RefreshToken';
 import Hotel from '../models/Hotel';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireActiveStaff } from '../middleware/staffAuth';
+import { sendError } from '../utils/sendError';
 
 const router = Router();
 
@@ -68,8 +69,8 @@ router.post('/register', authMiddleware, requireActiveStaff, async (req: AuthReq
     );
 
     return res.json({ message: 'Device registered', device });
-  } catch {
-    return res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    return sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -80,8 +81,8 @@ router.get('/', authMiddleware, requireAdmin, async (req: AuthRequest, res: Resp
       .sort({ isActive: -1, lastSeen: -1 })
       .lean();
     return res.json(devices);
-  } catch {
-    return res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    return sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -96,8 +97,8 @@ router.post('/heartbeat', authMiddleware, requireActiveStaff, async (req: AuthRe
       { $set: { lastSeen: new Date(), isOnline: true, ...(appVersion ? { appVersion } : {}) } }
     );
     return res.json({ ok: true });
-  } catch {
-    return res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    return sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -121,8 +122,8 @@ router.patch('/:id/logout', authMiddleware, requireAdmin, async (req: AuthReques
 
     await Device.findByIdAndUpdate(req.params.id, { isActive: false, isOnline: false });
     return res.json({ ok: true });
-  } catch {
-    return res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    return sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -134,8 +135,8 @@ router.delete('/logout-all', authMiddleware, requireAdmin, async (req: AuthReque
       Device.updateMany({ hotelId: req.hotelId }, { isActive: false, isOnline: false }),
     ]);
     return res.json({ ok: true });
-  } catch {
-    return res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    return sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -145,8 +146,8 @@ router.delete('/:id', authMiddleware, requireAdmin, async (req: AuthRequest, res
     const device = await Device.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });
     if (!device) return res.status(404).json({ message: 'Device not found' });
     return res.json({ ok: true });
-  } catch {
-    return res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    return sendError(res, 500, 'Server error', error);
   }
 });
 

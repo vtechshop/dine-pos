@@ -4,6 +4,7 @@ import Order from '../models/Order';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 import mongoose from 'mongoose';
+import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
@@ -26,7 +27,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const expenses = await Expense.find(filter).sort({ date: -1 });
     res.json(expenses);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -70,7 +71,7 @@ router.get('/pnl', async (req: AuthRequest, res: Response) => {
       breakdown: expenseResult,
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -82,7 +83,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     logAudit(req, 'expense.created', 'expense', String((expense as any)._id), { description: (expense as any).description, amount: (expense as any).amount });
     res.status(201).json(expense);
   } catch (error) {
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
@@ -98,7 +99,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     logAudit(req, 'expense.updated', 'expense', req.params.id, { description: (expense as any).description, amount: (expense as any).amount });
     res.json(expense);
   } catch (error) {
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
@@ -110,7 +111,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     logAudit(req, 'expense.deleted', 'expense', req.params.id, { description: (expense as any).description, amount: (expense as any).amount });
     res.json({ message: 'Deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 

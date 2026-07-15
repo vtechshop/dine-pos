@@ -15,6 +15,7 @@ import RemoteConfig from '../models/RemoteConfig';
 import { redisHealthCheck } from '../config/redis';
 import { generateAdminId, generatePassword } from '../utils/credentialGenerator';
 import { bootstrapNewHotel } from '../services/bootstrapHotel';
+import { sendError } from '../utils/sendError';
 
 // Subscription plan pricing (INR/month) — update when pricing changes
 const PLAN_PRICES: Record<string, number> = {
@@ -105,7 +106,7 @@ router.get('/hotels', superAdminAuth, async (req: Request, res: Response) => {
     ]);
 
     return res.json({ hotels, total, page, limit, pages: Math.ceil(total / limit) || 1 });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.get('/hotels/:id', superAdminAuth, async (req: Request, res: Response) => {
@@ -113,7 +114,7 @@ router.get('/hotels/:id', superAdminAuth, async (req: Request, res: Response) =>
     const hotel = await Hotel.findById(req.params.id).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     return res.json(hotel);
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/hotels/:id/approve', superAdminAuth, async (req: Request, res: Response) => {
@@ -209,7 +210,7 @@ router.put('/hotels/:id/approve', superAdminAuth, async (req: Request, res: Resp
       emailPayload,
       whatsappPayload,
     });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/hotels/:id/reject', superAdminAuth, async (req: Request, res: Response) => {
@@ -223,7 +224,7 @@ router.put('/hotels/:id/reject', superAdminAuth, async (req: Request, res: Respo
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     return res.json({ message: `${hotel.hotelName} rejected`, hotel });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/hotels/:id/suspend', superAdminAuth, async (req: Request, res: Response) => {
@@ -238,7 +239,7 @@ router.put('/hotels/:id/suspend', superAdminAuth, async (req: Request, res: Resp
       Device.updateMany({ hotelId: req.params.id }, { isActive: false, isOnline: false }),
     ]).catch(() => {});
     return res.json({ message: `${hotel.hotelName} suspended`, hotel });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/hotels/:id/activate', superAdminAuth, async (req: Request, res: Response) => {
@@ -248,7 +249,7 @@ router.put('/hotels/:id/activate', superAdminAuth, async (req: Request, res: Res
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     return res.json({ message: `${hotel.hotelName} activated`, hotel });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/hotels/:id/expire', superAdminAuth, async (req: Request, res: Response) => {
@@ -258,7 +259,7 @@ router.put('/hotels/:id/expire', superAdminAuth, async (req: Request, res: Respo
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     return res.json({ message: `${hotel.hotelName} marked as expired`, hotel });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/hotels/:id/credentials', superAdminAuth, async (req: Request, res: Response) => {
@@ -287,7 +288,7 @@ router.put('/hotels/:id/credentials', superAdminAuth, async (req: Request, res: 
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     return res.json({ message: `${hotel.hotelName} approved and credentials set`, hotel });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/hotels/:id/premium', superAdminAuth, async (req: Request, res: Response) => {
@@ -308,7 +309,7 @@ router.put('/hotels/:id/premium', superAdminAuth, async (req: Request, res: Resp
     const hotel = await Hotel.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     return res.json({ message: `${hotel.hotelName} plan updated`, hotel });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // PUT /api/superadmin/hotels/:id/trial — start or reset trial
@@ -339,7 +340,7 @@ router.put('/hotels/:id/trial', superAdminAuth, async (req: Request, res: Respon
       message: `${hotel.hotelName} trial started for ${days} days (until ${trialEndDate.toLocaleDateString('en-IN')})`,
       hotel,
     });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // PUT /api/superadmin/hotels/:id/extend-trial — add days to current trial end
@@ -372,7 +373,7 @@ router.put('/hotels/:id/extend-trial', superAdminAuth, async (req: Request, res:
       message: `Trial extended by ${addDays} days (until ${newEnd.toLocaleDateString('en-IN')})`,
       hotel: updated,
     });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // PUT /api/superadmin/hotels/:id/plan — convert to paid subscription
@@ -406,7 +407,7 @@ router.put('/hotels/:id/plan', superAdminAuth, async (req: Request, res: Respons
       message: `${hotel.hotelName} converted to ${plan} plan (${days} days, until ${subscriptionEndDate.toLocaleDateString('en-IN')})`,
       hotel,
     });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // PUT /api/superadmin/hotels/:id/features — update feature flags
@@ -424,7 +425,7 @@ router.put('/hotels/:id/features', superAdminAuth, async (req: Request, res: Res
     const hotel = await Hotel.findByIdAndUpdate(req.params.id, { $set: update }, { new: true }).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     return res.json({ message: 'Feature flags updated', features: hotel.features });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
@@ -447,7 +448,7 @@ router.get('/stats', superAdminAuth, async (_req: Request, res: Response) => {
     ]);
 
     return res.json({ total, pending, trial, active, expired, suspended, rejected, resetRequests, todayRegistrations });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // ── Revenue ───────────────────────────────────────────────────────────────────
@@ -473,7 +474,7 @@ router.get('/branch-revenue', superAdminAuth, async (req: Request, res: Response
     const totalOrders  = branches.reduce((s: number, b: any) => s + b.orders, 0);
 
     res.json({ date: dateStr, totalRevenue, totalOrders, branches });
-  } catch { res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { sendError(res, 500, 'Server error', error); }
 });
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
@@ -514,7 +515,7 @@ router.get('/analytics', superAdminAuth, async (req: Request, res: Response) => 
     }
 
     return res.json({ analytics: statsMap, generatedAt: new Date() });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // ── Devices ───────────────────────────────────────────────────────────────────
@@ -530,7 +531,7 @@ router.get('/devices', superAdminAuth, async (req: Request, res: Response) => {
       .limit(500)
       .lean();
     return res.json(devices);
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // ── Notifications ─────────────────────────────────────────────────────────────
@@ -543,7 +544,7 @@ router.get('/notifications', superAdminAuth, async (_req: Request, res: Response
       $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
     }).sort({ createdAt: -1 }).limit(50).lean();
     return res.json(notifications);
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.post('/notifications', superAdminAuth, async (req: Request, res: Response) => {
@@ -566,14 +567,14 @@ router.post('/notifications', superAdminAuth, async (req: Request, res: Response
       createdBy:    'superadmin',
     });
     return res.status(201).json({ message: 'Notification broadcast sent', notification });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.delete('/notifications/:id', superAdminAuth, async (req: Request, res: Response) => {
   try {
     await Notification.findByIdAndUpdate(req.params.id, { isActive: false });
     return res.json({ message: 'Notification deactivated' });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // ── Remote Config (super admin management) ─────────────────────────────────────
@@ -583,7 +584,7 @@ router.get('/remote-config', superAdminAuth, async (_req: Request, res: Response
     const config = await RemoteConfig.findOne().lean()
       ?? (await RemoteConfig.create({})).toObject();
     return res.json(config);
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/remote-config', superAdminAuth, async (req: Request, res: Response) => {
@@ -599,7 +600,7 @@ router.put('/remote-config', superAdminAuth, async (req: Request, res: Response)
     }
     let config = await RemoteConfig.findOneAndUpdate({}, { $set: update }, { new: true, upsert: true });
     return res.json({ message: 'Remote config updated', config });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // ── System Health ─────────────────────────────────────────────────────────────
@@ -629,7 +630,7 @@ router.get('/health', superAdminAuth, async (_req: Request, res: Response) => {
       onlineDevices,
       checkedAt:    new Date(),
     });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // ── Super Admin Dashboard ─────────────────────────────────────────────────────
@@ -796,7 +797,7 @@ router.get('/dashboard', superAdminAuth, async (_req: Request, res: Response) =>
 
       generatedAt: now,
     });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // ── Subscription Revenue ───────────────────────────────────────────────────────
@@ -856,7 +857,7 @@ router.get('/dashboard/subscription-revenue', superAdminAuth, async (_req: Reque
       breakdown:              breakdown.sort((a, b) => b.contribution - a.contribution),
       recentSubscriptions:    recentSubs,
     });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // ── Hotel Growth ──────────────────────────────────────────────────────────────
@@ -903,7 +904,7 @@ router.get('/dashboard/hotel-growth', superAdminAuth, async (req: Request, res: 
     const totalInPeriod = (data as any[]).reduce((s, d) => s + d.total, 0);
 
     return res.json({ period, data, totalInPeriod });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // ── Failed Payments ───────────────────────────────────────────────────────────
@@ -943,7 +944,7 @@ router.get('/dashboard/failed-payments', superAdminAuth, async (_req: Request, r
       total:  pending + failed + overdue,
       recent,
     });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // ── Device Licensing ──────────────────────────────────────────────────────────
@@ -1001,7 +1002,7 @@ router.get('/dashboard/device-licensing', superAdminAuth, async (_req: Request, 
       blocked: blockedDevices,
       byPlan:  byPlan.sort((a, b) => b.activeDevices - a.activeDevices),
     });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 // ── Top Hotels ────────────────────────────────────────────────────────────────
@@ -1085,7 +1086,7 @@ router.get('/dashboard/top-hotels', superAdminAuth, async (req: Request, res: Re
     ]);
 
     return res.json({ by, period, hotels: results });
-  } catch { return res.status(500).json({ message: 'Server error' }); }
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 export default router;

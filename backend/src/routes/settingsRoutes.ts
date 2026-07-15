@@ -5,6 +5,7 @@ import Hotel from '../models/Hotel';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 import { validatePin } from '../utils/pinPolicy';
+import { sendError } from '../utils/sendError';
 
 const router = Router();
 
@@ -37,7 +38,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       trialEndsAt: hotel?.trialEndsAt || null,
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Server error', error);
   }
 });
 
@@ -70,7 +71,7 @@ router.put('/', requireAdmin, async (req: AuthRequest, res: Response) => {
     logAudit(req, 'settings.updated', 'settings', req.hotelId || '', { changedKeys: Object.keys(body).filter(k => k !== 'hotelId') });
     res.json(settings);
   } catch (error) {
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
