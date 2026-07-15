@@ -145,9 +145,8 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
 
     const hotelId = String(hotelParam);
 
-    // Server-side price recalculation for items that reference a known product by ObjectId.
-    // Items without a product ObjectId (e.g. from legacy or QR menus) are trusted as-is
-    // since the prices were displayed from our own backend.
+    // All items must reference a product by ObjectId so prices are always verified
+    // against the server-side catalog. Items without a valid product ID are rejected.
     const productIds = clientItems
       .map((i: any) => i.product)
       .filter((id: any) => mongoose.Types.ObjectId.isValid(String(id ?? '')));
@@ -182,23 +181,6 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
           total:       +total.toFixed(2),
         });
         subtotal += prod.price * qty;
-        taxTotal += taxAmt;
-      } else if (ci.productName && Number(ci.price) > 0) {
-        // Client-trusted item: no product ObjectId, use provided name/price/quantity
-        const qty    = Math.max(1, Math.floor(Number(ci.quantity) || 1));
-        const price  = Number(ci.price);
-        const taxPct = Number(ci.taxPercent) || 0;
-        const taxAmt = (price * qty * taxPct) / 100;
-        const total  = price * qty + taxAmt;
-        validatedItems.push({
-          productName: String(ci.productName).slice(0, 100),
-          quantity:    qty,
-          price,
-          taxPercent:  taxPct,
-          taxAmount:   +taxAmt.toFixed(2),
-          total:       +total.toFixed(2),
-        });
-        subtotal += price * qty;
         taxTotal += taxAmt;
       }
     }
