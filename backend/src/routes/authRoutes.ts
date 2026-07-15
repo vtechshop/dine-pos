@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import Hotel from '../models/Hotel';
 import RefreshToken from '../models/RefreshToken';
 import Settings from '../models/Settings';
-import { generateToken, generateRefreshToken, generateKitchenToken, generateWaiterToken, generateCashierToken } from '../middleware/auth';
+import { generateToken, generateRefreshToken, generateKitchenToken, generateWaiterToken, generateCashierToken, hashRefreshToken } from '../middleware/auth';
 import Waiter from '../models/Waiter';
 import Cashier from '../models/Cashier';
 import { logAuditRaw } from '../utils/audit';
@@ -134,7 +134,7 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
   }
 
   try {
-    const record = await RefreshToken.findOne({ token: refreshToken, revokedAt: null });
+    const record = await RefreshToken.findOne({ token: hashRefreshToken(refreshToken), revokedAt: null });
     if (!record) {
       return res.status(401).json({ message: 'Invalid or revoked refresh token' });
     }
@@ -261,7 +261,7 @@ router.post('/logout', async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
   if (refreshToken && typeof refreshToken === 'string') {
     await RefreshToken.findOneAndUpdate(
-      { token: refreshToken, revokedAt: null },
+      { token: hashRefreshToken(refreshToken), revokedAt: null },
       { revokedAt: new Date() }
     ).catch(() => {}); // fire-and-forget, non-critical
   }

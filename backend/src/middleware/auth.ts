@@ -268,9 +268,14 @@ export const generateCashierToken = (hotelId: string, cashierId: string, cashier
   return jwt.sign({ hotelId, role: 'cashier', cashierId, cashierName }, JWT_SECRET, { expiresIn: '12h' });
 };
 
+// Returns the SHA-256 hex digest of a refresh token.
+// Only the digest is stored; the raw token is returned to the client once.
+export const hashRefreshToken = (token: string): string =>
+  crypto.createHash('sha256').update(token).digest('hex');
+
 export const generateRefreshToken = async (hotelId: string): Promise<string> => {
   const token = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  await RefreshToken.create({ token, hotelId, expiresAt });
+  await RefreshToken.create({ token: hashRefreshToken(token), hotelId, expiresAt });
   return token;
 };
