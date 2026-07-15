@@ -1,13 +1,38 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL } from '../utils/constants';
 import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport, GSTR1Json, RemoteConfig, Device, AppNotification, FeatureFlags } from '../types';
 import { navigateGlobal } from '../utils/navigationRef';
 import { emitSessionExpired } from '../utils/authEvents';
 
-const API_URL_STORAGE_KEY = '@hotel_pos_api_base_url';
-const JWT_STORAGE_KEY = '@hotel_pos_jwt_token';
-const REFRESH_TOKEN_STORAGE_KEY = '@hotel_pos_refresh_token';
+const API_URL_STORAGE_KEY  = '@hotel_pos_api_base_url';
 const HOTEL_ID_STORAGE_KEY = '@hotel_pos_hotel_id';
+
+// SecureStore keys (no @ — Android Keystore only allows [a-zA-Z0-9._-]).
+// AsyncStorage legacy keys kept for one-time migration on first read.
+const JWT_STORAGE_KEY          = '@hotel_pos_jwt_token';
+const REFRESH_TOKEN_STORAGE_KEY = '@hotel_pos_refresh_token';
+const SEC_JWT_KEY           = 'hotel_pos_jwt_token';
+const SEC_REFRESH_KEY       = 'hotel_pos_refresh_token';
+
+// Reads from SecureStore; on first access migrates from AsyncStorage if present.
+const secureGet = async (secureKey: string, legacyKey: string): Promise<string | null> => {
+  try {
+    const val = await SecureStore.getItemAsync(secureKey);
+    if (val !== null) return val;
+    // One-time migration from AsyncStorage
+    const legacy = await AsyncStorage.getItem(legacyKey);
+    if (legacy) {
+      await SecureStore.setItemAsync(secureKey, legacy);
+      await AsyncStorage.removeItem(legacyKey);
+      return legacy;
+    }
+    return null;
+  } catch {
+    // Fallback to AsyncStorage on devices where SecureStore is unavailable
+    try { return await AsyncStorage.getItem(legacyKey); } catch { return null; }
+  }
+};
 
 let _cachedBaseUrl: string | null = null;
 let _cachedToken: string | null = null;
@@ -36,21 +61,22 @@ export const getSocketUrl = async (): Promise<string> => {
 
 export const saveToken = async (token: string): Promise<void> => {
   _cachedToken = token;
-  await AsyncStorage.setItem(JWT_STORAGE_KEY, token);
+  try {
+    await SecureStore.setItemAsync(SEC_JWT_KEY, token);
+  } catch {
+    await AsyncStorage.setItem(JWT_STORAGE_KEY, token);
+  }
 };
 
 export const getToken = async (): Promise<string | null> => {
   if (_cachedToken) return _cachedToken;
-  try {
-    _cachedToken = await AsyncStorage.getItem(JWT_STORAGE_KEY);
-  } catch {
-    _cachedToken = null;
-  }
+  _cachedToken = await secureGet(SEC_JWT_KEY, JWT_STORAGE_KEY);
   return _cachedToken;
 };
 
 export const clearToken = async (): Promise<void> => {
   _cachedToken = null;
+  try { await SecureStore.deleteItemAsync(SEC_JWT_KEY); } catch { /* ignore */ }
   await AsyncStorage.removeItem(JWT_STORAGE_KEY);
   // hotelId is kept after logout so the customer kiosk menu still works
 };
@@ -59,21 +85,22 @@ export const clearToken = async (): Promise<void> => {
 
 export const saveRefreshToken = async (token: string): Promise<void> => {
   _cachedRefreshToken = token;
-  await AsyncStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, token);
+  try {
+    await SecureStore.setItemAsync(SEC_REFRESH_KEY, token);
+  } catch {
+    await AsyncStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, token);
+  }
 };
 
 export const getRefreshToken = async (): Promise<string | null> => {
   if (_cachedRefreshToken) return _cachedRefreshToken;
-  try {
-    _cachedRefreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_STORAGE_KEY);
-  } catch {
-    _cachedRefreshToken = null;
-  }
+  _cachedRefreshToken = await secureGet(SEC_REFRESH_KEY, REFRESH_TOKEN_STORAGE_KEY);
   return _cachedRefreshToken;
 };
 
 export const clearRefreshToken = async (): Promise<void> => {
   _cachedRefreshToken = null;
+  try { await SecureStore.deleteItemAsync(SEC_REFRESH_KEY); } catch { /* ignore */ }
   await AsyncStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
 };
 
@@ -1088,21 +1115,23 @@ export const getSystemHealth = (): Promise<{
 // ==================== KITCHEN DISPLAY ====================
 
 const KITCHEN_TOKEN_KEY = '@hotel_pos_kitchen_token';
+const SEC_KITCHEN_KEY   = 'hotel_pos_kitchen_token';
 let _cachedKitchenToken: string | null = null;
 
 export const saveKitchenToken = async (token: string): Promise<void> => {
   _cachedKitchenToken = token;
-  await AsyncStorage.setItem(KITCHEN_TOKEN_KEY, token);
+  try { await SecureStore.setItemAsync(SEC_KITCHEN_KEY, token); } catch { await AsyncStorage.setItem(KITCHEN_TOKEN_KEY, token); }
 };
 
 export const getKitchenToken = async (): Promise<string | null> => {
   if (_cachedKitchenToken) return _cachedKitchenToken;
-  try { _cachedKitchenToken = await AsyncStorage.getItem(KITCHEN_TOKEN_KEY); } catch { _cachedKitchenToken = null; }
+  _cachedKitchenToken = await secureGet(SEC_KITCHEN_KEY, KITCHEN_TOKEN_KEY);
   return _cachedKitchenToken;
 };
 
 export const clearKitchenToken = async (): Promise<void> => {
   _cachedKitchenToken = null;
+  try { await SecureStore.deleteItemAsync(SEC_KITCHEN_KEY); } catch { /* ignore */ }
   await AsyncStorage.removeItem(KITCHEN_TOKEN_KEY);
 };
 
@@ -1162,21 +1191,23 @@ export const updateKitchenOrderStatus = async (orderId: string, status: string):
 // ==================== WAITER DISPLAY ====================
 
 const WAITER_TOKEN_KEY = '@hotel_pos_waiter_token';
+const SEC_WAITER_KEY   = 'hotel_pos_waiter_token';
 let _cachedWaiterToken: string | null = null;
 
 export const saveWaiterToken = async (token: string): Promise<void> => {
   _cachedWaiterToken = token;
-  await AsyncStorage.setItem(WAITER_TOKEN_KEY, token);
+  try { await SecureStore.setItemAsync(SEC_WAITER_KEY, token); } catch { await AsyncStorage.setItem(WAITER_TOKEN_KEY, token); }
 };
 
 export const getWaiterToken = async (): Promise<string | null> => {
   if (_cachedWaiterToken) return _cachedWaiterToken;
-  try { _cachedWaiterToken = await AsyncStorage.getItem(WAITER_TOKEN_KEY); } catch { _cachedWaiterToken = null; }
+  _cachedWaiterToken = await secureGet(SEC_WAITER_KEY, WAITER_TOKEN_KEY);
   return _cachedWaiterToken;
 };
 
 export const clearWaiterToken = async (): Promise<void> => {
   _cachedWaiterToken = null;
+  try { await SecureStore.deleteItemAsync(SEC_WAITER_KEY); } catch { /* ignore */ }
   await AsyncStorage.removeItem(WAITER_TOKEN_KEY);
 };
 
@@ -1301,21 +1332,23 @@ export const markOrderServed = async (orderId: string): Promise<void> => {
 // ==================== CASHIER DISPLAY ====================
 
 const CASHIER_TOKEN_KEY = '@hotel_pos_cashier_token';
+const SEC_CASHIER_KEY   = 'hotel_pos_cashier_token';
 let _cachedCashierToken: string | null = null;
 
 export const saveCashierToken = async (token: string): Promise<void> => {
   _cachedCashierToken = token;
-  await AsyncStorage.setItem(CASHIER_TOKEN_KEY, token);
+  try { await SecureStore.setItemAsync(SEC_CASHIER_KEY, token); } catch { await AsyncStorage.setItem(CASHIER_TOKEN_KEY, token); }
 };
 
 export const getCashierToken = async (): Promise<string | null> => {
   if (_cachedCashierToken) return _cachedCashierToken;
-  try { _cachedCashierToken = await AsyncStorage.getItem(CASHIER_TOKEN_KEY); } catch { _cachedCashierToken = null; }
+  _cachedCashierToken = await secureGet(SEC_CASHIER_KEY, CASHIER_TOKEN_KEY);
   return _cachedCashierToken;
 };
 
 export const clearCashierToken = async (): Promise<void> => {
   _cachedCashierToken = null;
+  try { await SecureStore.deleteItemAsync(SEC_CASHIER_KEY); } catch { /* ignore */ }
   await AsyncStorage.removeItem(CASHIER_TOKEN_KEY);
 };
 
