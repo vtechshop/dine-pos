@@ -42,15 +42,6 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [tick, setTick] = useState(0);
   const { count: cashierBadge, increment: incCashierBadge, reset: resetCashierBadge } = useBadgeCount(BADGE_KEYS.cashierPending);
 
-  useFocusEffect(useCallback(() => {
-    let active = true;
-    (async () => {
-      const ok = await loadOrders();
-      if (ok && active) resetCashierBadge();
-    })();
-    return () => { active = false; };
-  }, [loadOrders, resetCashierBadge]));
-
   // Counter instead of boolean — every new order triggers a re-render
   const [newOrderCount, setNewOrderCount] = useState(0);
 
@@ -94,6 +85,15 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       if (mountedRef.current) setLoading(false);
     }
   }, []);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    (async () => {
+      const ok = await loadOrders();
+      if (ok && active) resetCashierBadge();
+    })();
+    return () => { active = false; };
+  }, [loadOrders, resetCashierBadge]));
 
   useEffect(() => {
     mountedRef.current = true;

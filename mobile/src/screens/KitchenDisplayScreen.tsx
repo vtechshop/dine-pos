@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  ActivityIndicator, StatusBar, Vibration, ScrollView, Modal,
+  ActivityIndicator, StatusBar, Vibration, ScrollView, Modal, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -31,14 +31,6 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const { count: kitchenBadge, increment: incKitchenBadge, reset: resetKitchenBadge } = useBadgeCount(BADGE_KEYS.kitchenOrders);
   const seenOrderIds = useRef<Set<string>>(new Set());
 
-  useFocusEffect(useCallback(() => {
-    let active = true;
-    (async () => {
-      const ok = await loadOrders();
-      if (ok && active) resetKitchenBadge();
-    })();
-    return () => { active = false; };
-  }, [loadOrders, resetKitchenBadge]));
   // Counter instead of boolean — ensures every new order triggers a re-render
   // even if the popup is already visible (boolean setTrue on true = no re-render)
   const [newOrderCount, setNewOrderCount] = useState(0);
@@ -58,6 +50,15 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       if (mountedRef.current) setLoading(false);
     }
   }, []);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    (async () => {
+      const ok = await loadOrders();
+      if (ok && active) resetKitchenBadge();
+    })();
+    return () => { active = false; };
+  }, [loadOrders, resetKitchenBadge]));
 
   // Auto-dismiss popup after 5 seconds
   useEffect(() => {
@@ -162,8 +163,8 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
           o._id === order._id ? { ...o, status: newStatus as KitchenOrder['status'] } : o
         ));
       }
-    } catch {
-      // silent — socket will sync if it fails
+    } catch (e: any) {
+      Alert.alert('Update Failed', e?.message || 'Could not update order status. Please try again.');
     } finally {
       setUpdatingId(null);
     }

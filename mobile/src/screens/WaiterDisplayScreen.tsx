@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  ActivityIndicator, StatusBar, Vibration, Modal,
+  ActivityIndicator, StatusBar, Vibration, Modal, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -34,15 +34,6 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const seenReadyIds = useRef<Set<string>>(new Set());
   const { count: waiterBadge, increment: incWaiterBadge, reset: resetWaiterBadge } = useBadgeCount(BADGE_KEYS.waiterReady);
 
-  useFocusEffect(useCallback(() => {
-    let active = true;
-    (async () => {
-      const ok = await loadOrders();
-      if (ok && active) resetWaiterBadge();
-    })();
-    return () => { active = false; };
-  }, [loadOrders, resetWaiterBadge]));
-
   const [readyPopup, setReadyPopup] = useState<{ orderNumber: string; tableNumber: string } | null>(null);
   const [tick, setTick] = useState(0);
 
@@ -68,6 +59,15 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
       if (mountedRef.current) setLoading(false);
     }
   }, []);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    (async () => {
+      const ok = await loadOrders();
+      if (ok && active) resetWaiterBadge();
+    })();
+    return () => { active = false; };
+  }, [loadOrders, resetWaiterBadge]));
 
   useEffect(() => {
     mountedRef.current = true;
@@ -164,8 +164,8 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
     try {
       await markOrderServed(order._id);
       setOrders(prev => prev.filter(o => o._id !== order._id));
-    } catch {
-      // silent — socket will sync
+    } catch (e: any) {
+      Alert.alert('Update Failed', e?.message || 'Could not mark order as served. Please try again.');
     } finally {
       setServingId(null);
     }
