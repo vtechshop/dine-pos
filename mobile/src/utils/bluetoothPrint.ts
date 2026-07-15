@@ -8,7 +8,10 @@ const fetchQRBase64 = async (upiId: string, amount: string, sizePx: number): Pro
   const upiStr = `upi://pay?pa=${upiId}&am=${amount}&cu=INR`;
   const apiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${sizePx}x${sizePx}&format=png&data=${encodeURIComponent(upiStr)}`;
   const tempPath = `${cacheDirectory}receipt_qr.png`;
-  const { uri } = await downloadAsync(apiUrl, tempPath);
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('QR fetch timed out')), 5000),
+  );
+  const { uri } = await Promise.race([downloadAsync(apiUrl, tempPath), timeout]);
   return await readAsStringAsync(uri, { encoding: EncodingType.Base64 });
 };
 
