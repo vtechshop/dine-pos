@@ -39,7 +39,8 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [socketLost, setSocketLost] = useState(false);
   const socketRef = useRef<Socket | null>(null);
-  const mountedRef = useRef(true);
+  const mountedRef    = useRef(true);
+  const submittingRef = useRef(false);
   const [tick, setTick] = useState(0);
   const { count: cashierBadge, increment: incCashierBadge, reset: resetCashierBadge } = useBadgeCount(BADGE_KEYS.cashierPending);
 
@@ -203,7 +204,8 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   }, [loadOrders]);
 
   const handleCollectPayment = async () => {
-    if (!payModal) return;
+    if (!payModal || submittingRef.current) return;
+    submittingRef.current = true;
     setCompleting(true);
     try {
       await completeOrderPayment(payModal.order._id, selectedMethod);
@@ -223,6 +225,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to collect payment');
     } finally {
+      submittingRef.current = false;
       setCompleting(false);
     }
   };
