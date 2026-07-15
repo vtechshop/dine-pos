@@ -236,18 +236,21 @@ router.get('/bill', async (req: Request, res: Response) => {
   try {
     const { table, hotel } = req.query as { table?: string; hotel?: string };
     if (!table) return res.status(400).json({ message: 'table param required' });
+    if (!hotel || !mongoose.Types.ObjectId.isValid(hotel)) {
+      return res.status(400).json({ message: 'hotel param required' });
+    }
 
-    const hotelId = await resolveHotelId(hotel);
+    const hotelId = new mongoose.Types.ObjectId(hotel);
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
     const filter: any = {
+      hotelId,
       tableNumber: table,
       status: { $nin: ['cancelled'] },
       createdAt: { $gte: startOfDay },
     };
-    if (hotelId) filter.hotelId = hotelId;
 
     const orders = await Order.find(filter).sort({ createdAt: 1 }).lean();
 
