@@ -19,6 +19,10 @@ export const BT_PERMISSION_DENIED = 'BT_PERMISSION_DENIED';
 let BluetoothEscposPrinter: any = null;
 let BluetoothManager: any = null;
 
+// Module-level connection state — prevents concurrent connect() calls racing each other
+let _btConnectedAddress: string | null = null;
+let _btConnecting     : Promise<void> | null = null;
+
 try {
   const { NativeModules } = require('react-native');
   if (NativeModules.BluetoothManager) BluetoothManager = NativeModules.BluetoothManager;
@@ -57,17 +61,27 @@ export const getPairedDevices = async (): Promise<BluetoothDevice[]> => {
   }
 };
 
-// Connect to a printer by address
+// Connect to a printer by address — deduplicated at module level so concurrent
+// callers await the same in-flight connect() rather than racing each other.
 export const connectPrinter = async (address: string): Promise<void> => {
   if (!BluetoothManager) throw new Error('Bluetooth printing not available on this device');
-  try {
-    await BluetoothManager.connect(address);
-  } catch (e: any) {
-    if (e.message && e.message.includes('BLUETOOTH_CONNECT')) {
-      throw new Error(BT_PERMISSION_DENIED);
+  if (_btConnectedAddress === address) return; // already connected
+  if (_btConnecting) { await _btConnecting; return; } // join in-flight connection
+  _btConnecting = (async () => {
+    try {
+      await BluetoothManager.connect(address);
+      _btConnectedAddress = address;
+    } catch (e: any) {
+      _btConnectedAddress = null;
+      if (e.message && e.message.includes('BLUETOOTH_CONNECT')) {
+        throw new Error(BT_PERMISSION_DENIED);
+      }
+      throw e;
+    } finally {
+      _btConnecting = null;
     }
-    throw e;
-  }
+  })();
+  await _btConnecting;
 };
 
 // Print the receipt via Bluetooth ESC/POS
