@@ -136,7 +136,13 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
         if (!mountedRef.current) return;
         const id = data.orderId || data._id || '';
         if (id && seenReadyIds.current.has(id)) return;
-        if (id) seenReadyIds.current.add(id);
+        if (id) {
+          if (seenReadyIds.current.size >= 500) {
+            // Evict the oldest entry to prevent unbounded growth
+            seenReadyIds.current.delete(seenReadyIds.current.values().next().value!);
+          }
+          seenReadyIds.current.add(id);
+        }
         incWaiterBadge();
         Vibration.vibrate([0, 300, 150, 300, 150, 500]);
         Notifications.scheduleNotificationAsync({
