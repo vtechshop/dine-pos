@@ -18,6 +18,7 @@ import { generateAdminId, generatePassword } from '../utils/credentialGenerator'
 import { bootstrapNewHotel } from '../services/bootstrapHotel';
 import { sendError } from '../utils/sendError';
 import { getPriceForPlan, getDeviceLimitForPlan } from '../utils/planLimits';
+import { logAuditRaw } from '../utils/audit';
 
 
 const router = Router();
@@ -202,6 +203,7 @@ router.put('/hotels/:id/approve', superAdminAuth, async (req: Request, res: Resp
         `Download the app and login to get started.`,
     };
 
+    logAuditRaw({ hotelId: req.params.id, action: 'hotel.approved', targetType: 'hotel', targetId: req.params.id, metadata: { trialDays: days, adminId }, ip: req.ip });
     return res.json({
       message: `${hotel.hotelName} approved — ${days}-day trial started`,
       hotel,
@@ -222,6 +224,7 @@ router.put('/hotels/:id/reject', superAdminAuth, async (req: Request, res: Respo
       { new: true }
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    logAuditRaw({ hotelId: req.params.id, action: 'hotel.rejected', targetType: 'hotel', targetId: req.params.id, metadata: { reason }, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} rejected`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -237,6 +240,7 @@ router.put('/hotels/:id/suspend', superAdminAuth, async (req: Request, res: Resp
       RefreshToken.updateMany({ hotelId: req.params.id, revokedAt: null }, { revokedAt: new Date() }),
       Device.updateMany({ hotelId: req.params.id }, { isActive: false, isOnline: false }),
     ]).catch(() => {});
+    logAuditRaw({ hotelId: req.params.id, action: 'hotel.suspended', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} suspended`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
