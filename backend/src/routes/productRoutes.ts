@@ -78,7 +78,9 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
       { new: true, runValidators: true }
     ).populate('category', 'name color');
     if (!product) return res.status(404).json({ message: 'Product not found' });
-    logAudit(req, 'product.updated', 'product', req.params.id, { name: (product as any).name });
+    const meta: Record<string, unknown> = { name: (product as any).name };
+    if (req.body.price !== undefined) meta.newPrice = (product as any).price;
+    logAudit(req, 'product.updated', 'product', req.params.id, meta);
     res.json(product);
   } catch (error) {
     sendError(res, 400, 'Invalid data', error);
