@@ -556,18 +556,34 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// PUT update order status
+// PUT update order — field whitelist prevents mass-assignment and MongoDB operator injection
+const ORDER_UPDATE_ALLOWED = new Set([
+  'status', 'paymentStatus', 'paymentMethod', 'notes', 'discount',
+  'tableNumber', 'isParcel', 'customerName', 'totalAmount', 'taxAmount',
+]);
+
 router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
+  // Reject MongoDB operator keys (e.g. $set, $unset, $where)
+  const hasOperator = Object.keys(req.body).some(k => k.startsWith('$'));
+  if (hasOperator) {
+    return res.status(400).json({ message: 'Invalid update fields' });
+  }
+
+  const update: Record<string, unknown> = {};
+  for (const key of Object.keys(req.body)) {
+    if (ORDER_UPDATE_ALLOWED.has(key)) update[key] = req.body[key];
+  }
+
   try {
     const order = await Order.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
-      req.body,
+      update,
       { new: true, runValidators: true }
     );
     if (!order) return res.status(404).json({ message: 'Order not found' });
     res.json(order);
   } catch (error) {
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
