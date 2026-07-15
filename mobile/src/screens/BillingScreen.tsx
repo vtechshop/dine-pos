@@ -131,7 +131,7 @@ const BillingScreen: React.FC = () => {
   useEffect(() => {
     if (!search.trim()) { handleCategorySelect(selectedCat); return; }
     setFiltered(products.filter(p => p.name.toLowerCase().includes(search.toLowerCase())));
-  }, [search]);
+  }, [search, products, handleCategorySelect, selectedCat]);
 
   useEffect(() => {
     if (IS_TABLET) setShowCart(!isPortrait);
