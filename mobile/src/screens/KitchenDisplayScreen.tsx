@@ -70,6 +70,10 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   // ── Socket: real-time new orders + status changes ───────────────────────────
   useEffect(() => {
     mountedRef.current = true;
+    // Per-effect cancellation flag — guards against fast unmount/remount races
+    // where mountedRef.current is reset to true by the new effect before the
+    // old async IIFE checks it, which would create a duplicate socket.
+    let cancelled = false;
     setupNotifications();
     loadOrders();
 
@@ -79,8 +83,8 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         getStoredHotelId(), getSocketUrl(), getKitchenToken(),
       ]);
       console.log(`[SOCKET][Kitchen] hotelId=${hotelId} | url=${url} | hasToken=${!!token}`);
-      if (!hotelId || !mountedRef.current) {
-        console.log('[SOCKET][Kitchen] ABORT — hotelId missing, socket will not connect');
+      if (cancelled || !hotelId) {
+        console.log('[SOCKET][Kitchen] ABORT — cancelled or hotelId missing');
         return;
       }
 
@@ -142,6 +146,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
     })();
 
     return () => {
+      cancelled = true;
       mountedRef.current = false;
       if (socketRef.current) {
         socketRef.current.off();
