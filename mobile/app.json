@@ -13,7 +13,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jegatheswar.dinepos"
+      "bundleIdentifier": "com.jegatheswar.dinepos",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "Dine POS uses Bluetooth to connect to receipt printers.",
+        "NSBluetoothPeripheralUsageDescription": "Dine POS uses Bluetooth to connect to receipt printers."
+      }
     },
     "android": {
       "adaptiveIcon": {
