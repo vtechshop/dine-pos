@@ -677,16 +677,21 @@ const superAdminFetch = async <T>(endpoint: string, options?: RequestInit): Prom
     headers['x-super-admin-id']   = superAdminCredentials.id;
     headers['x-super-admin-pass'] = superAdminCredentials.pass;
   }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
   try {
-    const response = await fetch(`${baseUrl}${endpoint}`, { headers, ...options });
+    const response = await fetch(`${baseUrl}${endpoint}`, { headers, ...options, signal: controller.signal });
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message || 'Request failed');
     }
     return response.json();
   } catch (error: any) {
+    if (error.name === 'AbortError') throw new Error('Request timed out. Please try again.');
     if (error.message === 'Network request failed') throw new Error('Server unreachable.');
     throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 };
 
