@@ -5,24 +5,16 @@ import Hotel from '../models/Hotel';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireActiveStaff } from '../middleware/staffAuth';
 import { sendError } from '../utils/sendError';
+import { getDeviceLimitForPlan } from '../utils/planLimits';
 
 const router = Router();
-
-// Device limits per subscription plan
-const DEVICE_LIMITS: Record<string, number> = {
-  starter:      2,
-  professional: 5,
-  enterprise:   -1, // unlimited
-  none:          1,
-  trial:         2,
-};
 
 async function getDeviceLimit(hotelId: string): Promise<number> {
   const hotel = await Hotel.findById(hotelId).select('subscriptionPlan status').lean();
   if (!hotel) return 1;
   const h = hotel as any;
   const plan: string = h.subscriptionPlan || (h.status === 'trial' ? 'trial' : 'none');
-  return DEVICE_LIMITS[plan] ?? 2;
+  return getDeviceLimitForPlan(plan);
 }
 
 // POST /api/devices/register — called on app launch after login

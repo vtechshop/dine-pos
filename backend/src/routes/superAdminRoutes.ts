@@ -17,22 +17,8 @@ import { redisHealthCheck } from '../config/redis';
 import { generateAdminId, generatePassword } from '../utils/credentialGenerator';
 import { bootstrapNewHotel } from '../services/bootstrapHotel';
 import { sendError } from '../utils/sendError';
+import { getPriceForPlan, getDeviceLimitForPlan } from '../utils/planLimits';
 
-// Subscription plan pricing (INR/month) — update when pricing changes
-const PLAN_PRICES: Record<string, number> = {
-  trial: 0,
-  starter: 999,
-  professional: 4999,
-  enterprise: 9999,
-};
-
-// Max devices allowed per hotel per plan
-const PLAN_DEVICE_LIMITS: Record<string, number> = {
-  trial: 3,
-  starter: 3,
-  professional: 8,
-  enterprise: 20,
-};
 
 const router = Router();
 
@@ -852,14 +838,14 @@ router.get('/dashboard/subscription-revenue', superAdminAuth, async (_req: Reque
 
     for (const row of planAgg as any[]) {
       const plan  = row._id || 'trial';
-      const price = PLAN_PRICES[plan] || 0;
+      const price = getPriceForPlan(plan);
       const contrib = price * row.count;
       mrr += contrib;
       breakdown.push({ plan, count: row.count, monthlyPrice: price, contribution: contrib });
     }
 
     const expectedRenewalRevenue = (renewingHotels as any[]).reduce((sum, h) => {
-      return sum + (PLAN_PRICES[h.subscriptionType] || 0);
+      return sum + getPriceForPlan(h.subscriptionType);
     }, 0);
 
     return res.json({
@@ -999,7 +985,7 @@ router.get('/dashboard/device-licensing', superAdminAuth, async (_req: Request, 
 
     const byPlan = (planAgg as any[]).map((row: any) => {
       const plan          = row._id || 'trial';
-      const allowedPerHotel = PLAN_DEVICE_LIMITS[plan] || 3;
+      const allowedPerHotel = getDeviceLimitForPlan(plan);
       return {
         plan,
         allowedPerHotel,
