@@ -129,7 +129,13 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         if (!mountedRef.current) return;
         const id = data.orderId || data._id || '';
         if (id && seenOrderIds.current.has(id)) return; // dedup
-        if (id) seenOrderIds.current.add(id);
+        if (id) {
+          if (seenOrderIds.current.size >= 500) {
+            // Evict the oldest entry to prevent unbounded growth
+            seenOrderIds.current.delete(seenOrderIds.current.values().next().value!);
+          }
+          seenOrderIds.current.add(id);
+        }
         incKitchenBadge();
         Vibration.vibrate([0, 300, 150, 300, 150, 500]);
         notifyNewKitchenOrder();
