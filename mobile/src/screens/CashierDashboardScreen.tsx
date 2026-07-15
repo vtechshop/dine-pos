@@ -215,7 +215,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
           'Payment Collected ✓',
           `₹${paid.grandTotal.toFixed(0)} via ${selectedMethod.toUpperCase()}`,
           [
-            { text: 'Print Receipt', onPress: () => printReceipt(paid as unknown as Order, settings) },
+            { text: 'Print Receipt', onPress: () => printReceipt(paid as unknown as Order, settings).catch((err: any) => Alert.alert('Print Failed', err?.message || 'Could not print receipt. Check your printer.')) },
             { text: 'Done', style: 'cancel' },
           ]
         );
@@ -334,7 +334,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         {settings && (
           <TouchableOpacity
             style={styles.reprintBtn}
-            onPress={() => printReceipt(item as unknown as Order, settings)}
+            onPress={() => printReceipt(item as unknown as Order, settings).catch((err: any) => Alert.alert('Print Failed', err?.message || 'Could not print receipt. Check your printer.'))}
             activeOpacity={0.85}
           >
             <MaterialIcons name="print" size={16} color={Colors.info} />
