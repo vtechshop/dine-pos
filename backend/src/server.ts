@@ -43,6 +43,7 @@ import waiterRoutes from './routes/waiterRoutes';
 import cashierRoutes from './routes/cashierRoutes';
 import auditRoutes from './routes/auditRoutes';
 import * as Sentry from '@sentry/node';
+import helmet from 'helmet';
 
 dotenv.config();
 
@@ -79,6 +80,12 @@ if (!process.env.NODE_ENV) {
 const app = express();
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
+
+// ── Security headers ──────────────────────────────────────────────────────────
+// CSP disabled: the /menu PWA loads product images from Cloudinary (dynamic external URLs)
+// and Google Fonts. Configure per-route CSP as a follow-up once all asset origins are known.
+// TODO: Enable contentSecurityPolicy with Cloudinary + fonts.googleapis.com allowlist.
+app.use(helmet({ contentSecurityPolicy: false }));
 
 // ── CORS — restrict to known origins ─────────────────────────────────────────
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
