@@ -9,7 +9,7 @@ import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
-import rateLimit from 'express-rate-limit';
+import { makeRateLimiter } from './utils/rateLimiter';
 import connectDB from './config/database';
 import { connectRedis, getRedisClient, closeRedis, redisHealthCheck } from './config/redis';
 import { logger } from './utils/logger';
@@ -147,12 +147,10 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // All limits are per IP. A restaurant's tablets share one public IP, so
 // per-IP limits effectively protect per-hotel without needing the auth middleware
 // to run before the limiter.
-const _rl = (max: number, windowMs: number) => rateLimit({
+const _rl = (max: number, windowMs: number) => makeRateLimiter({
   windowMs,
   max,
   skip: () => process.env.NODE_ENV === 'test',
-  standardHeaders: true,
-  legacyHeaders: false,
   handler: (_req, res) => res.status(429).json({ message: 'Too many requests. Please slow down.' }),
 });
 

@@ -1,17 +1,15 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
+import { makeRateLimiter } from '../utils/rateLimiter';
 import Hotel from '../models/Hotel';
 import { sendError } from '../utils/sendError';
 
 // 5 registration / resubmit attempts per hour per IP — prevents registration spam
-const registrationLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
+const registrationLimiter = makeRateLimiter({
+  windowMs: 60 * 60 * 1000,
   max: 5,
   skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Too many registration attempts. Please try again after an hour.' },
-  standardHeaders: true,
-  legacyHeaders: false,
 });
 
 const JWT_SECRET = process.env.JWT_SECRET!;

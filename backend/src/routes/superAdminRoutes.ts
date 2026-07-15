@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import rateLimit from 'express-rate-limit';
 import { timingSafeEqual } from 'crypto';
+import { makeRateLimiter } from '../utils/rateLimiter';
 import jwt from 'jsonwebtoken';
 import os from 'os';
 import mongoose from 'mongoose';
@@ -36,13 +36,11 @@ const PLAN_DEVICE_LIMITS: Record<string, number> = {
 
 const router = Router();
 
-const adminLoginLimiter = rateLimit({
+const adminLoginLimiter = makeRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 10,
   skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Too many login attempts. Please try again after 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false,
 });
 
 const safeEqual = (a: string, b: string): boolean => {

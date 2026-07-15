@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
-import rateLimit from 'express-rate-limit';
 import Product from '../models/Product';
+import { makeRateLimiter } from '../utils/rateLimiter';
 import Category from '../models/Category';
 import Settings from '../models/Settings';
 import Order from '../models/Order';
@@ -13,22 +13,18 @@ import { sendError } from '../utils/sendError';
 const router = Router();
 
 // Public API rate limits — unauthenticated endpoints, per-IP
-const publicReadLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
+const publicReadLimiter = makeRateLimiter({
+  windowMs: 60 * 1000,
   max: 60,
   skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Too many requests. Please slow down.' },
-  standardHeaders: true,
-  legacyHeaders: false,
 });
 
-const publicWriteLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
+const publicWriteLimiter = makeRateLimiter({
+  windowMs: 60 * 1000,
   max: 30,
   skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Too many requests. Please slow down.' },
-  standardHeaders: true,
-  legacyHeaders: false,
 });
 
 // ─── Helper: resolve hotelId from query param ─────────────────────────────────

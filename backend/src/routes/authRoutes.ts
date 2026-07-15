@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import rateLimit from 'express-rate-limit';
+import { makeRateLimiter } from '../utils/rateLimiter';
 import Hotel from '../models/Hotel';
 import RefreshToken from '../models/RefreshToken';
 import Settings from '../models/Settings';
@@ -11,29 +11,25 @@ import { logAuditRaw } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 
 // Token refresh — 20 requests / 15 min per IP (prevents refresh-token brute-force)
-const refreshLimiter = rateLimit({
+const refreshLimiter = makeRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 20,
   skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Too many token refresh requests. Please try again after 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false,
 });
 
 // Admin login — strict: 10 attempts / 15 min per IP (protects full account access)
-const loginLimiter = rateLimit({
+const loginLimiter = makeRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 10,
   skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Too many login attempts. Please try again after 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false,
 });
 
 // Staff PIN login — keyed by hotelId:employeeCode (not by IP) so tablets that
 // share a restaurant's public IP never burn each other's counter.
 // Kitchen route has no employeeCode so it keys by hotelId alone.
-const staffPinLimiter = rateLimit({
+const staffPinLimiter = makeRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 30,
   skip: () => process.env.NODE_ENV === 'test',
@@ -44,8 +40,6 @@ const staffPinLimiter = rateLimit({
     return req.ip || 'unknown';
   },
   message: { message: 'Too many PIN attempts. Please wait a moment and try again.' },
-  standardHeaders: true,
-  legacyHeaders: false,
 });
 
 const router = Router();
