@@ -77,6 +77,11 @@ if (!process.env.NODE_ENV) {
   console.warn('⚠ NODE_ENV is not set. Running in development mode.');
 }
 
+if (process.env.NODE_ENV === 'production' && !process.env.ALLOWED_ORIGINS?.trim()) {
+  console.error('❌ FATAL: ALLOWED_ORIGINS must be set in production. Add comma-separated list of allowed origins to your environment.');
+  process.exit(1);
+}
+
 const app = express();
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
