@@ -147,6 +147,12 @@ router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response
     const toDate = to ? new Date(to) : new Date();
     toDate.setHours(23, 59, 59, 999);
 
+    // Cap at 92 days (~one quarter) to avoid heap pressure on large datasets
+    const maxMs = 92 * 24 * 60 * 60 * 1000;
+    if (toDate.getTime() - fromDate.getTime() > maxMs) {
+      return res.status(400).json({ message: 'Date range cannot exceed 92 days for GSTR-1 export.' });
+    }
+
     const settings = await Settings.findOne({ hotelId: req.hotelId });
     const gstin    = (settings?.gstNumber || '').toUpperCase().trim();
     const stateCode = gstin.length >= 2 ? gstin.substring(0, 2) : '33';
