@@ -330,25 +330,30 @@ io.on('connection', (socket) => {
     console.log(`[SOCKET] Auto-joined | socketId=${socket.id} | room=hotel_${socket.data.hotelId}`);
   }
 
-  // join_hotel: admin app calls this on connect (backward-compat + unauthenticated fallback)
+  // join_hotel: admin app calls this on connect (backward-compat + customer fallback)
   socket.on('join_hotel', (hotelId: string) => {
     console.log(`[SOCKET] join_hotel received | socketId=${socket.id} | hotelId=${hotelId} | authenticated=${!!socket.data.authenticated}`);
     if (typeof hotelId !== 'string' || !hotelId) return;
+
     if (socket.data.authenticated) {
-      // Authenticated: silently ignore join_hotel if hotelId doesn't match JWT claim.
-      // The socket was already auto-joined to the correct room on connection.
+      // Authenticated: JWT must match the claimed hotelId.
+      // The socket was already auto-joined to the correct rooms on connection.
       if (socket.data.hotelId !== hotelId) {
         console.log(`[SOCKET] join_hotel REJECTED | socketId=${socket.id} | claimed=${hotelId} | jwt=${socket.data.hotelId}`);
         return;
       }
+      // Re-join in case of reconnect after server restart
+      socket.join(`hotel_${hotelId}`);
+      socket.join(`admin_${hotelId}`);
     } else {
-      // Unauthenticated: accept claimed hotelId (customer-side fallback)
+      // Unauthenticated (customer QR / browser): allow hotel_ room only.
+      // admin_ room is restricted to authenticated sockets.
       socket.data.hotelId = hotelId;
+      socket.join(`hotel_${hotelId}`);
     }
-    socket.join(`hotel_${hotelId}`);
-    socket.join(`admin_${hotelId}`);
+
     const roomSize = io.sockets.adapter.rooms.get(`hotel_${hotelId}`)?.size ?? 0;
-    console.log(`[SOCKET] Joined room | socketId=${socket.id} | room=hotel_${hotelId} | clientsInRoom=${roomSize}`);
+    console.log(`[SOCKET] Joined room | socketId=${socket.id} | room=hotel_${hotelId} | authenticated=${!!socket.data.authenticated} | clientsInRoom=${roomSize}`);
   });
 
   // join: customer table room (e.g. socket.emit('join', 'table_5'))
