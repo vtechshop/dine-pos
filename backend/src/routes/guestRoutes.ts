@@ -325,9 +325,10 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
 router.post('/merge', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { sessionId } = req.params;
-    const { sourceGuestId, targetGuestId } = req.body as {
+    const { sourceGuestId, targetGuestId, reason } = req.body as {
       sourceGuestId?: string;
       targetGuestId?: string;
+      reason?: string;
     };
 
     if (!sourceGuestId || !targetGuestId) {
@@ -399,6 +400,10 @@ router.post('/merge', requireCashierOrAdmin, async (req: AuthRequest, res: Respo
       ),
     ]);
 
+    const mergedAt = new Date();
+    const mergedBy =
+      req.cashierName || req.waiterName || req.hotelId || 'Admin';
+
     io.to(`hotel_${req.hotelId}`).emit('guests_merged', {
       sessionId: session._id,
       sourceGuestId: source._id,
@@ -407,9 +412,13 @@ router.post('/merge', requireCashierOrAdmin, async (req: AuthRequest, res: Respo
     });
 
     logAudit(req, 'guest.merged', 'guest', String(target._id), {
-      sessionId: String(session._id),
+      sessionId:     String(session._id),
       sourceGuestId: String(source._id),
-      amountMerged: source.totalAmount,
+      targetGuestId: String(target._id),
+      amountMerged:  source.totalAmount,
+      mergedBy,
+      mergedAt:      mergedAt.toISOString(),
+      reason:        reason?.trim().slice(0, 200) || null,
     });
 
     logger.info('Guests merged', {
