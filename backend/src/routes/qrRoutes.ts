@@ -615,17 +615,27 @@ router.get('/bill', qrReadLimiter, async (req: Request, res: Response): Promise<
       taxTotal += Number(o.taxTotal) || 0;
     }
 
+    // [Phase 6] Include loyalty balance so customer can see redeemable points
+    let loyaltyBalance: number | undefined;
+    if (guest.customerId) {
+      const profile = await CustomerProfile.findById(guest.customerId).select('loyaltyBalance').lean();
+      loyaltyBalance = (profile as any)?.loyaltyBalance;
+    }
+
     res.json({
-      tableNumber:   guest.tableNumber,
-      displayLabel:  guest.displayLabel,
-      guestStatus:   guest.status,
+      tableNumber:           guest.tableNumber,
+      displayLabel:          guest.displayLabel,
+      guestStatus:           guest.status,
       orders,
-      subtotal:      +subtotal.toFixed(2),
-      taxTotal:      +taxTotal.toFixed(2),
-      grandTotal:    +(subtotal + taxTotal).toFixed(2),
-      isBilled:      guest.status === 'billed',
-      paymentMethod: guest.paymentMethod,
-      fetchedAt:     new Date().toISOString(),
+      subtotal:              +subtotal.toFixed(2),
+      taxTotal:              +taxTotal.toFixed(2),
+      grandTotal:            +(subtotal + taxTotal).toFixed(2),
+      isBilled:              guest.status === 'billed',
+      paymentMethod:         guest.paymentMethod,
+      loyaltyBalance,
+      loyaltyPointsRedeemed: guest.loyaltyPointsRedeemed || undefined,
+      loyaltyDiscountAmount:  guest.loyaltyDiscountAmount || undefined,
+      fetchedAt:             new Date().toISOString(),
     });
   } catch (err: any) {
     sendError(res, 500, 'Failed to fetch bill', err);

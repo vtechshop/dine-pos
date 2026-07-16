@@ -19,6 +19,7 @@ import Order from '../models/Order';
 import Settings from '../models/Settings';
 import CustomerProfile from '../models/CustomerProfile';
 import guestRouter from './guestRoutes';
+import { getLoyaltyConfig, calculateEarnedPoints, earnPoints } from '../utils/loyaltyUtils';
 
 const router = Router();
 
@@ -378,7 +379,7 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
         }
       );
 
-      // [Phase 4] Loyalty preparation: fire-and-forget lifetimeSpend update
+      // [Phase 4] fire-and-forget lifetimeSpend; [Phase 6] fire-and-forget earn points
       for (const g of activeBeforeBill) {
         if (g.customerId) {
           CustomerProfile.findByIdAndUpdate(g.customerId, {
@@ -387,6 +388,31 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
           }).catch(() => {});
         }
       }
+
+      // [Phase 6] Earn loyalty points for every billed guest with a CustomerProfile
+      ;(async () => {
+        try {
+          const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+          if (loyaltyCfg.enabled && loyaltyCfg.pointsPerHundredRupees > 0) {
+            await Promise.allSettled(
+              activeBeforeBill
+                .filter((g) => g.customerId)
+                .map((g) => (async () => {
+                  const pts = calculateEarnedPoints(g.totalAmount, loyaltyCfg);
+                  if (pts > 0) {
+                    await earnPoints(
+                      g.customerId as mongoose.Types.ObjectId,
+                      req.hotelId!,
+                      pts,
+                      loyaltyCfg,
+                      { sessionId: String(session._id), guestId: String(g._id), createdBy: 'system:bulkBill' },
+                    );
+                  }
+                })())
+            );
+          }
+        } catch { /* non-critical */ }
+      })();
     } else {
       const activeGuests = guests.filter((g) => g.status === 'active');
       if (activeGuests.length > 0) {

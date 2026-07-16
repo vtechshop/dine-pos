@@ -15,6 +15,7 @@ import Guest from '../models/Guest';
 import Order from '../models/Order';
 import CustomerProfile from '../models/CustomerProfile';
 import { guestLabel } from '../utils/guestLabel';
+import { getLoyaltyConfig, calculateEarnedPoints, calculateMaxRedeemablePoints, earnPoints, redeemPoints as redeemLoyaltyPts } from '../utils/loyaltyUtils';
 
 // mergeParams: true — inherits :sessionId from the parent sessionRoutes mount
 const router = Router({ mergeParams: true });
@@ -168,12 +169,13 @@ router.get('/:guestId', async (req: AuthRequest, res: Response): Promise<void> =
 router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { sessionId, guestId } = req.params;
-    const { action, paymentMethod, splitDetails, paidAmount, displayLabel } = req.body as {
+    const { action, paymentMethod, splitDetails, paidAmount, displayLabel, redeemPoints } = req.body as {
       action: 'bill' | 'left' | 'rename';
       paymentMethod?: string;
       splitDetails?: { cash?: number; upi?: number; card?: number };
       paidAmount?: number;
       displayLabel?: string;
+      redeemPoints?: number;
     };
 
     if (!action || !['bill', 'left', 'rename'].includes(action)) {
@@ -232,18 +234,71 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         updateFields['splitDetails.card'] = splitDetails.card ?? 0;
       }
 
+      // [Phase 6] Loyalty redemption — atomically deduct points before saving bill
+      if (redeemPoints && typeof redeemPoints === 'number' && redeemPoints > 0 && guest.customerId) {
+        try {
+          const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+          if (loyaltyCfg.enabled && redeemPoints >= loyaltyCfg.minimumRedeemPoints) {
+            const profile = await CustomerProfile.findById(guest.customerId).select('loyaltyBalance').lean();
+            const balance = (profile as any)?.loyaltyBalance ?? 0;
+            const toRedeem = calculateMaxRedeemablePoints(
+              guest.totalAmount,
+              balance,
+              redeemPoints,
+              loyaltyCfg,
+            );
+            if (toRedeem > 0) {
+              const discount = await redeemLoyaltyPts(
+                guest.customerId as mongoose.Types.ObjectId,
+                req.hotelId!,
+                toRedeem,
+                loyaltyCfg,
+                { sessionId: String(session._id), guestId: String(guest._id), createdBy: `cashier:${req.hotelId}` },
+              );
+              updateFields.loyaltyPointsRedeemed = toRedeem;
+              updateFields.loyaltyDiscountAmount  = discount;
+            }
+          }
+        } catch (loyaltyErr: any) {
+          logger.warn('Loyalty redemption skipped during billing', {
+            hotelId: req.hotelId,
+            guestId: String(guest._id),
+            error: loyaltyErr?.message,
+          });
+        }
+      }
+
       const updated = await Guest.findByIdAndUpdate(
         guest._id,
         { $set: updateFields },
         { new: true }
       );
 
-      // [Phase 4] Loyalty preparation: update lifetime spend on billing (fire-and-forget)
+      // [Phase 4] fire-and-forget lifetimeSpend; [Phase 6] fire-and-forget earn points
       if (guest.customerId) {
         CustomerProfile.findByIdAndUpdate(guest.customerId, {
           $inc: { lifetimeSpend: guest.totalAmount },
           $set: { lastVisitAt: new Date() },
         }).catch(() => {});
+
+        // [Phase 6] Earn points after billing
+        ;(async () => {
+          try {
+            const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+            if (loyaltyCfg.enabled) {
+              const pts = calculateEarnedPoints(guest.totalAmount, loyaltyCfg);
+              if (pts > 0) {
+                await earnPoints(
+                  guest.customerId as mongoose.Types.ObjectId,
+                  req.hotelId!,
+                  pts,
+                  loyaltyCfg,
+                  { sessionId: String(session._id), guestId: String(guest._id), createdBy: 'system' },
+                );
+              }
+            }
+          } catch { /* non-critical */ }
+        })();
       }
 
       io.to(`hotel_${req.hotelId}`).emit('guest_billed', {

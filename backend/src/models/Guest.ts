@@ -26,6 +26,8 @@ export interface IGuest extends Document {
   splitDetails: IGuestSplitDetails;
   paidAmount: number | null;
   billedAt: Date | null;
+  loyaltyPointsRedeemed: number;   // points redeemed at billing (0 = none); Phase 6
+  loyaltyDiscountAmount: number;   // rupee value of redeemed points; Phase 6
   notes: string;
   createdAt: Date;
   updatedAt: Date;
@@ -54,9 +56,11 @@ const GuestSchema: Schema = new Schema(
       upi:  { type: Number, default: 0 },
       card: { type: Number, default: 0 },
     },
-    paidAmount: { type: Number, default: null },
-    billedAt:   { type: Date, default: null },
-    notes:      { type: String, default: '', maxlength: 500 },
+    paidAmount:             { type: Number, default: null },
+    billedAt:               { type: Date, default: null },
+    loyaltyPointsRedeemed:  { type: Number, default: 0, min: 0 },
+    loyaltyDiscountAmount:  { type: Number, default: 0, min: 0 },
+    notes:                  { type: String, default: '', maxlength: 500 },
   },
   { timestamps: true }
 );
