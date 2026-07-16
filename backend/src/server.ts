@@ -42,6 +42,7 @@ import notificationRoutes from './routes/notificationRoutes';
 import waiterRoutes from './routes/waiterRoutes';
 import cashierRoutes from './routes/cashierRoutes';
 import auditRoutes from './routes/auditRoutes';
+import sessionRoutes from './routes/sessionRoutes';
 import * as Sentry from '@sentry/node';
 import helmet from 'helmet';
 
@@ -164,6 +165,8 @@ app.use('/api/settings',    _rl(60, 60_000));
 app.use('/api/devices/heartbeat', _rl(12, 60_000));
 // Public remote-config — 30/min per IP; prevents crash-loop hammering
 app.use('/api/remote-config', _rl(30, 60_000));
+// Session + guest writes — 60/min per IP (generous for any table-service flow)
+app.use('/api/sessions', _rl(60, 60_000));
 
 console.log(
   process.env.NODE_ENV === 'test'
@@ -198,6 +201,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/waiters', waiterRoutes);
 app.use('/api/cashiers', cashierRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/sessions', sessionRoutes);
 
 // Enhanced health check — covers MongoDB, Redis, memory, uptime, version
 app.get('/api/health', async (_req, res) => {
