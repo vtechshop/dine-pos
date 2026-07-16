@@ -17,6 +17,7 @@ import Guest from '../models/Guest';
 import Table from '../models/Table';
 import Order from '../models/Order';
 import Settings from '../models/Settings';
+import CustomerProfile from '../models/CustomerProfile';
 import guestRouter from './guestRoutes';
 
 const router = Router();
@@ -29,6 +30,78 @@ router.use(requireFeature('tableSessions'));
 // Guests are sub-resources of sessions: /api/sessions/:sessionId/guests/…
 // mergeParams: true in guestRoutes lets guest handlers read req.params.sessionId.
 router.use('/:sessionId/guests', guestRouter);
+
+// ────────────────────────────────────────────────────────────────────────────────
+// GET /api/sessions
+// List sessions for this hotel. Default: open sessions only.
+// Returns each session enriched with active guest count + running total.
+// RBAC: cashier | admin
+// ────────────────────────────────────────────────────────────────────────────────
+router.get('/', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const statusParam = req.query.status as string | undefined;
+    const filter: Record<string, any> = { hotelId: req.hotelId };
+
+    if (!statusParam || statusParam === 'open' || statusParam === 'closed') {
+      filter.status = statusParam || 'open';
+    } else if (statusParam === 'all') {
+      // no status filter
+    } else {
+      res.status(400).json({ message: "status must be 'open', 'closed', or 'all'" });
+      return;
+    }
+
+    const sessions = await TableSession.find(filter)
+      .sort({ openedAt: -1 })
+      .limit(100)
+      .lean();
+
+    if (sessions.length === 0) {
+      res.json({ sessions: [], total: 0 });
+      return;
+    }
+
+    const sessionIds = sessions.map((s: any) => s._id);
+
+    // One aggregation for all guest summaries — avoids N+1 queries
+    const agg = await Guest.aggregate([
+      {
+        $match: {
+          sessionId: { $in: sessionIds },
+          hotelId: new mongoose.Types.ObjectId(req.hotelId),
+        },
+      },
+      {
+        $group: {
+          _id: '$sessionId',
+          guestCount:       { $sum: 1 },
+          activeGuestCount: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
+          runningTotal:     { $sum: { $cond: [{ $eq: ['$status', 'active'] }, '$totalAmount', 0] } },
+        },
+      },
+    ]);
+
+    const aggMap: Record<string, { guestCount: number; activeGuestCount: number; runningTotal: number }> = {};
+    for (const a of agg) {
+      aggMap[String(a._id)] = {
+        guestCount:       a.guestCount,
+        activeGuestCount: a.activeGuestCount,
+        runningTotal:     a.runningTotal,
+      };
+    }
+
+    const enriched = sessions.map((s: any) => ({
+      ...s,
+      guestCount:       aggMap[String(s._id)]?.guestCount       ?? 0,
+      activeGuestCount: aggMap[String(s._id)]?.activeGuestCount ?? 0,
+      runningTotal:     aggMap[String(s._id)]?.runningTotal     ?? 0,
+    }));
+
+    res.json({ sessions: enriched, total: enriched.length });
+  } catch (err: any) {
+    sendError(res, 500, 'Failed to fetch sessions', err);
+  }
+});
 
 // ────────────────────────────────────────────────────────────────────────────────
 // POST /api/sessions
@@ -288,6 +361,9 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
         return;
       }
 
+      // Capture active guests before bulk-bill so we can update loyalty after
+      const activeBeforeBill = guests.filter((g) => g.status === 'active');
+
       const now = new Date();
       await Guest.updateMany(
         { sessionId: session._id, status: 'active' },
@@ -301,6 +377,16 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
           },
         }
       );
+
+      // [Phase 4] Loyalty preparation: fire-and-forget lifetimeSpend update
+      for (const g of activeBeforeBill) {
+        if (g.customerId) {
+          CustomerProfile.findByIdAndUpdate(g.customerId, {
+            $inc: { lifetimeSpend: g.totalAmount },
+            $set: { lastVisitAt: now },
+          }).catch(() => {});
+        }
+      }
     } else {
       const activeGuests = guests.filter((g) => g.status === 'active');
       if (activeGuests.length > 0) {

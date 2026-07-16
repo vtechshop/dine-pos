@@ -4,7 +4,10 @@ import Order from '../models/Order';
 import Product from '../models/Product';
 import Ingredient from '../models/Ingredient';
 import DailyCounter from '../models/DailyCounter';
-import { authMiddleware, requireAdmin, requireKitchenOrAdmin, requireWaiterOrAdmin, requireCashierOrAdmin, requireWaiterOrCashierOrAdmin, AuthRequest } from '../middleware/auth';
+import TableSession from '../models/TableSession';
+import Guest from '../models/Guest';
+import CustomerProfile from '../models/CustomerProfile';
+import { authMiddleware, requireAdmin, requireKitchenOrAdmin, requireWaiterOrAdmin, requireCashierOrAdmin, requireWaiterOrCashierOrAdmin, resolveHotelStatus, AuthRequest } from '../middleware/auth';
 import { requireActiveStaff } from '../middleware/staffAuth';
 import { logAudit } from '../utils/audit';
 import { io } from '../server';
@@ -375,10 +378,95 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       if (existing) return res.status(200).json(existing);
     }
 
+    // ── Phase 4: Order Route Guard ────────────────────────────────────────────
+    // When sessionId + guestId are both provided, validate the ownership chain:
+    //   hotel → session open → guest active + belongs to this session.
+    // If either lookup returns null the order is rejected (guest stale/wrong hotel).
+    // Hotels without tableSessions simply have no sessions — validation returns null
+    // naturally, so an explicit feature-flag check is not needed here.
+    let linkedGuestId: mongoose.Types.ObjectId | null = null;
+
+    if (req.body.sessionId && req.body.guestId) {
+      const { sessionId, guestId } = req.body;
+
+      if (!mongoose.isValidObjectId(sessionId) || !mongoose.isValidObjectId(guestId)) {
+        return res.status(400).json({ message: 'Invalid sessionId or guestId' });
+      }
+
+      const [linkedSession, linkedGuest] = await Promise.all([
+        TableSession.findOne({ _id: sessionId, hotelId: req.hotelId, status: 'open' }),
+        Guest.findOne({ _id: guestId, sessionId, hotelId: req.hotelId, status: 'active' }),
+      ]);
+
+      if (!linkedSession) {
+        return res.status(409).json({ message: 'Session not found or not open' });
+      }
+      if (!linkedGuest) {
+        return res.status(409).json({ message: 'Guest not found, not active, or does not belong to this session' });
+      }
+
+      linkedGuestId = linkedGuest._id as mongoose.Types.ObjectId;
+
+      // CustomerProfile find/create when phone + name provided and guest has no profile yet
+      const { customerPhone, customerName } = req.body;
+      if (customerPhone && !linkedGuest.customerId) {
+        try {
+          const entry = await resolveHotelStatus(req.hotelId!);
+          if ((entry.features as any)?.customerIdentification === 'name_mobile') {
+            const cleanPhone = String(customerPhone).trim().slice(0, 20);
+            const cleanName  = String(customerName || '').trim().slice(0, 100);
+
+            let profile = await CustomerProfile.findOne({
+              hotelId: new mongoose.Types.ObjectId(req.hotelId),
+              phone:   cleanPhone,
+              status:  { $ne: 'merged' },
+            });
+
+            if (!profile && cleanName) {
+              const counterKey = `CUST-${req.hotelId}`;
+              const counter = await DailyCounter.findOneAndUpdate(
+                { key: counterKey },
+                { $inc: { seq: 1 }, $setOnInsert: { key: counterKey } },
+                { upsert: true, new: true }
+              );
+              const newCustomerId = `CUST-${req.hotelId!.slice(-6).toUpperCase()}-${String(counter!.seq).padStart(4, '0')}`;
+              profile = await CustomerProfile.create({
+                hotelId:     new mongoose.Types.ObjectId(req.hotelId),
+                customerId:  newCustomerId,
+                name:        cleanName,
+                phone:       cleanPhone,
+                lastVisitAt: new Date(),
+                visitCount:  1,
+              });
+              console.log(`[ORDER] CustomerProfile created | customerId=${newCustomerId} | hotelId=${req.hotelId}`);
+            } else if (profile) {
+              CustomerProfile.findByIdAndUpdate(profile._id, {
+                $set: { lastVisitAt: new Date(), ...(cleanName ? { name: cleanName } : {}) },
+                $inc: { visitCount: 1 },
+              }).catch(() => {});
+            }
+
+            if (profile) {
+              // Link profile to guest — non-blocking
+              Guest.findByIdAndUpdate(linkedGuest._id, { $set: { customerId: profile._id } }).catch(() => {});
+            }
+          }
+        } catch (profileErr) {
+          // CustomerProfile failure is non-fatal — order still proceeds
+          console.error('[ORDER] CustomerProfile lookup/create failed:', profileErr);
+        }
+      }
+    }
+
     const orderNumber = await generateOrderNumber(req.hotelId!);
     const order = new Order({ ...req.body, hotelId: req.hotelId, orderNumber });
     await order.save();
     console.log(`[ORDER] Saved | orderId=${order._id} | orderNumber=${order.orderNumber} | hotelId=${req.hotelId}`);
+
+    // ── Phase 4: Update guest running total ───────────────────────────────────
+    if (linkedGuestId) {
+      await Guest.findByIdAndUpdate(linkedGuestId, { $inc: { totalAmount: order.grandTotal } });
+    }
 
     // ── Stock deduction ──────────────────────────────────────────────────────
     const stockItems = order.items.filter(i => i.product);

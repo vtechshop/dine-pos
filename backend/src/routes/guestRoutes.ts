@@ -13,6 +13,7 @@ import { io } from '../server';
 import TableSession from '../models/TableSession';
 import Guest from '../models/Guest';
 import Order from '../models/Order';
+import CustomerProfile from '../models/CustomerProfile';
 import { guestLabel } from '../utils/guestLabel';
 
 // mergeParams: true — inherits :sessionId from the parent sessionRoutes mount
@@ -236,6 +237,14 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         { $set: updateFields },
         { new: true }
       );
+
+      // [Phase 4] Loyalty preparation: update lifetime spend on billing (fire-and-forget)
+      if (guest.customerId) {
+        CustomerProfile.findByIdAndUpdate(guest.customerId, {
+          $inc: { lifetimeSpend: guest.totalAmount },
+          $set: { lastVisitAt: new Date() },
+        }).catch(() => {});
+      }
 
       io.to(`hotel_${req.hotelId}`).emit('guest_billed', {
         sessionId: session._id,
