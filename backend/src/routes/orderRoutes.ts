@@ -7,6 +7,7 @@ import DailyCounter from '../models/DailyCounter';
 import TableSession from '../models/TableSession';
 import Guest from '../models/Guest';
 import CustomerProfile from '../models/CustomerProfile';
+import { findOrCreateOpenSession, findOrCreateDefaultGuest } from '../utils/sessionUtils';
 import { authMiddleware, requireAdmin, requireKitchenOrAdmin, requireWaiterOrAdmin, requireCashierOrAdmin, requireWaiterOrCashierOrAdmin, resolveHotelStatus, AuthRequest } from '../middleware/auth';
 import { requireActiveStaff } from '../middleware/staffAuth';
 import { logAudit } from '../utils/audit';
@@ -455,6 +456,53 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
           // CustomerProfile failure is non-fatal — order still proceeds
           console.error('[ORDER] CustomerProfile lookup/create failed:', profileErr);
         }
+      }
+    } else if (req.body.tableId && mongoose.isValidObjectId(req.body.tableId)) {
+      // ── Phase 5: Waiter auto-session ──────────────────────────────────────────
+      // When a staff member places an order with a tableId but no explicit sessionId/guestId,
+      // auto-create a session (if none is open) and link to a default "table" guest.
+      // Hotels with tableSessions=false skip this entirely (no feature lookup needed —
+      // they won't have any sessions, so findOne returns null and would create one;
+      // we guard with resolveHotelStatus to keep strict feature control).
+      try {
+        const entry = await resolveHotelStatus(req.hotelId!);
+        if ((entry.features as any)?.tableSessions) {
+          const openedBy = req.role === 'waiter' && req.waiterName
+            ? `Waiter: ${req.waiterName}`
+            : req.role === 'cashier' && req.cashierName
+            ? `Cashier: ${req.cashierName}`
+            : 'Admin';
+
+          const { session, created } = await findOrCreateOpenSession(
+            req.body.tableId,
+            req.hotelId!,
+            openedBy,
+          );
+
+          if (created) {
+            try {
+              io.to(`hotel_${req.hotelId}`).emit('session_opened', {
+                sessionId:   String(session._id),
+                tableId:     String(session.tableId),
+                tableNumber: session.tableNumber,
+                openedBy,
+                openedAt:    session.openedAt,
+              });
+            } catch { /* non-critical */ }
+          }
+
+          const defaultGuest = await findOrCreateDefaultGuest(session, req.hotelId!);
+          linkedGuestId = defaultGuest._id as mongoose.Types.ObjectId;
+        }
+      } catch (sessionErr: any) {
+        if (sessionErr.httpStatus === 404) {
+          return res.status(404).json({ message: sessionErr.message });
+        }
+        if (sessionErr.httpStatus === 409) {
+          return res.status(409).json({ message: sessionErr.message });
+        }
+        // Other session errors are non-fatal — order proceeds without session link
+        console.error('[ORDER] Auto-session error:', sessionErr);
       }
     }
 

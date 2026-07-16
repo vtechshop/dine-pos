@@ -27,7 +27,7 @@ export interface IOrder extends Document {
     card?: number;
   };
   status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
-  orderSource: 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr';
+  orderSource: 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr' | 'kiosk' | 'waiter' | 'admin';
   isParcel: boolean;
   customerName: string;
   customerPhone: string;
@@ -149,7 +149,7 @@ const OrderSchema: Schema = new Schema(
     },
     orderSource: {
       type: String,
-      enum: ['dine-in', 'takeaway', 'swiggy', 'zomato', 'qr'],
+      enum: ['dine-in', 'takeaway', 'swiggy', 'zomato', 'qr', 'kiosk', 'waiter', 'admin'],
       default: 'dine-in',
     },
     servedBy:    { type: String, default: '' },
