@@ -38,6 +38,13 @@ export interface IOrder extends Document {
   completedBy: string;
   completedAt: Date | null;
   cashierId: string;
+  // ── Table Session / Guest Billing (Architecture v1.1) ───────────────────
+  // null for takeaway, aggregator, and hotels with tableSessions=false
+  sessionId: mongoose.Types.ObjectId | null;
+  guestId: mongoose.Types.ObjectId | null;
+  // ── Loyalty (Architecture v1.1) ─────────────────────────────────────────
+  redeemedPoints: number;    // loyalty points redeemed against this order
+  loyaltyDiscount: number;   // INR value of the loyalty discount applied
   createdAt: Date;
   updatedAt: Date;
 }
@@ -150,6 +157,14 @@ const OrderSchema: Schema = new Schema(
     completedBy: { type: String, default: '' },
     completedAt: { type: Date, default: null },
     cashierId:   { type: String, default: '' },
+
+    // ── Table Session / Guest Billing (Architecture v1.1) ─────────────────
+    sessionId: { type: Schema.Types.ObjectId, ref: 'TableSession', default: null },
+    guestId:   { type: Schema.Types.ObjectId, ref: 'Guest',        default: null },
+
+    // ── Loyalty (Architecture v1.1) ───────────────────────────────────────
+    redeemedPoints:  { type: Number, default: 0, min: 0 },
+    loyaltyDiscount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );
@@ -164,5 +179,12 @@ OrderSchema.index({ createdAt: -1 });                                        // 
 // Sparse unique index: null values are excluded, non-null offlineIds must be globally unique.
 // This is the idempotency guard — a retry with the same offlineId is a no-op.
 OrderSchema.index({ offlineId: 1 }, { unique: true, sparse: true });
+// ── Table Session indexes (Architecture v1.1) ────────────────────────────
+// Find all orders in a session (used by guest bill aggregation and cashier merged bill)
+OrderSchema.index({ sessionId: 1 }, { sparse: true });
+// Find orders for a specific guest (used by guest bill view — hot path)
+OrderSchema.index({ guestId: 1 }, { sparse: true });
+// Combined: all orders for a session filtered by guest (most common guest bill query)
+OrderSchema.index({ sessionId: 1, guestId: 1 }, { sparse: true });
 
 export default mongoose.model<IOrder>('Order', OrderSchema);

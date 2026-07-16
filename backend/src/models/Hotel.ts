@@ -1,6 +1,9 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export type CustomerIdentificationMode = 'disabled' | 'name_only' | 'name_mobile';
+
 export interface IFeatureFlags {
+  // ── Existing flags (never change defaults) ───────────────────────────────
   payment: boolean;
   reservations: boolean;
   customerChat: boolean;
@@ -11,6 +14,23 @@ export interface IFeatureFlags {
   ingredients: boolean;
   waste: boolean;
   aggregator: boolean;
+
+  // ── Table Session & Guest Billing (Architecture v1.1) ────────────────────
+  tableSessions: boolean;
+
+  // ── Customer & Loyalty (Architecture v1.1) ───────────────────────────────
+  // Dependency graph enforced in super-admin UI:
+  //   tableSessions → customerIdentification → customerDatabase
+  //   customerDatabase + name_mobile → loyaltyProgram
+  customerIdentification: CustomerIdentificationMode;
+  customerDatabase: boolean;
+  loyaltyProgram: boolean;
+  birthdayOffers: boolean;
+  whatsappNotifications: boolean;
+  smsNotifications: boolean;
+  digitalReceipts: boolean;
+  customerOrderHistory: boolean;
+  marketingCampaigns: boolean;
 }
 
 export type BusinessType =
@@ -150,6 +170,7 @@ const HotelSchema: Schema = new Schema(
 
     // Feature flags
     features: {
+      // ── Existing (defaults unchanged) ──────────────────────────────────
       payment:        { type: Boolean, default: false },
       reservations:   { type: Boolean, default: true },
       customerChat:   { type: Boolean, default: true },
@@ -160,6 +181,24 @@ const HotelSchema: Schema = new Schema(
       ingredients:    { type: Boolean, default: false },
       waste:          { type: Boolean, default: false },
       aggregator:     { type: Boolean, default: false },
+
+      // ── Table Sessions (Architecture v1.1) — default false ─────────────
+      tableSessions:           { type: Boolean, default: false },
+
+      // ── Customer & Loyalty (Architecture v1.1) — all opt-in ────────────
+      customerIdentification:  {
+        type: String,
+        enum: ['disabled', 'name_only', 'name_mobile'],
+        default: 'disabled',
+      },
+      customerDatabase:        { type: Boolean, default: false },
+      loyaltyProgram:          { type: Boolean, default: false },
+      birthdayOffers:          { type: Boolean, default: false },
+      whatsappNotifications:   { type: Boolean, default: false },
+      smsNotifications:        { type: Boolean, default: false },
+      digitalReceipts:         { type: Boolean, default: false },
+      customerOrderHistory:    { type: Boolean, default: false },
+      marketingCampaigns:      { type: Boolean, default: false },
     },
 
     // Legacy premium fields (backwards compat)
