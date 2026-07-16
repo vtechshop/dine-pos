@@ -43,6 +43,7 @@ import waiterRoutes from './routes/waiterRoutes';
 import cashierRoutes from './routes/cashierRoutes';
 import auditRoutes from './routes/auditRoutes';
 import sessionRoutes from './routes/sessionRoutes';
+import qrRoutes from './routes/qrRoutes';
 import * as Sentry from '@sentry/node';
 import helmet from 'helmet';
 
@@ -186,6 +187,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/seed', seedRoutes);
+app.use('/api/public/qr', qrRoutes); // mount before /api/public so paths are matched first
 app.use('/api/public', menuRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/tables', tableRoutes);

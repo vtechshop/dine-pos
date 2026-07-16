@@ -55,7 +55,7 @@ router.get('/menu', publicReadLimiter, async (req: Request, res: Response) => {
     if (!hotelId) return res.status(400).json({ error: 'hotel param required' });
 
     // Return 404 for nonexistent hotels, 403 for suspended/inactive hotels
-    const hotelDoc = await Hotel.findOne({ _id: hotelId }, { status: 1 }).lean();
+    const hotelDoc = await Hotel.findOne({ _id: hotelId }, { status: 1, features: 1 }).lean();
     if (!hotelDoc) return res.status(404).json({ error: 'Hotel not found' });
     if (!['trial', 'active'].includes((hotelDoc as any).status)) {
       return res.status(403).json({ error: 'This hotel is not currently active' });
@@ -93,6 +93,7 @@ router.get('/menu', publicReadLimiter, async (req: Request, res: Response) => {
       (products[0] as any)?.hotelId?.toString() ||
       (settingsDoc as any)?.hotelId?.toString();
 
+    const hf = (hotelDoc as any).features ?? {};
     res.json({
       hotel: {
         id:       resolvedHotelId,
@@ -100,6 +101,12 @@ router.get('/menu', publicReadLimiter, async (req: Request, res: Response) => {
         address:  settings.address,
         phone:    settings.phone,
         currency: settings.currencySymbol,
+        // QR client reads these to decide which ordering flow to use (additive; existing clients ignore unknown fields)
+        features: {
+          tableSessions:          Boolean(hf.tableSessions),
+          customerIdentification: hf.customerIdentification ?? 'disabled',
+          qrOrdering:             hf.qrOrdering !== false,
+        },
       },
       categories,
       products,
