@@ -8,6 +8,7 @@ import TableSession from '../models/TableSession';
 import Guest from '../models/Guest';
 import CustomerProfile from '../models/CustomerProfile';
 import { findOrCreateOpenSession, findOrCreateDefaultGuest } from '../utils/sessionUtils';
+import { scheduleKOTPrint } from '../utils/printUtils';
 import { authMiddleware, requireAdmin, requireKitchenOrAdmin, requireWaiterOrAdmin, requireCashierOrAdmin, requireWaiterOrCashierOrAdmin, resolveHotelStatus, AuthRequest } from '../middleware/auth';
 import { requireActiveStaff } from '../middleware/staffAuth';
 import { logAudit } from '../utils/audit';
@@ -510,6 +511,20 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     const order = new Order({ ...req.body, hotelId: req.hotelId, orderNumber });
     await order.save();
     console.log(`[ORDER] Saved | orderId=${order._id} | orderNumber=${order.orderNumber} | hotelId=${req.hotelId}`);
+
+    // ── Phase 7: Fire-and-forget KOT print ───────────────────────────────────
+    scheduleKOTPrint(req.hotelId!, {
+      _id:         order._id,
+      orderNumber: order.orderNumber,
+      tableNumber: order.tableNumber,
+      customerName: order.customerName,
+      items:       order.items as { productName: string; quantity: number }[],
+      notes:       order.notes,
+      orderSource: order.orderSource,
+      createdAt:   order.createdAt,
+      sessionId:   order.sessionId,
+      guestId:     linkedGuestId ?? undefined,
+    }).catch(() => {});
 
     // ── Phase 4: Update guest running total ───────────────────────────────────
     if (linkedGuestId) {

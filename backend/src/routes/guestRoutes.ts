@@ -16,6 +16,7 @@ import Order from '../models/Order';
 import CustomerProfile from '../models/CustomerProfile';
 import { guestLabel } from '../utils/guestLabel';
 import { getLoyaltyConfig, calculateEarnedPoints, calculateMaxRedeemablePoints, earnPoints, redeemPoints as redeemLoyaltyPts } from '../utils/loyaltyUtils';
+import { scheduleReceiptPrint } from '../utils/printUtils';
 
 // mergeParams: true — inherits :sessionId from the parent sessionRoutes mount
 const router = Router({ mergeParams: true });
@@ -300,6 +301,17 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
           } catch { /* non-critical */ }
         })();
       }
+
+      // [Phase 7] Fire-and-forget receipt print
+      scheduleReceiptPrint(req.hotelId!, {
+        guestId:               String(guest._id),
+        sessionId:             String(session._id),
+        tableNumber:           guest.tableNumber,
+        guestLabel:            guest.displayLabel,
+        totalAmount:           guest.totalAmount,
+        paymentMethod,
+        loyaltyDiscountAmount: updateFields.loyaltyDiscountAmount,
+      }).catch(() => {});
 
       io.to(`hotel_${req.hotelId}`).emit('guest_billed', {
         sessionId: session._id,

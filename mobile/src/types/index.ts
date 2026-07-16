@@ -110,6 +110,11 @@ export interface Settings {
   footerText: string;
   kitchenPin: string;
   isSetupComplete: boolean;
+  // Phase 7 — dual printer engine
+  printerMode?: 'single' | 'dual';
+  kitchenPrinterAddress?: string;
+  cashierPrinterAddress?: string;
+  kotAutoPrint?: boolean;
   isPremium?: boolean;
   premiumPlan?: string;
   premiumExpiry?: string | null;

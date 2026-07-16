@@ -42,6 +42,7 @@ import { logger } from '../utils/logger';
 import { guestLabel } from '../utils/guestLabel';
 import { findOrCreateOpenSession } from '../utils/sessionUtils';
 import { makeRateLimiter } from '../utils/rateLimiter';
+import { scheduleKOTPrint } from '../utils/printUtils';
 import { io } from '../server';
 
 const router = Router();
@@ -523,6 +524,20 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       sessionId:      guest.sessionId,
       guestId:        guest._id,
     });
+
+    // ── Phase 7: Fire-and-forget KOT print ───────────────────────────────────
+    scheduleKOTPrint(String(hotelId), {
+      _id:         order._id,
+      orderNumber: order.orderNumber,
+      tableNumber: order.tableNumber,
+      customerName: order.customerName,
+      items:       order.items as { productName: string; quantity: number }[],
+      notes:       order.notes,
+      orderSource: order.orderSource,
+      createdAt:   order.createdAt,
+      sessionId:   guest.sessionId,
+      guestId:     guest._id,
+    }).catch(() => {});
 
     // ── Update guest: increment running total + clear idle timeout ────────────
     await Guest.findByIdAndUpdate(guest._id, {

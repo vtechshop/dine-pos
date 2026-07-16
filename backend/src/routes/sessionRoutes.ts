@@ -20,6 +20,7 @@ import Settings from '../models/Settings';
 import CustomerProfile from '../models/CustomerProfile';
 import guestRouter from './guestRoutes';
 import { getLoyaltyConfig, calculateEarnedPoints, earnPoints } from '../utils/loyaltyUtils';
+import { scheduleReceiptPrint } from '../utils/printUtils';
 
 const router = Router();
 
@@ -413,6 +414,17 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
           }
         } catch { /* non-critical */ }
       })();
+      // [Phase 7] Fire-and-forget receipt prints for each billed guest
+      for (const g of activeBeforeBill) {
+        scheduleReceiptPrint(req.hotelId!, {
+          guestId:      String(g._id),
+          sessionId:    String(session._id),
+          tableNumber:  g.tableNumber,
+          guestLabel:   g.displayLabel,
+          totalAmount:  g.totalAmount,
+          paymentMethod,
+        }).catch(() => {});
+      }
     } else {
       const activeGuests = guests.filter((g) => g.status === 'active');
       if (activeGuests.length > 0) {

@@ -32,6 +32,10 @@ const defaultSettings: Settings = {
   footerText: 'Thank you! Visit again!',
   isSetupComplete: false,
   kitchenPin: '',
+  printerMode: 'single',
+  kitchenPrinterAddress: '',
+  cashierPrinterAddress: '',
+  kotAutoPrint: false,
 };
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
