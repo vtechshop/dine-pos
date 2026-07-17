@@ -23,11 +23,12 @@ router.get('/devices', requireCashierOrAdmin, async (req: AuthRequest, res: Resp
   try {
     const devices = await PrinterDevice.find({
       hotelId: new mongoose.Types.ObjectId(req.hotelId),
-    }).select('deviceId printerRole socketId connectedAt lastSeen').lean();
+    }).select('deviceId printerName printerRole socketId connectedAt lastSeen lastHeartbeat').lean();
 
+    const sixtySecsAgo = new Date(Date.now() - 60_000);
     const withStatus = (devices as any[]).map(d => ({
       ...d,
-      online: !!d.socketId,
+      online: !!d.socketId && !!d.lastHeartbeat && new Date(d.lastHeartbeat) > sixtySecsAgo,
     }));
 
     res.json({ devices: withStatus });

@@ -48,15 +48,21 @@ async function reportPrintStatus(
 // always has the current socketId for targeted dispatch.
 // The hook manages its own socket connection; it does NOT share the screen socket.
 
-export function usePrinterSocket(printerRole: 'kitchen' | 'cashier'): void {
-  const { settings } = useSettings();
-  const settingsRef  = useRef(settings);
-  const roleRef      = useRef(printerRole);
-  const socketRef    = useRef<Socket | null>(null);
+export function usePrinterSocket(
+  printerRole: 'kitchen' | 'cashier',
+  printerName?: string,
+): void {
+  const { settings }   = useSettings();
+  const settingsRef    = useRef(settings);
+  const roleRef        = useRef(printerRole);
+  const nameRef        = useRef(printerName);
+  const socketRef      = useRef<Socket | null>(null);
+  const heartbeatRef   = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Keep refs current so event handlers always see latest values
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   useEffect(() => { roleRef.current = printerRole; }, [printerRole]);
+  useEffect(() => { nameRef.current = printerName; }, [printerName]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,11 +87,11 @@ export function usePrinterSocket(printerRole: 'kitchen' | 'cashier'): void {
 
       socket.on('connect', () => {
         socket.emit('join_hotel', hotelId);
-        // Register this device for its printer role on every connect/reconnect
-        // so the backend always has the current socketId
+        // Register (or re-register on reconnect) so backend has current socketId + heartbeat
         socket.emit('register_printer', {
           deviceId,
           printerRole: roleRef.current,
+          printerName: nameRef.current,
         });
       });
 
@@ -96,12 +102,20 @@ export function usePrinterSocket(printerRole: 'kitchen' | 'cashier'): void {
           reportPrintStatus,
         );
       });
+
+      // Heartbeat every 30 s — server marks device offline if > 60 s stale
+      heartbeatRef.current = setInterval(() => {
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('printer_heartbeat');
+        }
+      }, 30_000);
     })();
 
     return () => {
       cancelled = true;
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
-  }, []); // socket lifecycle is mount/unmount only; role changes update via roleRef
+  }, []); // socket + heartbeat lifecycle tied to mount/unmount only
 }

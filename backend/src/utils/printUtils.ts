@@ -59,10 +59,13 @@ async function dispatchPrintJob(
   const device = await PrinterDevice.findOne({
     hotelId:     new mongoose.Types.ObjectId(hotelId),
     printerRole: printerTarget,
-  }).select('socketId').lean();
+  }).select('socketId lastHeartbeat').lean();
 
-  const socketId  = (device as any)?.socketId as string | null | undefined;
-  const shouldEmit = autoEmit && !!socketId;
+  const socketId      = (device as any)?.socketId as string | null | undefined;
+  const lastHeartbeat = (device as any)?.lastHeartbeat as Date | null | undefined;
+  const sixtySecsAgo  = new Date(Date.now() - 60_000);
+  const isOnline      = !!socketId && !!lastHeartbeat && new Date(lastHeartbeat) > sixtySecsAgo;
+  const shouldEmit    = autoEmit && isOnline;
 
   const job = await PrintJob.create({
     hotelId:      new mongoose.Types.ObjectId(hotelId),
@@ -105,7 +108,11 @@ async function dispatchPrintJob(
       socketId,
     });
   } else {
-    const reason = !autoEmit ? 'kotAutoPrint=false' : 'no registered printer device online';
+    const reason = !autoEmit
+      ? 'kotAutoPrint=false'
+      : !socketId
+      ? 'no printer device registered'
+      : 'printer heartbeat stale (>60 s)';
     logger.info(`Print job queued as pending (${reason})`, {
       hotelId,
       jobId:          String(job._id),

@@ -441,7 +441,8 @@ io.on('connection', (socket) => {
 
   // register_printer: printer device registers itself after login.
   // Upserts the PrinterDevice record so dispatches go only to this socket.
-  socket.on('register_printer', async (data: { deviceId?: string; printerRole?: string }) => {
+  // Registration counts as the first heartbeat — lastHeartbeat is set here.
+  socket.on('register_printer', async (data: { deviceId?: string; printerRole?: string; printerName?: string }) => {
     try {
       const hotelId = socket.data.hotelId;
       if (!hotelId || !socket.data.authenticated) return;
@@ -452,23 +453,38 @@ io.on('connection', (socket) => {
         { hotelId: new mongoose.Types.ObjectId(hotelId), printerRole: data.printerRole },
         {
           $set: {
-            deviceId:    String(data.deviceId).slice(0, 100),
-            socketId:    socket.id,
-            connectedAt: now,
-            lastSeen:    now,
+            deviceId:      String(data.deviceId).slice(0, 100),
+            printerName:   data.printerName ? String(data.printerName).slice(0, 100) : null,
+            socketId:      socket.id,
+            connectedAt:   now,
+            lastSeen:      now,
+            lastHeartbeat: now,
           },
         },
         { upsert: true, new: true, setDefaultsOnInsert: true },
       );
       logger.info('Printer registered', {
         hotelId,
-        printerRole: data.printerRole,
-        socketId:    socket.id,
-        deviceId:    data.deviceId,
+        printerRole:  data.printerRole,
+        printerName:  data.printerName,
+        socketId:     socket.id,
+        deviceId:     data.deviceId,
       });
     } catch (err) {
       logger.error('register_printer error', { err: String(err) });
     }
+  });
+
+  // printer_heartbeat: mobile sends every 30 s to confirm the device is alive.
+  // Dispatch checks lastHeartbeat age; jobs stay pending if > 60 s stale.
+  socket.on('printer_heartbeat', async () => {
+    try {
+      const now = new Date();
+      await PrinterDevice.findOneAndUpdate(
+        { socketId: socket.id },
+        { $set: { lastHeartbeat: now, lastSeen: now } },
+      );
+    } catch { /* non-critical */ }
   });
 
   socket.on('disconnect', async (reason) => {
