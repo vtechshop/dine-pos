@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Dine POS Design Tokens ────────────────────────────────────────────────── */
+:root {
+  --dp-brand:        #E8380D;
+  --dp-brand-light:  #FF5E36;
+  --dp-brand-dark:   #C93008;
+  --dp-amber:        #FFA500;
+
+  --dp-n0:   #FFFFFF;
+  --dp-n50:  #FFF6EE;
+  --dp-n100: #F5EDE4;
+  --dp-n200: #EBD8C8;
+  --dp-n300: #D4B5A0;
+  --dp-n400: #B89278;
+  --dp-n500: #9A6E55;
+  --dp-n600: #7A4F3A;
+  --dp-n700: #5C3322;
+  --dp-n800: #3C1C0E;
+  --dp-n900: #1C0800;
+
+  --dp-success: #22C55E;
+  --dp-danger:  #C62828;
+  --dp-warning: #E65100;
+  --dp-info:    #3B82F6;
+
+  --dp-bg:       #FFF6EE;
+  --dp-surface:  #FFFFFF;
+  --dp-border:   #EBD8C8;
+  --dp-text:     #1C0800;
+  --dp-text-2:   #7A4F3A;
+  --dp-text-3:   #B89278;
+
+  --dp-radius-sm: 6px;
+  --dp-radius-md: 10px;
+  --dp-radius-lg: 14px;
+  --dp-radius-xl: 20px;
+}
+
+/* ── Base resets ─────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  background: #ffffff;
+  color: var(--dp-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Smooth scroll offset for sticky header ──────────────────────────────────── */
+[id] { scroll-margin-top: 80px; }
