@@ -89,6 +89,79 @@ export interface DailyReport {
   sourceBreakdown: Record<string, number>;
 }
 
+// ── Billing ───────────────────────────────────────────────────────────────────
+
+export type PaymentMethod = 'cash' | 'card' | 'upi' | 'split' | 'complimentary';
+
+export interface Guest {
+  _id: string;
+  sessionId: string;
+  hotelId: string;
+  tableNumber: string;
+  guestNumber: number;
+  displayLabel: string;
+  status: 'active' | 'billed' | 'left' | 'cancelled';
+  totalAmount: number;
+  paymentMethod?: string | null;
+  billedAt?: string | null;
+  paidAmount?: number | null;
+  splitDetails?: { cash: number; upi: number; card: number };
+  loyaltyPointsRedeemed?: number;
+  loyaltyDiscountAmount?: number;
+  customerId?: string | null;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface OrderItem {
+  productName: string;
+  quantity: number;
+  price: number;
+  total: number;
+}
+
+export interface BillingOrder {
+  _id: string;
+  orderNumber: string;
+  tableNumber: string;
+  guestId: string;
+  sessionId: string;
+  items: OrderItem[];
+  subtotal: number;
+  taxTotal: number;
+  grandTotal: number;
+  orderSource: string;
+  createdAt: string;
+}
+
+export interface GuestBill {
+  guest: Guest;
+  orders: BillingOrder[];
+}
+
+export interface SessionBill {
+  session: SessionSummary & { tableNumber: string };
+  guests: GuestBill[];
+  grandTotal: number;
+}
+
+// ── Print Jobs ────────────────────────────────────────────────────────────────
+
+export interface PrintJob {
+  _id: string;
+  jobType: 'kot' | 'receipt';
+  status: 'pending' | 'sent' | 'success' | 'failed';
+  printerTarget: 'kitchen' | 'cashier';
+  guestId?: string | null;
+  sessionId?: string | null;
+  orderId?: string | null;
+  errorMessage?: string | null;
+  createdAt: string;
+  sentAt?: string | null;
+  printedAt?: string | null;
+  attemptCount: number;
+}
+
 // ── Printer ───────────────────────────────────────────────────────────────────
 
 export interface PrinterDeviceStatus {

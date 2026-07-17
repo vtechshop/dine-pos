@@ -4,6 +4,7 @@ import type { Table, SessionSummary, TableGridItem } from '../types';
 import { fetchTables, fetchOpenSessions } from '../api/tables';
 import { TableCard } from '../components/ui/TableCard';
 import { Spinner } from '../components/ui/Spinner';
+import { BillingDrawer } from '../components/billing/BillingDrawer';
 import { useSettings } from '../context/SettingsContext';
 import { useSocket } from '../context/SocketContext';
 import { useShortcut } from '../hooks/useShortcut';
@@ -40,6 +41,7 @@ export function DashboardPage() {
   const [error,    setError]    = useState<string | null>(null);
   const [filter,   setFilter]   = useState<Filter>('all');
   const [search,   setSearch]   = useState('');
+  const [billingSessionId, setBillingSessionId] = useState<string | null>(null);
 
   // Badge state — updated by socket without touching table/session arrays
   const [newOrderTables, dispatchBadge] = useReducer(badgeReducer, new Set<string>());
@@ -105,7 +107,11 @@ export function DashboardPage() {
   useShortcut('Escape', () => {
     setSearch('');
     (document.getElementById('table-search') as HTMLInputElement | null)?.blur();
-  });
+  }, !billingSessionId);
+
+  const handleTableSelect = useCallback((sessionId: string) => {
+    setBillingSessionId(sessionId);
+  }, []);
 
   // ── Build joined table grid items ───────────────────────────────────────────
 
@@ -232,11 +238,22 @@ export function DashboardPage() {
                 table={table}
                 hasNewOrder={newOrderTables.has(table.name || `T${table.number}`)}
                 currencySymbol={currencySymbol}
+                onSelect={table.status === 'occupied' ? handleTableSelect : undefined}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Billing drawer — rendered when an occupied table is clicked */}
+      {billingSessionId && (
+        <BillingDrawer
+          sessionId={billingSessionId}
+          openSessions={sessions}
+          currencySymbol={currencySymbol}
+          onClose={() => { setBillingSessionId(null); void load(); }}
+        />
+      )}
     </div>
   );
 }

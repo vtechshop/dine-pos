@@ -8,6 +8,7 @@ interface TableCardProps {
   table:        TableGridItem;
   hasNewOrder:  boolean;
   currencySymbol: string;
+  onSelect?:    (sessionId: string) => void;
 }
 
 function elapsedLabel(openedAt: string): string {
@@ -35,13 +36,20 @@ export const TableCard = memo(function TableCard({
   table,
   hasNewOrder,
   currencySymbol,
+  onSelect,
 }: TableCardProps) {
   const { session, status } = table;
   const displayName = table.name || `T${table.number}`;
+  const clickable = !!onSelect && !!table.currentSessionId;
+
+  function handleClick() {
+    if (clickable && table.currentSessionId) onSelect!(table.currentSessionId);
+  }
 
   return (
     <div
-      className={`relative flex flex-col rounded-xl border p-3.5 transition-shadow hover:shadow-md ${borderColor(status, hasNewOrder)} ${bgColor(status)}`}
+      onClick={clickable ? handleClick : undefined}
+      className={`relative flex flex-col rounded-xl border p-3.5 transition-shadow hover:shadow-md ${borderColor(status, hasNewOrder)} ${bgColor(status)} ${clickable ? 'cursor-pointer active:scale-[0.98]' : ''}`}
     >
       {/* New order badge */}
       {hasNewOrder && (
