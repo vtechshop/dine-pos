@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { AuthProvider } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { SocketProvider } from './context/SocketContext';
@@ -25,6 +26,7 @@ function ComingSoon({ page }: { page: string }) {
 
 export function App() {
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <AuthProvider>
         <SettingsProvider>
@@ -78,5 +80,6 @@ export function App() {
         </SettingsProvider>
       </AuthProvider>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }

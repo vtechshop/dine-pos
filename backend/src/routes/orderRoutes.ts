@@ -649,6 +649,14 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       }));
       if (bulkOps.length > 0) await Product.bulkWrite(bulkOps as any);
       await applyIngredientStockChange(existing.items, req.hotelId!, 1);
+
+      // F-02: reverse the guest running total that was added when the order was placed.
+      // Uses an aggregation-pipeline update to floor at 0 (handles edge-case data drift).
+      if (existing.guestId) {
+        await Guest.findByIdAndUpdate(existing.guestId, [
+          { $set: { totalAmount: { $max: [0, { $subtract: ['$totalAmount', existing.grandTotal] }] } } },
+        ]);
+      }
     }
 
     existing.status = status;

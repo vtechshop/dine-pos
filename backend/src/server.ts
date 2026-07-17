@@ -16,6 +16,7 @@ import { connectRedis, getRedisClient, closeRedis, redisHealthCheck } from './co
 import { logger } from './utils/logger';
 import ChatMessage from './models/ChatMessage';
 import PrinterDevice from './models/PrinterDevice';
+import PrintJob from './models/PrintJob';
 
 // Route imports
 import categoryRoutes from './routes/categoryRoutes';
@@ -471,6 +472,39 @@ io.on('connection', (socket) => {
         socketId:     socket.id,
         deviceId:     data.deviceId,
       });
+
+      // F-06: flush any pending print jobs that were created while this printer
+      // was offline. Only jobs from the last 24 hours; oldest first so KOTs print
+      // in the order they were originally queued.
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const pendingJobs = await PrintJob.find({
+        hotelId:       new mongoose.Types.ObjectId(hotelId),
+        printerTarget: data.printerRole,
+        status:        'pending',
+        createdAt:     { $gte: since },
+      }).sort({ createdAt: 1 }).lean();
+
+      if (pendingJobs.length > 0) {
+        for (const job of pendingJobs) {
+          socket.emit('print_job', {
+            jobId:          String(job._id),
+            jobType:        job.jobType,
+            printerTarget:  job.printerTarget,
+            printerAddress: job.printerAddress,
+            printerMode:    job.printerMode,
+            payload:        job.payload,
+          });
+        }
+        await PrintJob.updateMany(
+          { _id: { $in: pendingJobs.map(j => j._id) } },
+          { $set: { status: 'sent', sentAt: new Date() }, $inc: { attemptCount: 1 } },
+        );
+        logger.info('Flushed pending print jobs on printer reconnect', {
+          hotelId,
+          printerRole: data.printerRole,
+          count:       pendingJobs.length,
+        });
+      }
     } catch (err) {
       logger.error('register_printer error', { err: String(err) });
     }

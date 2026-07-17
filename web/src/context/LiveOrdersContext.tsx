@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useReducer } from 'react';
 import type { ReactNode } from 'react';
 import type { LiveOrder, LiveOrderItem } from '../types';
 import { useSocket } from './SocketContext';
+import { apiFetch } from '../api/client';
 
 interface LiveOrdersContextType {
   orders: LiveOrder[];
@@ -14,7 +15,8 @@ const LiveOrdersContext = createContext<LiveOrdersContextType | null>(null);
 type Action =
   | { type: 'ADD'; order: LiveOrder }
   | { type: 'MARK_OLD'; id: string }
-  | { type: 'MARK_READ' };
+  | { type: 'MARK_READ' }
+  | { type: 'SEED'; orders: LiveOrder[] };
 
 interface State {
   orders: LiveOrder[];
@@ -37,6 +39,17 @@ function reducer(state: State, action: Action): State {
       };
     case 'MARK_READ':
       return { ...state, unreadCount: 0 };
+    case 'SEED': {
+      const existingIds = new Set(state.orders.map(o => o.id));
+      const fresh = action.orders
+        .filter(o => !existingIds.has(o.id))
+        .map(o => ({ ...o, isNew: false }));
+      if (fresh.length === 0) return state;
+      return {
+        ...state,
+        orders: [...state.orders, ...fresh].slice(0, 50),
+      };
+    }
   }
 }
 
@@ -76,7 +89,7 @@ function parseOrderEvent(data: unknown): LiveOrder | null {
 }
 
 export function LiveOrdersProvider({ children }: { children: ReactNode }) {
-  const { socket } = useSocket();
+  const { socket, reconnectCount } = useSocket();
   const [state, dispatch] = useReducer(reducer, { orders: [], unreadCount: 0 });
 
   useEffect(() => {
@@ -96,6 +109,20 @@ export function LiveOrdersProvider({ children }: { children: ReactNode }) {
     socket.on('new_order', handler);
     return () => { socket.off('new_order', handler); };
   }, [socket]);
+
+  // F-04: on socket reconnect, back-fill orders that arrived during the gap.
+  useEffect(() => {
+    if (reconnectCount === 0) return;
+    const today = new Date().toISOString().split('T')[0];
+    apiFetch<{ orders: unknown[] }>(`/orders?date=${today}&limit=50`)
+      .then(res => {
+        const seeded = (res.orders ?? [])
+          .map(parseOrderEvent)
+          .filter((o): o is LiveOrder => o !== null);
+        if (seeded.length > 0) dispatch({ type: 'SEED', orders: seeded });
+      })
+      .catch(() => {}); // non-critical — socket will deliver subsequent events
+  }, [reconnectCount]);
 
   const markRead = () => dispatch({ type: 'MARK_READ' });
 
