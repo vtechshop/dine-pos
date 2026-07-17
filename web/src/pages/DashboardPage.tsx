@@ -159,11 +159,11 @@ export function DashboardPage() {
   return (
     <div className="flex h-full flex-col">
       {/* Page header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-gray-900 px-5 py-3">
+      <div className="flex shrink-0 items-center justify-between border-b border-[#E8D5C0] bg-white px-5 py-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-base font-semibold text-white">Table Grid</h1>
-          <div className="flex items-center gap-1 text-xs text-white/40">
-            <span className="text-green-400 font-medium">{occupiedCount} occupied</span>
+          <h1 className="text-base font-semibold text-[#1C0800]">Table Grid</h1>
+          <div className="flex items-center gap-1 text-xs text-[#1C0800]/40">
+            <span className="text-green-600 font-medium">{occupiedCount} occupied</span>
             <span>·</span>
             <span>{availableCount} available</span>
           </div>
@@ -172,14 +172,14 @@ export function DashboardPage() {
         <div className="flex items-center gap-2">
           {/* Search — F1 focuses this */}
           <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/30" />
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#1C0800]/30" />
             <input
               id="table-search"
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search table… (F1)"
-              className="h-8 w-48 rounded-lg border border-white/10 bg-white/5 pl-8 pr-3 text-xs text-white placeholder-white/25 outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
+              className="h-8 w-48 rounded-lg border border-[#E8D5C0] bg-[#FFF6EE] pl-8 pr-3 text-xs text-[#1C0800] placeholder-[#1C0800]/30 outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
             />
           </div>
 
@@ -191,7 +191,7 @@ export function DashboardPage() {
               className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
                 filter === f
                   ? 'bg-[#E8380D] text-white'
-                  : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'
+                  : 'bg-[#1C0800]/5 text-[#1C0800]/50 hover:bg-[#1C0800]/10 hover:text-[#1C0800]'
               }`}
             >
               {f}
@@ -201,7 +201,7 @@ export function DashboardPage() {
           <button
             onClick={() => void load()}
             disabled={loading}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-white/40 transition-colors hover:bg-white/5 hover:text-white/70 disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-[#1C0800]/40 transition-colors hover:bg-[#1C0800]/5 hover:text-[#1C0800]/70 disabled:opacity-40"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             Refresh
@@ -222,7 +222,7 @@ export function DashboardPage() {
             <Spinner size="lg" />
           </div>
         ) : visibleItems.length === 0 ? (
-          <div className="flex h-48 flex-col items-center justify-center text-center text-white/30">
+          <div className="flex h-48 flex-col items-center justify-center text-center text-[#1C0800]/30">
             <p className="text-sm">No tables found</p>
             {search && (
               <button onClick={() => setSearch('')} className="mt-2 text-xs text-[#E8380D] hover:underline">
