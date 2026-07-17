@@ -9,9 +9,32 @@ import { sendError } from '../utils/sendError';
 import { logger } from '../utils/logger';
 import { io } from '../server';
 import PrintJob from '../models/PrintJob';
+import PrinterDevice from '../models/PrinterDevice';
 
 const router = Router();
 router.use(authMiddleware);
+
+// ────────────────────────────────────────────────────────────────────────────────
+// GET /api/print-jobs/devices
+// List registered printer devices for this hotel with online/offline status.
+// RBAC: cashier | admin
+// ────────────────────────────────────────────────────────────────────────────────
+router.get('/devices', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const devices = await PrinterDevice.find({
+      hotelId: new mongoose.Types.ObjectId(req.hotelId),
+    }).select('deviceId printerRole socketId connectedAt lastSeen').lean();
+
+    const withStatus = (devices as any[]).map(d => ({
+      ...d,
+      online: !!d.socketId,
+    }));
+
+    res.json({ devices: withStatus });
+  } catch (err) {
+    sendError(res, 500, 'Failed to fetch printer devices', err);
+  }
+});
 
 // ────────────────────────────────────────────────────────────────────────────────
 // GET /api/print-jobs
@@ -124,12 +147,24 @@ router.post('/:jobId/reprint', requireCashierOrAdmin, async (req: AuthRequest, r
       return;
     }
 
+    // Look up the registered device for this job's role
+    const device = await PrinterDevice.findOne({
+      hotelId:     new mongoose.Types.ObjectId(req.hotelId),
+      printerRole: job.printerTarget,
+    }).select('socketId').lean();
+
+    const socketId = (device as any)?.socketId as string | null | undefined;
+    if (!socketId) {
+      res.status(503).json({ message: `No ${job.printerTarget} printer device online — connect the device first` });
+      return;
+    }
+
     await PrintJob.findByIdAndUpdate(jobId, {
       $set: { status: 'sent', sentAt: new Date(), errorMessage: null },
       $inc: { attemptCount: 1 },
     });
 
-    io.to(`hotel_${req.hotelId}`).emit('print_job', {
+    io.to(socketId).emit('print_job', {
       jobId:          String(job._id),
       jobType:        job.jobType,
       printerTarget:  job.printerTarget,

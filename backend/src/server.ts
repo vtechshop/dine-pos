@@ -14,6 +14,7 @@ import connectDB from './config/database';
 import { connectRedis, getRedisClient, closeRedis, redisHealthCheck } from './config/redis';
 import { logger } from './utils/logger';
 import ChatMessage from './models/ChatMessage';
+import PrinterDevice from './models/PrinterDevice';
 
 // Route imports
 import categoryRoutes from './routes/categoryRoutes';
@@ -438,8 +439,47 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', (reason) => {
+  // register_printer: printer device registers itself after login.
+  // Upserts the PrinterDevice record so dispatches go only to this socket.
+  socket.on('register_printer', async (data: { deviceId?: string; printerRole?: string }) => {
+    try {
+      const hotelId = socket.data.hotelId;
+      if (!hotelId || !socket.data.authenticated) return;
+      if (!data?.deviceId || !['kitchen', 'cashier'].includes(data.printerRole || '')) return;
+
+      const now = new Date();
+      await PrinterDevice.findOneAndUpdate(
+        { hotelId: new mongoose.Types.ObjectId(hotelId), printerRole: data.printerRole },
+        {
+          $set: {
+            deviceId:    String(data.deviceId).slice(0, 100),
+            socketId:    socket.id,
+            connectedAt: now,
+            lastSeen:    now,
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+      logger.info('Printer registered', {
+        hotelId,
+        printerRole: data.printerRole,
+        socketId:    socket.id,
+        deviceId:    data.deviceId,
+      });
+    } catch (err) {
+      logger.error('register_printer error', { err: String(err) });
+    }
+  });
+
+  socket.on('disconnect', async (reason) => {
     console.log(`[SOCKET] Disconnected | socketId=${socket.id} | reason=${reason}`);
+    // Clear printer registration so pending-dispatch knows the device is offline
+    try {
+      await PrinterDevice.findOneAndUpdate(
+        { socketId: socket.id },
+        { $set: { socketId: null } },
+      );
+    } catch { /* non-critical */ }
   });
 
   socket.on('error', (err) => {

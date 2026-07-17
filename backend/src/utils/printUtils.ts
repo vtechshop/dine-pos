@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Settings from '../models/Settings';
 import Order from '../models/Order';
 import PrintJob from '../models/PrintJob';
+import PrinterDevice from '../models/PrinterDevice';
 import { io } from '../server';
 import { logger } from './logger';
 
@@ -42,19 +43,26 @@ export interface ReceiptPayload {
 
 export type PrintPayload = KOTPayload | ReceiptPayload;
 
-// ── Internal: create job record and emit socket event if applicable ─────────────
+// ── Internal: create job record and emit to registered printer device ────────────
 
 async function dispatchPrintJob(
-  hotelId:       string,
-  jobType:       'kot' | 'receipt',
-  printerTarget: 'kitchen' | 'cashier',
+  hotelId:        string,
+  jobType:        'kot' | 'receipt',
+  printerTarget:  'kitchen' | 'cashier',
   printerAddress: string,
-  printerMode:   'single' | 'dual',
-  autoEmit:      boolean,
-  payload:       PrintPayload,
+  printerMode:    'single' | 'dual',
+  autoEmit:       boolean,
+  payload:        PrintPayload,
   refs: { orderId?: string; guestId?: string; sessionId?: string },
 ): Promise<void> {
-  const shouldEmit = autoEmit && !!printerAddress;
+  // Look up the registered printer device for this role
+  const device = await PrinterDevice.findOne({
+    hotelId:     new mongoose.Types.ObjectId(hotelId),
+    printerRole: printerTarget,
+  }).select('socketId').lean();
+
+  const socketId  = (device as any)?.socketId as string | null | undefined;
+  const shouldEmit = autoEmit && !!socketId;
 
   const job = await PrintJob.create({
     hotelId:      new mongoose.Types.ObjectId(hotelId),
@@ -72,7 +80,8 @@ async function dispatchPrintJob(
   });
 
   if (shouldEmit) {
-    io.to(`hotel_${hotelId}`).emit('print_job', {
+    // Emit only to the registered device socket — never broadcast to the whole hotel room
+    io.to(socketId!).emit('print_job', {
       jobId: String(job._id),
       jobType,
       printerTarget,
@@ -80,19 +89,28 @@ async function dispatchPrintJob(
       printerMode,
       payload,
     });
-    logger.info('Print job dispatched', {
+    // Update device lastSeen (best-effort)
+    PrinterDevice.findOneAndUpdate(
+      { hotelId: new mongoose.Types.ObjectId(hotelId), printerRole: printerTarget },
+      { $set: { lastSeen: new Date() } },
+    ).catch(() => {});
+
+    logger.info('Print job dispatched to registered device', {
       hotelId,
       jobId:         String(job._id),
       jobType,
       printerTarget,
       printerMode,
       printerAddress,
+      socketId,
     });
   } else {
-    logger.info('Print job queued as pending', {
+    const reason = !autoEmit ? 'kotAutoPrint=false' : 'no registered printer device online';
+    logger.info(`Print job queued as pending (${reason})`, {
       hotelId,
       jobId:          String(job._id),
       jobType,
+      printerTarget,
       printerAddress: printerAddress || '(none)',
     });
   }
