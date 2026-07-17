@@ -65,10 +65,10 @@ function NavItemRow({ item }: { item: NavItem }) {
 
   if (soon) {
     return (
-      <div className="flex cursor-default items-center gap-2.5 rounded-lg px-3 py-2 text-gray-600">
+      <div className="flex cursor-default items-center gap-2.5 rounded-lg px-3 py-2 text-white/25">
         <Icon size={16} />
         <span className="flex-1 text-sm">{label}</span>
-        <span className="text-[9px] font-medium uppercase tracking-widest text-gray-700">soon</span>
+        <span className="text-[9px] font-medium uppercase tracking-widest text-white/20">soon</span>
       </div>
     );
   }
@@ -79,8 +79,8 @@ function NavItemRow({ item }: { item: NavItem }) {
       className={({ isActive }) =>
         `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
           isActive
-            ? 'bg-blue-600 text-white'
-            : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+            ? 'bg-[#E8380D] text-white'
+            : 'text-white/50 hover:bg-white/[0.08] hover:text-white'
         }`
       }
     >
@@ -89,12 +89,12 @@ function NavItemRow({ item }: { item: NavItem }) {
           <Icon size={16} />
           <span className="flex-1">{label}</span>
           {hint && (
-            <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-blue-200' : 'text-gray-600'}`}>
+            <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-orange-200' : 'text-white/25'}`}>
               {hint}
             </span>
           )}
           {!IMPLEMENTED.has(to) && !isActive && (
-            <span className="text-[8px] text-gray-700 uppercase tracking-widest">—</span>
+            <span className="text-[8px] text-white/20 uppercase tracking-widest">—</span>
           )}
         </>
       )}
@@ -104,12 +104,12 @@ function NavItemRow({ item }: { item: NavItem }) {
 
 export function Sidebar() {
   return (
-    <aside className="flex h-full w-52 shrink-0 flex-col border-r border-gray-700/60 bg-gray-900">
+    <aside className="flex h-full w-52 shrink-0 flex-col border-r border-white/10 bg-[#1C0800]">
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
         {NAV_GROUPS.map((group, gi) => (
           <div key={gi}>
             {group.heading && (
-              <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-gray-700">
+              <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-white/25">
                 {group.heading}
               </p>
             )}
@@ -124,8 +124,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-gray-700/60 px-4 py-3">
-        <p className="text-[10px] text-gray-700">Dine POS Web · W4</p>
+      <div className="border-t border-white/10 px-4 py-3">
+        <p className="text-[10px] text-white/20">Dine POS Web · W4</p>
       </div>
     </aside>
   );

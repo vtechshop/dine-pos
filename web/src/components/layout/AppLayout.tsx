@@ -20,7 +20,7 @@ export function AppLayout() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-gray-950">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#1C0800]">
       {/* ── Top bar ──────────────────────────────────────────────────── */}
       <TopBar />
 

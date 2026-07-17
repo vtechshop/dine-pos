@@ -19,14 +19,14 @@ function Chip({ icon, label, value, dim }: ChipProps) {
   return (
     <div className={`flex items-center gap-1.5 ${dim ? 'opacity-30' : ''}`}>
       <span className="text-gray-500">{icon}</span>
-      <span className="text-xs text-gray-400">{label}</span>
-      <span className="text-xs font-semibold text-gray-200 tabular-nums">{value}</span>
+      <span className="text-xs text-white/40">{label}</span>
+      <span className="text-xs font-semibold text-white/80 tabular-nums">{value}</span>
     </div>
   );
 }
 
 function Divider() {
-  return <div className="h-3.5 w-px bg-gray-700" />;
+  return <div className="h-3.5 w-px bg-white/15" />;
 }
 
 // ── Status bar ────────────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ export function StatusBar() {
     : '—';
 
   return (
-    <footer className="flex h-10 shrink-0 items-center justify-between border-t border-gray-700/60 bg-gray-900 px-5">
+    <footer className="flex h-10 shrink-0 items-center justify-between border-t border-white/10 bg-[#1C0800] px-5">
       {/* Left: stat chips */}
       <div className="flex items-center gap-4">
         <Chip icon={<TrendingUp size={12} />}  label="Revenue" value={revenue} dim={!report} />
@@ -72,9 +72,9 @@ export function StatusBar() {
         <Chip icon={<LayoutGrid size={12} />}   label="Tables"  value={liveOrders.length > 0 ? `${new Set(liveOrders.map(o => o.tableNumber)).size} active` : '—'} />
         <Divider />
         {/* Future feature placeholders */}
-        <span className="text-[10px] text-gray-600">Reservations</span>
-        <span className="text-[10px] text-gray-600">Cleaning</span>
-        <span className="text-[10px] text-gray-600">Online Orders</span>
+        <span className="text-[10px] text-white/20">Reservations</span>
+        <span className="text-[10px] text-white/20">Cleaning</span>
+        <span className="text-[10px] text-white/20">Online Orders</span>
       </div>
 
       {/* Right: printer + socket + keyboard hints */}
@@ -82,7 +82,7 @@ export function StatusBar() {
         {/* Keyboard shortcut hints */}
         <div className="hidden items-center gap-2 xl:flex">
           {(['F1 Search', 'F2 New Order', 'F3 Tables', 'F4 Customers'] as const).map(hint => (
-            <span key={hint} className="text-[9px] font-mono text-gray-600 tracking-wide">{hint}</span>
+            <span key={hint} className="text-[9px] font-mono text-white/25 tracking-wide">{hint}</span>
           ))}
           <Divider />
         </div>
