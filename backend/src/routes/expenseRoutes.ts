@@ -11,7 +11,6 @@ import { isValidDateParam } from '../utils/dateParam';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
-router.use(requireFeature('expenses'));
 
 // GET expenses with optional date range
 router.get('/', async (req: AuthRequest, res: Response) => {

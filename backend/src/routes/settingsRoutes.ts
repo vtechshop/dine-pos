@@ -17,7 +17,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     // Run both queries in parallel — they have no data dependency
     const [settingsDoc, hotel] = await Promise.all([
       Settings.findOne({ hotelId: req.hotelId }),
-      Hotel.findById(req.hotelId).select('isPremium premiumPlan premiumExpiry trialEndsAt'),
+      Hotel.findById(req.hotelId).select('isPremium premiumPlan premiumExpiry trialEndsAt features'),
     ]);
     const settings = settingsDoc ?? await Settings.create({ hotelId: req.hotelId });
 
@@ -36,6 +36,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       premiumPlan: hotel?.premiumPlan || 'free',
       premiumExpiry: hotel?.premiumExpiry || null,
       trialEndsAt: hotel?.trialEndsAt || null,
+      features: hotel?.features ?? {},
     });
   } catch (error) {
     sendError(res, 500, 'Server error', error);

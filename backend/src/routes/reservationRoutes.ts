@@ -6,7 +6,6 @@ import { requireFeature } from '../middleware/requireFeature';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
-router.use(requireFeature('reservations'));
 
 // GET reservations — optional ?date=YYYY-MM-DD filter
 router.get('/', async (req: AuthRequest, res: Response) => {

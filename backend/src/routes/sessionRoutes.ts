@@ -24,9 +24,8 @@ import { scheduleReceiptPrint } from '../utils/printUtils';
 
 const router = Router();
 
-// ── Global middleware: every session route requires auth + tableSessions feature ──
+// ── Global middleware: every session route requires auth ──────────────────────
 router.use(authMiddleware);
-router.use(requireFeature('tableSessions'));
 
 // ── Mount nested guest routes ──────────────────────────────────────────────────
 // Guests are sub-resources of sessions: /api/sessions/:sessionId/guests/…

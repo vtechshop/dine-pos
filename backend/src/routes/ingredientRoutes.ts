@@ -7,7 +7,6 @@ import { requireFeature } from '../middleware/requireFeature';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
-router.use(requireFeature('ingredients'));
 
 // GET all ingredients for this hotel
 router.get('/', async (req: AuthRequest, res: Response) => {

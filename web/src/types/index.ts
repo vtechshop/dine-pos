@@ -260,6 +260,63 @@ export interface Ingredient {
   updatedAt: string;
 }
 
+// ── Orders (admin list view) ──────────────────────────────────────────────────
+
+export interface OrderListItem {
+  _id: string;
+  orderNumber: string;
+  tableNumber: string;
+  customerName?: string;
+  status: 'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled';
+  paymentMethod?: string | null;
+  grandTotal: number;
+  subtotal: number;
+  taxTotal: number;
+  discountAmount?: number;
+  orderSource: string;
+  isParcel: boolean;
+  items: { productName: string; quantity: number; price: number; total: number }[];
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+export interface OrdersResponse {
+  orders: OrderListItem[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+// ── KDS Order ────────────────────────────────────────────────────────────────
+
+export interface KDSOrder {
+  _id: string;
+  orderNumber: string;
+  tableNumber: string;
+  customerName?: string;
+  notes?: string;
+  status: 'pending' | 'preparing' | 'ready';
+  isParcel: boolean;
+  items: { productName: string; quantity: number }[];
+  createdAt: string;
+}
+
+// ── Reservation ───────────────────────────────────────────────────────────────
+
+export interface Reservation {
+  _id: string;
+  tableId?: string | null;
+  tableNumber?: number | null;
+  customerName: string;
+  phone: string;
+  partySize: number;
+  date: string;
+  time: string;
+  status: 'confirmed' | 'seated' | 'cancelled' | 'no-show';
+  notes: string;
+  createdAt: string;
+}
+
 // ── Printer ───────────────────────────────────────────────────────────────────
 
 export interface PrinterDeviceStatus {

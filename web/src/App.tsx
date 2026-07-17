@@ -13,16 +13,10 @@ import { InventoryPage } from './pages/InventoryPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SettingsPage } from './pages/SettingsPage';
-
-// Placeholder for unimplemented routes — renders until each phase delivers the page
-function ComingSoon({ page }: { page: string }) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center text-center">
-      <p className="text-2xl font-bold text-[#1C0800]/20">{page}</p>
-      <p className="mt-2 text-sm text-[#1C0800]/15">This module will be available in a future phase.</p>
-    </div>
-  );
-}
+import { OrdersPage } from './pages/OrdersPage';
+import { TablesPage } from './pages/TablesPage';
+import { KitchenPage } from './pages/KitchenPage';
+import { ReservationsPage } from './pages/ReservationsPage';
 
 // Redirect non-admin roles away from pages they are not permitted to view
 function AdminOnly({ children }: { children: React.ReactNode }) {
@@ -54,29 +48,20 @@ export function App() {
 
                   <Route element={<AppLayout />}>
                     <Route index element={<Navigate to="/dashboard" replace />} />
-                    <Route path="/dashboard"    element={<DashboardPage />} />
+                    <Route path="/dashboard"   element={<DashboardPage />} />
+                    <Route path="/orders"      element={<AdminOnly><OrdersPage /></AdminOnly>} />
+                    <Route path="/tables"      element={<TablesPage />} />
+                    <Route path="/customers"   element={<AdminOnly><CustomersPage /></AdminOnly>} />
+                    <Route path="/products"    element={<AdminOnly><ProductsPage /></AdminOnly>} />
+                    <Route path="/inventory"   element={<AdminOnly><InventoryPage /></AdminOnly>} />
+                    <Route path="/reports"     element={<AdminOnly><ReportsPage /></AdminOnly>} />
+                    <Route path="/settings"    element={<AdminOnly><SettingsPage /></AdminOnly>} />
+                    <Route path="/reservations" element={<AdminOnly><ReservationsPage /></AdminOnly>} />
+                    <Route path="/kitchen"     element={<KitchenPage />} />
 
-                    {/* ── Role entry points (app.dinepos.com) ────────────────
-                        Each role lands here after login. Placeholder until
-                        the role-specific UI is built in a future phase.
-                        Do NOT add admin.dinepos.com routes here — that is
-                        a completely separate deployment.
-                    ────────────────────────────────────────────────────── */}
-                    <Route path="/cashier"       element={<ComingSoon page="Cashier Dashboard" />} />
-                    <Route path="/waiter"        element={<ComingSoon page="Waiter Dashboard" />} />
-                    <Route path="/kitchen"       element={<ComingSoon page="Kitchen Display" />} />
-
-                    {/* ── Placeholder routes — replace with real pages in future phases */}
-                    <Route path="/orders"        element={<AdminOnly><ComingSoon page="Orders" /></AdminOnly>} />
-                    <Route path="/tables"        element={<ComingSoon page="Tables" />} />
-                    <Route path="/customers"      element={<AdminOnly><CustomersPage /></AdminOnly>} />
-                    <Route path="/products"      element={<AdminOnly><ProductsPage /></AdminOnly>} />
-                    <Route path="/inventory"     element={<AdminOnly><InventoryPage /></AdminOnly>} />
-                    <Route path="/reports"        element={<AdminOnly><ReportsPage /></AdminOnly>} />
-                    <Route path="/settings"      element={<AdminOnly><SettingsPage /></AdminOnly>} />
-                    <Route path="/reservations"  element={<ComingSoon page="Reservations" />} />
-                    <Route path="/cleaning"      element={<ComingSoon page="Cleaning" />} />
-                    <Route path="/online"        element={<ComingSoon page="Online Orders" />} />
+                    {/* Role landing pages redirect to dashboard until role-specific views are built */}
+                    <Route path="/cashier" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/waiter"  element={<Navigate to="/dashboard" replace />} />
 
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Route>

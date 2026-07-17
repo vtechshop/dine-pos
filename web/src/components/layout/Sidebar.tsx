@@ -9,8 +9,7 @@ import {
   BarChart2,
   Settings,
   CalendarDays,
-  Sparkles,
-  Globe,
+  ChefHat,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -18,11 +17,10 @@ import { useAuth } from '../../context/AuthContext';
 // ── Nav item types ─────────────────────────────────────────────────────────────
 
 interface NavItem {
-  to:       string;
-  icon:     LucideIcon;
-  label:    string;
-  hint?:    string;  // keyboard shortcut label
-  soon?:    boolean;
+  to:    string;
+  icon:  LucideIcon;
+  label: string;
+  hint?: string;
 }
 
 interface NavGroup {
@@ -35,47 +33,30 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-      { to: '/orders',    icon: ShoppingCart,    label: 'Orders' },
-      { to: '/tables',    icon: LayoutGrid,      label: 'Tables',    hint: 'F3' },
-      { to: '/customers', icon: Users,           label: 'Customers', hint: 'F4' },
-      { to: '/products',  icon: Package,         label: 'Products' },
-      { to: '/inventory', icon: Archive,         label: 'Inventory' },
-      { to: '/reports',   icon: BarChart2,       label: 'Reports' },
-      { to: '/settings',  icon: Settings,        label: 'Settings' },
-    ],
-  },
-  {
-    heading: 'Coming soon',
-    items: [
-      { to: '/reservations', icon: CalendarDays, label: 'Reservations', soon: true },
-      { to: '/cleaning',     icon: Sparkles,     label: 'Cleaning',     soon: true },
-      { to: '/online',       icon: Globe,        label: 'Online Orders', soon: true },
+      { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/orders',       icon: ShoppingCart,    label: 'Orders' },
+      { to: '/tables',       icon: LayoutGrid,      label: 'Tables',    hint: 'F3' },
+      { to: '/customers',    icon: Users,           label: 'Customers', hint: 'F4' },
+      { to: '/products',     icon: Package,         label: 'Products' },
+      { to: '/inventory',    icon: Archive,         label: 'Inventory' },
+      { to: '/reports',      icon: BarChart2,       label: 'Reports' },
+      { to: '/settings',     icon: Settings,        label: 'Settings' },
+      { to: '/reservations', icon: CalendarDays,    label: 'Reservations' },
+      { to: '/kitchen',      icon: ChefHat,         label: 'Kitchen' },
     ],
   },
 ];
 
-// ── Active routes — pages not yet implemented go back to dashboard ─────────────
-
-const IMPLEMENTED = new Set(['/dashboard', '/login', '/products', '/inventory', '/customers', '/reports', '/settings']);
-
-// Routes visible only to the admin role; all others see Dashboard + Tables only
-const ADMIN_ONLY_ROUTES = new Set(['/orders', '/customers', '/products', '/inventory', '/reports', '/settings']);
+// Routes visible only to the admin role; staff roles see Dashboard, Tables, and Kitchen
+const ADMIN_ONLY_ROUTES = new Set([
+  '/orders', '/customers', '/products', '/inventory',
+  '/reports', '/settings', '/reservations',
+]);
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 function NavItemRow({ item }: { item: NavItem }) {
-  const { to, icon: Icon, label, hint, soon } = item;
-
-  if (soon) {
-    return (
-      <div className="flex cursor-default items-center gap-2.5 rounded-lg px-3 py-2 text-white/25">
-        <Icon size={16} />
-        <span className="flex-1 text-sm">{label}</span>
-        <span className="text-[9px] font-medium uppercase tracking-widest text-white/20">soon</span>
-      </div>
-    );
-  }
+  const { to, icon: Icon, label, hint } = item;
 
   return (
     <NavLink
@@ -96,9 +77,6 @@ function NavItemRow({ item }: { item: NavItem }) {
             <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-orange-200' : 'text-white/25'}`}>
               {hint}
             </span>
-          )}
-          {!IMPLEMENTED.has(to) && !isActive && (
-            <span className="text-[8px] text-white/20 uppercase tracking-widest">—</span>
           )}
         </>
       )}
@@ -138,7 +116,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-white/10 px-4 py-3">
-        <p className="text-[10px] text-white/20">Dine POS Web · W7</p>
+        <p className="text-[10px] text-white/20">Dine POS Web · v1.0</p>
       </div>
     </aside>
   );

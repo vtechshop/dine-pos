@@ -67,11 +67,6 @@ export function StatusBar() {
         <Chip icon={<ShoppingCart size={12} />} label="Orders"  value={report?.totalOrders ?? '—'} dim={!report} />
         <Divider />
         <Chip icon={<LayoutGrid size={12} />}   label="Tables"  value={liveOrders.length > 0 ? `${new Set(liveOrders.map(o => o.tableNumber)).size} active` : '—'} />
-        <Divider />
-        {/* Future feature placeholders */}
-        <span className="text-[10px] text-white/20">Reservations</span>
-        <span className="text-[10px] text-white/20">Cleaning</span>
-        <span className="text-[10px] text-white/20">Online Orders</span>
       </div>
 
       {/* Right: printer + socket + keyboard hints */}
