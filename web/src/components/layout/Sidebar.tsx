@@ -13,6 +13,7 @@ import {
   Globe,
   type LucideIcon,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 // ── Nav item types ─────────────────────────────────────────────────────────────
 
@@ -57,6 +58,9 @@ const NAV_GROUPS: NavGroup[] = [
 // ── Active routes — pages not yet implemented go back to dashboard ─────────────
 
 const IMPLEMENTED = new Set(['/dashboard', '/login', '/products', '/inventory', '/customers', '/reports', '/settings']);
+
+// Routes visible only to the admin role; all others see Dashboard + Tables only
+const ADMIN_ONLY_ROUTES = new Set(['/orders', '/customers', '/products', '/inventory', '/reports', '/settings']);
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -103,25 +107,34 @@ function NavItemRow({ item }: { item: NavItem }) {
 }
 
 export function Sidebar() {
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
+
   return (
     <aside className="flex h-full w-52 shrink-0 flex-col border-r border-white/10 bg-[#1C0800]">
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
-        {NAV_GROUPS.map((group, gi) => (
-          <div key={gi}>
-            {group.heading && (
-              <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-white/25">
-                {group.heading}
-              </p>
-            )}
-            <ul className="space-y-0.5">
-              {group.items.map(item => (
-                <li key={item.to}>
-                  <NavItemRow item={item} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+        {NAV_GROUPS.map((group, gi) => {
+          const visibleItems = isAdmin
+            ? group.items
+            : group.items.filter(item => !ADMIN_ONLY_ROUTES.has(item.to));
+          if (visibleItems.length === 0) return null;
+          return (
+            <div key={gi}>
+              {group.heading && (
+                <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-white/25">
+                  {group.heading}
+                </p>
+              )}
+              <ul className="space-y-0.5">
+                {visibleItems.map(item => (
+                  <li key={item.to}>
+                    <NavItemRow item={item} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
       </nav>
 
       <div className="border-t border-white/10 px-4 py-3">

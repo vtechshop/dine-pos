@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import Table from '../models/Table';
-import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, requireWaiterOrCashierOrAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 
 const router = Router();
@@ -46,8 +46,8 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// PATCH table status
-router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
+// PATCH table status — waiter/cashier/admin only; kitchen must not change table state
+router.patch('/:id/status', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Response) => {
   const { status, currentOrderId } = req.body;
   const allowed = ['available', 'occupied', 'reserved', 'inactive'];
   if (!allowed.includes(status)) return res.status(400).json({ message: 'Invalid status' });

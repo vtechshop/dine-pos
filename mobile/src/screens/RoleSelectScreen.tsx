@@ -134,15 +134,6 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
         </Animated.View>
       </View>
 
-      {/* ── Platform admin ──────────────────────────────────────────────── */}
-      <TouchableOpacity
-        style={[styles.superBtn, { marginBottom: bottom + Spacing.lg }]}
-        onPress={() => navigation.replace('SuperAdminLogin')}
-        activeOpacity={0.7}
-      >
-        <MaterialIcons name="lock" size={13} color={Colors.textMuted} />
-        <Text style={styles.superBtnText}>Platform Admin</Text>
-      </TouchableOpacity>
     </View>
   );
 };
@@ -260,12 +251,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
 
-  // Platform admin
-  superBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    alignSelf: 'center', paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md,
-  },
-  superBtnText: { fontSize: FontSize.sm, color: Colors.textMuted, fontWeight: '600', letterSpacing: 0.3 },
 });
 
 export default RoleSelectScreen;

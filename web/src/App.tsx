@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { SocketProvider } from './context/SocketContext';
 import { KeyboardProvider } from './context/KeyboardContext';
@@ -22,6 +22,13 @@ function ComingSoon({ page }: { page: string }) {
       <p className="mt-2 text-sm text-[#1C0800]/15">This module will be available in a future phase.</p>
     </div>
   );
+}
+
+// Redirect non-admin roles away from pages they are not permitted to view
+function AdminOnly({ children }: { children: React.ReactNode }) {
+  const { role } = useAuth();
+  if (role !== null && role !== 'admin') return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
 }
 
 export function App() {
@@ -60,13 +67,13 @@ export function App() {
                     <Route path="/kitchen"       element={<ComingSoon page="Kitchen Display" />} />
 
                     {/* ── Placeholder routes — replace with real pages in future phases */}
-                    <Route path="/orders"        element={<ComingSoon page="Orders" />} />
+                    <Route path="/orders"        element={<AdminOnly><ComingSoon page="Orders" /></AdminOnly>} />
                     <Route path="/tables"        element={<ComingSoon page="Tables" />} />
-                    <Route path="/customers"      element={<CustomersPage />} />
-                    <Route path="/products"      element={<ProductsPage />} />
-                    <Route path="/inventory"     element={<InventoryPage />} />
-                    <Route path="/reports"        element={<ReportsPage />} />
-                    <Route path="/settings"      element={<SettingsPage />} />
+                    <Route path="/customers"      element={<AdminOnly><CustomersPage /></AdminOnly>} />
+                    <Route path="/products"      element={<AdminOnly><ProductsPage /></AdminOnly>} />
+                    <Route path="/inventory"     element={<AdminOnly><InventoryPage /></AdminOnly>} />
+                    <Route path="/reports"        element={<AdminOnly><ReportsPage /></AdminOnly>} />
+                    <Route path="/settings"      element={<AdminOnly><SettingsPage /></AdminOnly>} />
                     <Route path="/reservations"  element={<ComingSoon page="Reservations" />} />
                     <Route path="/cleaning"      element={<ComingSoon page="Cleaning" />} />
                     <Route path="/online"        element={<ComingSoon page="Online Orders" />} />
