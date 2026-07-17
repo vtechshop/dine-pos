@@ -1,196 +1,240 @@
-import { useState, useEffect, useCallback } from 'react';
-import {
-  TrendingUp,
-  ShoppingCart,
-  Receipt,
-  Printer,
-  RefreshCw,
-  Wifi,
-  WifiOff,
-} from 'lucide-react';
-import { TopBar } from '../components/layout/TopBar';
-import { StatCard } from '../components/ui/StatCard';
+import { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
+import { RefreshCw, Search } from 'lucide-react';
+import type { Table, SessionSummary, TableGridItem } from '../types';
+import { fetchTables, fetchOpenSessions } from '../api/tables';
+import { TableCard } from '../components/ui/TableCard';
 import { Spinner } from '../components/ui/Spinner';
-import { fetchDailyReport, fetchPrinterDevices } from '../api/dashboard';
 import { useSettings } from '../context/SettingsContext';
 import { useSocket } from '../context/SocketContext';
-import type { DailyReport, PrinterDeviceStatus } from '../types';
+import { useShortcut } from '../hooks/useShortcut';
 
-function fmt(value: number, symbol: string) {
-  return `${symbol}${value.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+// ── New-order badge state ─────────────────────────────────────────────────────
+// Tracked separately so socket events do NOT re-render the full table grid.
+// Only the single affected TableCard re-renders (React.memo equality check).
+
+type BadgeAction =
+  | { type: 'ADD';    tableNumber: string }
+  | { type: 'REMOVE'; tableNumber: string };
+
+function badgeReducer(state: Set<string>, action: BadgeAction): Set<string> {
+  const next = new Set(state);
+  if (action.type === 'ADD')    next.add(action.tableNumber);
+  if (action.type === 'REMOVE') next.delete(action.tableNumber);
+  return next;
 }
 
-function PaymentRow({ label, value, symbol, total }: { label: string; value: number; symbol: string; total: number }) {
-  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
-  return (
-    <div className="flex items-center gap-3">
-      <span className="w-14 text-right text-xs font-medium text-gray-500">{label}</span>
-      <div className="flex-1 overflow-hidden rounded-full bg-gray-100">
-        <div
-          className="h-2 rounded-full bg-blue-500 transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="w-20 text-right text-sm font-semibold text-gray-800 tabular-nums">
-        {fmt(value, symbol)}
-      </span>
-      <span className="w-8 text-right text-xs text-gray-400">{pct}%</span>
-    </div>
-  );
-}
+// ── Filter types ──────────────────────────────────────────────────────────────
 
-function PrinterChip({ device }: { device: PrinterDeviceStatus }) {
-  return (
-    <div className="flex items-center gap-2.5 rounded-lg border border-gray-100 bg-white px-4 py-3 shadow-sm">
-      <Printer size={15} className={device.online ? 'text-green-500' : 'text-gray-300'} />
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-gray-800">
-          {device.printerName ?? (device.printerRole === 'kitchen' ? 'Kitchen Printer' : 'Cashier Printer')}
-        </p>
-        <p className="text-xs text-gray-400 capitalize">{device.printerRole}</p>
-      </div>
-      <div className={`ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${device.online ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-        {device.online ? <Wifi size={10} /> : <WifiOff size={10} />}
-        {device.online ? 'Online' : 'Offline'}
-      </div>
-    </div>
-  );
-}
+type Filter = 'all' | 'occupied' | 'available';
+
+// ── Dashboard page ────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
-  const { settings } = useSettings();
-  const { socket } = useSocket();
-  const symbol = settings?.currencySymbol ?? '₹';
+  const { settings }                   = useSettings();
+  const { socket, reconnectCount }     = useSocket();
+  const currencySymbol                 = settings?.currencySymbol ?? '₹';
 
-  const [report, setReport] = useState<DailyReport | null>(null);
-  const [devices, setDevices] = useState<PrinterDeviceStatus[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [recentOrderCount, setRecentOrderCount] = useState(0);
+  const [tables,   setTables]   = useState<Table[]>([]);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState<string | null>(null);
+  const [filter,   setFilter]   = useState<Filter>('all');
+  const [search,   setSearch]   = useState('');
+
+  // Badge state — updated by socket without touching table/session arrays
+  const [newOrderTables, dispatchBadge] = useReducer(badgeReducer, new Set<string>());
+
+  // ── Data loading ────────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [r, d] = await Promise.allSettled([fetchDailyReport(), fetchPrinterDevices()]);
-      if (r.status === 'fulfilled') setReport(r.value);
-      else setError(r.reason instanceof Error ? r.reason.message : 'Failed to load report');
-      if (d.status === 'fulfilled') setDevices(d.value);
+      const [t, s] = await Promise.all([fetchTables(), fetchOpenSessions()]);
+      setTables(t);
+      setSessions(s);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load table data');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  // Initial load + refresh after socket reconnect
+  useEffect(() => { void load(); }, [load, reconnectCount]);
 
-  // Real-time: increment order count on new_order socket event
+  // Periodic refresh every 2 minutes (elapsed times stay fresh)
+  useEffect(() => {
+    const id = setInterval(() => void load(), 120_000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  // ── Socket: targeted badge update — does NOT rebuild table list ─────────────
+  // Only the affected TableCard re-renders (React.memo guards the rest).
+
   useEffect(() => {
     if (!socket) return;
-    const handler = () => setRecentOrderCount(n => n + 1);
+
+    const handler = (data: unknown) => {
+      const raw = (data && typeof data === 'object' && 'order' in data)
+        ? (data as { order: Record<string, unknown> }).order
+        : data as Record<string, unknown>;
+
+      const tableNumber = typeof raw?.tableNumber === 'string' ? raw.tableNumber : null;
+      if (!tableNumber) return;
+
+      dispatchBadge({ type: 'ADD', tableNumber });
+      setTimeout(() => dispatchBadge({ type: 'REMOVE', tableNumber }), 10_000);
+    };
+
     socket.on('new_order', handler);
     return () => { socket.off('new_order', handler); };
   }, [socket]);
 
-  const today = new Date().toLocaleDateString('en-IN', {
-    weekday: 'long', day: 'numeric', month: 'long',
+  // ── Keyboard shortcuts (architecture layer — handlers wired here) ───────────
+
+  useShortcut('F1', () => {
+    (document.getElementById('table-search') as HTMLInputElement | null)?.focus();
   });
 
-  return (
-    <div className="flex flex-col overflow-hidden">
-      <TopBar title="Dashboard" />
+  useShortcut('F2', () => {
+    // Placeholder: will open New Order modal in a future phase
+    console.debug('[Shortcut] F2 — New Order (not yet implemented)');
+  });
 
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        {/* Date + refresh */}
-        <div className="mb-5 flex items-center justify-between">
-          <p className="text-sm text-gray-500">{today}</p>
+  useShortcut('Escape', () => {
+    setSearch('');
+    (document.getElementById('table-search') as HTMLInputElement | null)?.blur();
+  });
+
+  // ── Build joined table grid items ───────────────────────────────────────────
+
+  const sessionByTableNumber = useMemo(
+    () => new Map(sessions.map(s => [s.tableNumber, s])),
+    [sessions],
+  );
+
+  const gridItems = useMemo((): TableGridItem[] => {
+    return tables.map(table => ({
+      ...table,
+      session: table.currentSessionId
+        ? sessionByTableNumber.get(
+            // sessions use tableNumber (string like "T1") — match by table.name or T{number}
+            table.name || `T${table.number}`,
+          )
+        : undefined,
+    }));
+  }, [tables, sessionByTableNumber]);
+
+  // ── Filter + search ─────────────────────────────────────────────────────────
+
+  const visibleItems = useMemo(() => {
+    let items = gridItems;
+
+    if (filter === 'occupied')  items = items.filter(t => t.status === 'occupied');
+    if (filter === 'available') items = items.filter(t => t.status === 'available');
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      items = items.filter(t =>
+        t.name.toLowerCase().includes(q) ||
+        String(t.number).includes(q),
+      );
+    }
+
+    return items;
+  }, [gridItems, filter, search]);
+
+  const occupiedCount  = gridItems.filter(t => t.status === 'occupied').length;
+  const availableCount = gridItems.filter(t => t.status === 'available').length;
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* Page header */}
+      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-5 py-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-base font-semibold text-gray-800">Table Grid</h1>
+          <div className="flex items-center gap-1 text-xs text-gray-400">
+            <span className="text-green-600 font-medium">{occupiedCount} occupied</span>
+            <span>·</span>
+            <span>{availableCount} available</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Search — F1 focuses this */}
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              id="table-search"
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search table… (F1)"
+              className="h-8 w-48 rounded-lg border border-gray-200 pl-8 pr-3 text-xs text-gray-700 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+            />
+          </div>
+
+          {/* Filter chips */}
+          {(['all', 'occupied', 'available'] as Filter[]).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                filter === f
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+
           <button
             onClick={() => void load()}
             disabled={loading}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 disabled:opacity-40"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
+      </div>
 
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-5">
         {error && (
-          <div className="mb-5 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+          <div className="mb-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
             {error}
           </div>
         )}
 
-        {loading && !report ? (
+        {loading && tables.length === 0 ? (
           <div className="flex h-48 items-center justify-center">
             <Spinner size="lg" />
           </div>
+        ) : visibleItems.length === 0 ? (
+          <div className="flex h-48 flex-col items-center justify-center text-center text-gray-400">
+            <p className="text-sm">No tables found</p>
+            {search && (
+              <button onClick={() => setSearch('')} className="mt-2 text-xs text-blue-500 hover:underline">
+                Clear search
+              </button>
+            )}
+          </div>
         ) : (
-          <>
-            {/* Stat cards */}
-            <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
-              <StatCard
-                label="Today's Revenue"
-                value={report ? fmt(report.totalSales, symbol) : '—'}
-                sub="Excluding tax"
-                accent="green"
-                icon={<TrendingUp size={18} />}
+          <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {visibleItems.map(table => (
+              <TableCard
+                key={table._id}
+                table={table}
+                hasNewOrder={newOrderTables.has(table.name || `T${table.number}`)}
+                currencySymbol={currencySymbol}
               />
-              <StatCard
-                label="Total Orders"
-                value={report ? report.totalOrders + recentOrderCount : '—'}
-                sub={recentOrderCount > 0 ? `+${recentOrderCount} since load` : undefined}
-                accent="blue"
-                icon={<ShoppingCart size={18} />}
-              />
-              <StatCard
-                label="Tax Collected"
-                value={report ? fmt(report.totalTax, symbol) : '—'}
-                accent="orange"
-                icon={<Receipt size={18} />}
-              />
-              <StatCard
-                label="Parcel Orders"
-                value={report ? report.parcelOrders : '—'}
-                sub={report ? `${fmt(report.parcelRevenue, symbol)} revenue` : undefined}
-                accent="purple"
-                icon={<ShoppingCart size={18} />}
-              />
-            </div>
-
-            {/* Payment breakdown + Printer status */}
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {/* Payment breakdown */}
-              {report && (
-                <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-                  <h2 className="mb-4 text-sm font-semibold text-gray-700">Payment Breakdown</h2>
-                  <div className="space-y-3">
-                    {Object.entries(report.paymentBreakdown).map(([method, value]) => (
-                      <PaymentRow
-                        key={method}
-                        label={method.charAt(0).toUpperCase() + method.slice(1)}
-                        value={value}
-                        symbol={symbol}
-                        total={report.totalSales}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Printer status */}
-              <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-                <h2 className="mb-4 text-sm font-semibold text-gray-700">Printer Devices</h2>
-                {devices.length === 0 ? (
-                  <p className="text-sm text-gray-400">No printer devices registered.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {devices.map(d => (
-                      <PrinterChip key={d._id} device={d} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
+            ))}
+          </div>
         )}
       </div>
     </div>

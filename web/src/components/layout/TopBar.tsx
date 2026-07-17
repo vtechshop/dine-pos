@@ -1,48 +1,65 @@
-import { Wifi, WifiOff, LogOut } from 'lucide-react';
+import { Hotel, LogOut, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
+import { NotificationBell } from '../ui/NotificationBell';
+import { LiveBadge } from '../ui/LiveBadge';
 
-interface TopBarProps {
-  title: string;
-}
-
-export function TopBar({ title }: TopBarProps) {
+export function TopBar() {
   const { hotelName, logout } = useAuth();
-  const { connected } = useSocket();
+  const { connected, reconnecting } = useSocket();
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6">
-      <h1 className="text-base font-semibold text-gray-800">{title}</h1>
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-700/60 bg-gray-900 px-5">
+      {/* Brand */}
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
+          <Hotel size={14} className="text-white" />
+        </div>
+        <span className="text-base font-bold text-white tracking-tight">Dine POS</span>
+        {hotelName && (
+          <>
+            <span className="text-gray-600">/</span>
+            <span className="max-w-48 truncate text-sm text-gray-400">{hotelName}</span>
+          </>
+        )}
+      </div>
 
-      <div className="flex items-center gap-4">
-        {/* Socket status */}
-        <div className="flex items-center gap-1.5">
+      {/* Right controls */}
+      <div className="flex items-center gap-1">
+        {/* Notification bell */}
+        <NotificationBell />
+
+        {/* Socket status badge */}
+        <div className="mx-2">
           {connected ? (
-            <Wifi size={15} className="text-green-500" />
+            <LiveBadge label="Live" />
+          ) : reconnecting ? (
+            <span className="animate-pulse rounded-full bg-yellow-600 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-white">
+              Reconnecting
+            </span>
           ) : (
-            <WifiOff size={15} className="text-gray-400" />
+            <span className="rounded-full bg-gray-700 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-gray-400">
+              Offline
+            </span>
           )}
-          <span className={`text-xs font-medium ${connected ? 'text-green-600' : 'text-gray-400'}`}>
-            {connected ? 'Live' : 'Offline'}
-          </span>
         </div>
 
-        <div className="h-4 w-px bg-gray-200" />
+        <div className="h-4 w-px bg-gray-700" />
 
-        {/* Hotel name */}
-        {hotelName && (
-          <span className="text-sm text-gray-500">{hotelName}</span>
-        )}
-
-        {/* Logout */}
-        <button
-          onClick={logout}
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
-          title="Sign out"
-        >
-          <LogOut size={15} />
-          <span>Sign out</span>
-        </button>
+        {/* User / sign-out */}
+        <div className="flex items-center gap-1.5 pl-1">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-700">
+            <User size={13} className="text-gray-300" />
+          </div>
+          <span className="hidden text-sm text-gray-300 sm:block">Admin</span>
+          <button
+            onClick={logout}
+            className="ml-1 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-800 hover:text-gray-300"
+            title="Sign out"
+          >
+            <LogOut size={15} />
+          </button>
+        </div>
       </div>
     </header>
   );
