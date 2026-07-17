@@ -99,7 +99,7 @@ export function InventoryPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search… (F1)"
-              className="h-8 w-44 rounded-lg border border-gray-200 pl-8 pr-3 text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+              className="h-8 w-44 rounded-lg border border-gray-200 pl-8 pr-3 text-xs outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
             />
           </div>
           <button
@@ -111,7 +111,7 @@ export function InventoryPage() {
           </button>
           <button
             onClick={() => setDrawer({ mode: 'form', ingredient: null })}
-            className="flex h-8 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700"
+            className="flex h-8 items-center gap-1.5 rounded-lg bg-[#E8380D] px-3 text-xs font-semibold text-white hover:bg-[#E8380D]/90"
           >
             <Plus size={13} />Add Ingredient (F2)
           </button>
@@ -155,7 +155,7 @@ export function InventoryPage() {
             {!search && (
               <button
                 onClick={() => setDrawer({ mode: 'form', ingredient: null })}
-                className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                className="mt-3 rounded-lg bg-[#E8380D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#E8380D]/90"
               >
                 Add First Ingredient
               </button>

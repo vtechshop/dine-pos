@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useEffect } from 'react';
+import { createContext, useContext, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 
 export type ShortcutKey = 'F1' | 'F2' | 'F3' | 'F4' | 'Escape' | 'Enter';
@@ -44,16 +44,14 @@ export function KeyboardProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // Stable reference — does not change across renders
-  const register = useRef((key: ShortcutKey, handler: Handler): (() => void) => {
+  const register = useCallback((key: ShortcutKey, handler: Handler): (() => void) => {
     registry.current.set(key, handler);
     return () => {
-      // Only delete if this registration is still the current one
       if (registry.current.get(key) === handler) {
         registry.current.delete(key);
       }
     };
-  }).current;
+  }, []);
 
   return (
     <KeyboardContext.Provider value={{ register }}>

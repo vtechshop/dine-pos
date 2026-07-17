@@ -4,7 +4,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from '../components/ui/Spinner';
 
-const APP_VERSION = 'v1.0 · W4';
+const APP_VERSION = 'v1.0-rc1';
 
 // Map JWT role → post-login destination within the POS app
 function roleDestination(role: string | null): string {
@@ -68,7 +68,7 @@ export function LoginPage() {
                 required
                 value={userId}
                 onChange={e => setUserId(e.target.value)}
-                className="mt-1.5 block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="mt-1.5 block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-[#E8380D]/50 focus:ring-2 focus:ring-[#E8380D]/20"
                 placeholder="Enter your ID"
               />
             </div>
@@ -86,7 +86,7 @@ export function LoginPage() {
                   required
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 pr-10 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  className="block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 pr-10 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-[#E8380D]/50 focus:ring-2 focus:ring-[#E8380D]/20"
                   placeholder="Enter your password"
                 />
                 <button
@@ -111,7 +111,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#E8380D] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#E8380D]/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading && <Spinner size="sm" />}
               {loading ? 'Signing in…' : 'Sign in'}
@@ -130,7 +130,7 @@ export function LoginPage() {
             Need help?{' '}
             <a
               href="mailto:support@dinepos.com"
-              className="font-medium text-blue-600 hover:underline"
+              className="font-medium text-[#E8380D] hover:underline"
             >
               Contact Support
             </a>

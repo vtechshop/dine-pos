@@ -105,7 +105,7 @@ export function GuestCard({ guest, orders, currencySymbol, selected, onSelect, o
           <button
             disabled={disabled}
             onClick={onBill}
-            className="flex-1 rounded-lg bg-blue-600 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-40"
+            className="flex-1 rounded-lg bg-[#E8380D] py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#E8380D]/90 disabled:opacity-40"
           >
             Bill
           </button>

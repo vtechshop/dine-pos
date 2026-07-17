@@ -8,8 +8,8 @@ import { useSettings } from '../context/SettingsContext';
 import { updateSettings, fetchSubscription } from '../api/settings';
 import type { SubscriptionInfo } from '../api/settings';
 import {
-  fetchCashiers, createCashier, updateCashier, toggleCashier, deleteCashier,
-  fetchWaiters, createWaiter, updateWaiter, toggleWaiter, deleteWaiter,
+  fetchCashiers, toggleCashier, deleteCashier,
+  fetchWaiters, toggleWaiter, deleteWaiter,
 } from '../api/staff';
 import type { StaffMember } from '../api/staff';
 import { fetchSessionDevices, logoutDevice, logoutAllDevices } from '../api/devices';
@@ -301,6 +301,88 @@ function LegalSection({ settings, refresh }: { settings: Settings; refresh: () =
   );
 }
 
+// ── StaffTable (extracted to top level to avoid component-during-render) ──────
+
+interface StaffTableProps {
+  members: StaffMember[];
+  role: 'cashier' | 'waiter';
+  confirmDelId: string | null;
+  onAdd: () => void;
+  onEdit: (m: StaffMember) => void;
+  onToggle: (id: string) => void;
+  onDeleteRequest: (id: string) => void;
+  onDeleteConfirm: () => void;
+  onDeleteCancel: () => void;
+}
+
+function StaffTable({ members, role, confirmDelId, onAdd, onEdit, onToggle, onDeleteRequest, onDeleteConfirm, onDeleteCancel }: StaffTableProps) {
+  return (
+    <div className="rounded-xl border border-[#E8D5C0] bg-white">
+      <div className="flex items-center justify-between border-b border-[#E8D5C0] px-4 py-3">
+        <h4 className="text-xs font-semibold text-[#1C0800]">
+          {role === 'cashier' ? 'Cashiers' : 'Waiters'}
+          <span className="ml-2 rounded-full bg-[#E8D5C0]/60 px-1.5 py-0.5 text-[10px] text-[#1C0800]/50">
+            {members.length}
+          </span>
+        </h4>
+        <button
+          onClick={onAdd}
+          className="flex items-center gap-1 rounded-lg bg-[#E8380D]/10 px-2.5 py-1.5 text-[11px] font-semibold text-[#E8380D] hover:bg-[#E8380D]/20"
+        >
+          <Plus size={12} /> Add {role === 'cashier' ? 'Cashier' : 'Waiter'}
+        </button>
+      </div>
+      {members.length === 0 ? (
+        <p className="px-4 py-6 text-center text-xs text-[#1C0800]/30">No {role}s added yet.</p>
+      ) : (
+        <div className="divide-y divide-[#E8D5C0]/60">
+          {members.map(m => (
+            <div key={m._id} className="flex items-center gap-3 px-4 py-3">
+              <span className="w-14 shrink-0 rounded-md bg-[#1C0800]/5 px-1.5 py-0.5 text-center font-mono text-[10px] font-semibold text-[#1C0800]/60">
+                {m.employeeCode}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-[#1C0800]">{m.name}</p>
+                {m.mobile && <p className="text-[10px] text-[#1C0800]/40">{m.mobile}</p>}
+              </div>
+              <button
+                onClick={() => onToggle(m._id)}
+                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                  m.isActive
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                    : 'bg-red-100 text-red-600 hover:bg-red-200'
+                }`}
+              >
+                {m.isActive ? 'Active' : 'Inactive'}
+              </button>
+              {confirmDelId === m._id ? (
+                <div className="flex shrink-0 items-center gap-1">
+                  <span className="text-[10px] text-red-500">Delete?</span>
+                  <button onClick={onDeleteConfirm} className="rounded bg-red-500 px-2 py-0.5 text-[10px] text-white">
+                    Yes
+                  </button>
+                  <button onClick={onDeleteCancel} className="rounded border border-[#E8D5C0] px-2 py-0.5 text-[10px] text-[#1C0800]/50">
+                    No
+                  </button>
+                </div>
+              ) : (
+                <div className="flex shrink-0 items-center gap-1">
+                  <button onClick={() => onEdit(m)} className="rounded-lg p-1.5 text-[#1C0800]/40 hover:bg-[#1C0800]/5">
+                    <Pencil size={12} />
+                  </button>
+                  <button onClick={() => onDeleteRequest(m._id)} className="rounded-lg p-1.5 text-red-400 hover:bg-red-50">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── StaffSection ──────────────────────────────────────────────────────────────
 
 function StaffSection() {
@@ -361,80 +443,34 @@ function StaffSection() {
     setDrawer(null);
   };
 
-  const StaffTable = ({ members, role }: { members: StaffMember[]; role: 'cashier' | 'waiter' }) => (
-    <div className="rounded-xl border border-[#E8D5C0] bg-white">
-      <div className="flex items-center justify-between border-b border-[#E8D5C0] px-4 py-3">
-        <h4 className="text-xs font-semibold text-[#1C0800]">
-          {role === 'cashier' ? 'Cashiers' : 'Waiters'}
-          <span className="ml-2 rounded-full bg-[#E8D5C0]/60 px-1.5 py-0.5 text-[10px] text-[#1C0800]/50">
-            {members.length}
-          </span>
-        </h4>
-        <button
-          onClick={() => setDrawer({ role, staff: null })}
-          className="flex items-center gap-1 rounded-lg bg-[#E8380D]/10 px-2.5 py-1.5 text-[11px] font-semibold text-[#E8380D] hover:bg-[#E8380D]/20"
-        >
-          <Plus size={12} /> Add {role === 'cashier' ? 'Cashier' : 'Waiter'}
-        </button>
-      </div>
-      {members.length === 0 ? (
-        <p className="px-4 py-6 text-center text-xs text-[#1C0800]/30">No {role}s added yet.</p>
-      ) : (
-        <div className="divide-y divide-[#E8D5C0]/60">
-          {members.map(m => (
-            <div key={m._id} className="flex items-center gap-3 px-4 py-3">
-              <span className="w-14 shrink-0 rounded-md bg-[#1C0800]/5 px-1.5 py-0.5 text-center font-mono text-[10px] font-semibold text-[#1C0800]/60">
-                {m.employeeCode}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-[#1C0800]">{m.name}</p>
-                {m.mobile && <p className="text-[10px] text-[#1C0800]/40">{m.mobile}</p>}
-              </div>
-              <button
-                onClick={() => void handleToggle(role, m._id)}
-                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors ${
-                  m.isActive
-                    ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                    : 'bg-red-100 text-red-600 hover:bg-red-200'
-                }`}
-              >
-                {m.isActive ? 'Active' : 'Inactive'}
-              </button>
-              {confirmDel?.id === m._id ? (
-                <div className="flex shrink-0 items-center gap-1">
-                  <span className="text-[10px] text-red-500">Delete?</span>
-                  <button onClick={() => void handleDelete()} className="rounded bg-red-500 px-2 py-0.5 text-[10px] text-white">
-                    Yes
-                  </button>
-                  <button onClick={() => setConfirmDel(null)} className="rounded border border-[#E8D5C0] px-2 py-0.5 text-[10px] text-[#1C0800]/50">
-                    No
-                  </button>
-                </div>
-              ) : (
-                <div className="flex shrink-0 items-center gap-1">
-                  <button onClick={() => setDrawer({ role, staff: m })} className="rounded-lg p-1.5 text-[#1C0800]/40 hover:bg-[#1C0800]/5">
-                    <Pencil size={12} />
-                  </button>
-                  <button onClick={() => setConfirmDel({ role, id: m._id })} className="rounded-lg p-1.5 text-red-400 hover:bg-red-50">
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
   if (loading) {
     return <div className="flex h-40 items-center justify-center text-sm text-[#1C0800]/30">Loading staff…</div>;
   }
 
   return (
     <div className="space-y-5">
-      <StaffTable members={cashiers} role="cashier" />
-      <StaffTable members={waiters} role="waiter" />
+      <StaffTable
+        members={cashiers}
+        role="cashier"
+        confirmDelId={confirmDel?.role === 'cashier' ? confirmDel.id : null}
+        onAdd={() => setDrawer({ role: 'cashier', staff: null })}
+        onEdit={m => setDrawer({ role: 'cashier', staff: m })}
+        onToggle={id => void handleToggle('cashier', id)}
+        onDeleteRequest={id => setConfirmDel({ role: 'cashier', id })}
+        onDeleteConfirm={() => void handleDelete()}
+        onDeleteCancel={() => setConfirmDel(null)}
+      />
+      <StaffTable
+        members={waiters}
+        role="waiter"
+        confirmDelId={confirmDel?.role === 'waiter' ? confirmDel.id : null}
+        onAdd={() => setDrawer({ role: 'waiter', staff: null })}
+        onEdit={m => setDrawer({ role: 'waiter', staff: m })}
+        onToggle={id => void handleToggle('waiter', id)}
+        onDeleteRequest={id => setConfirmDel({ role: 'waiter', id })}
+        onDeleteConfirm={() => void handleDelete()}
+        onDeleteCancel={() => setConfirmDel(null)}
+      />
       {drawer && (
         <StaffDrawer
           role={drawer.role}

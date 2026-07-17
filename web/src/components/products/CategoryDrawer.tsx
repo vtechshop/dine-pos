@@ -67,7 +67,7 @@ export function CategoryDrawer({ category, onSave, onClose }: Props) {
   useShortcut('Enter', () => { void handleSave(); }, !saving);
 
   const field =
-    'block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100';
+    'block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20';
 
   return (
     <div
@@ -165,7 +165,7 @@ export function CategoryDrawer({ category, onSave, onClose }: Props) {
               type="button"
               onClick={() => set('isActive', !form.isActive)}
               className={`relative h-5 w-9 rounded-full transition-colors ${
-                form.isActive ? 'bg-blue-600' : 'bg-gray-200'
+                form.isActive ? 'bg-[#E8380D]' : 'bg-gray-200'
               }`}
             >
               <span
@@ -188,7 +188,7 @@ export function CategoryDrawer({ category, onSave, onClose }: Props) {
           <button
             onClick={() => { void handleSave(); }}
             disabled={saving}
-            className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-40"
+            className="flex-1 rounded-lg bg-[#E8380D] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#E8380D]/90 disabled:opacity-40"
           >
             {saving ? 'Saving…' : category ? 'Update' : 'Create'}
           </button>

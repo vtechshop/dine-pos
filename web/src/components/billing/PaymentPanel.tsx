@@ -75,7 +75,7 @@ export function PaymentPanel({
             </p>
           )}
           {mode === 'guest' && !selectedGuestBill && (
-            <p className="mt-1.5 text-[11px] text-blue-600">
+            <p className="mt-1.5 text-[11px] text-[#E8380D]">
               Click a guest's Bill button to select them.
             </p>
           )}

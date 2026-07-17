@@ -15,14 +15,14 @@ export const OrderCard = memo(function OrderCard({ order }: OrderCardProps) {
     <div
       className={`rounded-lg border p-3 transition-colors duration-300 ${
         order.isNew
-          ? 'border-blue-200 bg-blue-50'
+          ? 'border-[#E8380D]/20 bg-[#E8380D]/[0.04]'
           : 'border-gray-100 bg-white'
       }`}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           {order.isNew && (
-            <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-blue-500" />
+            <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#E8380D]" />
           )}
           <span className="text-sm font-bold text-gray-900">#{order.orderNumber}</span>
         </div>

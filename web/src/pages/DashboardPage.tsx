@@ -100,8 +100,7 @@ export function DashboardPage() {
   });
 
   useShortcut('F2', () => {
-    // Placeholder: will open New Order modal in a future phase
-    console.debug('[Shortcut] F2 — New Order (not yet implemented)');
+    // F2 reserved for future New Order shortcut
   });
 
   useShortcut('Escape', () => {

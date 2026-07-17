@@ -98,7 +98,7 @@ export function ProductsPage() {
               onClick={() => setTab(t)}
               className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium capitalize transition-colors ${
                 tab === t
-                  ? 'border-blue-600 text-blue-600'
+                  ? 'border-[#E8380D] text-[#E8380D]'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -266,14 +266,14 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search… (F1)"
-            className="h-8 w-48 rounded-lg border border-gray-200 pl-8 pr-3 text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+            className="h-8 w-48 rounded-lg border border-gray-200 pl-8 pr-3 text-xs outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
           />
         </div>
 
         <select
           value={catFilter}
           onChange={e => setCatFilter(e.target.value)}
-          className="h-8 rounded-lg border border-gray-200 px-2 text-xs text-gray-600 outline-none focus:border-blue-400"
+          className="h-8 rounded-lg border border-gray-200 px-2 text-xs text-gray-600 outline-none focus:border-[#E8380D]/50"
         >
           <option value="">All Categories</option>
           {categories.map(c => (
@@ -345,7 +345,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
 
         <button
           onClick={() => setEditing('new')}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700"
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-[#E8380D] px-3 text-xs font-semibold text-white hover:bg-[#E8380D]/90"
         >
           <Plus size={13} />New (F2)
         </button>
@@ -361,7 +361,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
             onClick={() => {
               setSearch(''); setCatFilter(''); setVegFilter('all'); setAvailFilter(null);
             }}
-            className="text-blue-500 hover:underline"
+            className="text-[#E8380D] hover:underline"
           >
             Clear filters
           </button>
@@ -386,7 +386,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
             {!hasFilter && (
               <button
                 onClick={() => setEditing('new')}
-                className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                className="mt-3 rounded-lg bg-[#E8380D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#E8380D]/90"
               >
                 Add First Product
               </button>
@@ -572,7 +572,7 @@ function CategoriesPanel({
         <span className="text-xs text-gray-400">{categories.length} categories</span>
         <button
           onClick={() => setEditing('new')}
-          className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+          className="flex items-center gap-1.5 rounded-lg bg-[#E8380D] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#E8380D]/90"
         >
           <Plus size={13} />New (F2)
         </button>
@@ -585,7 +585,7 @@ function CategoriesPanel({
             <p className="text-sm">No categories yet</p>
             <button
               onClick={() => setEditing('new')}
-              className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+              className="mt-3 rounded-lg bg-[#E8380D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#E8380D]/90"
             >
               Add First Category
             </button>

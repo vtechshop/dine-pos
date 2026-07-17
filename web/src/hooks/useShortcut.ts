@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useKeyboardContext, type ShortcutKey } from '../context/KeyboardContext';
 
 /**
@@ -18,8 +18,8 @@ export function useShortcut(
   enabled = true,
 ): void {
   const { register } = useKeyboardContext();
-  const handlerRef   = useRef(handler);
-  handlerRef.current = handler;
+  const handlerRef = useRef(handler);
+  useLayoutEffect(() => { handlerRef.current = handler; });
 
   useEffect(() => {
     if (!enabled) return;

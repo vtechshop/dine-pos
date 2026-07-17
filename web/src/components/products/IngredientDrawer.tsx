@@ -89,7 +89,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
   useShortcut('Enter', () => { void handleSave(); }, !saving);
 
   const field =
-    'block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100';
+    'block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20';
 
   return (
     <div
@@ -195,7 +195,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
                       onClick={() => set('unit', u)}
                       className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${
                         form.unit === u
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          ? 'border-[#E8380D] bg-[#E8380D]/5 text-[#E8380D]'
                           : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                       }`}
                     >
@@ -273,7 +273,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
             className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-40 ${
               mode === 'restock'
                 ? 'bg-green-600 hover:bg-green-700'
-                : 'bg-blue-600 hover:bg-blue-700'
+                : 'bg-[#E8380D] hover:bg-[#E8380D]/90'
             }`}
           >
             {saving

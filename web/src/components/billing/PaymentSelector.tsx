@@ -25,12 +25,12 @@ export function PaymentSelector({ value, onChange, disabled }: Props) {
           onClick={() => onChange(m.key)}
           className={`flex-1 min-w-[60px] rounded-lg border px-3 py-2 text-sm font-medium transition-all disabled:opacity-50 ${
             value === m.key
-              ? 'border-blue-500 bg-blue-600 text-white shadow-sm'
-              : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50'
+              ? 'border-[#E8380D] bg-[#E8380D] text-white shadow-sm'
+              : 'border-gray-200 bg-white text-gray-700 hover:border-[#E8380D]/30 hover:bg-[#E8380D]/5'
           }`}
         >
           <span>{m.label}</span>
-          <span className={`ml-1 text-[10px] font-mono ${value === m.key ? 'text-blue-200' : 'text-gray-400'}`}>
+          <span className={`ml-1 text-[10px] font-mono ${value === m.key ? 'text-white/70' : 'text-gray-400'}`}>
             {m.shortcut}
           </span>
         </button>

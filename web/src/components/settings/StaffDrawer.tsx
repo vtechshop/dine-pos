@@ -59,9 +59,11 @@ export function StaffDrawer({ role, staff, onSave, onClose }: Props) {
           ? await updateCashier(staff._id, data)
           : await updateWaiter(staff._id, data);
         if (pin) {
-          role === 'cashier'
-            ? await updateCashierPin(staff._id, pin)
-            : await updateWaiterPin(staff._id, pin);
+          if (role === 'cashier') {
+            await updateCashierPin(staff._id, pin);
+          } else {
+            await updateWaiterPin(staff._id, pin);
+          }
         }
       } else {
         const createData: StaffInput = { ...data as Required<typeof data>, pin };

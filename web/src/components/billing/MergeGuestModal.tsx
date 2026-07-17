@@ -36,7 +36,7 @@ export function MergeGuestModal({ sourceGuest, activeGuests, onConfirm, onClose 
       <div className="w-full max-w-sm rounded-xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <div className="flex items-center gap-2 text-gray-800">
-            <GitMerge size={16} className="text-blue-500" />
+            <GitMerge size={16} className="text-[#E8380D]" />
             <span className="font-semibold text-sm">Merge Guest</span>
           </div>
           <button onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100">
@@ -62,7 +62,7 @@ export function MergeGuestModal({ sourceGuest, activeGuests, onConfirm, onClose 
                     onClick={() => setTargetId(g._id)}
                     className={`w-full flex items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition-colors ${
                       targetId === g._id
-                        ? 'border-blue-500 bg-blue-50 text-blue-800'
+                        ? 'border-[#E8380D] bg-[#E8380D]/5 text-[#1C0800]'
                         : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                     }`}
                   >
@@ -96,7 +96,7 @@ export function MergeGuestModal({ sourceGuest, activeGuests, onConfirm, onClose 
           <button
             onClick={handleConfirm}
             disabled={!targetId || busy}
-            className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-40"
+            className="flex-1 rounded-lg bg-[#E8380D] py-2 text-sm font-medium text-white transition-colors hover:bg-[#E8380D]/90 disabled:opacity-40"
           >
             {busy ? 'Merging…' : 'Confirm Merge'}
           </button>

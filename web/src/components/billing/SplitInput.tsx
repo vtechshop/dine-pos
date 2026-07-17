@@ -35,7 +35,7 @@ export function SplitInput({ total, value, onChange, currencySymbol, disabled }:
               value={value[field] || ''}
               onChange={e => update(field, e.target.value)}
               placeholder="0"
-              className="w-full rounded-md border border-gray-200 pl-6 pr-2 py-1.5 text-sm text-right outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 disabled:opacity-50"
+              className="w-full rounded-md border border-gray-200 pl-6 pr-2 py-1.5 text-sm text-right outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20 disabled:opacity-50"
             />
           </div>
         </div>

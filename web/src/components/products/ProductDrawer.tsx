@@ -82,7 +82,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
   useShortcut('Enter', () => { void handleSave(); }, !saving);
 
   const field =
-    'block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100';
+    'block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20';
 
   return (
     <div
@@ -265,7 +265,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                 onClick={() => set('stock', -1)}
                 className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                   (form.stock ?? -1) === -1
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    ? 'border-[#E8380D] bg-[#E8380D]/5 text-[#E8380D]'
                     : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                 }`}
               >
@@ -276,7 +276,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                 onClick={() => set('stock', (form.stock ?? -1) < 0 ? 0 : (form.stock ?? 0))}
                 className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                   (form.stock ?? -1) >= 0
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    ? 'border-[#E8380D] bg-[#E8380D]/5 text-[#E8380D]'
                     : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                 }`}
               >
@@ -321,7 +321,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
           <button
             onClick={() => { void handleSave(); }}
             disabled={saving}
-            className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-40"
+            className="flex-1 rounded-lg bg-[#E8380D] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#E8380D]/90 disabled:opacity-40"
           >
             {saving ? 'Saving…' : product ? 'Update' : 'Create Product'}
           </button>

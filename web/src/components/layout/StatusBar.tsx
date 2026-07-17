@@ -53,9 +53,6 @@ export function StatusBar() {
   const cashier = devices.find(d => d.printerRole === 'cashier');
   const printersOnline = (kitchen?.online ?? false) || (cashier?.online ?? false);
 
-  // Live orders count = today's backend orders + socket orders received this session
-  const totalOrders = (report?.totalOrders ?? 0) + liveOrders.filter(o => o.isNew).length;
-
   // Active tables: use live orders to estimate (table grid is the source of truth)
   const revenue = report
     ? `${symbol}${Math.round(report.totalSales).toLocaleString('en-IN')}`
