@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CheckCircle2, Clock, Monitor, Headphones } from 'lucide-react';
+import { submitDemo } from '../api';
 
 interface FormState {
   name: string;
@@ -38,13 +39,28 @@ export function BookDemoPage() {
     setError('');
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
       setError('Name, email and phone are required.');
       return;
     }
-    setSubmitted(true);
+    setError('');
+    try {
+      await submitDemo({
+        name:          form.name.trim(),
+        email:         form.email.trim(),
+        phone:         form.phone.trim(),
+        restaurant:    form.restaurant.trim() || undefined,
+        outlets:       form.outlets || undefined,
+        preferredDate: form.preferredDate || undefined,
+        preferredTime: form.preferredTime || undefined,
+        notes:         form.notes.trim() || undefined,
+      });
+      setSubmitted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Submission failed. Please try again.');
+    }
   }
 
   const field =

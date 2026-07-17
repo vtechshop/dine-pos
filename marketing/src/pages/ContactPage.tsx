@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Mail, Phone, MapPin, CheckCircle2 } from 'lucide-react';
+import { submitContact } from '../api';
 
 interface FormState {
   name: string;
@@ -21,14 +22,25 @@ export function ContactPage() {
     setError('');
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim() || !form.message.trim()) {
       setError('Please fill in name, email, and message.');
       return;
     }
-    // Static — no backend. Show success.
-    setSubmitted(true);
+    setError('');
+    try {
+      await submitContact({
+        name:       form.name.trim(),
+        email:      form.email.trim(),
+        phone:      form.phone.trim() || undefined,
+        restaurant: form.restaurant.trim() || undefined,
+        message:    form.message.trim(),
+      });
+      setSubmitted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Submission failed. Please try again.');
+    }
   }
 
   const field =

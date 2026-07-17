@@ -17,6 +17,40 @@ import { sendError } from '../utils/sendError';
 
 const router = Router();
 
+// ── C1: Server-side monetary recalculation ───────────────────────────────────
+// The backend is the single source of truth for all monetary values.
+// Client-supplied subtotal / taxTotal / discountAmount / grandTotal are
+// ignored and recomputed from the raw items before any Order is persisted.
+function recalcOrderTotals(
+  rawItems: any[],
+  rawDiscount: unknown,
+  rawLoyaltyDiscount: unknown,
+) {
+  let subtotal = 0;
+  let taxTotal = 0;
+
+  const items = (rawItems ?? []).map((item: any) => {
+    const unitPrice = Math.max(0, Number(item.price) || 0);
+    const qty       = Math.max(1, Math.floor(Number(item.quantity) || 1));
+    const taxPct    = Math.max(0, Number(item.taxPercent) || 0);
+    const lineBase  = Math.round(unitPrice * qty * 100) / 100;
+    const taxAmt    = Math.round(lineBase * taxPct / 100 * 100) / 100;
+    const lineTotal = Math.round((lineBase + taxAmt) * 100) / 100;
+    subtotal += lineBase;
+    taxTotal += taxAmt;
+    return { ...item, quantity: qty, taxAmount: taxAmt, total: lineTotal };
+  });
+
+  subtotal = Math.round(subtotal * 100) / 100;
+  taxTotal = Math.round(taxTotal * 100) / 100;
+  const available        = subtotal + taxTotal;
+  const discountAmount   = Math.min(Math.max(0, Number(rawDiscount) || 0), available);
+  const loyaltyDiscount  = Math.min(Math.max(0, Number(rawLoyaltyDiscount) || 0), available - discountAmount);
+  const grandTotal       = Math.max(0, Math.round((available - discountAmount - loyaltyDiscount) * 100) / 100);
+
+  return { items, subtotal, taxTotal, discountAmount, loyaltyDiscount, grandTotal };
+}
+
 // Deduct (-1) or restore (+1) raw-material stock based on each product's recipe (BOM)
 const applyIngredientStockChange = async (orderItems: { product?: any; quantity: number }[], hotelId: string, sign: 1 | -1) => {
   const productIds = orderItems.filter(i => i.product).map(i => i.product);
@@ -508,7 +542,18 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     }
 
     const orderNumber = await generateOrderNumber(req.hotelId!);
-    const order = new Order({ ...req.body, hotelId: req.hotelId, orderNumber });
+    const recalc = recalcOrderTotals(req.body.items, req.body.discountAmount, req.body.loyaltyDiscount);
+    const order = new Order({
+      ...req.body,
+      hotelId:        req.hotelId,
+      orderNumber,
+      items:           recalc.items,
+      subtotal:        recalc.subtotal,
+      taxTotal:        recalc.taxTotal,
+      discountAmount:  recalc.discountAmount,
+      loyaltyDiscount: recalc.loyaltyDiscount,
+      grandTotal:      recalc.grandTotal,
+    });
     await order.save();
     console.log(`[ORDER] Saved | orderId=${order._id} | orderNumber=${order.orderNumber} | hotelId=${req.hotelId}`);
 

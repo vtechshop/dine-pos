@@ -9,6 +9,18 @@ import { printReceiptBluetooth, printKOTBluetooth, connectPrinter } from './blue
 const BT_PRINTER_KEY = '@hotel_pos_bt_printer';
 const BT_PRINTER_ADDRESS_KEY = '@hotel_pos_bt_printer_address';
 
+function taxRows(subtotal: number, taxTotal: number, sym: string, fontSize: number): string {
+  if (taxTotal <= 0) return '';
+  const rate     = subtotal > 0 ? (taxTotal / subtotal) * 100 : 0;
+  const halfRate = (rate / 2).toFixed(1).replace(/\.0$/, '');
+  const half     = (taxTotal / 2).toFixed(2);
+  const tdL = `text-align:left; padding:3px 2px; font-size:${fontSize}px`;
+  const tdR = `text-align:right; padding:3px 2px; font-size:${fontSize}px`;
+  return `
+    <tr><td style="${tdL}">CGST (${halfRate}%)</td><td style="${tdR}">${sym}${half}</td></tr>
+    <tr><td style="${tdL}">SGST (${halfRate}%)</td><td style="${tdR}">${sym}${half}</td></tr>`;
+}
+
 const escHtml = (s: unknown): string =>
   String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
@@ -201,10 +213,7 @@ export const generateReceiptHTML = (order: Order, settings: Settings): string =>
         <td style="text-align:left;">Subtotal</td>
         <td style="text-align:right;">${settings.currencySymbol}${order.subtotal.toFixed(2)}</td>
       </tr>
-      <tr>
-        <td style="text-align:left;">GST</td>
-        <td style="text-align:right;">${settings.currencySymbol}${order.taxTotal.toFixed(2)}</td>
-      </tr>
+      ${taxRows(order.subtotal, order.taxTotal, settings.currencySymbol, fs.total)}
       <tr class="grand-total">
         <td style="text-align:left;">GRAND TOTAL</td>
         <td style="text-align:right;">${settings.currencySymbol}${order.grandTotal.toFixed(2)}</td>

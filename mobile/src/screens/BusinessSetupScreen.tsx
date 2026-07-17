@@ -19,6 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { registerHotel, resubmitHotel, verifyPincode, verifyGST, verifyFSSAI } from '../services/api';
 import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { validatePhone, validateEmail, validateGST, validateFSSAI, validatePincode } from '../utils/validation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BusinessSetup'>;
 
@@ -90,11 +91,11 @@ const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
       showAlert('Required', 'Please enter owner name');
       return false;
     }
-    if (!phone.trim() || !/^\d{10}$/.test(phone.trim())) {
+    if (!phone.trim() || !validatePhone(phone)) {
       showAlert('Invalid Phone', 'Phone number must be exactly 10 digits');
       return false;
     }
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    if (!email.trim() || !validateEmail(email)) {
       showAlert('Invalid Email', 'Please enter a valid email address');
       return false;
     }
@@ -110,15 +111,15 @@ const BusinessSetupScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const validateStep1 = (): boolean => {
-    if (gstNumber.trim() && !/^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}$/.test(gstNumber.trim().toUpperCase())) {
+    if (gstNumber.trim() && !validateGST(gstNumber)) {
       showAlert('Invalid GST', 'GST number format is invalid (e.g. 29ABCDE1234F1Z5)');
       return false;
     }
-    if (fssaiNumber.trim() && !/^\d{14}$/.test(fssaiNumber.trim())) {
+    if (fssaiNumber.trim() && !validateFSSAI(fssaiNumber)) {
       showAlert('Invalid FSSAI', 'FSSAI license number must be exactly 14 digits');
       return false;
     }
-    if (pincode.trim() && !/^\d{6}$/.test(pincode.trim())) {
+    if (pincode.trim() && !validatePincode(pincode)) {
       showAlert('Invalid Pincode', 'Pincode must be exactly 6 digits');
       return false;
     }

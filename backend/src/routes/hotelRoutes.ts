@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { makeRateLimiter } from '../utils/rateLimiter';
 import Hotel from '../models/Hotel';
 import { sendError } from '../utils/sendError';
+import { validatePhone, validateEmail, validateGST, validateFSSAI, validatePincode } from '../utils/validation';
 
 // 5 registration / resubmit attempts per hour per IP — prevents registration spam
 const registrationLimiter = makeRateLimiter({
@@ -44,11 +45,11 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     if (!hotelName?.trim()) return res.status(400).json({ message: 'Business name is required' });
     if (!ownerName?.trim()) return res.status(400).json({ message: 'Owner name is required' });
     if (!phone?.trim())     return res.status(400).json({ message: 'Phone number is required' });
-    if (!/^\d{10}$/.test(String(phone).trim())) {
+    if (!validatePhone(String(phone))) {
       return res.status(400).json({ message: 'Phone number must be exactly 10 digits' });
     }
     if (!email?.trim()) return res.status(400).json({ message: 'Email address is required' });
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
+    if (!validateEmail(String(email))) {
       return res.status(400).json({ message: 'Please provide a valid email address' });
     }
     if (!businessType || !VALID_BUSINESS_TYPES.includes(businessType)) {
@@ -111,7 +112,22 @@ router.put('/resubmit/:phone', registrationLimiter, async (req: Request, res: Re
       return res.status(400).json({ message: 'Only rejected registrations can be resubmitted' });
     }
 
-    const { hotelName, ownerName, email, businessType, state, city, address } = req.body;
+    const { hotelName, ownerName, email, businessType, state, city, address,
+            gstNumber, fssaiNumber, pincode, gstVerified, fssaiVerified } = req.body;
+
+    if (email && !validateEmail(String(email))) {
+      return res.status(400).json({ message: 'Please provide a valid email address' });
+    }
+    if (gstNumber && !validateGST(String(gstNumber))) {
+      return res.status(400).json({ message: 'Invalid GST number format' });
+    }
+    if (fssaiNumber && !validateFSSAI(String(fssaiNumber))) {
+      return res.status(400).json({ message: 'FSSAI number must be exactly 14 digits' });
+    }
+    if (pincode && !validatePincode(String(pincode))) {
+      return res.status(400).json({ message: 'Pincode must be exactly 6 digits' });
+    }
+
     const updated = await Hotel.findOneAndUpdate(
       { phone: req.params.phone },
       {
@@ -121,7 +137,10 @@ router.put('/resubmit/:phone', registrationLimiter, async (req: Request, res: Re
         ...(businessType  && { businessType }),
         ...(state         && { state:        String(state).trim() }),
         ...(city          && { city:         String(city).trim() }),
-        ...(typeof address === 'string' && { address: address.trim() }),
+        ...(typeof address    === 'string' && { address:      address.trim() }),
+        ...(typeof gstNumber  === 'string' && { gstNumber:    gstNumber.trim().toUpperCase(), gstVerified: Boolean(gstVerified) }),
+        ...(typeof fssaiNumber === 'string' && { fssaiNumber: fssaiNumber.trim(), fssaiVerified: Boolean(fssaiVerified) }),
+        ...(typeof pincode    === 'string' && { pincode:      pincode.trim() }),
         status: 'pending',
         rejectionReason: '',
         approvedAt: null,
