@@ -1,14 +1,16 @@
 import { memo } from 'react';
-import { Users, Clock } from 'lucide-react';
+import { Users, Clock, Loader2 } from 'lucide-react';
 import type { TableGridItem } from '../../types';
 import { StatusChip } from './StatusChip';
 import { LiveBadge } from './LiveBadge';
 
 interface TableCardProps {
-  table:        TableGridItem;
-  hasNewOrder:  boolean;
-  currencySymbol: string;
-  onSelect?:    (sessionId: string) => void;
+  table:            TableGridItem;
+  hasNewOrder:      boolean;
+  currencySymbol:   string;
+  onSelect?:        (sessionId: string) => void;
+  onOpenAvailable?: () => void;
+  isOpening?:       boolean;
 }
 
 function elapsedLabel(openedAt: string): string {
@@ -18,7 +20,7 @@ function elapsedLabel(openedAt: string): string {
 }
 
 function borderColor(status: TableGridItem['status'], hasNewOrder: boolean): string {
-  if (hasNewOrder)          return 'border-blue-300 ring-1 ring-blue-200';
+  if (hasNewOrder)           return 'border-[#E8380D]/60 ring-1 ring-[#E8380D]/20';
   if (status === 'occupied') return 'border-green-200';
   if (status === 'reserved') return 'border-amber-200';
   if (status === 'inactive') return 'border-dashed border-gray-200';
@@ -37,13 +39,20 @@ export const TableCard = memo(function TableCard({
   hasNewOrder,
   currencySymbol,
   onSelect,
+  onOpenAvailable,
+  isOpening = false,
 }: TableCardProps) {
   const { session, status } = table;
   const displayName = table.name || `T${table.number}`;
-  const clickable = !!onSelect && !!table.currentSessionId;
+  const clickable = (!!onSelect && !!table.currentSessionId) || !!onOpenAvailable;
 
   function handleClick() {
-    if (clickable && table.currentSessionId) onSelect!(table.currentSessionId);
+    if (isOpening) return;
+    if (onOpenAvailable && status === 'available') {
+      onOpenAvailable();
+    } else if (onSelect && table.currentSessionId) {
+      onSelect(table.currentSessionId);
+    }
   }
 
   return (
@@ -95,6 +104,12 @@ export const TableCard = memo(function TableCard({
         <p className="mt-auto text-xs text-amber-600">Reserved</p>
       ) : status === 'inactive' ? (
         <p className="mt-auto text-xs text-gray-400">Inactive</p>
+      ) : isOpening ? (
+        <p className="mt-auto flex items-center gap-1 text-xs text-[#E8380D]">
+          <Loader2 size={11} className="animate-spin" /> Opening…
+        </p>
+      ) : onOpenAvailable ? (
+        <p className="mt-auto text-xs text-[#E8380D]/70">Tap to seat guests</p>
       ) : (
         <p className="mt-auto text-xs text-gray-400">
           {table.capacity} seats

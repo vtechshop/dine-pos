@@ -6,14 +6,10 @@ import { Spinner } from '../components/ui/Spinner';
 
 const APP_VERSION = 'v1.0-rc1';
 
-// Map JWT role → post-login destination within the POS app
-function roleDestination(role: string | null): string {
-  switch (role) {
-    case 'cashier': return '/cashier';
-    case 'waiter':  return '/waiter';
-    case 'kitchen': return '/kitchen';
-    default:        return '/dashboard'; // admin / owner / manager
-  }
+// All roles land on the table-grid dashboard for the pilot phase.
+// Dedicated cashier/waiter/kitchen views are delivered in a future phase.
+function roleDestination(_role: string | null): string {
+  return '/dashboard';
 }
 
 export function LoginPage() {

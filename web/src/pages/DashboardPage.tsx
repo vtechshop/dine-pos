@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import type { Table, SessionSummary, TableGridItem } from '../types';
-import { fetchTables, fetchOpenSessions } from '../api/tables';
+import { fetchTables, fetchOpenSessions, openSession } from '../api/tables';
 import { TableCard } from '../components/ui/TableCard';
 import { Spinner } from '../components/ui/Spinner';
 import { BillingDrawer } from '../components/billing/BillingDrawer';
@@ -42,6 +42,7 @@ export function DashboardPage() {
   const [filter,   setFilter]   = useState<Filter>('all');
   const [search,   setSearch]   = useState('');
   const [billingSessionId, setBillingSessionId] = useState<string | null>(null);
+  const [openingTableId,   setOpeningTableId]   = useState<string | null>(null);
 
   // Badge state — updated by socket without touching table/session arrays
   const [newOrderTables, dispatchBadge] = useReducer(badgeReducer, new Set<string>());
@@ -111,6 +112,20 @@ export function DashboardPage() {
   const handleTableSelect = useCallback((sessionId: string) => {
     setBillingSessionId(sessionId);
   }, []);
+
+  const handleAvailableTableClick = useCallback(async (tableId: string) => {
+    setOpeningTableId(tableId);
+    try {
+      const { session } = await openSession(tableId);
+      void load();
+      setBillingSessionId(session._id);
+    } catch {
+      // 409 = race (table just became occupied) — refresh so grid reflects reality
+      void load();
+    } finally {
+      setOpeningTableId(null);
+    }
+  }, [load]);
 
   // ── Build joined table grid items ───────────────────────────────────────────
 
@@ -238,6 +253,8 @@ export function DashboardPage() {
                 hasNewOrder={newOrderTables.has(table.name || `T${table.number}`)}
                 currencySymbol={currencySymbol}
                 onSelect={table.status === 'occupied' ? handleTableSelect : undefined}
+                onOpenAvailable={table.status === 'available' ? () => void handleAvailableTableClick(table._id) : undefined}
+                isOpening={openingTableId === table._id}
               />
             ))}
           </div>

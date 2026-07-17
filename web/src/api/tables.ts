@@ -12,3 +12,10 @@ export async function fetchOpenSessions(): Promise<SessionSummary[]> {
   const res = await apiFetch<{ sessions: SessionSummary[] }>('/sessions?status=open');
   return res.sessions;
 }
+
+export async function openSession(tableId: string): Promise<{ session: SessionSummary & { _id: string } }> {
+  return apiFetch<{ session: SessionSummary & { _id: string } }>('/sessions', {
+    method: 'POST',
+    body: JSON.stringify({ tableId }),
+  });
+}

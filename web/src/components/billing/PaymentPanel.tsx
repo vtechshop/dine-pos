@@ -18,6 +18,7 @@ interface Props {
   canConfirm: boolean;
   confirming: boolean;
   onConfirm: () => void;
+  confirmFlash?: boolean;
 }
 
 function fmt(n: number, sym: string) {
@@ -38,6 +39,7 @@ export function PaymentPanel({
   canConfirm,
   confirming,
   onConfirm,
+  confirmFlash = false,
 }: Props) {
   const guestTotal = selectedGuestBill
     ? selectedGuestBill.orders.reduce((s, o) => s + o.grandTotal, 0)
@@ -76,7 +78,7 @@ export function PaymentPanel({
           )}
           {mode === 'guest' && !selectedGuestBill && (
             <p className="mt-1.5 text-[11px] text-[#E8380D]">
-              Click a guest's Bill button to select them.
+              Click a guest's Pay button to select them.
             </p>
           )}
         </div>
@@ -140,7 +142,7 @@ export function PaymentPanel({
           <button
             onClick={onConfirm}
             disabled={!canConfirm || confirming}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-green-700 disabled:opacity-40"
+            className={`flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-green-700 disabled:opacity-40 ${confirmFlash ? 'ring-2 ring-green-400 ring-offset-1 animate-pulse' : ''}`}
           >
             {confirming ? (
               <>

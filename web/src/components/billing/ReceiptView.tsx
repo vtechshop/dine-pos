@@ -12,6 +12,8 @@ interface Props {
   onDone: () => void;
 }
 
+type PrinterStatus = 'checking' | 'ready' | 'queued' | 'not_found';
+
 function fmt(n: number, sym: string) {
   return `${sym}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -29,15 +31,18 @@ function paymentLabel(method?: string | null, split?: { cash: number; upi: numbe
 }
 
 export function ReceiptView({ guest, tableLabel, orders, currencySymbol, isBulk, onDone }: Props) {
-  const [reprintId, setReprintId] = useState<string | null>(null);
-  const [printing, setPrinting] = useState(false);
-  const [printMsg, setPrintMsg] = useState<string | null>(null);
+  const [reprintId,     setReprintId]     = useState<string | null>(null);
+  const [printing,      setPrinting]      = useState(false);
+  const [printMsg,      setPrintMsg]      = useState<string | null>(null);
+  const [printerStatus, setPrinterStatus] = useState<PrinterStatus>('checking');
+  const [retryCount,    setRetryCount]    = useState(0);
 
-  const subtotal = orders.reduce((s, o) => s + (o.subtotal ?? 0), 0);
-  const taxTotal = orders.reduce((s, o) => s + (o.taxTotal ?? 0), 0);
+  const subtotal   = orders.reduce((s, o) => s + (o.subtotal ?? 0), 0);
+  const taxTotal   = orders.reduce((s, o) => s + (o.taxTotal ?? 0), 0);
   const grandTotal = orders.reduce((s, o) => s + (o.grandTotal ?? 0), 0);
 
   useEffect(() => {
+    setPrinterStatus('checking');
     const find = async () => {
       try {
         await new Promise(r => setTimeout(r, 800));
@@ -45,11 +50,18 @@ export function ReceiptView({ guest, tableLabel, orders, currencySymbol, isBulk,
         const match = guest
           ? jobs.find(j => j.guestId === guest._id)
           : jobs[0];
-        if (match) setReprintId(match._id);
-      } catch { /* silent */ }
+        if (match) {
+          setReprintId(match._id);
+          setPrinterStatus(match.status === 'pending' ? 'queued' : 'ready');
+        } else {
+          setPrinterStatus('not_found');
+        }
+      } catch {
+        setPrinterStatus('not_found');
+      }
     };
     void find();
-  }, [guest]);
+  }, [guest, retryCount]);
 
   async function handlePrint() {
     if (!reprintId || printing) return;
@@ -63,6 +75,12 @@ export function ReceiptView({ guest, tableLabel, orders, currencySymbol, isBulk,
     } finally {
       setPrinting(false);
     }
+  }
+
+  function handleRetry() {
+    setPrintMsg(null);
+    setReprintId(null);
+    setRetryCount(c => c + 1);
   }
 
   return (
@@ -157,25 +175,52 @@ export function ReceiptView({ guest, tableLabel, orders, currencySymbol, isBulk,
       </div>
 
       {/* Actions */}
-      <div className="border-t border-gray-100 px-5 py-3 flex gap-2 bg-gray-50">
-        {printMsg ? (
-          <p className="flex-1 text-center text-xs text-gray-500 py-1">{printMsg}</p>
-        ) : (
-          <button
-            onClick={handlePrint}
-            disabled={!reprintId || printing}
-            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gray-800 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:opacity-40"
-          >
-            <Printer size={15} />
-            {printing ? 'Sending…' : 'Print Receipt'}
-          </button>
+      <div className="border-t border-gray-100 px-5 py-3 flex flex-col gap-2 bg-gray-50">
+        {/* Printer status banners */}
+        {printerStatus === 'queued' && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            Printer offline — receipt queued. It will print automatically when the printer reconnects.
+          </div>
         )}
-        <button
-          onClick={onDone}
-          className="flex-1 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-        >
-          Done
-        </button>
+        {printerStatus === 'not_found' && !printMsg && (
+          <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs text-gray-600">
+            Receipt job not found. Check printer connection and tap Retry.
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          {printMsg ? (
+            <p className="flex-1 text-center text-xs text-gray-500 py-1">{printMsg}</p>
+          ) : printerStatus === 'queued' ? (
+            <div className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 py-2.5 text-sm font-medium text-amber-700">
+              <Printer size={15} />
+              Queued for printing
+            </div>
+          ) : printerStatus === 'not_found' ? (
+            <button
+              onClick={handleRetry}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+            >
+              <Printer size={15} />
+              Retry
+            </button>
+          ) : (
+            <button
+              onClick={handlePrint}
+              disabled={printerStatus === 'checking' || !reprintId || printing}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gray-800 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:opacity-40"
+            >
+              <Printer size={15} />
+              {printing ? 'Sending…' : printerStatus === 'checking' ? 'Checking…' : 'Print Receipt'}
+            </button>
+          )}
+          <button
+            onClick={onDone}
+            className="flex-1 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            Done
+          </button>
+        </div>
       </div>
     </div>
   );

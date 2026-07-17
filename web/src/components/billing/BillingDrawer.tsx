@@ -46,6 +46,9 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
   const [actionError, setActionError]         = useState<string | null>(null);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
+  // Pulses the Confirm Payment button briefly after a guest is selected via Pay
+  const [confirmFlash, setConfirmFlash] = useState(false);
+
   // Receipt overlay after successful billing
   const [receipt, setReceipt] = useState<{
     mode: 'guest' | 'table';
@@ -196,6 +199,8 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
     setSelectedGuestId(guestId);
     setMode('guest');
     setSplitDetails({ cash: 0, card: 0, upi: 0 });
+    setConfirmFlash(true);
+    setTimeout(() => setConfirmFlash(false), 1200);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -303,6 +308,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
                       canConfirm={canConfirm}
                       confirming={confirming}
                       onConfirm={() => void handleConfirm()}
+                      confirmFlash={confirmFlash}
                     />
                   )}
                 </>
