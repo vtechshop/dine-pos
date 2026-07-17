@@ -1,18 +1,30 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Hotel, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from '../components/ui/Spinner';
 
-export function LoginPage() {
-  const { isAuthenticated, login } = useAuth();
-  const [userId, setUserId] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPwd, setShowPwd] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+const APP_VERSION = 'v1.0 · W4';
 
-  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+// Map JWT role → post-login destination within the POS app
+function roleDestination(role: string | null): string {
+  switch (role) {
+    case 'cashier': return '/cashier';
+    case 'waiter':  return '/waiter';
+    case 'kitchen': return '/kitchen';
+    default:        return '/dashboard'; // admin / owner / manager
+  }
+}
+
+export function LoginPage() {
+  const { isAuthenticated, login, role } = useAuth();
+  const [userId, setUserId]       = useState('');
+  const [password, setPassword]   = useState('');
+  const [showPwd, setShowPwd]     = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+
+  if (isAuthenticated) return <Navigate to={roleDestination(role)} replace />;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -28,15 +40,17 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm">
-        {/* Logo */}
+        {/* Brand */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 shadow-lg">
-            <Hotel size={24} className="text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">Hotel POS</h1>
-          <p className="mt-1 text-sm text-gray-500">Sign in to your admin panel</p>
+          <img
+            src="/branding/logo-64.png"
+            alt="Dine POS"
+            className="mx-auto mb-3 h-14 w-14 rounded-2xl object-contain shadow-md"
+          />
+          <h1 className="text-2xl font-bold text-gray-900">Dine POS</h1>
+          <p className="mt-1 text-sm text-gray-500">Sign in to your Dine POS account</p>
         </div>
 
         {/* Card */}
@@ -45,7 +59,7 @@ export function LoginPage() {
             {/* User ID */}
             <div>
               <label htmlFor="userId" className="block text-sm font-medium text-gray-700">
-                Hotel Phone / User ID
+                Hotel ID / User ID
               </label>
               <input
                 id="userId"
@@ -99,10 +113,40 @@ export function LoginPage() {
               disabled={loading}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? <Spinner size="sm" /> : null}
+              {loading && <Spinner size="sm" />}
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+
+          {/* Role hint */}
+          <p className="mt-5 text-center text-[11px] text-gray-400">
+            Hotel&nbsp;Owner&nbsp;·&nbsp;Manager&nbsp;·&nbsp;Cashier&nbsp;·&nbsp;Waiter&nbsp;·&nbsp;Kitchen
+          </p>
+        </div>
+
+        {/* Footer */}
+        <div className="mt-6 flex flex-col items-center gap-2.5 text-xs text-gray-400">
+          <span>
+            Need help?{' '}
+            <a
+              href="mailto:support@dinepos.com"
+              className="font-medium text-blue-600 hover:underline"
+            >
+              Contact Support
+            </a>
+          </span>
+          <button
+            type="button"
+            className="font-medium text-gray-500 transition hover:text-gray-700"
+            onClick={() =>
+              setError(
+                'To reset your password, contact support at support@dinepos.com',
+              )
+            }
+          >
+            Forgot Password
+          </button>
+          <span className="text-gray-300">Dine POS · {APP_VERSION}</span>
         </div>
       </div>
     </div>

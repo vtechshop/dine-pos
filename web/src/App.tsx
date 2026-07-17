@@ -44,7 +44,17 @@ export function App() {
                     <Route index element={<Navigate to="/dashboard" replace />} />
                     <Route path="/dashboard"    element={<DashboardPage />} />
 
-                    {/* Placeholder routes — replace with real pages in future phases */}
+                    {/* ── Role entry points (app.dinepos.com) ────────────────
+                        Each role lands here after login. Placeholder until
+                        the role-specific UI is built in a future phase.
+                        Do NOT add admin.dinepos.com routes here — that is
+                        a completely separate deployment.
+                    ────────────────────────────────────────────────────── */}
+                    <Route path="/cashier"       element={<ComingSoon page="Cashier Dashboard" />} />
+                    <Route path="/waiter"        element={<ComingSoon page="Waiter Dashboard" />} />
+                    <Route path="/kitchen"       element={<ComingSoon page="Kitchen Display" />} />
+
+                    {/* ── Placeholder routes — replace with real pages in future phases */}
                     <Route path="/orders"        element={<ComingSoon page="Orders" />} />
                     <Route path="/tables"        element={<ComingSoon page="Tables" />} />
                     <Route path="/customers"     element={<ComingSoon page="Customers" />} />
