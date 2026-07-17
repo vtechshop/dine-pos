@@ -14,8 +14,8 @@ import { InventoryPage } from './pages/InventoryPage';
 function ComingSoon({ page }: { page: string }) {
   return (
     <div className="flex h-full flex-col items-center justify-center text-center">
-      <p className="text-2xl font-bold text-gray-200">{page}</p>
-      <p className="mt-2 text-sm text-gray-500">This module will be available in a future phase.</p>
+      <p className="text-2xl font-bold text-white/20">{page}</p>
+      <p className="mt-2 text-sm text-white/15">This module will be available in a future phase.</p>
     </div>
   );
 }

@@ -30,7 +30,7 @@ export function AppLayout() {
         <Sidebar />
 
         {/* Main page content — each page controls its own scroll */}
-        <main className="flex flex-1 flex-col overflow-hidden bg-gray-50">
+        <main className="flex flex-1 flex-col overflow-hidden bg-gray-950">
           <Outlet />
         </main>
 
