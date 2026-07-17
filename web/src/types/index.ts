@@ -1,20 +1,74 @@
 // ── Hotel Settings ────────────────────────────────────────────────────────────
 
+export interface LoyaltySettings {
+  rewardName: string;
+  pointsPerHundredRupees: number;
+  minimumRedeemPoints: number;
+  maximumRedeemPercent: number;
+  pointValueInPaisa: number;
+  expiryDays: number;
+  roundingRule: 'floor' | 'round' | 'ceil';
+  calculationBase: 'before_gst' | 'after_gst';
+}
+
+export interface FeatureFlags {
+  payment?: boolean;
+  reservations?: boolean;
+  customerChat?: boolean;
+  qrOrdering?: boolean;
+  expenses?: boolean;
+  reports?: boolean;
+  tables?: boolean;
+  ingredients?: boolean;
+  waste?: boolean;
+  aggregator?: boolean;
+  tableSessions?: boolean;
+  customerIdentification?: 'disabled' | 'name_only' | 'name_mobile';
+  customerDatabase?: boolean;
+  loyaltyProgram?: boolean;
+  birthdayOffers?: boolean;
+  whatsappNotifications?: boolean;
+  smsNotifications?: boolean;
+  digitalReceipts?: boolean;
+  customerOrderHistory?: boolean;
+  marketingCampaigns?: boolean;
+}
+
 export interface Settings {
   _id?: string;
   hotelName: string;
   address?: string;
   phone?: string;
+  email?: string;
+  ownerName?: string;
+  businessType?: 'veg' | 'non-veg' | 'both';
   gstNumber?: string;
+  fssaiNumber?: string;
+  panNumber?: string;
   footerText?: string;
   upiId?: string;
   currencySymbol: string;
   defaultTaxPercent: number;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankIfscCode?: string;
+  bankAccountHolder?: string;
   printerWidth?: '58mm' | '80mm';
   printerMode?: 'single' | 'dual';
   kitchenPrinterAddress?: string;
   cashierPrinterAddress?: string;
   kotAutoPrint?: boolean;
+  qrGuestTimeoutMinutes?: number;
+  roleImageAdmin?: string;
+  isSetupComplete?: boolean;
+  loyaltySettings?: LoyaltySettings;
+  // Premium overlay fields (read-only — set by SuperAdmin)
+  isPremium?: boolean;
+  premiumPlan?: string;
+  premiumExpiry?: string | null;
+  trialEndsAt?: string | null;
+  // Feature flags (read-only — set by SuperAdmin)
+  features?: FeatureFlags;
 }
 
 // ── Tables ────────────────────────────────────────────────────────────────────

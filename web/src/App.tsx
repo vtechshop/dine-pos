@@ -11,6 +11,7 @@ import { ProductsPage } from './pages/ProductsPage';
 import { InventoryPage } from './pages/InventoryPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 // Placeholder for unimplemented routes — renders until each phase delivers the page
 function ComingSoon({ page }: { page: string }) {
@@ -63,7 +64,7 @@ export function App() {
                     <Route path="/products"      element={<ProductsPage />} />
                     <Route path="/inventory"     element={<InventoryPage />} />
                     <Route path="/reports"        element={<ReportsPage />} />
-                    <Route path="/settings"      element={<ComingSoon page="Settings" />} />
+                    <Route path="/settings"      element={<SettingsPage />} />
                     <Route path="/reservations"  element={<ComingSoon page="Reservations" />} />
                     <Route path="/cleaning"      element={<ComingSoon page="Cleaning" />} />
                     <Route path="/online"        element={<ComingSoon page="Online Orders" />} />
