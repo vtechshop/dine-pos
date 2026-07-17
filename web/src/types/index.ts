@@ -162,6 +162,50 @@ export interface PrintJob {
   attemptCount: number;
 }
 
+// ── Products & Categories (W4) ────────────────────────────────────────────────
+
+export interface Category {
+  _id: string;
+  name: string;
+  icon: string;
+  color: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Product {
+  _id: string;
+  name: string;
+  price: number;
+  category: { _id: string; name: string; color: string } | null;
+  taxPercent: number;
+  hsnCode: string;
+  image: string;
+  isAvailable: boolean;
+  isVeg: boolean;
+  shortCode: string;
+  description: string;
+  stock: number;   // -1 = unlimited
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Inventory (W4) ────────────────────────────────────────────────────────────
+
+export interface Ingredient {
+  _id: string;
+  name: string;
+  unit: string;
+  currentStock: number;
+  lowStockThreshold: number;
+  costPerUnit: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ── Printer ───────────────────────────────────────────────────────────────────
 
 export interface PrinterDeviceStatus {

@@ -7,6 +7,8 @@ import { LiveOrdersProvider } from './context/LiveOrdersContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { ProductsPage } from './pages/ProductsPage';
+import { InventoryPage } from './pages/InventoryPage';
 
 // Placeholder for unimplemented routes — renders until each phase delivers the page
 function ComingSoon({ page }: { page: string }) {
@@ -46,8 +48,8 @@ export function App() {
                     <Route path="/orders"        element={<ComingSoon page="Orders" />} />
                     <Route path="/tables"        element={<ComingSoon page="Tables" />} />
                     <Route path="/customers"     element={<ComingSoon page="Customers" />} />
-                    <Route path="/products"      element={<ComingSoon page="Products" />} />
-                    <Route path="/inventory"     element={<ComingSoon page="Inventory" />} />
+                    <Route path="/products"      element={<ProductsPage />} />
+                    <Route path="/inventory"     element={<InventoryPage />} />
                     <Route path="/reports"       element={<ComingSoon page="Reports" />} />
                     <Route path="/settings"      element={<ComingSoon page="Settings" />} />
                     <Route path="/reservations"  element={<ComingSoon page="Reservations" />} />

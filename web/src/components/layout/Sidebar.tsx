@@ -56,7 +56,7 @@ const NAV_GROUPS: NavGroup[] = [
 
 // ── Active routes — pages not yet implemented go back to dashboard ─────────────
 
-const IMPLEMENTED = new Set(['/dashboard', '/login']);
+const IMPLEMENTED = new Set(['/dashboard', '/login', '/products', '/inventory']);
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -125,7 +125,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-gray-700/60 px-4 py-3">
-        <p className="text-[10px] text-gray-700">Dine POS Web · W2</p>
+        <p className="text-[10px] text-gray-700">Dine POS Web · W4</p>
       </div>
     </aside>
   );
