@@ -7,12 +7,14 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { io, Socket } from 'socket.io-client';
 import { Order } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
-import { getOrders, updateOrderStatus } from '../services/api';
+import { getOrders, updateOrderStatus, getSocketUrl, getStoredHotelId } from '../services/api';
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import { printReceipt, printKOT } from '../utils/receipt';
 import { useSettings } from '../context/SettingsContext';
+import { setupNotifications, notifyNewOrder } from '../utils/notifications';
 
 type OrderStatus = Order['status'];
 type OrderSource = NonNullable<Order['orderSource']>;
@@ -87,6 +89,11 @@ const OrdersScreen: React.FC = () => {
   const [updating,     setUpdating]     = useState(false);
   const [reprinting,   setReprinting]   = useState(false);
   const [printingKot,  setPrintingKot]  = useState(false);
+  const [newOrderCount, setNewOrderCount] = useState(0);
+  const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set());
+
+  const socketRef    = useRef<Socket | null>(null);
+  const newOrderIds  = useRef<Set<string>>(new Set());
 
   const fetchOrders = useCallback(async (pageNum: number, tab: string, append = false, source = 'all') => {
     try {
@@ -140,6 +147,67 @@ const OrdersScreen: React.FC = () => {
     if (!filterMountedRef.current) { filterMountedRef.current = true; return; }
     fetchOrders(1, activeTab, false, activeSource);
   }, [activeTab, activeSource, fetchOrders]);
+
+  // Socket — connect on mount, disconnect on unmount
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      await setupNotifications();
+      const [url, hotelId] = await Promise.all([getSocketUrl(), getStoredHotelId()]);
+      if (!url || !mounted) return;
+
+      const socket = io(url, { transports: ['websocket'] });
+      socketRef.current = socket;
+
+      socket.on('connect', () => {
+        if (hotelId) socket.emit('join_hotel', hotelId);
+      });
+
+      socket.on('new_order', (data: unknown) => {
+        const order = (data && typeof data === 'object' && 'order' in data)
+          ? (data as { order: Order }).order
+          : data as Order;
+        if (!order?._id) return;
+
+        // Notify
+        void notifyNewOrder(order as any);
+
+        // Show new order banner
+        setNewOrderCount(c => c + 1);
+        setTimeout(() => setNewOrderCount(c => Math.max(0, c - 1)), 6000);
+
+        // Only prepend to list if it matches current tab/source filters
+        const tab    = activeTabRef.current;
+        const source = activeSourceRef.current;
+        const statusMatch  = tab === 'active' || tab === 'all' || tab === (order as Order).status;
+        const sourceMatch  = source === 'all' || source === (order as Order).orderSource;
+
+        if (statusMatch && sourceMatch) {
+          setOrders(prev => {
+            if (prev.some(o => o._id === (order as Order)._id)) return prev;
+            return [(order as Order), ...prev];
+          });
+
+          // Highlight for 6 seconds
+          const id = (order as Order)._id;
+          newOrderIds.current.add(id);
+          setHighlightedIds(new Set(newOrderIds.current));
+          setTimeout(() => {
+            newOrderIds.current.delete(id);
+            setHighlightedIds(new Set(newOrderIds.current));
+          }, 6000);
+        }
+      });
+    })();
+
+    return () => {
+      mounted = false;
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTabChange    = (tab: string) => setActiveTab(tab);
   const handleSourceFilter = (src: string) => setActiveSource(src);
@@ -197,8 +265,13 @@ const OrdersScreen: React.FC = () => {
   const renderCard = useCallback(({ item }: { item: Order }) => {
     const { date, time } = fmt(item.createdAt);
     const cfg = STATUS_CONFIG[item.status];
+    const isNew = highlightedIds.has(item._id);
     return (
-      <TouchableOpacity style={styles.card} onPress={() => setSelected(item)} activeOpacity={0.75}>
+      <TouchableOpacity
+        style={[styles.card, isNew && styles.cardHighlight]}
+        onPress={() => setSelected(item)}
+        activeOpacity={0.75}
+      >
         <View style={styles.cardTop}>
           <View style={styles.cardLeft}>
             <Text style={styles.orderNum}>#{item.orderNumber}</Text>
@@ -236,7 +309,7 @@ const OrdersScreen: React.FC = () => {
         </View>
       </TouchableOpacity>
     );
-  }, [cur, setSelected]);
+  }, [cur, setSelected, highlightedIds]);
 
   // ── Detail Modal ────────────────────────────────────────────────────────────
   const renderModal = () => {
@@ -386,6 +459,21 @@ const OrdersScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      {/* New order banner */}
+      {newOrderCount > 0 && (
+        <TouchableOpacity
+          style={styles.newOrderBanner}
+          onPress={() => setNewOrderCount(0)}
+          activeOpacity={0.85}
+        >
+          <MaterialIcons name="notifications-active" size={16} color={Colors.white} />
+          <Text style={styles.newOrderBannerText}>
+            {newOrderCount} new order{newOrderCount !== 1 ? 's' : ''} received
+          </Text>
+          <MaterialIcons name="close" size={14} color={Colors.white} />
+        </TouchableOpacity>
+      )}
+
       {/* Status Tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabs} contentContainerStyle={styles.tabsContent}>
         {TAB_FILTERS.map(t => (
@@ -511,6 +599,14 @@ const styles = StyleSheet.create({
   sourceFilterText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.textMuted },
   sourceFilterTextActive: { color: Colors.text, fontWeight: '700' },
 
+  // New order banner
+  newOrderBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.primary, paddingHorizontal: Spacing.lg, paddingVertical: 10,
+    justifyContent: 'center',
+  },
+  newOrderBannerText: { color: Colors.white, fontSize: FontSize.sm, fontWeight: '700', flex: 1, textAlign: 'center' },
+
   // Card
   list: { padding: Spacing.lg, paddingBottom: 120 },
   card: {
@@ -519,6 +615,10 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
     shadowColor: '#8B3A1A', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
+  },
+  cardHighlight: {
+    borderColor: Colors.primary, borderWidth: 2,
+    backgroundColor: Colors.primary + '08',
   },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: Spacing.sm },
   cardLeft: { flex: 1 },

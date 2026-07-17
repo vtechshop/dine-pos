@@ -12,7 +12,7 @@ import { showAlert } from '../utils/alert';
 import { useCart, DiscountType } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
-import { Category, Product } from '../types';
+import { Category, Product, Table } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, UPI_ID, UPI_NAME } from '../utils/constants';
 import { enqueueOrder } from '../utils/offlineQueue';
 import { getLocalCategories, getLocalProducts, saveCategories, saveProducts } from '../database/localCacheDao';
@@ -82,6 +82,9 @@ const BillingScreen: React.FC = () => {
   const [customerPhone,     setCustomerPhone]    = useState('');
   const [orderSource,       setOrderSource]      = useState<OrderSource>('dine-in');
   const [printingKot,       setPrintingKot]      = useState(false);
+  const [tables,            setTables]           = useState<Table[]>([]);
+  const [showTablePicker,   setShowTablePicker]  = useState(false);
+  const [tableSearch,       setTableSearch]      = useState('');
 
   const handleSourceChange = (src: OrderSource) => {
     setOrderSource(src);
@@ -95,11 +98,12 @@ const BillingScreen: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [cats, prods] = await Promise.all([api.getCategories(), api.getProducts()]);
+      const [cats, prods, tbls] = await Promise.all([api.getCategories(), api.getProducts(), api.getTables()]);
       setCategories(cats);
       setProducts(prods);
       setFiltered(prods);
       setSelectedCat(null);
+      setTables(tbls.filter(t => t.status !== 'inactive'));
       saveCategories(cats);
       saveProducts(prods);
     } catch {
@@ -522,18 +526,18 @@ Thank you for dining with us! 🍽️`;
                   onChangeText={setCustomer}
                 />
               </View>
-              {!cart.isParcel && (
-                <View style={[styles.custInput, { width: 90 }]}>
+              {!cart.isParcel && orderSource === 'dine-in' && (
+                <TouchableOpacity
+                  style={[styles.custInput, { width: 110 }]}
+                  onPress={() => { setTableSearch(''); setShowTablePicker(true); }}
+                  activeOpacity={0.75}
+                >
                   <MaterialIcons name="grid-on" size={16} color={Colors.textMuted} />
-                  <TextInput
-                    style={styles.custInputText}
-                    placeholder="Table"
-                    placeholderTextColor={Colors.textMuted}
-                    value={cart.tableNumber}
-                    onChangeText={setTable}
-                    keyboardType="number-pad"
-                  />
-                </View>
+                  <Text style={[styles.custInputText, { flex: 1, paddingVertical: 0, color: cart.tableNumber ? Colors.text : Colors.textMuted }]}>
+                    {cart.tableNumber || 'Table'}
+                  </Text>
+                  <MaterialIcons name="arrow-drop-down" size={18} color={Colors.textMuted} />
+                </TouchableOpacity>
               )}
             </View>
             {/* Phone (for WhatsApp bill) */}
@@ -650,6 +654,89 @@ Thank you for dining with us! 🍽️`;
           </View>
         )}
       </View>
+
+      {/* ── Table Picker Modal ── */}
+      <Modal visible={showTablePicker} transparent animationType="slide" onRequestClose={() => setShowTablePicker(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.payModal, { paddingBottom: 24 + bottom, maxHeight: '80%' }]}>
+            <View style={styles.payModalHandle} />
+            <Text style={styles.payModalTitle}>Select Table</Text>
+
+            {/* Search */}
+            <View style={[styles.custInput, { marginHorizontal: 0, marginBottom: 12 }]}>
+              <MaterialIcons name="search" size={16} color={Colors.textMuted} />
+              <TextInput
+                style={[styles.custInputText, { flex: 1 }]}
+                placeholder="Search table..."
+                placeholderTextColor={Colors.textMuted}
+                value={tableSearch}
+                onChangeText={setTableSearch}
+                autoFocus
+              />
+              {tableSearch.length > 0 && (
+                <TouchableOpacity onPress={() => setTableSearch('')}>
+                  <MaterialIcons name="close" size={16} color={Colors.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                {tables
+                  .filter(t => {
+                    if (!tableSearch.trim()) return true;
+                    const q = tableSearch.toLowerCase();
+                    return (t.name || `T${t.number}`).toLowerCase().includes(q);
+                  })
+                  .map(t => {
+                    const label = t.name || `T${t.number}`;
+                    const isOccupied = t.status === 'occupied';
+                    const isSelected = cart.tableNumber === label;
+                    return (
+                      <TouchableOpacity
+                        key={t._id}
+                        style={[
+                          styles.tablePickerCard,
+                          isOccupied && styles.tablePickerCardOccupied,
+                          isSelected && styles.tablePickerCardSelected,
+                        ]}
+                        onPress={() => {
+                          setTable(label);
+                          setShowTablePicker(false);
+                          setTableSearch('');
+                        }}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={[styles.tablePickerName, isSelected && { color: Colors.white }]}>{label}</Text>
+                        <View style={[
+                          styles.tablePickerStatus,
+                          { backgroundColor: isOccupied ? Colors.danger + '22' : Colors.success + '22' },
+                        ]}>
+                          <Text style={[styles.tablePickerStatusText, { color: isOccupied ? Colors.danger : Colors.success }]}>
+                            {isOccupied ? 'Busy' : 'Free'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+              </View>
+              {tables.filter(t => {
+                if (!tableSearch.trim()) return true;
+                const q = tableSearch.toLowerCase();
+                return (t.name || `T${t.number}`).toLowerCase().includes(q);
+              }).length === 0 && (
+                <Text style={{ textAlign: 'center', color: Colors.textMuted, paddingVertical: 24, fontSize: FontSize.sm }}>
+                  No tables found
+                </Text>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity style={[styles.payCancel, { marginTop: 12, marginHorizontal: 0 }]} onPress={() => setShowTablePicker(false)}>
+              <Text style={styles.payCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Payment Modal ── */}
       <Modal visible={showPayModal} transparent animationType="slide" onRequestClose={() => setShowPayModal(false)}>
@@ -977,6 +1064,18 @@ const styles = StyleSheet.create({
   payCancelText: { color: Colors.textSecondary, fontSize: FontSize.lg, fontWeight: '600' },
   payConfirm: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.success, paddingVertical: 14, borderRadius: BorderRadius.lg, gap: 8, ...Shadows.success },
   payConfirmText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '800' },
+
+  // Table picker
+  tablePickerCard: {
+    width: 80, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8,
+    borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.border,
+    backgroundColor: Colors.surface, gap: 6,
+  },
+  tablePickerCardOccupied: { borderColor: Colors.danger + '60', backgroundColor: Colors.danger + '08' },
+  tablePickerCardSelected: { borderColor: Colors.primary, backgroundColor: Colors.primary },
+  tablePickerName: { fontSize: FontSize.md, fontWeight: '800', color: Colors.text },
+  tablePickerStatus: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: BorderRadius.round },
+  tablePickerStatusText: { fontSize: FontSize.xs, fontWeight: '700' },
 
   // Success modal
   successModal: {

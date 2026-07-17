@@ -44,6 +44,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
   const [splitDetails, setSplitDetails]       = useState<SplitDetails>({ cash: 0, card: 0, upi: 0 });
   const [confirming, setConfirming]           = useState(false);
   const [actionError, setActionError]         = useState<string | null>(null);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Receipt overlay after successful billing
   const [receipt, setReceipt] = useState<{
@@ -117,8 +118,8 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
     : '…';
 
   // Keyboard shortcuts — declared after canConfirm so the enabled flag resolves correctly
-  useShortcut('Escape', onClose);
-  useShortcut('Enter', () => { void handleConfirm(); }, canConfirm && !confirming);
+  useShortcut('Escape', () => { if (showCloseConfirm) setShowCloseConfirm(false); else onClose(); });
+  useShortcut('Enter', () => { void handleConfirm(); }, canConfirm && !confirming && !showCloseConfirm);
 
   // Payment method key shortcuts (C/K/U/S/M) — not in KeyboardContext; drawer-scoped only
   useEffect(() => {
@@ -138,6 +139,14 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
 
   async function handleConfirm() {
     if (!canConfirm || confirming) return;
+
+    // For table mode, show confirmation dialog first
+    if (mode === 'table' && !showCloseConfirm) {
+      setShowCloseConfirm(true);
+      return;
+    }
+
+    setShowCloseConfirm(false);
     setConfirming(true);
     setActionError(null);
 
@@ -194,7 +203,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
   return (
     <div className="fixed inset-0 z-50 flex items-stretch bg-black/60" onClick={onClose}>
       <div
-        className="ml-auto flex h-full w-full max-w-4xl flex-col bg-white shadow-2xl"
+        className="relative ml-auto flex h-full w-full max-w-4xl flex-col bg-white shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -302,6 +311,53 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
           </div>
         )}
       </div>
+
+      {/* Close confirmation dialog */}
+      {showCloseConfirm && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-none">
+          <div className="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="text-base font-bold text-gray-900 mb-1">Close Dining Session?</h2>
+            <p className="text-xs text-red-600 mb-4 font-medium">
+              This action closes the dining session and cannot be undone.
+            </p>
+            <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 mb-5 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Table</span>
+                <span className="font-semibold text-gray-800">{tableLabel}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Active Guests</span>
+                <span className="font-semibold text-gray-800">{activeGuestCount}</span>
+              </div>
+              <div className="flex justify-between border-t border-gray-200 pt-2 mt-1">
+                <span className="text-gray-700 font-medium">Running Total</span>
+                <span className="font-bold text-gray-900 tabular-nums">
+                  {currencySymbol}{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-400">Payment</span>
+                <span className="text-gray-600 font-medium capitalize">{paymentMethod}</span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowCloseConfirm(false)}
+                className="flex-1 rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel (Esc)
+              </button>
+              <button
+                onClick={() => void handleConfirm()}
+                disabled={confirming}
+                className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-40 transition-colors"
+              >
+                {confirming ? 'Processing…' : 'Confirm & Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -110,14 +110,33 @@ export function ReceiptView({ guest, tableLabel, orders, currencySymbol, isBulk,
             <span>Subtotal</span>
             <span className="tabular-nums">{fmt(subtotal, currencySymbol)}</span>
           </div>
-          {taxTotal > 0 && (
-            <div className="flex justify-between text-gray-500">
-              <span>Tax</span>
-              <span className="tabular-nums">{fmt(taxTotal, currencySymbol)}</span>
-            </div>
-          )}
+          {taxTotal > 0 && (() => {
+            const taxRate    = subtotal > 0 ? (taxTotal / subtotal) * 100 : 0;
+            const halfRate   = (taxRate / 2).toFixed(1).replace(/\.0$/, '');
+            const cgst       = taxTotal / 2;
+            const sgst       = taxTotal / 2;
+            const roundOff   = grandTotal - subtotal - taxTotal;
+            return (
+              <>
+                <div className="flex justify-between text-gray-500">
+                  <span>CGST ({halfRate}%)</span>
+                  <span className="tabular-nums">{fmt(cgst, currencySymbol)}</span>
+                </div>
+                <div className="flex justify-between text-gray-500">
+                  <span>SGST ({halfRate}%)</span>
+                  <span className="tabular-nums">{fmt(sgst, currencySymbol)}</span>
+                </div>
+                {Math.abs(roundOff) >= 0.01 && (
+                  <div className="flex justify-between text-gray-400">
+                    <span>Round Off</span>
+                    <span className="tabular-nums">{roundOff > 0 ? '+' : ''}{fmt(roundOff, currencySymbol)}</span>
+                  </div>
+                )}
+              </>
+            );
+          })()}
           <div className="flex justify-between text-base font-bold text-gray-900 pt-1 border-t border-gray-200">
-            <span>Total</span>
+            <span>Grand Total</span>
             <span className="tabular-nums">{fmt(grandTotal, currencySymbol)}</span>
           </div>
         </div>
