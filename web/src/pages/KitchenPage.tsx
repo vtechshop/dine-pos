@@ -134,8 +134,8 @@ export function KitchenPage() {
     try {
       await updateOrderStatus(orderId, newStatus);
       void load();
-    } catch {
-      // status update failure is non-fatal; next poll will re-sync
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to update order status');
     } finally {
       setActing(false);
     }
