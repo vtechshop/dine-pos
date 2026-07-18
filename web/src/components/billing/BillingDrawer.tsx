@@ -320,7 +320,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
 
       {/* Close confirmation dialog */}
       {showCloseConfirm && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-none">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-none" onClick={e => e.stopPropagation()}>
           <div className="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
             <h2 className="text-base font-bold text-gray-900 mb-1">Close Dining Session?</h2>
             <p className="text-xs text-red-600 mb-4 font-medium">

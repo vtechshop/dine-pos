@@ -44,17 +44,25 @@ export function GuestPanel({
   async function handleMerge(targetId: string) {
     if (!mergeSource) return;
     setActionError(null);
-    await mergeGuests(sessionId, mergeSource._id, targetId);
-    setMergeSource(null);
-    onRefresh();
+    try {
+      await mergeGuests(sessionId, mergeSource._id, targetId);
+      setMergeSource(null);
+      onRefresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Merge failed');
+    }
   }
 
   async function handleTransfer(targetSessionId: string) {
     if (!transferGuest_) return;
     setActionError(null);
-    await transferGuest(sessionId, transferGuest_._id, targetSessionId);
-    setTransferGuest(null);
-    onRefresh();
+    try {
+      await transferGuest(sessionId, transferGuest_._id, targetSessionId);
+      setTransferGuest(null);
+      onRefresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Transfer failed');
+    }
   }
 
   async function handleLeft(guestId: string) {
