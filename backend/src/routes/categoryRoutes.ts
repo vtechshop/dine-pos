@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import Category from '../models/Category';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
+import { sendError } from '../utils/sendError';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     }).sort({ sortOrder: 1 });
     res.json(categories);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to fetch categories', error);
   }
 });
 
@@ -29,7 +30,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
     if (!category) return res.status(404).json({ message: 'Category not found' });
     res.json(category);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to fetch category', error);
   }
 });
 
@@ -40,8 +41,8 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
     await category.save();
     logAudit(req, 'category.created', 'category', String((category as any)._id), { name: (category as any).name });
     res.status(201).json(category);
-  } catch (error: any) {
-    res.status(400).json({ message: error.message || 'Invalid data' });
+  } catch (error) {
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
@@ -57,7 +58,7 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     logAudit(req, 'category.updated', 'category', req.params.id, { name: (category as any).name });
     res.json(category);
   } catch (error) {
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
@@ -73,7 +74,7 @@ router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     logAudit(req, 'category.deleted', 'category', req.params.id, { name: (category as any).name });
     res.json({ message: 'Category deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to delete category', error);
   }
 });
 

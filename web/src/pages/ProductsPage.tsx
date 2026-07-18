@@ -218,7 +218,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
     setImporting(true);
     setImportMsg('');
     const text = await file.text();
-    const lines = text.split('\n').filter(l => l.trim());
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
     const [, ...dataLines] = lines;
     const catMap = new Map(categories.map(c => [c.name.toLowerCase(), c._id]));
     let ok = 0; let fail = 0;
