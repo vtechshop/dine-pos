@@ -12,7 +12,7 @@ import { Spinner } from '../components/ui/Spinner';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString('en-CA');
 }
 
 function fmtDate(iso: string) {
@@ -294,8 +294,8 @@ export function ReservationsPage() {
     try {
       await updateReservationStatus(id, status);
       void load();
-    } catch {
-      // non-fatal
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to update status');
     } finally {
       setActing(false);
     }
@@ -306,8 +306,8 @@ export function ReservationsPage() {
     try {
       await deleteReservation(id);
       void load();
-    } catch {
-      // non-fatal
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete reservation');
     } finally {
       setActing(false);
     }

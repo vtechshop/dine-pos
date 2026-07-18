@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import Reservation from '../models/Reservation';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
-import { requireFeature } from '../middleware/requireFeature';
+import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
@@ -25,7 +25,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     ]);
     res.json({ reservations, total, limit, skip });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to fetch reservations', error);
   }
 });
 
@@ -36,7 +36,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     await reservation.save();
     res.status(201).json(reservation);
   } catch (error) {
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
@@ -54,7 +54,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     if (!r) return res.status(404).json({ message: 'Reservation not found' });
     res.json(r);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to update reservation status', error);
   }
 });
 
@@ -69,7 +69,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (!r) return res.status(404).json({ message: 'Reservation not found' });
     res.json(r);
   } catch (error) {
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
@@ -80,7 +80,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     if (!r) return res.status(404).json({ message: 'Reservation not found' });
     res.json({ message: 'Deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to delete reservation', error);
   }
 });
 
