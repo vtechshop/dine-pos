@@ -1,0 +1,8 @@
+/* Dine POS brand design tokens as CSS custom properties.
+   Import this file in each app's entry CSS alongside @tailwind directives. */
+:root {
+  --brand-accent: #E8380D;
+  --brand-dark:   #1C0800;
+  --brand-cream:  #FFF6EE;
+  --brand-border: #E8D5C0;
+}

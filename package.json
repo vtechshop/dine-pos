@@ -1,12 +1,21 @@
 {
   "name": "dine-pos",
   "version": "1.0.0",
-  "description": "Dine POS - React Native + Node.js + MongoDB",
+  "description": "Dine POS — monorepo: 4 frontends + 1 backend",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
   "scripts": {
-    "backend": "cd backend && npm run dev",
-    "mobile": "cd mobile && npx expo start",
-    "install:all": "cd backend && npm install && cd ../mobile && npm install",
-    "seed": "curl -X POST http://localhost:5000/api/seed"
+    "web":        "pnpm --filter web dev",
+    "qr":         "pnpm --filter qr dev",
+    "admin":      "pnpm --filter admin dev",
+    "marketing":  "pnpm --filter marketing dev",
+    "backend":    "cd backend && npm run dev",
+    "mobile":     "cd mobile && npx expo start",
+    "build:web":  "pnpm --filter web build",
+    "build:qr":   "pnpm --filter qr build",
+    "build:admin":"pnpm --filter admin build",
+    "build:all":  "pnpm --filter './apps/*' build",
+    "install:all":"pnpm install && cd backend && npm install && cd ../mobile && npm install",
+    "seed":       "curl -X POST http://localhost:5000/api/seed"
   }
 }
- 
