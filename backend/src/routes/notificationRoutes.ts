@@ -3,13 +3,14 @@ import mongoose from 'mongoose';
 import Notification from '../models/Notification';
 import NotificationRead from '../models/NotificationRead';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
 
 // GET /api/notifications — notifications for this hotel (unread first)
-router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const hotelObjectId = new mongoose.Types.ObjectId(req.hotelId!);
     const now = new Date();
@@ -45,13 +46,13 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const unreadCount = withReadStatus.filter((n) => !n.isRead).length;
 
     return res.json({ notifications: withReadStatus, unreadCount });
-  } catch {
-    return res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    sendError(res, 500, 'Failed to fetch notifications', error);
   }
 });
 
 // PUT /api/notifications/:id/read — mark notification as read
-router.put('/:id/read', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.put('/:id/read', async (req: AuthRequest, res: Response) => {
   try {
     const hotelObjectId = new mongoose.Types.ObjectId(req.hotelId!);
     const notificationId = new mongoose.Types.ObjectId(req.params.id);
@@ -61,13 +62,13 @@ router.put('/:id/read', authMiddleware, async (req: AuthRequest, res: Response) 
       { upsert: true }
     );
     return res.json({ ok: true });
-  } catch {
-    return res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    sendError(res, 500, 'Failed to mark notification as read', error);
   }
 });
 
 // PUT /api/notifications/read-all — mark all active notifications as read
-router.put('/read-all', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.put('/read-all', async (req: AuthRequest, res: Response) => {
   try {
     const hotelObjectId = new mongoose.Types.ObjectId(req.hotelId!);
     const now = new Date();
@@ -88,8 +89,8 @@ router.put('/read-all', authMiddleware, async (req: AuthRequest, res: Response) 
 
     await NotificationRead.bulkWrite(ops, { ordered: false });
     return res.json({ ok: true });
-  } catch {
-    return res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    sendError(res, 500, 'Failed to mark all notifications as read', error);
   }
 });
 
