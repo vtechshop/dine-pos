@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import Ingredient from '../models/Ingredient';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
-import { requireFeature } from '../middleware/requireFeature';
+import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
@@ -19,7 +19,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     ]);
     res.json({ ingredients, total, limit, skip });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to fetch ingredients', error);
   }
 });
 
@@ -32,7 +32,7 @@ router.get('/alerts/low-stock', async (req: AuthRequest, res: Response) => {
     }).sort({ currentStock: 1 });
     res.json({ ingredients });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to fetch low stock alerts', error);
   }
 });
 
@@ -44,7 +44,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     logAudit(req, 'ingredient.created', 'ingredient', String((ingredient as any)._id), { name: (ingredient as any).name });
     res.status(201).json(ingredient);
   } catch (error) {
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
@@ -60,7 +60,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     logAudit(req, 'ingredient.updated', 'ingredient', req.params.id, { name: (ingredient as any).name });
     res.json(ingredient);
   } catch (error) {
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
@@ -80,7 +80,7 @@ router.patch('/:id/restock', async (req: AuthRequest, res: Response) => {
     logAudit(req, 'ingredient.restocked', 'ingredient', req.params.id, { name: (ingredient as any).name, quantity });
     res.json(ingredient);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to restock ingredient', error);
   }
 });
 
@@ -92,7 +92,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     logAudit(req, 'ingredient.deleted', 'ingredient', req.params.id, { name: (ingredient as any).name });
     res.json({ message: 'Deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to delete ingredient', error);
   }
 });
 
