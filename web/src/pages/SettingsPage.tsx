@@ -389,17 +389,19 @@ function StaffSection() {
   const [cashiers, setCashiers] = useState<StaffMember[]>([]);
   const [waiters, setWaiters] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<{ role: 'cashier' | 'waiter'; staff: StaffMember | null } | null>(null);
   const [confirmDel, setConfirmDel] = useState<{ role: 'cashier' | 'waiter'; id: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const [c, w] = await Promise.all([fetchCashiers(), fetchWaiters()]);
       setCashiers(c);
       setWaiters(w);
-    } catch {
-      /* ignore */
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load staff');
     } finally {
       setLoading(false);
     }
@@ -408,15 +410,19 @@ function StaffSection() {
   useEffect(() => { void load(); }, [load]);
 
   const handleToggle = async (role: 'cashier' | 'waiter', id: string) => {
+    setError(null);
     try {
       const res = role === 'cashier' ? await toggleCashier(id) : await toggleWaiter(id);
       const setter = role === 'cashier' ? setCashiers : setWaiters;
       setter(prev => prev.map(m => (m._id === id ? { ...m, isActive: res.isActive } : m)));
-    } catch { /* ignore */ }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to toggle staff status');
+    }
   };
 
   const handleDelete = async () => {
     if (!confirmDel) return;
+    setError(null);
     try {
       if (confirmDel.role === 'cashier') {
         await deleteCashier(confirmDel.id);
@@ -425,7 +431,9 @@ function StaffSection() {
         await deleteWaiter(confirmDel.id);
         setWaiters(prev => prev.filter(m => m._id !== confirmDel.id));
       }
-    } catch { /* ignore */ }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete staff member');
+    }
     setConfirmDel(null);
   };
 
@@ -449,6 +457,11 @@ function StaffSection() {
 
   return (
     <div className="space-y-5">
+      {error && (
+        <div className="rounded-lg border border-[#E8380D]/20 bg-[#E8380D]/10 px-4 py-2.5 text-xs text-[#E8380D]">
+          {error}
+        </div>
+      )}
       <StaffTable
         members={cashiers}
         role="cashier"
@@ -878,7 +891,10 @@ function SecuritySection({ settings }: { settings: Settings }) {
     try {
       await logoutDevice(id);
       setDevices(prev => prev.filter(d => d._id !== id));
-    } catch { /* ignore */ }
+    } catch {
+      setNotice('Failed to log out device. Please try again.');
+      setTimeout(() => setNotice(null), 3000);
+    }
   };
 
   const handleLogoutAll = async () => {
@@ -887,7 +903,10 @@ function SecuritySection({ settings }: { settings: Settings }) {
       setDevices([]);
       setNotice('All sessions have been logged out.');
       setTimeout(() => setNotice(null), 4000);
-    } catch { /* ignore */ }
+    } catch {
+      setNotice('Failed to log out all sessions. Please try again.');
+      setTimeout(() => setNotice(null), 3000);
+    }
   };
 
   const handleResetRequest = async () => {
