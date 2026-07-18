@@ -18,7 +18,7 @@ const STATUS_COLORS: Record<Reservation['status'], { text: string; bg: string }>
   'no-show': { text: Colors.textMuted, bg: Colors.elevated },
 };
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => new Date().toLocaleDateString('en-CA');
 
 const fmtDate = (s: string) => {
   const d = new Date(s);

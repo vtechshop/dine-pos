@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io, Socket } from 'socket.io-client';
 import { useSettings } from '../context/SettingsContext';
 import { executePrintJob, PrintJobEvent } from '../services/PrintService';
-import { getSocketUrl, getToken, getStoredHotelId, getBaseUrl } from '../services/api';
+import { getSocketUrl, getToken, getKitchenToken, getCashierToken, getStoredHotelId, getBaseUrl } from '../services/api';
 
 const DEVICE_ID_KEY = '@dine_device_id';
 
@@ -68,12 +68,19 @@ export function usePrinterSocket(
     let cancelled = false;
 
     (async () => {
-      const [url, token, hotelId, deviceId] = await Promise.all([
+      // Prefer role-specific JWT so dedicated kitchen/cashier tablets (where no
+      // admin has logged in) can authenticate the printer socket connection.
+      const roleFetcher = printerRole === 'kitchen' ? getKitchenToken
+                        : printerRole === 'cashier' ? getCashierToken
+                        : getToken;
+      const [url, roleToken, adminToken, hotelId, deviceId] = await Promise.all([
         getSocketUrl(),
+        roleFetcher(),
         getToken(),
         getStoredHotelId(),
         getOrCreateDeviceId(),
       ]);
+      const token = roleToken || adminToken;
 
       if (cancelled || !url || !hotelId) return;
 

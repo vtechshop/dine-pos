@@ -978,7 +978,7 @@ export const deleteTable = (id: string): Promise<void> =>
 
 export const getReservations = (date?: string): Promise<Reservation[]> => {
   const q = date ? `?date=${date}` : '';
-  return fetchAPI<Reservation[]>(`/reservations${q}`);
+  return fetchAPI<{ reservations: Reservation[] }>(`/reservations${q}`).then(r => r.reservations);
 };
 
 export const createReservation = (data: Partial<Reservation>): Promise<Reservation> =>
