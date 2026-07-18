@@ -1124,7 +1124,7 @@ export const convertToPaidPlan = (
   superAdminFetch(`/superadmin/hotels/${id}/plan`, { method: 'PUT', body: JSON.stringify({ plan, durationDays }) });
 
 export const updateHotelFeatures = (id: string, features: Partial<FeatureFlags>): Promise<{ message: string; features: FeatureFlags }> =>
-  superAdminFetch(`/superadmin/hotels/${id}/features`, { method: 'PUT', body: JSON.stringify({ features }) });
+  superAdminFetch(`/superadmin/hotels/${id}/features`, { method: 'PUT', body: JSON.stringify(features) });
 
 export const getUsageAnalytics = (): Promise<{
   hotels: {
