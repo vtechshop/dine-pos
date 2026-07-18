@@ -523,13 +523,14 @@ function PrintersSection({ settings, refresh }: { settings: Settings; refresh: (
   const [pinSaving, setPinSaving] = useState(false);
   const [pinMsg, setPinMsg] = useState<string | null>(null);
   const [devices, setDevices] = useState<PrinterDeviceStatus[]>([]);
+  const [devicesError, setDevicesError] = useState<string | null>(null);
 
   useEffect(() => setD(toPrinterDraft(settings)), [settings]);
 
   useEffect(() => {
     fetchPrinterDevices()
-      .then(setDevices)
-      .catch(() => {});
+      .then(d => { setDevices(d); setDevicesError(null); })
+      .catch(() => setDevicesError('Failed to load printer devices'));
   }, []);
 
   const handlePinSave = async () => {
@@ -648,13 +649,18 @@ function PrintersSection({ settings, refresh }: { settings: Settings; refresh: (
         <div className="mb-4 flex items-center justify-between">
           <p className="text-xs text-[#1C0800]/50">Registered printer devices and their current connection status.</p>
           <button
-            onClick={() => fetchPrinterDevices().then(setDevices).catch(() => {})}
+            onClick={() => fetchPrinterDevices().then(d => { setDevices(d); setDevicesError(null); }).catch(() => setDevicesError('Failed to load printer devices'))}
             className="flex items-center gap-1.5 text-[11px] text-[#1C0800]/40 hover:text-[#1C0800]/70"
           >
             <RefreshCw size={11} /> Refresh
           </button>
         </div>
-        {devices.length === 0 ? (
+        {devicesError && (
+          <div className="mb-3 rounded-lg border border-[#E8380D]/20 bg-[#E8380D]/10 px-4 py-2.5 text-xs text-[#E8380D]">
+            {devicesError}
+          </div>
+        )}
+        {devices.length === 0 && !devicesError ? (
           <p className="py-6 text-center text-xs text-[#1C0800]/30">No printer devices registered yet.</p>
         ) : (
           <div className="space-y-2">
