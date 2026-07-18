@@ -59,8 +59,16 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       setConnected(false);
     });
 
-    s.on('connect_error', () => {
+    s.on('connect_error', (err: Error) => {
       setConnected(false);
+      // H-05 / H-03: the server rejected our token as expired or invalid.
+      // Stop Socket.IO's built-in retry loop — the next HTTP API call's 401
+      // interceptor will silently refresh the token, update AuthContext state
+      // (which changes `token` in the effect deps), and this effect will
+      // then create a fresh socket connection with the new token.
+      if (err.message?.toLowerCase().includes('authentication')) {
+        s.disconnect();
+      }
     });
 
     // Manager-level events for reconnect attempts

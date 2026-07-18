@@ -344,22 +344,23 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 // ─── Socket.io authentication middleware ─────────────────────────────────────
-// Admin app passes JWT in handshake.auth.token.
-// Customer-facing menu connects without a token — allowed but gets no admin privileges.
+// Admin/staff app passes JWT in handshake.auth.token.
+// Customer-facing QR menu connects without a token — allowed but unauthenticated.
+// H-05: a token that IS provided but is expired or invalid is rejected outright;
+//        the client must refresh the access token before reconnecting.
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token as string | undefined;
-  if (!token) return next(); // unauthenticated = customer menu connection
+  if (!token) return next(); // no token = customer QR menu connection (allowed)
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { hotelId: string };
     socket.data.hotelId = decoded.hotelId;
     socket.data.authenticated = true;
     next();
   } catch {
-    // Expired or invalid token — connect as unauthenticated rather than
-    // rejecting the socket. Staff/admin devices with stale tokens (e.g. after
-    // overnight "remember device") can still receive real-time order events.
-    // Room access is controlled by join_hotel below, same as pre-auth behavior.
-    return next();
+    // H-05: token was provided but is expired or invalid — reject the connection.
+    // The web client's 401 interceptor will obtain a fresh token and then the
+    // SocketContext effect (which depends on `token`) will reconnect automatically.
+    return next(new Error('Socket authentication failed: token expired or invalid'));
   }
 });
 
@@ -401,9 +402,12 @@ io.on('connection', (socket) => {
   });
 
   // join: customer table room (e.g. socket.emit('join', 'table_5'))
-  // No longer adds sockets to a global 'admin' room — scoped rooms only.
+  // H-04: hotel_ and admin_ rooms are managed server-side only — never granted
+  // by client request. Authenticated sockets auto-join their rooms on connection
+  // (lines above). This handler is kept only for customer QR table-chat rooms.
   socket.on('join', (room: string) => {
     if (typeof room !== 'string' || !room) return;
+    if (room.startsWith('admin_') || room.startsWith('hotel_')) return; // H-04
     socket.join(room);
   });
 

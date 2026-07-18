@@ -1,9 +1,11 @@
 import { apiFetch } from './client';
 
 export interface LoginResponse {
-  token: string;
-  hotelId?: string;
-  role?: string;
+  token:         string;
+  refreshToken?: string;
+  hotelId?:      string;
+  role?:         string;
+  hotelName?:    string;
 }
 
 export function decodeJwtPayload(token: string): Record<string, unknown> {
@@ -18,6 +20,14 @@ export function decodeJwtPayload(token: string): Record<string, unknown> {
 export async function loginApi(userId: string, password: string): Promise<LoginResponse> {
   return apiFetch<LoginResponse>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ userId, password }),
+    body:   JSON.stringify({ userId, password }),
+  });
+}
+
+// H-02: revoke the refresh token on the server so it cannot generate new access tokens
+export async function logoutApi(refreshToken: string): Promise<void> {
+  await apiFetch('/auth/logout', {
+    method: 'POST',
+    body:   JSON.stringify({ refreshToken }),
   });
 }

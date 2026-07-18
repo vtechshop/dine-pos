@@ -210,6 +210,21 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         res.status(409).json({ message: `Guest is already ${guest.status}` });
         return;
       }
+
+      // H-06: reject billing if the kitchen still has active orders for this guest
+      const activeOrderCount = await Order.countDocuments({
+        guestId: guest._id,
+        hotelId: req.hotelId,
+        status:  { $in: ['pending', 'preparing', 'ready'] },
+      });
+      if (activeOrderCount > 0) {
+        res.status(409).json({
+          message: `Cannot bill: ${activeOrderCount} order${activeOrderCount > 1 ? 's are' : ' is'} still in the kitchen (pending, preparing, or ready). Mark them as served before billing.`,
+          pendingOrderCount: activeOrderCount,
+        });
+        return;
+      }
+
       const VALID_METHODS = ['cash', 'upi', 'card', 'split', 'complimentary'];
       if (!paymentMethod || !VALID_METHODS.includes(paymentMethod)) {
         res.status(400).json({
@@ -269,11 +284,18 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         }
       }
 
-      const updated = await Guest.findByIdAndUpdate(
-        guest._id,
+      // H-07: atomic guard — the filter includes status:'active' so that two
+      // concurrent billing requests for the same guest can only produce one
+      // successful write. The second request gets null back and returns 409.
+      const updated = await Guest.findOneAndUpdate(
+        { _id: guest._id, status: 'active' },
         { $set: updateFields },
-        { new: true }
+        { new: true, runValidators: true },
       );
+      if (!updated) {
+        res.status(409).json({ message: 'Guest has already been billed. Refresh to see the latest status.' });
+        return;
+      }
 
       // [Phase 4] fire-and-forget lifetimeSpend; [Phase 6] fire-and-forget earn points
       if (guest.customerId) {

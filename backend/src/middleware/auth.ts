@@ -253,7 +253,8 @@ export const requireWaiterOrCashierOrAdmin = (req: AuthRequest, res: Response, n
 };
 
 export const generateToken = (hotelId: string, hotelName: string): string => {
-  return jwt.sign({ hotelId, hotelName, role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+  // H-03: 15-minute access token; clients must use the refresh token to obtain new tokens silently
+  return jwt.sign({ hotelId, hotelName, role: 'admin' }, JWT_SECRET, { expiresIn: '15m' });
 };
 
 export const generateKitchenToken = (hotelId: string): string => {
