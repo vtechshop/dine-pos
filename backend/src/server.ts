@@ -447,9 +447,10 @@ io.on('connection', (socket) => {
   // Admin replies to a table
   socket.on('admin_message', async (data: { hotelId: string; tableNumber: string; message: string }) => {
     try {
+      if (!socket.data.authenticated) return; // only authenticated admin sockets may send admin messages
       if (!data?.hotelId || !data?.tableNumber || !data?.message) return;
       // Prevent cross-hotel spoofing: authenticated socket must match claimed hotelId
-      if (socket.data.authenticated && socket.data.hotelId !== data.hotelId) return;
+      if (socket.data.hotelId !== data.hotelId) return;
       const msg = await ChatMessage.create({
         hotelId: data.hotelId,
         tableNumber: data.tableNumber,
@@ -621,10 +622,10 @@ process.on('SIGINT', shutdown);
     }
 
     httpServer.listen(Number(PORT), '0.0.0.0', () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
-      console.log(`📡 API Base: http://localhost:${PORT}/api`);
-      console.log(`📱 Customer Menu: http://localhost:${PORT}/menu`);
-      console.log(`💬 Chat: Socket.io ready`);
+      logger.info(`Server running on http://localhost:${PORT}`);
+      logger.info(`API Base: http://localhost:${PORT}/api`);
+      logger.info(`Customer Menu: http://localhost:${PORT}/menu`);
+      logger.info('Chat: Socket.io ready');
     });
   } catch (err) {
     logger.error('Failed to start server', { err: String(err) });
