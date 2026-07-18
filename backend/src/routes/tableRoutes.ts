@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import Table from '../models/Table';
+import TableSession from '../models/TableSession';
 import { authMiddleware, requireAdmin, requireWaiterOrCashierOrAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
@@ -66,19 +67,21 @@ router.patch('/:id/status', requireWaiterOrCashierOrAdmin, async (req: AuthReque
     logAudit(req, 'table.status_changed', 'table', req.params.id, { status });
     res.json(table);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to update table status', error);
   }
 });
 
 // DELETE table — admin only
 router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
+    const openSession = await TableSession.findOne({ tableId: req.params.id, hotelId: req.hotelId, status: 'active' }).lean();
+    if (openSession) return res.status(409).json({ message: 'Cannot delete a table with an active session. Close the session first.' });
     const table = await Table.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });
     if (!table) return res.status(404).json({ message: 'Table not found' });
     logAudit(req, 'table.deleted', 'table', req.params.id, { number: (table as any).number });
     res.json({ message: 'Table deleted' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to delete table', error);
   }
 });
 
