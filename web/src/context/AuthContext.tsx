@@ -80,15 +80,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     localStorage.setItem(KEYS.token,   res.token);
     if (res.refreshToken) {
-      localStorage.setItem(KEYS.refreshToken, res.refreshToken); // H-02: persist for silent refresh
+      localStorage.setItem(KEYS.refreshToken, res.refreshToken);
     }
     localStorage.setItem(KEYS.hotelId, hotelId);
+    if (res.hotelName) localStorage.setItem(KEYS.hotelName, res.hotelName);
     if (role) localStorage.setItem(KEYS.role, role);
 
     setState({
       token:           res.token,
       hotelId,
-      hotelName:       null,
+      hotelName:       res.hotelName ?? null,
       role,
       isAuthenticated: true,
     });

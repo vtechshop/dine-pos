@@ -82,9 +82,12 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       });
     }
     if (hotel.status === 'expired') {
+      const isTrial = hotel.subscriptionType === 'trial' || !hotel.subscriptionType;
       return res.status(403).json({
-        code: 'TRIAL_EXPIRED',
-        message: 'Your free trial has ended. Please contact support to activate your subscription.',
+        code: isTrial ? 'TRIAL_EXPIRED' : 'PLAN_EXPIRED',
+        message: isTrial
+          ? 'Your free trial has ended. Please contact support to activate your subscription.'
+          : 'Your subscription has expired. Please renew to continue.',
       });
     }
 
@@ -137,7 +140,7 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
     }
 
     const hotel = await Hotel.findById(record.hotelId).select('hotelName status').lean();
-    if (!hotel || !['active', 'trial', 'premium'].includes((hotel as any).status)) {
+    if (!hotel || !['active', 'trial'].includes((hotel as any).status)) {
       return res.status(403).json({ message: 'Account not active' });
     }
 
