@@ -10,7 +10,7 @@ automation/.env.test
 # Exception: apps/web/.env.production contains only public domain URLs (no secrets).
 # Vite bakes VITE_API_URL/VITE_SOCKET_URL into the JS bundle at build time;
 # without this file committed, production builds fall back to localhost URLs.
-!apps/web/.env.production
+!web/.env.production
 
 # Automation runtime artifacts (generated per-run, contain tokens/secrets)
 automation/.test-state.json

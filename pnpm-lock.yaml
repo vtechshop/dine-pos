@@ -8,11 +8,11 @@ importers:
 
   .: {}
 
-  apps/admin:
+  admin:
     dependencies:
       '@dinepos/shared':
         specifier: workspace:*
-        version: link:../../packages/shared
+        version: link:../packages/shared
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -45,7 +45,7 @@ importers:
         specifier: ^6.0.7
         version: 6.4.3(jiti@1.21.7)
 
-  apps/marketing:
+  marketing:
     dependencies:
       lucide-react:
         specifier: ^0.441.0
@@ -85,11 +85,30 @@ importers:
         specifier: ^5.4.1
         version: 5.4.21
 
-  apps/qr:
+  packages/shared:
+    dependencies:
+      react:
+        specifier: ^18.0.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.0.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.3
+        version: 18.3.31
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.31)
+      typescript:
+        specifier: ^5.5.3
+        version: 5.9.3
+
+  qr:
     dependencies:
       '@dinepos/shared':
         specifier: workspace:*
-        version: link:../../packages/shared
+        version: link:../packages/shared
       lucide-react:
         specifier: ^0.441.0
         version: 0.441.0(react@18.3.1)
@@ -131,11 +150,11 @@ importers:
         specifier: ^5.4.1
         version: 5.4.21
 
-  apps/web:
+  web:
     dependencies:
       '@dinepos/shared':
         specifier: workspace:*
-        version: link:../../packages/shared
+        version: link:../packages/shared
       lucide-react:
         specifier: ^0.441.0
         version: 0.441.0(react@18.3.1)
@@ -191,25 +210,6 @@ importers:
       vite:
         specifier: ^5.4.1
         version: 5.4.21
-
-  packages/shared:
-    dependencies:
-      react:
-        specifier: ^18.0.0
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.0.0
-        version: 18.3.1(react@18.3.1)
-    devDependencies:
-      '@types/react':
-        specifier: ^18.3.3
-        version: 18.3.31
-      '@types/react-dom':
-        specifier: ^18.3.0
-        version: 18.3.7(@types/react@18.3.31)
-      typescript:
-        specifier: ^5.5.3
-        version: 5.9.3
 
 packages:
 

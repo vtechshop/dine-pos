@@ -1,3 +1,6 @@
 packages:
-  - 'apps/*'
+  - 'web'
+  - 'marketing'
+  - 'qr'
+  - 'admin'
   - 'packages/*'
