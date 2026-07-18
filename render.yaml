@@ -17,31 +17,79 @@ services:
       - key: PORT
         value: 5000
 
-      # Set these in the Render dashboard → Environment tab
-      - key: JWT_SECRET
-        sync: false         # Strong random secret — never commit to source control
-
+      # ── Database (REQUIRED) ────────────────────────────────────────────────
       - key: MONGODB_URI
         sync: false         # MongoDB Atlas connection string
+                            # Atlas → Connect → Drivers → copy connection string
+                            # IMPORTANT: Enable Atlas auto-backup (M10+ cluster):
+                            #   Cluster → Backup → Enable Continuous Cloud Backup
+                            #   Retention: 7-day daily snapshots minimum
+                            #   Point-in-time recovery: 24 hours minimum
+                            # Test restore before go-live: Backup → Restore → select snapshot
 
-      - key: REDIS_URL
-        sync: false         # Upstash Redis URL (optional — falls back to in-memory if unset)
+      # ── Authentication (REQUIRED) ──────────────────────────────────────────
+      - key: JWT_SECRET
+        sync: false         # 64-byte hex secret for hotel session JWTs
+                            # Generate: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+                            # NEVER reuse across environments
 
-      - key: ALLOWED_ORIGINS
-        sync: false         # Comma-separated list of allowed CORS origins
+      - key: SUPER_ADMIN_JWT_SECRET
+        sync: false         # Separate 64-byte hex secret for super-admin JWTs.
+                            # Must differ from JWT_SECRET so hotel tokens cannot
+                            # be used as super-admin tokens even if JWT_SECRET leaks.
+                            # Generate same way as JWT_SECRET.
 
+      # ── Super Admin (REQUIRED) ─────────────────────────────────────────────
       - key: SUPER_ADMIN_ID
         sync: false
 
       - key: SUPER_ADMIN_PASS
         sync: false
 
-      - key: AGGREGATOR_SECRET
-        sync: false
+      # ── CORS (REQUIRED) ───────────────────────────────────────────────────
+      - key: ALLOWED_ORIGINS
+        sync: false         # Comma-separated list of ALL frontend origins.
+                            # Required value for production:
+                            # https://app.dinepos.com,https://qr.dinepos.com,https://admin.dinepos.com,https://www.dinepos.com
 
-    # Auto-scaling: Render Standard supports horizontal scale-out.
-    # Socket.IO will use the Redis adapter when REDIS_URL is set,
-    # allowing all instances to share the same pub/sub bus.
+      # ── Redis (REQUIRED when maxInstances > 1) ────────────────────────────
+      - key: REDIS_URL
+        sync: false         # Upstash Redis URL (ioredis format: rediss://:<pass>@<host>:6379)
+                            # CRITICAL: Must be set before auto-scaling kicks in.
+                            # Without Redis, Socket.IO uses in-memory adapter; events
+                            # emitted on instance A are never delivered to clients on
+                            # instance B. Live order updates silently fail on ~50% of
+                            # connections as soon as a second instance starts.
+                            # Provision Upstash Redis (free tier handles ~500 hotels):
+                            #   https://console.upstash.com → Create Database → Copy REST URL
+
+      # ── Image Uploads (REQUIRED for product images) ───────────────────────
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false         # Cloudinary dashboard → Settings → API Keys → Cloud Name
+
+      - key: CLOUDINARY_API_KEY
+        sync: false         # Cloudinary dashboard → Settings → API Keys → API Key
+
+      - key: CLOUDINARY_API_SECRET
+        sync: false         # Cloudinary dashboard → Settings → API Keys → API Secret
+
+      # ── Aggregator Webhook (REQUIRED if aggregator feature is used) ────────
+      - key: AGGREGATOR_SECRET
+        sync: false         # Shared secret verified in X-Aggregator-Secret header
+
+      # ── Error Tracking (optional — strongly recommended for production) ────
+      - key: SENTRY_DSN
+        sync: false         # Sentry → Project → Settings → Client Keys → DSN
+                            # Captures unhandled exceptions with stack traces
+
+      # ── Log Aggregation (optional — strongly recommended for production) ───
+      - key: LOGTAIL_SOURCE_TOKEN
+        sync: false         # Better Stack → Sources → Source Token
+                            # Without this, JSON logs go to Render stdout drain only
+
+    # ── Auto-scaling ──────────────────────────────────────────────────────────
+    # IMPORTANT: Set REDIS_URL before increasing minInstances above 1.
+    # Socket.IO requires the Redis adapter for cross-instance event delivery.
     scaling:
       minInstances: 1
       maxInstances: 3       # Scale to 3 at peak; each handles ~200 concurrent hotels
@@ -51,13 +99,13 @@ services:
   - type: web
     name: dine-pos-api-staging
     runtime: node
-    plan: starter             # Low traffic — single instance is fine for QA
+    plan: starter           # Low traffic — single instance is fine for QA
     region: singapore
     rootDir: backend
     buildCommand: npm install && npm run build
     startCommand: node dist/server.js
     healthCheckPath: /api/health
-    autoDeploy: false         # Manual deploys only — don't auto-promote to staging
+    autoDeploy: false       # Manual deploys only — don't auto-promote to staging
 
     envVars:
       - key: NODE_ENV
@@ -69,8 +117,11 @@ services:
       - key: JWT_SECRET
         sync: false
 
+      - key: SUPER_ADMIN_JWT_SECRET
+        sync: false
+
       - key: MONGODB_URI
-        sync: false           # Point to a separate staging Atlas cluster
+        sync: false         # Point to a separate staging Atlas cluster
 
       - key: REDIS_URL
         sync: false
@@ -85,4 +136,19 @@ services:
         sync: false
 
       - key: AGGREGATOR_SECRET
+        sync: false
+
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+
+      - key: CLOUDINARY_API_KEY
+        sync: false
+
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+      - key: SENTRY_DSN
+        sync: false
+
+      - key: LOGTAIL_SOURCE_TOKEN
         sync: false

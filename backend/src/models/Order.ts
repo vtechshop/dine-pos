@@ -186,5 +186,7 @@ OrderSchema.index({ sessionId: 1 }, { sparse: true });
 OrderSchema.index({ guestId: 1 }, { sparse: true });
 // Combined: all orders for a session filtered by guest (most common guest bill query)
 OrderSchema.index({ sessionId: 1, guestId: 1 }, { sparse: true });
+// Legacy table bill: menuRoutes filters by hotelId + tableNumber + createdAt (today's orders)
+OrderSchema.index({ hotelId: 1, tableNumber: 1, createdAt: -1 });
 
 export default mongoose.model<IOrder>('Order', OrderSchema);

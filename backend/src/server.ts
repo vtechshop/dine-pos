@@ -100,10 +100,26 @@ const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
 
 // ── Security headers ──────────────────────────────────────────────────────────
-// CSP disabled: the /menu PWA loads product images from Cloudinary (dynamic external URLs)
-// and Google Fonts. Configure per-route CSP as a follow-up once all asset origins are known.
-// TODO: Enable contentSecurityPolicy with Cloudinary + fonts.googleapis.com allowlist.
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc:             ["'self'"],
+        scriptSrc:              ["'self'"],
+        // unsafe-inline: the /bill/:orderId route emits an inline <style> block
+        styleSrc:               ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc:                ["'self'", 'https://fonts.gstatic.com'],
+        // res.cloudinary.com: product images uploaded via Cloudinary
+        imgSrc:                 ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com'],
+        // wss: covers Socket.IO WebSocket upgrade; ws: needed for non-TLS dev
+        connectSrc:             ["'self'", 'wss:', 'ws:'],
+        objectSrc:              ["'none'"],
+        frameAncestors:         ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+  }),
+);
 
 // ── CORS — restrict to known origins ─────────────────────────────────────────
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
@@ -366,25 +382,25 @@ io.use((socket, next) => {
 
 // ─── Socket.io ────────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
-  console.log(`[SOCKET] Connected | socketId=${socket.id} | authenticated=${!!socket.data.authenticated} | hotelId=${socket.data.hotelId || 'none'}`);
+  logger.info('[SOCKET] Connected', { socketId: socket.id, authenticated: !!socket.data.authenticated, hotelId: socket.data.hotelId || 'none' });
 
   // Auto-join authenticated admin sockets to their hotel rooms immediately
   if (socket.data.authenticated && socket.data.hotelId) {
     socket.join(`hotel_${socket.data.hotelId}`);
     socket.join(`admin_${socket.data.hotelId}`);
-    console.log(`[SOCKET] Auto-joined | socketId=${socket.id} | room=hotel_${socket.data.hotelId}`);
+    logger.info('[SOCKET] Auto-joined', { socketId: socket.id, room: `hotel_${socket.data.hotelId}` });
   }
 
   // join_hotel: admin app calls this on connect (backward-compat + customer fallback)
   socket.on('join_hotel', (hotelId: string) => {
-    console.log(`[SOCKET] join_hotel received | socketId=${socket.id} | hotelId=${hotelId} | authenticated=${!!socket.data.authenticated}`);
+    logger.info('[SOCKET] join_hotel received', { socketId: socket.id, hotelId, authenticated: !!socket.data.authenticated });
     if (typeof hotelId !== 'string' || !hotelId) return;
 
     if (socket.data.authenticated) {
       // Authenticated: JWT must match the claimed hotelId.
       // The socket was already auto-joined to the correct rooms on connection.
       if (socket.data.hotelId !== hotelId) {
-        console.log(`[SOCKET] join_hotel REJECTED | socketId=${socket.id} | claimed=${hotelId} | jwt=${socket.data.hotelId}`);
+        logger.warn('[SOCKET] join_hotel REJECTED', { socketId: socket.id, claimed: hotelId, jwt: socket.data.hotelId });
         return;
       }
       // Re-join in case of reconnect after server restart
@@ -398,7 +414,7 @@ io.on('connection', (socket) => {
     }
 
     const roomSize = io.sockets.adapter.rooms.get(`hotel_${hotelId}`)?.size ?? 0;
-    console.log(`[SOCKET] Joined room | socketId=${socket.id} | room=hotel_${hotelId} | authenticated=${!!socket.data.authenticated} | clientsInRoom=${roomSize}`);
+    logger.info('[SOCKET] Joined room', { socketId: socket.id, room: `hotel_${hotelId}`, authenticated: !!socket.data.authenticated, clientsInRoom: roomSize });
   });
 
   // join: customer table room (e.g. socket.emit('join', 'table_5'))
@@ -529,7 +545,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', async (reason) => {
-    console.log(`[SOCKET] Disconnected | socketId=${socket.id} | reason=${reason}`);
+    logger.info('[SOCKET] Disconnected', { socketId: socket.id, reason });
     // Clear printer registration so pending-dispatch knows the device is offline
     try {
       await PrinterDevice.findOneAndUpdate(
