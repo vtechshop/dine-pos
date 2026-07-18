@@ -8,11 +8,11 @@ import { BillPage } from './pages/BillPage.tsx';
 import { ErrorPage } from './pages/ErrorPage.tsx';
 
 export default function App() {
-  const params   = new URLSearchParams(window.location.search);
-  const hotelId  = params.get('hotel') ?? '';
-  const tableId  = params.get('table') ?? '';
+  const params      = new URLSearchParams(window.location.search);
+  const hotelId     = params.get('hotel') ?? '';
+  const tableNumber = params.get('table') ?? '';
 
-  if (!hotelId || !tableId) {
+  if (!hotelId || !tableNumber) {
     return (
       <ErrorPage
         title="Invalid QR code"
@@ -25,15 +25,15 @@ export default function App() {
     <BrowserRouter>
       <MenuProvider hotelId={hotelId}>
         <CartProvider>
-          <GuestProvider hotelId={hotelId} tableId={tableId}>
+          <GuestProvider hotelId={hotelId} tableId={tableNumber}>
             <Routes>
               <Route
                 path="/"
-                element={<MenuPage hotelId={hotelId} tableNumber={tableId} />}
+                element={<MenuPage hotelId={hotelId} tableNumber={tableNumber} />}
               />
               <Route
                 path="/orders"
-                element={<OrderStatusPage hotelId={hotelId} tableNumber={tableId} />}
+                element={<OrderStatusPage hotelId={hotelId} tableNumber={tableNumber} />}
               />
               <Route
                 path="/bill"

@@ -169,7 +169,11 @@ async function resolveTableId(
 
   if (tableNumber) {
     const cleanTable = String(tableNumber).trim();
-    const tableNum   = Number(cleanTable);
+
+    // Accept an ObjectId passed as tableNumber (QR code may encode table._id)
+    if (mongoose.isValidObjectId(cleanTable)) return cleanTable;
+
+    const tableNum = Number(cleanTable);
     if (!isNaN(tableNum)) {
       const tableDoc = await Table.findOne({
         hotelId: new mongoose.Types.ObjectId(hotelId),
