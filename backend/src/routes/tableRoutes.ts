@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import Table from '../models/Table';
 import { authMiddleware, requireAdmin, requireWaiterOrCashierOrAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
+import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
@@ -13,7 +14,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const tables = await Table.find({ hotelId: req.hotelId }).sort({ number: 1 });
     res.json(tables);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+    sendError(res, 500, 'Failed to fetch tables', error);
   }
 });
 
@@ -25,8 +26,8 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
     logAudit(req, 'table.created', 'table', String((table as any)._id), { number: (table as any).number });
     res.status(201).json(table);
   } catch (error: any) {
-    if (error.code === 11000) return res.status(400).json({ message: 'Table number already exists' });
-    res.status(400).json({ message: 'Invalid data', error });
+    if ((error as any).code === 11000) return res.status(400).json({ message: 'Table number already exists' });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 
@@ -42,7 +43,7 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     logAudit(req, 'table.updated', 'table', req.params.id);
     res.json(table);
   } catch (error) {
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 

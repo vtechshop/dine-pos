@@ -100,10 +100,6 @@ export function DashboardPage() {
     (document.getElementById('table-search') as HTMLInputElement | null)?.focus();
   });
 
-  useShortcut('F2', () => {
-    // F2 reserved for future New Order shortcut
-  });
-
   useShortcut('Escape', () => {
     setSearch('');
     (document.getElementById('table-search') as HTMLInputElement | null)?.blur();
@@ -119,9 +115,12 @@ export function DashboardPage() {
       const { session } = await openSession(tableId);
       void load();
       setBillingSessionId(session._id);
-    } catch {
+    } catch (err) {
       // 409 = race (table just became occupied) — refresh so grid reflects reality
       void load();
+      if (err instanceof Error && !err.message.includes('409')) {
+        setError(err.message || 'Failed to open table');
+      }
     } finally {
       setOpeningTableId(null);
     }
@@ -138,10 +137,7 @@ export function DashboardPage() {
     return tables.map(table => ({
       ...table,
       session: table.currentSessionId
-        ? sessionByTableNumber.get(
-            // sessions use tableNumber (string like "T1") — match by table.name or T{number}
-            table.name || `T${table.number}`,
-          )
+        ? sessionByTableNumber.get(String(table.number))
         : undefined,
     }));
   }, [tables, sessionByTableNumber]);
@@ -250,7 +246,7 @@ export function DashboardPage() {
               <TableCard
                 key={table._id}
                 table={table}
-                hasNewOrder={newOrderTables.has(table.name || `T${table.number}`)}
+                hasNewOrder={newOrderTables.has(String(table.number))}
                 currencySymbol={currencySymbol}
                 onSelect={table.status === 'occupied' ? handleTableSelect : undefined}
                 onOpenAvailable={table.status === 'available' ? () => void handleAvailableTableClick(table._id) : undefined}
