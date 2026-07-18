@@ -44,6 +44,54 @@ const staffPinLimiter = makeRateLimiter({
 
 const router = Router();
 
+// Shared hotel status guard — mirrors the checks in the admin login route so all
+// login endpoints return consistent 403 responses for non-operable accounts.
+// Returns a Response if the hotel is blocked, null if the caller should proceed.
+async function checkHotelStatus(
+  res: Response,
+  hotelId: string,
+): Promise<{ blocked: boolean }> {
+  const hotel = await Hotel.findById(hotelId)
+    .select('status subscriptionType trialEndDate')
+    .lean<{ status: string; subscriptionType?: string; trialEndDate?: Date | null; _id: unknown }>();
+
+  if (!hotel) {
+    res.status(401).json({ message: 'Invalid Hotel ID or credentials' });
+    return { blocked: true };
+  }
+  if (hotel.status === 'pending') {
+    res.status(403).json({ message: 'Your registration is still pending approval.' });
+    return { blocked: true };
+  }
+  if (hotel.status === 'suspended') {
+    res.status(403).json({ message: 'Your account has been suspended. Contact support.' });
+    return { blocked: true };
+  }
+  if (hotel.status === 'rejected') {
+    res.status(403).json({ message: 'Your registration was rejected. Please resubmit.' });
+    return { blocked: true };
+  }
+  if (hotel.status === 'trial' && hotel.trialEndDate && hotel.trialEndDate < new Date()) {
+    await Hotel.findByIdAndUpdate(hotelId, { status: 'expired' });
+    res.status(403).json({
+      code: 'TRIAL_EXPIRED',
+      message: 'Your free trial has ended. Please contact support to activate your subscription.',
+    });
+    return { blocked: true };
+  }
+  if (hotel.status === 'expired') {
+    const isTrial = hotel.subscriptionType === 'trial' || !hotel.subscriptionType;
+    res.status(403).json({
+      code: isTrial ? 'TRIAL_EXPIRED' : 'PLAN_EXPIRED',
+      message: isTrial
+        ? 'Your free trial has ended. Please contact support to activate your subscription.'
+        : 'Your subscription has expired. Please renew to continue.',
+    });
+    return { blocked: true };
+  }
+  return { blocked: false };
+}
+
 // Returns days remaining in trial (negative if expired)
 const trialDaysRemaining = (trialEndDate: Date | null): number => {
   if (!trialEndDate) return 0;
@@ -164,6 +212,8 @@ router.post('/kitchen', staffPinLimiter, async (req: Request, res: Response) => 
     return res.status(400).json({ message: 'Hotel ID and PIN required' });
   }
   try {
+    const { blocked } = await checkHotelStatus(res, hotelId);
+    if (blocked) return;
     const settings = await Settings.findOne({ hotelId }).select('kitchenPin').lean();
     if (!settings || !(settings as any).kitchenPin) {
       return res.status(403).json({ message: 'Kitchen PIN not set. Ask admin to configure it in Settings.' });
@@ -186,6 +236,8 @@ router.post('/waiter', staffPinLimiter, async (req: Request, res: Response) => {
     return res.status(400).json({ message: 'Hotel ID, employee code and PIN required' });
   }
   try {
+    const { blocked } = await checkHotelStatus(res, hotelId);
+    if (blocked) return;
     const waiter = await Waiter.findOne({
       hotelId,
       employeeCode: employeeCode.toString().trim().toUpperCase(),
@@ -223,6 +275,8 @@ router.post('/cashier', staffPinLimiter, async (req: Request, res: Response) => 
     return res.status(400).json({ message: 'Hotel ID, employee code and PIN required' });
   }
   try {
+    const { blocked } = await checkHotelStatus(res, hotelId);
+    if (blocked) return;
     const cashier = await Cashier.findOne({
       hotelId,
       employeeCode: employeeCode.toString().trim().toUpperCase(),
