@@ -5,6 +5,7 @@ import Settings from '../models/Settings';
 import mongoose from 'mongoose';
 import { sendError } from '../utils/sendError';
 import { isValidDateParam } from '../utils/dateParam';
+import { logger } from '../utils/logger';
 
 const router = Router();
 router.use(authMiddleware);
@@ -67,7 +68,7 @@ router.get('/gst', authMiddleware, async (req: AuthRequest, res: Response) => {
       totalValue:        result.reduce((s, r) => s + r.totalValue, 0),
     });
   } catch (err) {
-    console.error('GST report error:', err);
+    logger.error('GST report error', { err });
     sendError(res, 500, 'Failed to generate GST report', err);
   }
 });
@@ -125,7 +126,7 @@ router.get('/tally', authMiddleware, async (req: AuthRequest, res: Response) => 
       totalTax:     +rows.reduce((s, r) => s + r.cgst + r.sgst, 0).toFixed(2),
     });
   } catch (err) {
-    console.error('Tally export error:', err);
+    logger.error('Tally export error', { err });
     sendError(res, 500, 'Failed to generate Tally export', err);
   }
 });
@@ -237,7 +238,7 @@ router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response
       },
     });
   } catch (err) {
-    console.error('GSTR-1 JSON error:', err);
+    logger.error('GSTR-1 JSON error', { err });
     sendError(res, 500, 'Failed to generate GSTR-1 JSON', err);
   }
 });

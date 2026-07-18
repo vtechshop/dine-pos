@@ -36,7 +36,7 @@ type Tab = 'overview' | 'products' | 'gst' | 'expenses';
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString('en-CA');
 }
 
 function getRange(
