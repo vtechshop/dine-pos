@@ -245,13 +245,20 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         updateFields.paidAmount = paidAmount;
       }
       if (paymentMethod === 'split' && splitDetails) {
+        const splitSum = (splitDetails.cash ?? 0) + (splitDetails.upi ?? 0) + (splitDetails.card ?? 0);
+        if (Math.abs(splitSum - guest.totalAmount) > 0.01) {
+          res.status(400).json({ message: `Split amounts (₹${splitSum.toFixed(2)}) must equal bill total (₹${guest.totalAmount.toFixed(2)})` });
+          return;
+        }
         updateFields['splitDetails.cash'] = splitDetails.cash ?? 0;
         updateFields['splitDetails.upi']  = splitDetails.upi  ?? 0;
         updateFields['splitDetails.card'] = splitDetails.card ?? 0;
       }
 
-      // [Phase 6] Loyalty redemption — atomically deduct points before saving bill
-      if (redeemPoints && typeof redeemPoints === 'number' && redeemPoints > 0 && guest.customerId) {
+      // [Phase 6] Loyalty redemption — atomically deduct points before saving bill.
+      // Guard against double-billing race: if points were already deducted in a prior
+      // concurrent request that lost the guest update race, skip redemption here.
+      if (redeemPoints && typeof redeemPoints === 'number' && redeemPoints > 0 && guest.customerId && !guest.loyaltyPointsRedeemed) {
         try {
           const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
           if (loyaltyCfg.enabled && redeemPoints >= loyaltyCfg.minimumRedeemPoints) {
@@ -309,7 +316,18 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
           try {
             const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
             if (loyaltyCfg.enabled) {
-              const pts = calculateEarnedPoints(guest.totalAmount, loyaltyCfg);
+              // Honour calculationBase: use pre-GST subtotal when configured.
+              let earnBase = guest.totalAmount;
+              if (loyaltyCfg.calculationBase === 'before_gst') {
+                const [sub] = await Order.aggregate([
+                  { $match: { sessionId: session._id, guestId: guest._id, status: { $ne: 'cancelled' } } },
+                  { $group: { _id: null, s: { $sum: '$subtotal' } } },
+                ]);
+                earnBase = sub?.s ?? guest.totalAmount;
+              }
+              // Don't award points on the portion the customer received free via redemption.
+              const earnableBase = Math.max(0, earnBase - (updateFields.loyaltyDiscountAmount ?? 0));
+              const pts = calculateEarnedPoints(earnableBase, loyaltyCfg);
               if (pts > 0) {
                 await earnPoints(
                   guest.customerId as mongoose.Types.ObjectId,
@@ -334,6 +352,13 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         paymentMethod,
         loyaltyDiscountAmount: updateFields.loyaltyDiscountAmount,
       }).catch(() => {});
+
+      // Sync paymentMethod to linked orders so Order-based daily/range reports
+      // reflect the correct payment breakdown for session-billed dine-in guests.
+      Order.updateMany(
+        { sessionId: session._id, guestId: updated._id, status: { $ne: 'cancelled' } },
+        { $set: { paymentMethod } },
+      ).catch(() => {});
 
       io.to(`hotel_${req.hotelId}`).emit('guest_billed', {
         sessionId: session._id,

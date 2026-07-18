@@ -74,7 +74,7 @@ router.patch('/:id/status', requireWaiterOrCashierOrAdmin, async (req: AuthReque
 // DELETE table — admin only
 router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const openSession = await TableSession.findOne({ tableId: req.params.id, hotelId: req.hotelId, status: 'active' }).lean();
+    const openSession = await TableSession.findOne({ tableId: req.params.id, hotelId: req.hotelId, status: 'open' }).lean();
     if (openSession) return res.status(409).json({ message: 'Cannot delete a table with an active session. Close the session first.' });
     const table = await Table.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });
     if (!table) return res.status(404).json({ message: 'Table not found' });

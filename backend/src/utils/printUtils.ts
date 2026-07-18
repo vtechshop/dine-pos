@@ -241,7 +241,7 @@ export async function scheduleReceiptPrint(
     items,
     subtotal:              +subtotal.toFixed(2),
     taxTotal:              +taxTotal.toFixed(2),
-    grandTotal:            +input.totalAmount.toFixed(2),
+    grandTotal:            +(Math.max(0, input.totalAmount - (input.loyaltyDiscountAmount ?? 0))).toFixed(2),
     loyaltyDiscountAmount: input.loyaltyDiscountAmount || undefined,
     defaultTaxPercent:     s?.defaultTaxPercent  ?? 5,
     currencySymbol:        s?.currencySymbol      ?? '₹',

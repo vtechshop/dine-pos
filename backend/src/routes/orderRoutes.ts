@@ -133,6 +133,14 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
       }},
     ]);
 
+    // Loyalty discounts applied at Guest level (session billing) are not reflected in
+    // Order.grandTotal. Subtract them so totalSales is net actual revenue.
+    const [loyaltyAgg] = await Guest.aggregate([
+      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: 'billed', loyaltyDiscountAmount: { $gt: 0 }, updatedAt: { $gte: startOfDay, $lte: endOfDay } } },
+      { $group: { _id: null, total: { $sum: '$loyaltyDiscountAmount' } } },
+    ]);
+    const sessionLoyaltyDiscount = loyaltyAgg?.total ?? 0;
+
     const empty = {
       totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0,
       cashTotal: 0, upiTotal: 0, cardTotal: 0, splitTotal: 0,
@@ -141,11 +149,12 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
       qrOrders: 0, qrTotal: 0,
     };
     const r = result || empty;
+    const netSales = +(r.totalSales - sessionLoyaltyDiscount).toFixed(2);
 
     res.json({
       date: dateStr,
-      totalSales: r.totalSales,
-      totalRevenue: r.totalSales,
+      totalSales: netSales,
+      totalRevenue: netSales,
       totalTax: r.totalTax,
       totalDiscount: r.totalDiscount,
       totalOrders: r.totalOrders,
@@ -204,11 +213,18 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
       }},
     ]);
 
+    const [rangeLoyaltyAgg] = await Guest.aggregate([
+      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: 'billed', loyaltyDiscountAmount: { $gt: 0 }, updatedAt: { $gte: start, $lte: end } } },
+      { $group: { _id: null, total: { $sum: '$loyaltyDiscountAmount' } } },
+    ]);
+    const rangeSessionLoyaltyDiscount = rangeLoyaltyAgg?.total ?? 0;
+
     const empty = { totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0, cashTotal: 0, upiTotal: 0, cardTotal: 0, splitTotal: 0, dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0, swiggyOrders: 0, swiggyTotal: 0, zomatoOrders: 0, zomatoTotal: 0, qrOrders: 0, qrTotal: 0 };
     const r = result || empty;
+    const netRangeSales = +(r.totalSales - rangeSessionLoyaltyDiscount).toFixed(2);
     res.json({
       from: fromStr, to: toStr,
-      totalSales: r.totalSales, totalTax: r.totalTax, totalDiscount: r.totalDiscount,
+      totalSales: netRangeSales, totalTax: r.totalTax, totalDiscount: r.totalDiscount,
       totalOrders: r.totalOrders, parcelOrders: r.parcelOrders, parcelRevenue: r.parcelRevenue,
       paymentBreakdown: { cash: r.cashTotal, upi: r.upiTotal, card: r.cardTotal, split: r.splitTotal },
       sourceBreakdown: {
