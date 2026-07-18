@@ -12,6 +12,7 @@ import { scheduleKOTPrint } from '../utils/printUtils';
 import { authMiddleware, requireAdmin, requireKitchenOrAdmin, requireWaiterOrAdmin, requireCashierOrAdmin, requireWaiterOrCashierOrAdmin, resolveHotelStatus, AuthRequest } from '../middleware/auth';
 import { requireActiveStaff } from '../middleware/staffAuth';
 import { logAudit } from '../utils/audit';
+import { logger } from '../utils/logger';
 import { io } from '../server';
 import { sendError } from '../utils/sendError';
 
@@ -474,7 +475,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
                 lastVisitAt: new Date(),
                 visitCount:  1,
               });
-              console.log(`[ORDER] CustomerProfile created | customerId=${newCustomerId} | hotelId=${req.hotelId}`);
+              logger.info('CustomerProfile created', { customerId: String(newCustomerId), hotelId: req.hotelId });
             } else if (profile) {
               CustomerProfile.findByIdAndUpdate(profile._id, {
                 $set: { lastVisitAt: new Date(), ...(cleanName ? { name: cleanName } : {}) },
@@ -489,7 +490,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
           }
         } catch (profileErr) {
           // CustomerProfile failure is non-fatal — order still proceeds
-          console.error('[ORDER] CustomerProfile lookup/create failed:', profileErr);
+          logger.warn('CustomerProfile lookup/create failed; order proceeds', { error: String(profileErr), hotelId: req.hotelId });
         }
       }
     } else if (req.body.tableId && mongoose.isValidObjectId(req.body.tableId)) {
@@ -537,7 +538,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
           return res.status(409).json({ message: sessionErr.message });
         }
         // Other session errors are non-fatal — order proceeds without session link
-        console.error('[ORDER] Auto-session error:', sessionErr);
+        logger.warn('Auto-session error; order proceeds without session', { error: String(sessionErr), hotelId: req.hotelId });
       }
     }
 
@@ -555,7 +556,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       grandTotal:      recalc.grandTotal,
     });
     await order.save();
-    console.log(`[ORDER] Saved | orderId=${order._id} | orderNumber=${order.orderNumber} | hotelId=${req.hotelId}`);
+    logger.info('Order saved', { orderId: String(order._id), orderNumber: order.orderNumber, hotelId: req.hotelId });
 
     // ── Phase 7: Fire-and-forget KOT print ───────────────────────────────────
     scheduleKOTPrint(req.hotelId!, {
@@ -610,7 +611,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
 
     const room = `hotel_${req.hotelId}`;
     const roomClients = io.sockets.adapter.rooms.get(room)?.size ?? 0;
-    console.log(`[SOCKET] Emitting new_order | room=${room} | clientsInRoom=${roomClients} | orderId=${order._id}`);
+    logger.info('Emitting new_order', { room, clientsInRoom: roomClients, orderId: String(order._id) });
     io.to(room).emit('new_order', {
       _id: order._id,
       orderNumber: order.orderNumber,
@@ -633,7 +634,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       });
       if (existing) return res.status(200).json(existing);
     }
-    res.status(400).json({ message: 'Invalid data', error });
+    sendError(res, 400, 'Invalid data', error);
   }
 });
 

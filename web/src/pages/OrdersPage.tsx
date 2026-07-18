@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { OrderListItem } from '../types';
 import { fetchOrders } from '../api/orders';
@@ -8,7 +8,7 @@ import { useSettings } from '../context/SettingsContext';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
 }
 
 function fmtTime(iso: string) {
@@ -177,9 +177,8 @@ export function OrdersPage() {
             </thead>
             <tbody>
               {filtered.map(order => (
-                <>
+                <Fragment key={order._id}>
                   <tr
-                    key={order._id}
                     onClick={() => setExpanded(expanded === order._id ? null : order._id)}
                     className="cursor-pointer border-b border-[#E8D5C0]/60 transition-colors hover:bg-[#FFF6EE]"
                   >
@@ -255,7 +254,7 @@ export function OrdersPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
