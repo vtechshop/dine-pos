@@ -11,6 +11,21 @@ function todayStr() {
   return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
 }
 
+function daysAgoStr(n: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toLocaleDateString('en-CA');
+}
+
+type RangeMode = 'today' | 'week' | 'month' | 'all';
+
+const RANGE_OPTIONS: { key: RangeMode; label: string }[] = [
+  { key: 'today', label: 'Today' },
+  { key: 'week',  label: 'This Week' },
+  { key: 'month', label: 'This Month' },
+  { key: 'all',   label: 'All Time' },
+];
+
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
@@ -45,6 +60,7 @@ export function OrdersPage() {
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
 
+  const [rangeMode, setRangeMode] = useState<RangeMode>('today');
   const [date,   setDate]   = useState(todayStr());
   const [status, setStatus] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
@@ -60,7 +76,11 @@ export function OrdersPage() {
     setLoading(true);
     setError(null);
     try {
-      const params: Parameters<typeof fetchOrders>[0] = { date, page: pg, limit: 50 };
+      const params: Parameters<typeof fetchOrders>[0] = { page: pg, limit: 50 };
+      if (rangeMode === 'today') params.date = date;
+      else if (rangeMode === 'week')  { params.from = daysAgoStr(7);  params.to = todayStr(); }
+      else if (rangeMode === 'month') { params.from = daysAgoStr(30); params.to = todayStr(); }
+      // rangeMode === 'all': no date params → backend returns all orders
       if (status !== 'all') params.status = status;
       const res = await fetchOrders(params);
       setOrders(res.orders);
@@ -72,9 +92,9 @@ export function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [date, status, page]);
+  }, [rangeMode, date, status, page]);
 
-  useEffect(() => { void load(1); }, [date, status]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load(1); }, [rangeMode, date, status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = search.trim()
     ? orders.filter(o =>
@@ -98,14 +118,33 @@ export function OrdersPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Date picker */}
-          <input
-            type="date"
-            value={date}
-            max={todayStr()}
-            onChange={e => setDate(e.target.value)}
-            className="h-8 rounded-lg border border-[#E8D5C0] bg-[#FFF6EE] px-3 text-xs text-[#1C0800] outline-none focus:border-[#E8380D]/50"
-          />
+          {/* Range quick-select */}
+          <div className="flex items-center rounded-lg border border-[#E8D5C0] overflow-hidden">
+            {RANGE_OPTIONS.map(r => (
+              <button
+                key={r.key}
+                onClick={() => { setRangeMode(r.key); setExpanded(null); }}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  rangeMode === r.key
+                    ? 'bg-[#E8380D] text-white'
+                    : 'bg-white text-[#1C0800]/50 hover:bg-[#1C0800]/5'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Specific-date picker — only shown in Today mode */}
+          {rangeMode === 'today' && (
+            <input
+              type="date"
+              value={date}
+              max={todayStr()}
+              onChange={e => setDate(e.target.value)}
+              className="h-8 rounded-lg border border-[#E8D5C0] bg-[#FFF6EE] px-3 text-xs text-[#1C0800] outline-none focus:border-[#E8380D]/50"
+            />
+          )}
 
           {/* Search */}
           <div className="relative">
