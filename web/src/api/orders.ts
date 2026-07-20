@@ -1,6 +1,15 @@
 import { apiFetch } from './client';
 import type { OrdersResponse, KDSOrder } from '../types';
 
+export interface OrderCustomer {
+  phone: string;
+  customerName: string;
+  totalOrders: number;
+  totalSpent: number;
+  lastOrderDate: string;
+  firstOrderDate: string;
+}
+
 export interface FetchOrdersParams {
   date?: string;
   from?: string;
@@ -35,4 +44,8 @@ export async function updateOrderStatus(
     method: 'PATCH',
     body: JSON.stringify({ status }),
   });
+}
+
+export async function fetchOrderCustomers(): Promise<{ customers: OrderCustomer[]; total: number }> {
+  return apiFetch('/orders/customers');
 }

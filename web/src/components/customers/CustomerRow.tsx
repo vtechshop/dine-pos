@@ -68,12 +68,25 @@ export function CustomerRow({ customer, isSelected, onClick }: Props) {
       </div>
 
       <div className="shrink-0 text-right">
-        <p className="text-xs font-semibold text-[#1C0800] tabular-nums">
-          {loyaltyBalance > 0 ? `${loyaltyBalance.toLocaleString()} pts` : '—'}
-        </p>
-        <p className="mt-0.5 text-[10px] text-[#1C0800]/30">
-          {visitCount}v · {timeAgo(lastVisitAt)}
-        </p>
+        {customer._orderOnly ? (
+          <>
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-[#1C0800]/30">
+              History only
+            </p>
+            <p className="mt-0.5 text-[10px] text-[#1C0800]/30">
+              {visitCount}× · {timeAgo(lastVisitAt)}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-xs font-semibold text-[#1C0800] tabular-nums">
+              {loyaltyBalance > 0 ? `${loyaltyBalance.toLocaleString()} pts` : '—'}
+            </p>
+            <p className="mt-0.5 text-[10px] text-[#1C0800]/30">
+              {visitCount}v · {timeAgo(lastVisitAt)}
+            </p>
+          </>
+        )}
       </div>
     </button>
   );

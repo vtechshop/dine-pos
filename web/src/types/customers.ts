@@ -8,6 +8,8 @@ export interface CustomerSummary {
   visitCount: number;
   lastVisitAt: string | null;
   status: 'active' | 'blocked' | 'merged';
+  /** Synthesized from /orders/customers — no loyalty profile exists for this customer */
+  _orderOnly?: true;
 }
 
 export interface CustomerProfile extends CustomerSummary {

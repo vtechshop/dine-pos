@@ -2,9 +2,12 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Search, RefreshCw, Users, Star, Award, TrendingUp } from 'lucide-react';
 import type { CustomerSummary, LoyaltyConfig } from '../types/customers';
 import { searchCustomers, fetchLoyaltyConfig } from '../api/loyalty';
+import { fetchOrderCustomers } from '../api/orders';
+import type { OrderCustomer } from '../api/orders';
 import { ApiError } from '../api/client';
 import { CustomerRow } from '../components/customers/CustomerRow';
 import { CustomerDetail } from '../components/customers/CustomerDetail';
+import { OrderOnlyCustomerPanel } from '../components/customers/OrderOnlyCustomerPanel';
 import { Spinner } from '../components/ui/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
@@ -16,6 +19,28 @@ type SortMode     = 'default' | 'spend' | 'visits';
 
 function looksLikePhone(q: string): boolean {
   return /^[+\d\s\-()]{6,}$/.test(q.trim());
+}
+
+/** Last 10 digits of any phone string — used to deduplicate across sources. */
+function normalizePhone(phone: string | null | undefined): string {
+  if (!phone) return '';
+  return phone.replace(/\D/g, '').slice(-10);
+}
+
+/** Convert an order-aggregated customer into a CustomerSummary shape for rendering. */
+function toOrderOnlySummary(oc: OrderCustomer): CustomerSummary {
+  return {
+    _id:           `orderonly:${normalizePhone(oc.phone)}`,
+    customerId:    '',
+    name:          oc.customerName || 'Guest',
+    phone:         oc.phone,
+    loyaltyBalance: 0,
+    lifetimeSpend: oc.totalSpent,
+    visitCount:    oc.totalOrders,
+    lastVisitAt:   oc.lastOrderDate,
+    status:        'active',
+    _orderOnly:    true,
+  };
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -38,6 +63,7 @@ export function CustomersPage() {
   const [featureEnabled, setFeatureEnabled] = useState(true);
   const [selectedId, setSelectedId]       = useState<string | null>(null);
   const [config, setConfig]               = useState<LoyaltyConfig | null>(null);
+  const [orderCustomers, setOrderCustomers] = useState<OrderCustomer[]>([]);
 
   const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -73,6 +99,10 @@ export function CustomersPage() {
     fetchLoyaltyConfig()
       .then(({ config: c }) => setConfig(c))
       .catch(() => {});
+    // Silently fetch order-aggregated customers (requireAdmin — 403 for cashiers is expected).
+    fetchOrderCustomers()
+      .then(({ customers: ocs }) => setOrderCustomers(ocs))
+      .catch(() => {});
   }, [loadCustomers]);
 
   // Debounced search
@@ -96,14 +126,46 @@ export function CustomersPage() {
 
   // ── Derived lists ─────────────────────────────────────────────────────────────
 
+  // Phones seen in the loyalty list (all pages loaded so far) — used for dedup.
+  const loyaltyPhoneSet = useMemo(
+    () => new Set(customers.map(c => normalizePhone(c.phone))),
+    [customers],
+  );
+
+  // Map from normalised phone → raw order record — used for detail panel lookup.
+  const orderCustomersMap = useMemo(
+    () => new Map(orderCustomers.map(oc => [normalizePhone(oc.phone), oc])),
+    [orderCustomers],
+  );
+
+  // Order customers whose phone has no loyalty profile yet.
+  const orderOnlySummaries = useMemo(
+    () => orderCustomers
+      .filter(oc => oc.phone && !loyaltyPhoneSet.has(normalizePhone(oc.phone)))
+      .map(toOrderOnlySummary),
+    [orderCustomers, loyaltyPhoneSet],
+  );
+
+  // Client-side filter of order-only records when the search box is active.
+  const filteredOrderOnly = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return orderOnlySummaries;
+    return orderOnlySummaries.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      (c.phone ?? '').toLowerCase().includes(q),
+    );
+  }, [orderOnlySummaries, search]);
+
   const visibleCustomers = useMemo(() => {
-    let list = customers;
-    if (statusFilter === 'active')  list = list.filter(c => c.status === 'active');
-    if (statusFilter === 'blocked') list = list.filter(c => c.status === 'blocked');
-    if (sortMode === 'spend')  list = [...list].sort((a, b) => b.lifetimeSpend - a.lifetimeSpend);
-    if (sortMode === 'visits') list = [...list].sort((a, b) => b.visitCount   - a.visitCount);
-    return list;
-  }, [customers, statusFilter, sortMode]);
+    let loyaltyList = customers;
+    if (statusFilter === 'active')  loyaltyList = loyaltyList.filter(c => c.status === 'active');
+    if (statusFilter === 'blocked') loyaltyList = loyaltyList.filter(c => c.status === 'blocked');
+    if (sortMode === 'spend')  loyaltyList = [...loyaltyList].sort((a, b) => b.lifetimeSpend - a.lifetimeSpend);
+    if (sortMode === 'visits') loyaltyList = [...loyaltyList].sort((a, b) => b.visitCount   - a.visitCount);
+    // Blocked filter: order-only customers have no blocked state, exclude them
+    const orderOnlyVisible = statusFilter === 'blocked' ? [] : filteredOrderOnly;
+    return [...loyaltyList, ...orderOnlyVisible];
+  }, [customers, filteredOrderOnly, statusFilter, sortMode]);
 
   // Loyalty tab: sort the same loaded batch client-side
   const topByBalance = useMemo(
@@ -278,7 +340,18 @@ export function CustomersPage() {
 
           {/* Right panel: detail */}
           <div className="flex flex-1 flex-col overflow-hidden bg-[#FFF6EE]">
-            {selectedId ? (
+            {selectedId?.startsWith('orderonly:') ? (
+              (() => {
+                const oc = orderCustomersMap.get(selectedId.slice('orderonly:'.length));
+                return oc ? (
+                  <OrderOnlyCustomerPanel
+                    key={selectedId}
+                    customer={oc}
+                    currencySymbol={currencySymbol}
+                  />
+                ) : null;
+              })()
+            ) : selectedId ? (
               <CustomerDetail
                 key={selectedId}
                 customerId={selectedId}
