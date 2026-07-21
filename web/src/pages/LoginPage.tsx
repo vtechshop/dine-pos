@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from '../components/ui/Spinner';
@@ -116,12 +116,20 @@ export function LoginPage() {
 
           {/* Role hint */}
           <p className="mt-5 text-center text-[11px] text-ink/40">
-            Hotel&nbsp;Owner&nbsp;·&nbsp;Manager&nbsp;·&nbsp;Cashier&nbsp;·&nbsp;Waiter&nbsp;·&nbsp;Kitchen
+            Hotel&nbsp;Owner&nbsp;·&nbsp;Manager&nbsp;·&nbsp;Cashier
           </p>
         </div>
 
+        {/* Register link */}
+        <p className="mt-4 text-center text-sm text-ink/50">
+          New to Dine POS?{' '}
+          <Link to="/register" className="font-medium text-brand hover:underline">
+            Start Free Trial
+          </Link>
+        </p>
+
         {/* Footer */}
-        <div className="mt-6 flex flex-col items-center gap-2.5 text-xs text-ink/40">
+        <div className="mt-4 flex flex-col items-center gap-2.5 text-xs text-ink/40">
           <span>
             Need help?{' '}
             <a

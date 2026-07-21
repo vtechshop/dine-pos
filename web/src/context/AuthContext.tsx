@@ -79,6 +79,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       res.role ??
       (typeof decoded.role === 'string' ? decoded.role : null);
 
+    if (role === 'kitchen' || role === 'waiter') {
+      throw new Error('Kitchen and Waiter access is available on the mobile app only.');
+    }
+
     localStorage.setItem(KEYS.token,   res.token);
     if (res.refreshToken) {
       localStorage.setItem(KEYS.refreshToken, res.refreshToken);

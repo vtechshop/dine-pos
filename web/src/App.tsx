@@ -9,7 +9,9 @@ import { LiveOrdersProvider } from './context/LiveOrdersContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { Spinner } from './components/ui/Spinner';
 // Critical path — always bundled (login + dashboard render on first load)
-import { LoginPage } from './pages/LoginPage';
+import { LoginPage }           from './pages/LoginPage';
+import { RegisterPage }        from './pages/RegisterPage';
+import { RegisterSuccessPage } from './pages/RegisterSuccessPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
@@ -56,7 +58,9 @@ export function App() {
             <KeyboardProvider>
               <LiveOrdersProvider>
                 <Routes>
-                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/login"             element={<LoginPage />} />
+                  <Route path="/register"          element={<RegisterPage />} />
+                  <Route path="/register/success"  element={<RegisterSuccessPage />} />
 
                   <Route element={<AppLayout />}>
                     <Route index element={<Navigate to="/dashboard" replace />} />
