@@ -23,7 +23,7 @@ export const bootstrapNewHotel = async (
         phone: hotelData.phone || '',
         kitchenPin: pinHash,
         defaultTaxPercent: 5,
-        isSetupComplete: false,
+        isSetupComplete: true,
       },
     },
     { upsert: true, new: true }

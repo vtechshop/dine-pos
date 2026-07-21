@@ -1,19 +1,93 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, StyleSheet,
   TextInput, ActivityIndicator, StatusBar, Modal, ScrollView,
+  Animated, RefreshControl,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, Hotel, SuperAdminStats, AppNotification, Device, RemoteConfig, FeatureFlags } from '../types';
 import { showAlert } from '../utils/alert';
-import { getSuperAdminStats, getAllHotels, approveHotel, approveHotelWithCredentials, rejectHotel, suspendHotel, activateHotel, getAllTickets, adminReplyTicket, updateTicketStatus, getBranchRevenue, setHotelPremium, Ticket, getBroadcastNotifications, createBroadcastNotification, deleteBroadcastNotification, getAllDevices, getSystemHealth, getRemoteConfigAdmin, updateRemoteConfig, startHotelTrial, expireHotel, updateHotelFeatures, extendTrialDays, convertToPaidPlan } from '../services/api';
-import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
+import {
+  getSuperAdminStats, getAllHotels, approveHotel, approveHotelWithCredentials, rejectHotel,
+  suspendHotel, activateHotel, getAllTickets, adminReplyTicket, updateTicketStatus,
+  getBranchRevenue, setHotelPremium, Ticket, getBroadcastNotifications, createBroadcastNotification,
+  deleteBroadcastNotification, getAllDevices, getSystemHealth, getRemoteConfigAdmin, updateRemoteConfig,
+  startHotelTrial, expireHotel, updateHotelFeatures, extendTrialDays, convertToPaidPlan,
+  getSADashboard, getSASubscriptionRevenue, getSAHotelGrowth, getSAFailedPayments,
+  getSADeviceLicensing, getSATopHotels,
+  SADashboard, SASubscriptionRevenue, SAHotelGrowth, SAFailedPayments, SADeviceLicensing, SATopHotels,
+} from '../services/api';
+import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// ── Cache helpers ─────────────────────────────────────────────────────────────
+interface CacheEntry<T> { data: T; ts: number }
+const CACHE_TTL = 60_000;
+const isStale = <T,>(e?: CacheEntry<T>) => !e || Date.now() - e.ts > CACHE_TTL;
+
+// ── Skeleton pulse box ────────────────────────────────────────────────────────
+const SkeletonBox: React.FC<{ w?: number | string; h: number; r?: number; style?: any }> = ({ w, h, r = BorderRadius.sm, style }) => {
+  const opacity = useRef(new Animated.Value(0.35)).current;
+  useEffect(() => {
+    const anim = Animated.loop(Animated.sequence([
+      Animated.timing(opacity, { toValue: 0.75, duration: 850, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.35, duration: 850, useNativeDriver: true }),
+    ]));
+    anim.start();
+    return () => anim.stop();
+  }, [opacity]);
+  return <Animated.View style={[{ backgroundColor: Colors.border, borderRadius: r, opacity, width: w ?? '100%', height: h }, style]} />;
+};
+
+// ── Widget section wrapper ────────────────────────────────────────────────────
+const WidgetSection: React.FC<{
+  title: string; loading: boolean; error: string | null; onRetry: () => void;
+  skeletonH: number; hasData: boolean; children?: React.ReactNode; headerRight?: React.ReactNode;
+}> = ({ title, loading, error, onRetry, skeletonH, hasData, children, headerRight }) => (
+  <View style={wStyles.card}>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: Spacing.sm }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+        <Text style={wStyles.title}>{title}</Text>
+        {loading && <ActivityIndicator size="small" color={Colors.primary} />}
+      </View>
+      {headerRight}
+    </View>
+    {!hasData && loading ? <SkeletonBox h={skeletonH} r={BorderRadius.sm} />
+      : !hasData && error ? (
+        <View style={wStyles.errorBox}>
+          <MaterialIcons name="error-outline" size={16} color={Colors.danger} />
+          <Text style={wStyles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={onRetry}><Text style={wStyles.retryText}>Retry</Text></TouchableOpacity>
+        </View>
+      ) : children}
+  </View>
+);
+
+// Widget-section-only styles (avoids circular StyleSheet reference)
+const wStyles = StyleSheet.create({
+  card: { backgroundColor: Colors.card, borderRadius: BorderRadius.md, padding: Spacing.lg, borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.md },
+  title: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  errorBox: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, backgroundColor: Colors.dangerBg, borderRadius: BorderRadius.sm },
+  errorText: { flex: 1, color: Colors.danger, fontSize: FontSize.sm },
+  retryText: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '700', paddingHorizontal: Spacing.xs },
+});
+
+// ── Utility helpers ───────────────────────────────────────────────────────────
+const formatUptime = (s: number) => {
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`; if (h > 0) return `${h}h ${m}m`; return `${m}m`;
+};
+const formatINR = (n: number) => {
+  if (n >= 10000000) return `₹${(n / 10000000).toFixed(1)}Cr`;
+  if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
+  if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+  return `₹${n.toFixed(0)}`;
+};
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SuperAdminDashboard'>;
 
-type TabView = 'hotels' | 'tickets' | 'revenue' | 'notifications' | 'devices' | 'config';
+type TabView = 'overview' | 'hotels' | 'tickets' | 'revenue' | 'notifications' | 'devices' | 'config';
 type StatusFilter = 'all' | 'pending' | 'trial' | 'active' | 'expired' | 'suspended' | 'rejected';
 type TicketFilter = 'all' | 'open' | 'in-progress' | 'resolved' | 'closed';
 
@@ -50,7 +124,7 @@ const STATUS_ICONS: Record<string, keyof typeof MaterialIcons.glyphMap> = {
 
 const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const { bottom } = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<TabView>('hotels');
+  const [activeTab, setActiveTab] = useState<TabView>('overview');
   const [stats, setStats] = useState<SuperAdminStats | null>(null);
   const [hotels, setHotels]             = useState<Hotel[]>([]);
   const [hotelPage, setHotelPage]       = useState(1);
@@ -116,6 +190,45 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   // Health
   const [health, setHealth] = useState<{ mongo: { stateLabel: string }; totalDevices: number; onlineDevices: number } | null>(null);
 
+  // ── Dashboard Overview state ───────────────────────────────────────────────
+  const [dash, setDash] = useState<SADashboard | null>(null);
+  const [dashLoading, setDashLoading] = useState(true);
+  const [dashError, setDashError] = useState<string | null>(null);
+  const [overviewRefreshing, setOverviewRefreshing] = useState(false);
+
+  const [saRevenue, setSaRevenue] = useState<SASubscriptionRevenue | null>(null);
+  const [saRevenueLoading, setSaRevenueLoading] = useState(false);
+  const [saRevenueError, setSaRevenueError] = useState<string | null>(null);
+
+  const [saGrowth, setSaGrowth] = useState<SAHotelGrowth | null>(null);
+  const [saGrowthLoading, setSaGrowthLoading] = useState(false);
+  const [saGrowthError, setSaGrowthError] = useState<string | null>(null);
+  const [growthPeriod, setGrowthPeriod] = useState<'7d' | '30d' | '12m'>('30d');
+
+  const [saFailed, setSaFailed] = useState<SAFailedPayments | null>(null);
+  const [saFailedLoading, setSaFailedLoading] = useState(false);
+  const [saFailedError, setSaFailedError] = useState<string | null>(null);
+
+  const [saLicensing, setSaLicensing] = useState<SADeviceLicensing | null>(null);
+  const [saLicensingLoading, setSaLicensingLoading] = useState(false);
+  const [saLicensingError, setSaLicensingError] = useState<string | null>(null);
+
+  const [saTopHotels, setSaTopHotels] = useState<SATopHotels | null>(null);
+  const [saTopHotelsLoading, setSaTopHotelsLoading] = useState(false);
+  const [saTopHotelsError, setSaTopHotelsError] = useState<string | null>(null);
+  const [topBy, setTopBy] = useState<'revenue' | 'orders' | 'activity'>('revenue');
+  const [topPeriod, setTopPeriod] = useState<'today' | 'week' | 'month'>('today');
+
+  // Cache ref — keyed by entity, persists across renders
+  const saCache = useRef<{
+    dash?: CacheEntry<SADashboard>;
+    revenue?: CacheEntry<SASubscriptionRevenue>;
+    growth?: Record<string, CacheEntry<SAHotelGrowth>>;
+    failed?: CacheEntry<SAFailedPayments>;
+    licensing?: CacheEntry<SADeviceLicensing>;
+    topHotels?: Record<string, CacheEntry<SATopHotels>>;
+  }>({});
+
   const loadData = useCallback(async () => {
     try {
       const [statsData, hotelsResult, ticketsData, notifsData, devicesData, healthData] = await Promise.all([
@@ -159,6 +272,88 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     finally { setHotelLoadingMore(false); }
   }, [hotelPage, hotelTotalPages, hotelLoadingMore, filterStatus, search]);
 
+  // ── Dashboard loaders ──────────────────────────────────────────────────────
+  const loadDash = useCallback(async (force = false) => {
+    if (!force && !isStale(saCache.current.dash)) { setDash(saCache.current.dash!.data); setDashLoading(false); return; }
+    setDashLoading(true); setDashError(null);
+    try {
+      const data = await getSADashboard();
+      saCache.current.dash = { data, ts: Date.now() };
+      setDash(data);
+    } catch (e: any) { setDashError(e.message || 'Failed to load dashboard'); }
+    finally { setDashLoading(false); }
+  }, []);
+
+  const loadRevenue = useCallback(async (force = false) => {
+    if (!force && !isStale(saCache.current.revenue)) { setSaRevenue(saCache.current.revenue!.data); return; }
+    setSaRevenueLoading(true); setSaRevenueError(null);
+    try {
+      const data = await getSASubscriptionRevenue();
+      saCache.current.revenue = { data, ts: Date.now() };
+      setSaRevenue(data);
+    } catch (e: any) { setSaRevenueError(e.message || 'Failed to load revenue'); }
+    finally { setSaRevenueLoading(false); }
+  }, []);
+
+  const loadGrowth = useCallback(async (period: '7d' | '30d' | '12m', force = false) => {
+    const cached = saCache.current.growth?.[period];
+    if (!force && !isStale(cached)) { setSaGrowth(cached!.data); return; }
+    setSaGrowthLoading(true); setSaGrowthError(null);
+    try {
+      const data = await getSAHotelGrowth(period);
+      saCache.current.growth = { ...saCache.current.growth, [period]: { data, ts: Date.now() } };
+      setSaGrowth(data);
+    } catch (e: any) { setSaGrowthError(e.message || 'Failed to load hotel growth'); }
+    finally { setSaGrowthLoading(false); }
+  }, []);
+
+  const loadFailed = useCallback(async (force = false) => {
+    if (!force && !isStale(saCache.current.failed)) { setSaFailed(saCache.current.failed!.data); return; }
+    setSaFailedLoading(true); setSaFailedError(null);
+    try {
+      const data = await getSAFailedPayments();
+      saCache.current.failed = { data, ts: Date.now() };
+      setSaFailed(data);
+    } catch (e: any) { setSaFailedError(e.message || 'Failed to load payments'); }
+    finally { setSaFailedLoading(false); }
+  }, []);
+
+  const loadLicensing = useCallback(async (force = false) => {
+    if (!force && !isStale(saCache.current.licensing)) { setSaLicensing(saCache.current.licensing!.data); return; }
+    setSaLicensingLoading(true); setSaLicensingError(null);
+    try {
+      const data = await getSADeviceLicensing();
+      saCache.current.licensing = { data, ts: Date.now() };
+      setSaLicensing(data);
+    } catch (e: any) { setSaLicensingError(e.message || 'Failed to load licensing'); }
+    finally { setSaLicensingLoading(false); }
+  }, []);
+
+  const loadTopHotels = useCallback(async (by: 'revenue' | 'orders' | 'activity', period: 'today' | 'week' | 'month', force = false) => {
+    const key = `${by}:${period}`;
+    const cached = saCache.current.topHotels?.[key];
+    if (!force && !isStale(cached)) { setSaTopHotels(cached!.data); return; }
+    setSaTopHotelsLoading(true); setSaTopHotelsError(null);
+    try {
+      const data = await getSATopHotels(by, period);
+      saCache.current.topHotels = { ...saCache.current.topHotels, [key]: { data, ts: Date.now() } };
+      setSaTopHotels(data);
+    } catch (e: any) { setSaTopHotelsError(e.message || 'Failed to load top hotels'); }
+    finally { setSaTopHotelsLoading(false); }
+  }, []);
+
+  const handleOverviewRefresh = useCallback(async () => {
+    setOverviewRefreshing(true);
+    saCache.current = {};
+    await loadDash(true);
+    setOverviewRefreshing(false);
+    loadRevenue(true);
+    loadGrowth(growthPeriod, true);
+    loadFailed(true);
+    loadLicensing(true);
+    loadTopHotels(topBy, topPeriod, true);
+  }, [loadDash, loadRevenue, loadGrowth, growthPeriod, loadFailed, loadLicensing, loadTopHotels, topBy, topPeriod]);
+
   const handleAdminReply = async () => {
     if (!selectedTicket || !adminReply.trim()) return;
     setReplyLoading(true);
@@ -186,6 +381,16 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Load all overview widgets on mount
+  useEffect(() => {
+    loadDash();
+    loadRevenue();
+    loadGrowth('30d');
+    loadFailed();
+    loadLicensing();
+    loadTopHotels('revenue', 'today');
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleApprove = (hotel: Hotel) => {
     setSelectedHotel(hotel);
@@ -565,7 +770,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
             ])}
 
             {/* Registration Date */}
-            <Text style={styles.regDate}>
+            <Text style={styles.regDateCentered}>
               Registered: {new Date(hotel.createdAt).toLocaleString('en-IN')}
             </Text>
 
@@ -595,10 +800,6 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
                   <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => { setShowRejectModal(true); }} disabled={actionLoading}>
                     <MaterialIcons name="cancel" size={18} color={Colors.white} />
                     <Text style={styles.actionBtnText}>Reject</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent, flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleStartTrial(hotel)} disabled={actionLoading}>
-                    <MaterialIcons name="timer" size={18} color={Colors.white} />
-                    <Text style={styles.actionBtnText}>Start Trial</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleApprove(hotel)} disabled={actionLoading}>
                     {actionLoading ? <ActivityIndicator size="small" color={Colors.white} /> : (
@@ -1100,6 +1301,371 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     </>
   );
 
+  // ── Overview tab helpers ──────────────────────────────────────────────────
+  const renderKpi = (label: string, value: string | number, icon: keyof typeof MaterialIcons.glyphMap, color: string) => (
+    <View style={[styles.kpiCard, Shadows.sm]}>
+      <View style={[styles.kpiIconBox, { backgroundColor: color + '18' }]}>
+        <MaterialIcons name={icon} size={20} color={color} />
+      </View>
+      <Text style={[styles.kpiValue, { color }]}>{typeof value === 'number' ? value.toLocaleString('en-IN') : value}</Text>
+      <Text style={styles.kpiLabel}>{label}</Text>
+    </View>
+  );
+
+  const renderHealthRow = (label: string, status: string) => {
+    const color = status === 'connected' ? Colors.success : status === 'disabled' ? Colors.textSecondary : Colors.danger;
+    return (
+      <View key={label} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 5 }}>
+        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, marginRight: 8 }} />
+        <Text style={styles.healthLabel}>{label}</Text>
+        <Text style={[styles.healthValue, { color, marginLeft: 'auto' }]}>{status}</Text>
+      </View>
+    );
+  };
+
+  const renderOverviewTab = () => {
+    if (dashLoading && !dash) {
+      return (
+        <ScrollView contentContainerStyle={{ padding: Spacing.md, gap: Spacing.md }}>
+          <SkeletonBox h={14} w={120} style={{ marginBottom: 4 }} />
+          <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+            <SkeletonBox h={90} w="48%" r={BorderRadius.md} />
+            <SkeletonBox h={90} w="48%" r={BorderRadius.md} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+            <SkeletonBox h={90} w="48%" r={BorderRadius.md} />
+            <SkeletonBox h={90} w="48%" r={BorderRadius.md} />
+          </View>
+          <SkeletonBox h={14} w={160} style={{ marginBottom: 4 }} />
+          <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+            <SkeletonBox h={90} w="48%" r={BorderRadius.md} />
+            <SkeletonBox h={90} w="48%" r={BorderRadius.md} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+            <SkeletonBox h={90} w="48%" r={BorderRadius.md} />
+            <SkeletonBox h={90} w="48%" r={BorderRadius.md} />
+          </View>
+          <SkeletonBox h={160} r={BorderRadius.md} />
+          <SkeletonBox h={120} r={BorderRadius.md} />
+          <SkeletonBox h={180} r={BorderRadius.md} />
+        </ScrollView>
+      );
+    }
+
+    if (dashError && !dash) {
+      return (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md, padding: Spacing.xxxl }}>
+          <MaterialIcons name="error-outline" size={48} color={Colors.danger} />
+          <Text style={{ color: Colors.danger, fontSize: FontSize.md, textAlign: 'center' }}>{dashError}</Text>
+          <TouchableOpacity style={styles.overviewRetryBtn} onPress={() => loadDash(true)}>
+            <Text style={styles.overviewRetryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView
+        contentContainerStyle={{ padding: Spacing.md, paddingBottom: 60 }}
+        refreshControl={<RefreshControl refreshing={overviewRefreshing} onRefresh={handleOverviewRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Row 1: Hotel KPIs ── */}
+        <Text style={styles.sectionHeading}>Hotels</Text>
+        <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm }}>
+          {renderKpi('Total Hotels', dash?.hotelStats.total ?? 0, 'store', Colors.info)}
+          {renderKpi('Trial', dash?.hotelStats.trial ?? 0, 'timer', Colors.accent)}
+        </View>
+        <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg }}>
+          {renderKpi('Expired', dash?.hotelStats.expired ?? 0, 'timer-off', Colors.textSecondary)}
+          {renderKpi('Active Devices', dash?.devices.online ?? 0, 'devices', Colors.success)}
+        </View>
+
+        {/* ── Row 2: Revenue / Risk KPIs ── */}
+        <Text style={styles.sectionHeading}>Revenue & Health</Text>
+        <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm }}>
+          {renderKpi("Today's Revenue", formatINR(dash?.todayRevenue ?? 0), 'payments', Colors.success)}
+          {renderKpi('MRR', formatINR(dash?.monthlyRevenue ?? 0), 'trending-up', Colors.primary)}
+        </View>
+        <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg }}>
+          {renderKpi('Churn Risk', `${dash?.churnRisk ?? 0}`, 'warning', Colors.danger)}
+          {renderKpi('Open Tickets', dash?.openTickets ?? 0, 'support-agent', '#7B1FA2')}
+        </View>
+
+        {/* ── Row 3: Latest Registrations ── */}
+        {(dash?.latestRegistrations?.length ?? 0) > 0 && (
+          <View style={[wStyles.card, { marginBottom: Spacing.md }]}>
+            <Text style={wStyles.title}>Latest Registrations</Text>
+            {(dash!.latestRegistrations).slice(0, 6).map((h) => (
+              <View key={h._id} style={styles.regRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.regName}>{h.hotelName}</Text>
+                  <Text style={styles.regMeta}>{h.ownerName} · {h.city}, {h.state}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 3 }}>
+                  <View style={[styles.miniBadge, { backgroundColor: STATUS_COLORS[h.status] + '22', borderColor: STATUS_COLORS[h.status] }]}>
+                    <Text style={[styles.miniBadgeText, { color: STATUS_COLORS[h.status] }]}>{h.status.toUpperCase()}</Text>
+                  </View>
+                  <Text style={styles.regDate}>{new Date(h.createdAt).toLocaleDateString('en-IN')}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Pending Renewals */}
+        {(dash?.pendingRenewals?.length ?? 0) > 0 && (
+          <View style={[wStyles.card, { marginBottom: Spacing.md }]}>
+            <Text style={wStyles.title}>Pending Renewals</Text>
+            {(dash!.pendingRenewals).slice(0, 5).map((h) => {
+              const endDate = h.subscriptionEndDate || h.trialEndDate;
+              const daysLeft = endDate ? Math.ceil((new Date(endDate).getTime() - Date.now()) / 86400000) : null;
+              return (
+                <View key={h._id} style={styles.regRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.regName}>{h.hotelName}</Text>
+                    <Text style={styles.regMeta}>{h.ownerName} · {h.subscriptionType}</Text>
+                  </View>
+                  {daysLeft !== null && (
+                    <Text style={{ fontSize: FontSize.sm, fontWeight: '700', color: daysLeft <= 3 ? Colors.danger : daysLeft <= 7 ? Colors.warning : Colors.success }}>
+                      {daysLeft > 0 ? `${daysLeft}d left` : `${Math.abs(daysLeft)}d overdue`}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* ── Row 4: Recent Tickets ── */}
+        {(dash?.recentTickets?.length ?? 0) > 0 && (
+          <View style={[wStyles.card, { marginBottom: Spacing.md }]}>
+            <Text style={wStyles.title}>Recent Tickets</Text>
+            {(dash!.recentTickets).slice(0, 5).map((t) => (
+              <View key={t._id} style={[styles.regRow, { alignItems: 'flex-start' }]}>
+                <View style={[styles.statusDot, { backgroundColor: TICKET_STATUS_COLORS[t.status] ?? Colors.textMuted, marginTop: 5 }]} />
+                <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                  <Text style={styles.regName} numberOfLines={1}>{t.subject}</Text>
+                  <Text style={styles.regMeta}>{t.hotelName} · {t.category} · {t.priority}</Text>
+                </View>
+                <Text style={styles.regDate}>{new Date(t.createdAt).toLocaleDateString('en-IN')}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* System Health */}
+        {dash?.systemHealth && (
+          <View style={[wStyles.card, { marginBottom: Spacing.md }]}>
+            <Text style={wStyles.title}>System Health</Text>
+            {renderHealthRow('MongoDB', dash.systemHealth.mongo)}
+            {renderHealthRow('Redis', dash.systemHealth.redis)}
+            {renderHealthRow('API', dash.systemHealth.api)}
+            <View style={{ marginTop: Spacing.sm }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={styles.healthLabel}>Memory</Text>
+                <Text style={styles.healthValue}>{dash.systemHealth.memory.usedMB}MB / {dash.systemHealth.memory.totalMB}MB ({dash.systemHealth.memory.percentage.toFixed(0)}%)</Text>
+              </View>
+              <View style={{ height: 6, backgroundColor: Colors.border, borderRadius: 3 }}>
+                <View style={{ height: 6, borderRadius: 3, width: `${Math.min(dash.systemHealth.memory.percentage, 100)}%`, backgroundColor: dash.systemHealth.memory.percentage > 80 ? Colors.danger : Colors.success }} />
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: Spacing.sm }}>
+              <Text style={styles.healthLabel}>Uptime</Text>
+              <Text style={styles.healthValue}>{formatUptime(dash.systemHealth.uptimeSeconds)}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+              <Text style={styles.healthLabel}>Load Avg</Text>
+              <Text style={styles.healthValue}>{dash.systemHealth.loadAvg.toFixed(2)}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* App Version Distribution */}
+        {dash?.appVersions && (
+          <View style={[wStyles.card, { marginBottom: Spacing.md }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm }}>
+              <Text style={wStyles.title}>App Versions</Text>
+              {dash.appVersions.forceUpdateEnabled && (
+                <View style={[styles.miniBadge, { backgroundColor: Colors.dangerBg, borderColor: Colors.danger }]}>
+                  <Text style={[styles.miniBadgeText, { color: Colors.danger }]}>FORCE UPDATE ON</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.healthLabel}>Latest: v{dash.appVersions.latestVersion} · {dash.appVersions.outdatedDeviceCount} outdated / {dash.appVersions.totalDevices} total</Text>
+            <View style={{ marginTop: Spacing.sm, gap: Spacing.sm }}>
+              {dash.appVersions.distribution.map((v) => (
+                <View key={v.version}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <Text style={[styles.healthLabel, v.isLatest && { color: Colors.success, fontWeight: '700' }]}>v{v.version}</Text>
+                      {v.isLatest && <MaterialIcons name="verified" size={12} color={Colors.success} />}
+                    </View>
+                    <Text style={styles.healthLabel}>{v.count} ({v.percentage.toFixed(0)}%)</Text>
+                  </View>
+                  <View style={{ height: 5, backgroundColor: Colors.border, borderRadius: 3 }}>
+                    <View style={{ height: 5, borderRadius: 3, width: `${v.percentage}%`, backgroundColor: v.isLatest ? Colors.success : Colors.warning }} />
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* ── Row 5: Subscription Revenue (lazy) ── */}
+        <WidgetSection title="Subscription Revenue" loading={saRevenueLoading} error={saRevenueError} onRetry={() => loadRevenue(true)} skeletonH={130} hasData={!!saRevenue}>
+          {saRevenue && (
+            <>
+              <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md }}>
+                {[{ label: 'MRR', value: formatINR(saRevenue.mrr) }, { label: 'ARR', value: formatINR(saRevenue.arr) }, { label: 'Expected Renewal', value: formatINR(saRevenue.expectedRenewalRevenue) }].map(item => (
+                  <View key={item.label} style={styles.miniKpi}>
+                    <Text style={styles.miniKpiValue}>{item.value}</Text>
+                    <Text style={styles.miniKpiLabel}>{item.label}</Text>
+                  </View>
+                ))}
+              </View>
+              {saRevenue.breakdown.map((b) => (
+                <View key={b.plan} style={styles.breakdownRow}>
+                  <Text style={styles.regName}>{b.plan.charAt(0).toUpperCase() + b.plan.slice(1)} ({b.count})</Text>
+                  <Text style={styles.healthValue}>{formatINR(b.contribution)}/mo</Text>
+                </View>
+              ))}
+            </>
+          )}
+        </WidgetSection>
+
+        {/* ── Hotel Growth (lazy) ── */}
+        <WidgetSection
+          title="Hotel Growth"
+          loading={saGrowthLoading} error={saGrowthError} onRetry={() => loadGrowth(growthPeriod, true)}
+          skeletonH={140} hasData={!!saGrowth}
+          headerRight={
+            <View style={{ flexDirection: 'row', gap: 4 }}>
+              {(['7d', '30d', '12m'] as const).map((p) => (
+                <TouchableOpacity key={p} onPress={() => { setGrowthPeriod(p); loadGrowth(p); }} style={[styles.periodChip, growthPeriod === p && styles.periodChipActive]}>
+                  <Text style={[styles.periodChipText, growthPeriod === p && styles.periodChipTextActive]}>{p}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          }
+        >
+          {saGrowth && (
+            <>
+              <Text style={styles.regMeta}>{saGrowth.totalInPeriod} hotels registered in period</Text>
+              {saGrowth.data.length > 0 ? (
+                <View style={{ height: 80, flexDirection: 'row', alignItems: 'flex-end', gap: 2, marginTop: Spacing.md }}>
+                  {(() => {
+                    const maxVal = Math.max(...saGrowth.data.map((d) => d.total), 1);
+                    return saGrowth.data.map((d, i) => (
+                      <View key={i} style={{ flex: 1, height: Math.max((d.total / maxVal) * 72, 2), backgroundColor: Colors.primary, borderRadius: 2, opacity: 0.8 }} />
+                    ));
+                  })()}
+                </View>
+              ) : <Text style={{ color: Colors.textMuted, fontSize: FontSize.sm, marginTop: Spacing.md }}>No registrations in this period</Text>}
+            </>
+          )}
+        </WidgetSection>
+
+        {/* ── Row 6: Top Hotels (lazy) ── */}
+        <WidgetSection
+          title="Top Hotels" loading={saTopHotelsLoading} error={saTopHotelsError}
+          onRetry={() => loadTopHotels(topBy, topPeriod, true)} skeletonH={160} hasData={!!saTopHotels}
+          headerRight={
+            <View style={{ gap: 4, alignItems: 'flex-end' }}>
+              <View style={{ flexDirection: 'row', gap: 3 }}>
+                {(['revenue', 'orders', 'activity'] as const).map((b) => (
+                  <TouchableOpacity key={b} onPress={() => { setTopBy(b); loadTopHotels(b, topPeriod); }} style={[styles.periodChip, topBy === b && styles.periodChipActive]}>
+                    <Text style={[styles.periodChipText, topBy === b && styles.periodChipTextActive]}>{b}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 3 }}>
+                {(['today', 'week', 'month'] as const).map((p) => (
+                  <TouchableOpacity key={p} onPress={() => { setTopPeriod(p); loadTopHotels(topBy, p); }} style={[styles.periodChip, topPeriod === p && styles.periodChipActive]}>
+                    <Text style={[styles.periodChipText, topPeriod === p && styles.periodChipTextActive]}>{p}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          }
+        >
+          {saTopHotels && (
+            saTopHotels.hotels.length === 0
+              ? <Text style={{ color: Colors.textMuted, fontSize: FontSize.sm }}>No data for this period</Text>
+              : saTopHotels.hotels.slice(0, 8).map((h, i) => (
+                <View key={h.hotelId} style={styles.topRow}>
+                  <Text style={[styles.topRank, i < 3 && { color: ['#FFD700', '#B0B0B0', '#CD7F32'][i] }]}>
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                  </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.regName}>{h.hotelName}</Text>
+                    <Text style={styles.regMeta}>{h.city} · {h.plan}</Text>
+                  </View>
+                  {h.value !== undefined && (
+                    <Text style={[styles.healthValue, { color: Colors.success }]}>
+                      {topBy === 'revenue' ? formatINR(h.value) : h.value.toLocaleString('en-IN')}
+                    </Text>
+                  )}
+                </View>
+              ))
+          )}
+        </WidgetSection>
+
+        {/* Failed Payments (lazy) */}
+        <WidgetSection title="Failed Payments" loading={saFailedLoading} error={saFailedError} onRetry={() => loadFailed(true)} skeletonH={110} hasData={!!saFailed}>
+          {saFailed && (
+            <>
+              <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md }}>
+                {[{ label: 'Pending', val: saFailed.pending, c: Colors.warning }, { label: 'Failed', val: saFailed.failed, c: Colors.danger }, { label: 'Overdue', val: saFailed.overdue, c: Colors.dangerDark }].map((item) => (
+                  <View key={item.label} style={styles.miniKpi}>
+                    <Text style={[styles.miniKpiValue, { color: item.c }]}>{item.val}</Text>
+                    <Text style={styles.miniKpiLabel}>{item.label}</Text>
+                  </View>
+                ))}
+              </View>
+              {saFailed.recent.slice(0, 5).map((r) => (
+                <View key={r._id} style={styles.breakdownRow}>
+                  <View>
+                    <Text style={styles.regName}>{r.plan.charAt(0).toUpperCase() + r.plan.slice(1)} Plan</Text>
+                    <Text style={styles.regMeta}>{new Date(r.updatedAt).toLocaleDateString('en-IN')}</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.healthValue, { color: Colors.success }]}>{formatINR(r.amount)}</Text>
+                    <View style={[styles.miniBadge, { backgroundColor: r.status === 'failed' ? Colors.dangerBg : Colors.warningBg, borderColor: r.status === 'failed' ? Colors.danger : Colors.warning }]}>
+                      <Text style={[styles.miniBadgeText, { color: r.status === 'failed' ? Colors.danger : Colors.warning }]}>{r.status.toUpperCase()}</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
+        </WidgetSection>
+
+        {/* Device Licensing (lazy) */}
+        <WidgetSection title="Device Licensing" loading={saLicensingLoading} error={saLicensingError} onRetry={() => loadLicensing(true)} skeletonH={110} hasData={!!saLicensing}>
+          {saLicensing && (
+            <>
+              <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md }}>
+                {[{ label: 'Total', val: saLicensing.total, c: Colors.info }, { label: 'Active', val: saLicensing.active, c: Colors.success }, { label: 'Blocked', val: saLicensing.blocked, c: Colors.danger }].map((item) => (
+                  <View key={item.label} style={styles.miniKpi}>
+                    <Text style={[styles.miniKpiValue, { color: item.c }]}>{item.val}</Text>
+                    <Text style={styles.miniKpiLabel}>{item.label}</Text>
+                  </View>
+                ))}
+              </View>
+              {saLicensing.byPlan.map((p) => (
+                <View key={p.plan} style={styles.breakdownRow}>
+                  <Text style={styles.regName}>{p.plan.charAt(0).toUpperCase() + p.plan.slice(1)} ({p.hotelCount} hotels)</Text>
+                  <Text style={styles.healthValue}>{p.activeDevices}/{p.totalAllowed} devices</Text>
+                </View>
+              ))}
+            </>
+          )}
+        </WidgetSection>
+      </ScrollView>
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -1142,6 +1708,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
       {/* Tab Switch */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRow} contentContainerStyle={{ gap: 0 }}>
         {([
+          { id: 'overview', icon: 'dashboard', label: 'Overview' },
           { id: 'hotels', icon: 'store', label: `Hotels (${hotels.length})` },
           { id: 'tickets', icon: 'support-agent', label: `Tickets${tickets.filter(t => t.status === 'open').length > 0 ? ` (${tickets.filter(t => t.status === 'open').length})` : ''}` },
           { id: 'revenue', icon: 'bar-chart', label: 'Revenue' },
@@ -1172,7 +1739,8 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
         ))}
       </ScrollView>
 
-      {activeTab === 'notifications' ? (
+      {activeTab === 'overview' ? renderOverviewTab()
+      : activeTab === 'notifications' ? (
         <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 60, gap: Spacing.md }}>
           <View style={styles.detailSection}>
             <Text style={styles.detailSectionTitle}>Broadcast Notification</Text>
@@ -1464,7 +2032,8 @@ const styles = StyleSheet.create({
   detailLabel: { color: Colors.textSecondary, fontSize: FontSize.sm, flex: 1 },
   detailValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1, justifyContent: 'flex-end' },
   detailValue: { color: Colors.text, fontSize: FontSize.sm, fontWeight: '600', textAlign: 'right', flexShrink: 1 },
-  regDate: { color: Colors.textMuted, fontSize: FontSize.xs, textAlign: 'center', marginTop: Spacing.md },
+  regDate: { color: Colors.textMuted, fontSize: FontSize.xs },
+  regDateCentered: { color: Colors.textMuted, fontSize: FontSize.xs, textAlign: 'center', marginTop: Spacing.md },
   credentialsSection: { backgroundColor: Colors.card, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.md },
   credentialRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginBottom: Spacing.sm },
   credentialLabel: { color: Colors.textSecondary, fontSize: FontSize.sm, width: 80 },
@@ -1537,6 +2106,32 @@ const styles = StyleSheet.create({
   statusChipActive: { borderColor: '#7B1FA2', backgroundColor: '#7B1FA222' },
   statusChipText: { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '600' },
   statusChipTextActive: { color: '#CE93D8' },
+
+  // ── Overview Dashboard styles ─────────────────────────────────────────────
+  sectionHeading: { fontSize: FontSize.xs, color: Colors.primary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: Spacing.sm },
+  kpiCard: { flex: 1, backgroundColor: Colors.card, borderRadius: BorderRadius.md, padding: Spacing.md, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, gap: Spacing.xs },
+  kpiIconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  kpiValue: { fontSize: FontSize.xl, fontWeight: '900', color: Colors.text },
+  kpiLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, textAlign: 'center' },
+  regRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  regName: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
+  regMeta: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
+  miniBadge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: BorderRadius.round, borderWidth: 1 },
+  miniBadgeText: { fontSize: 9, fontWeight: '700' },
+  healthLabel: { color: Colors.textSecondary, fontSize: FontSize.sm, flex: 1 },
+  healthValue: { color: Colors.text, fontSize: FontSize.sm, fontWeight: '600' },
+  miniKpi: { flex: 1, backgroundColor: Colors.surface, borderRadius: BorderRadius.sm, padding: Spacing.sm, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
+  miniKpiValue: { fontSize: FontSize.xl, fontWeight: '900', color: Colors.text },
+  miniKpiLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, textAlign: 'center', marginTop: 2 },
+  breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  periodChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: BorderRadius.round, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  periodChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  periodChipText: { color: Colors.textSecondary, fontSize: 10, fontWeight: '600' },
+  periodChipTextActive: { color: Colors.white },
+  topRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.borderLight, gap: Spacing.sm },
+  topRank: { fontSize: FontSize.md, fontWeight: '700', color: Colors.textMuted, width: 30 },
+  overviewRetryBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.lg },
+  overviewRetryText: { color: Colors.white, fontSize: FontSize.md, fontWeight: '700' },
 });
 
 export default SuperAdminDashboardScreen;
