@@ -328,9 +328,10 @@ router.get('/:sessionId/bill', requireCashierOrAdmin, async (req: AuthRequest, r
 router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { sessionId } = req.params;
-    const { bulkBill, paymentMethod } = req.body as {
+    const { bulkBill, paymentMethod, splitDetails } = req.body as {
       bulkBill?: boolean;
       paymentMethod?: string;
+      splitDetails?: { cash?: number; upi?: number; card?: number };
     };
 
     if (!mongoose.isValidObjectId(sessionId)) {
@@ -375,6 +376,13 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
             billedAt: now,
             qrSessionToken: null,
             qrTokenExpiresAt: null,
+            ...(paymentMethod === 'split' && splitDetails
+              ? {
+                  'splitDetails.cash': splitDetails.cash ?? 0,
+                  'splitDetails.upi':  splitDetails.upi  ?? 0,
+                  'splitDetails.card': splitDetails.card ?? 0,
+                }
+              : {}),
           },
         }
       );
