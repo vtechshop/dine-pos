@@ -43,7 +43,7 @@ function TableForm({ initial = BLANK, onSave, onCancel, saving }: TableFormProps
     'block w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20';
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3">
       <div>
         <label className="mb-1 block text-xs font-semibold text-ink/50">Number *</label>
         <input
@@ -83,7 +83,7 @@ function TableForm({ initial = BLANK, onSave, onCancel, saving }: TableFormProps
           <option value="round">Round</option>
         </select>
       </div>
-      <div className="col-span-2 flex items-center gap-2 sm:col-span-4">
+      <div className="col-span-2 flex items-center gap-2">
         <button
           onClick={() => onSave(form)}
           disabled={saving || !form.number || !form.name || !form.capacity}
