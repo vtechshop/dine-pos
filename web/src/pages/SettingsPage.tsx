@@ -21,12 +21,12 @@ import type { Settings, PrinterDeviceStatus, LoyaltySettings } from '../types';
 // ── Shared UI helpers ─────────────────────────────────────────────────────────
 
 const inp =
-  'h-9 w-full rounded-lg border border-[#E8D5C0] bg-white px-3 text-sm text-[#1C0800] outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20';
+  'h-9 w-full rounded-lg border border-border bg-canvas px-3 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20';
 
 function F({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[#1C0800]/40">
+      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-ink/40">
         {label}
       </label>
       {children}
@@ -36,8 +36,8 @@ function F({ label, children }: { label: string; children: React.ReactNode }) {
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-[#E8D5C0] bg-white p-6">
-      <h3 className="mb-5 text-sm font-semibold text-[#1C0800]">{title}</h3>
+    <div className="rounded-xl border border-border bg-canvas p-6">
+      <h3 className="mb-5 text-sm font-semibold text-ink">{title}</h3>
       {children}
     </div>
   );
@@ -46,14 +46,14 @@ function SectionCard({ title, children }: { title: string; children: React.React
 function SaveRow({ onSave, saving, msg }: { onSave: () => void; saving: boolean; msg: string | null }) {
   const isOk = msg?.startsWith('Saved');
   return (
-    <div className="mt-5 flex items-center justify-between border-t border-[#E8D5C0] pt-5">
+    <div className="mt-5 flex items-center justify-between border-t border-border pt-5">
       <p className={`text-xs font-medium ${isOk ? 'text-green-600' : msg ? 'text-red-500' : 'opacity-0'}`}>
         {msg ?? '-'}
       </p>
       <button
         onClick={onSave}
         disabled={saving}
-        className="flex items-center gap-1.5 rounded-lg bg-[#E8380D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#E8380D]/90 disabled:opacity-40"
+        className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-40"
       >
         {saving ? 'Saving…' : isOk ? <><Check size={12} /> Saved</> : 'Save Changes'}
       </button>
@@ -189,7 +189,7 @@ function ProfileSection({ settings, refresh }: { settings: Settings; refresh: ()
               value={d.address}
               onChange={e => setD(p => ({ ...p, address: e.target.value }))}
               rows={3}
-              className="w-full resize-none rounded-lg border border-[#E8D5C0] bg-white px-3 py-2 text-sm text-[#1C0800] outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
+              className="w-full resize-none rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
             />
           </F>
         </div>
@@ -203,18 +203,18 @@ function ProfileSection({ settings, refresh }: { settings: Settings; refresh: ()
       <SectionCard title="Hotel Logo">
         <div className="flex items-center gap-5">
           {d.roleImageAdmin ? (
-            <img src={d.roleImageAdmin} alt="Hotel logo" className="h-16 w-16 rounded-xl border border-[#E8D5C0] object-contain" />
+            <img src={d.roleImageAdmin} alt="Hotel logo" className="h-16 w-16 rounded-xl border border-border object-contain" />
           ) : (
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl border-2 border-dashed border-[#E8D5C0] text-[#1C0800]/20">
+            <div className="flex h-16 w-16 items-center justify-center rounded-xl border-2 border-dashed border-border text-ink/20">
               <Building2 size={24} />
             </div>
           )}
           <div>
-            <label className="cursor-pointer rounded-lg border border-[#E8D5C0] bg-white px-3 py-2 text-xs text-[#1C0800]/60 hover:bg-[#1C0800]/5">
+            <label className="cursor-pointer rounded-lg border border-border bg-canvas px-3 py-2 text-xs text-ink/60 hover:bg-ink/5">
               Choose Image
               <input type="file" accept="image/*" className="hidden" onChange={handleLogo} />
             </label>
-            <p className="mt-1.5 text-[10px] text-[#1C0800]/30">PNG or JPG · Max 256 KB</p>
+            <p className="mt-1.5 text-[10px] text-ink/30">PNG or JPG · Max 256 KB</p>
             {d.roleImageAdmin && (
               <button
                 onClick={() => setD(p => ({ ...p, roleImageAdmin: '' }))}
@@ -317,33 +317,33 @@ interface StaffTableProps {
 
 function StaffTable({ members, role, confirmDelId, onAdd, onEdit, onToggle, onDeleteRequest, onDeleteConfirm, onDeleteCancel }: StaffTableProps) {
   return (
-    <div className="rounded-xl border border-[#E8D5C0] bg-white">
-      <div className="flex items-center justify-between border-b border-[#E8D5C0] px-4 py-3">
-        <h4 className="text-xs font-semibold text-[#1C0800]">
+    <div className="rounded-xl border border-border bg-canvas">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <h4 className="text-xs font-semibold text-ink">
           {role === 'cashier' ? 'Cashiers' : 'Waiters'}
-          <span className="ml-2 rounded-full bg-[#E8D5C0]/60 px-1.5 py-0.5 text-[10px] text-[#1C0800]/50">
+          <span className="ml-2 rounded-full bg-border/60 px-1.5 py-0.5 text-[10px] text-ink/50">
             {members.length}
           </span>
         </h4>
         <button
           onClick={onAdd}
-          className="flex items-center gap-1 rounded-lg bg-[#E8380D]/10 px-2.5 py-1.5 text-[11px] font-semibold text-[#E8380D] hover:bg-[#E8380D]/20"
+          className="flex items-center gap-1 rounded-lg bg-brand/10 px-2.5 py-1.5 text-[11px] font-semibold text-brand hover:bg-brand/20"
         >
           <Plus size={12} /> Add {role === 'cashier' ? 'Cashier' : 'Waiter'}
         </button>
       </div>
       {members.length === 0 ? (
-        <p className="px-4 py-6 text-center text-xs text-[#1C0800]/30">No {role}s added yet.</p>
+        <p className="px-4 py-6 text-center text-xs text-ink/30">No {role}s added yet.</p>
       ) : (
-        <div className="divide-y divide-[#E8D5C0]/60">
+        <div className="divide-y divide-border/60">
           {members.map(m => (
             <div key={m._id} className="flex items-center gap-3 px-4 py-3">
-              <span className="w-14 shrink-0 rounded-md bg-[#1C0800]/5 px-1.5 py-0.5 text-center font-mono text-[10px] font-semibold text-[#1C0800]/60">
+              <span className="w-14 shrink-0 rounded-md bg-ink/5 px-1.5 py-0.5 text-center font-mono text-[10px] font-semibold text-ink/60">
                 {m.employeeCode}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-[#1C0800]">{m.name}</p>
-                {m.mobile && <p className="text-[10px] text-[#1C0800]/40">{m.mobile}</p>}
+                <p className="truncate text-sm font-medium text-ink">{m.name}</p>
+                {m.mobile && <p className="text-[10px] text-ink/40">{m.mobile}</p>}
               </div>
               <button
                 onClick={() => onToggle(m._id)}
@@ -361,13 +361,13 @@ function StaffTable({ members, role, confirmDelId, onAdd, onEdit, onToggle, onDe
                   <button onClick={onDeleteConfirm} className="rounded bg-red-500 px-2 py-0.5 text-[10px] text-white">
                     Yes
                   </button>
-                  <button onClick={onDeleteCancel} className="rounded border border-[#E8D5C0] px-2 py-0.5 text-[10px] text-[#1C0800]/50">
+                  <button onClick={onDeleteCancel} className="rounded border border-border px-2 py-0.5 text-[10px] text-ink/50">
                     No
                   </button>
                 </div>
               ) : (
                 <div className="flex shrink-0 items-center gap-1">
-                  <button onClick={() => onEdit(m)} className="rounded-lg p-1.5 text-[#1C0800]/40 hover:bg-[#1C0800]/5">
+                  <button onClick={() => onEdit(m)} className="rounded-lg p-1.5 text-ink/40 hover:bg-ink/5">
                     <Pencil size={12} />
                   </button>
                   <button onClick={() => onDeleteRequest(m._id)} className="rounded-lg p-1.5 text-red-400 hover:bg-red-50">
@@ -452,13 +452,13 @@ function StaffSection() {
   };
 
   if (loading) {
-    return <div className="flex h-40 items-center justify-center text-sm text-[#1C0800]/30">Loading staff…</div>;
+    return <div className="flex h-40 items-center justify-center text-sm text-ink/30">Loading staff…</div>;
   }
 
   return (
     <div className="space-y-5">
       {error && (
-        <div className="rounded-lg border border-[#E8380D]/20 bg-[#E8380D]/10 px-4 py-2.5 text-xs text-[#E8380D]">
+        <div className="rounded-lg border border-brand/20 bg-brand/10 px-4 py-2.5 text-xs text-brand">
           {error}
         </div>
       )}
@@ -558,7 +558,7 @@ function PrintersSection({ settings, refresh }: { settings: Settings; refresh: (
       <button
         onClick={() => setD(p => ({ ...p, [field]: val }))}
         className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition-colors ${
-          current === val ? 'bg-[#E8380D] text-white' : 'text-[#1C0800]/50 hover:bg-[#1C0800]/5'
+          current === val ? 'bg-brand text-white' : 'text-ink/50 hover:bg-ink/5'
         }`}
       >
         {label}
@@ -571,13 +571,13 @@ function PrintersSection({ settings, refresh }: { settings: Settings; refresh: (
       <SectionCard title="Printer Configuration">
         <div className="grid grid-cols-2 gap-4">
           <F label="Paper Width">
-            <div className="flex rounded-lg border border-[#E8D5C0] p-0.5">
+            <div className="flex rounded-lg border border-border p-0.5">
               {modeBtn('printerWidth', '58mm', '58 mm')}
               {modeBtn('printerWidth', '80mm', '80 mm')}
             </div>
           </F>
           <F label="Printer Mode">
-            <div className="flex rounded-lg border border-[#E8D5C0] p-0.5">
+            <div className="flex rounded-lg border border-border p-0.5">
               {modeBtn('printerMode', 'single', 'Single')}
               {modeBtn('printerMode', 'dual', 'Dual')}
             </div>
@@ -604,15 +604,15 @@ function PrintersSection({ settings, refresh }: { settings: Settings; refresh: (
             type="checkbox"
             checked={d.kotAutoPrint}
             onChange={e => setD(p => ({ ...p, kotAutoPrint: e.target.checked }))}
-            className="h-4 w-4 accent-[#E8380D]"
+            className="h-4 w-4 accent-brand"
           />
-          <span className="text-xs text-[#1C0800]/70">Auto-print KOT on new order</span>
+          <span className="text-xs text-ink/70">Auto-print KOT on new order</span>
         </label>
         <SaveRow onSave={() => void save(d)} saving={saving} msg={msg} />
       </SectionCard>
 
       <SectionCard title="Kitchen Display PIN">
-        <p className="mb-4 text-xs text-[#1C0800]/50">
+        <p className="mb-4 text-xs text-ink/50">
           4–6 digit PIN used to unlock the Kitchen Display screen.
         </p>
         <div className="flex items-end gap-3">
@@ -632,7 +632,7 @@ function PrintersSection({ settings, refresh }: { settings: Settings; refresh: (
             <button
               onClick={() => void handlePinSave()}
               disabled={pinSaving || !kitchenPin}
-              className="rounded-lg bg-[#E8380D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#E8380D]/90 disabled:opacity-40"
+              className="rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-40"
             >
               {pinSaving ? 'Saving…' : 'Set PIN'}
             </button>
@@ -647,31 +647,31 @@ function PrintersSection({ settings, refresh }: { settings: Settings; refresh: (
 
       <SectionCard title="Live Printer Status">
         <div className="mb-4 flex items-center justify-between">
-          <p className="text-xs text-[#1C0800]/50">Registered printer devices and their current connection status.</p>
+          <p className="text-xs text-ink/50">Registered printer devices and their current connection status.</p>
           <button
             onClick={() => fetchPrinterDevices().then(d => { setDevices(d); setDevicesError(null); }).catch(() => setDevicesError('Failed to load printer devices'))}
-            className="flex items-center gap-1.5 text-[11px] text-[#1C0800]/40 hover:text-[#1C0800]/70"
+            className="flex items-center gap-1.5 text-[11px] text-ink/40 hover:text-ink/70"
           >
             <RefreshCw size={11} /> Refresh
           </button>
         </div>
         {devicesError && (
-          <div className="mb-3 rounded-lg border border-[#E8380D]/20 bg-[#E8380D]/10 px-4 py-2.5 text-xs text-[#E8380D]">
+          <div className="mb-3 rounded-lg border border-brand/20 bg-brand/10 px-4 py-2.5 text-xs text-brand">
             {devicesError}
           </div>
         )}
         {devices.length === 0 && !devicesError ? (
-          <p className="py-6 text-center text-xs text-[#1C0800]/30">No printer devices registered yet.</p>
+          <p className="py-6 text-center text-xs text-ink/30">No printer devices registered yet.</p>
         ) : (
           <div className="space-y-2">
             {devices.map(dev => (
-              <div key={dev._id} className="flex items-center gap-4 rounded-lg border border-[#E8D5C0] px-4 py-3">
+              <div key={dev._id} className="flex items-center gap-4 rounded-lg border border-border px-4 py-3">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${dev.online ? 'bg-green-500' : 'bg-red-400'}`} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-[#1C0800]">
+                  <p className="truncate text-xs font-semibold text-ink">
                     {dev.printerName ?? dev.deviceId ?? 'Unknown device'}
                   </p>
-                  <p className="text-[10px] capitalize text-[#1C0800]/40">{dev.printerRole} printer</p>
+                  <p className="text-[10px] capitalize text-ink/40">{dev.printerRole} printer</p>
                 </div>
                 {dev.online ? (
                   <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
@@ -683,7 +683,7 @@ function PrintersSection({ settings, refresh }: { settings: Settings; refresh: (
                   </span>
                 )}
                 {dev.lastHeartbeat && (
-                  <span className="shrink-0 text-[10px] text-[#1C0800]/30">
+                  <span className="shrink-0 text-[10px] text-ink/30">
                     {new Date(dev.lastHeartbeat).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 )}
@@ -811,8 +811,8 @@ function FeaturesSection({ settings }: { settings: Settings }) {
         {sub ? (
           <div className="flex items-start gap-6">
             <div className="flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#1C0800]/40">Current Plan</p>
-              <p className="mt-1 text-xl font-bold text-[#1C0800]">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">Current Plan</p>
+              <p className="mt-1 text-xl font-bold text-ink">
                 {PLAN_LABELS[sub.subscriptionType] ?? sub.subscriptionType}
               </p>
               <p className={`mt-1 text-xs font-semibold ${sub.isExpired ? 'text-red-500' : 'text-green-600'}`}>
@@ -821,8 +821,8 @@ function FeaturesSection({ settings }: { settings: Settings }) {
             </div>
             {(sub.trialEndDate ?? sub.subscriptionEndDate) && (
               <div className="text-right">
-                <p className="text-[10px] text-[#1C0800]/40">{sub.trialEndDate ? 'Trial ends' : 'Renews'}</p>
-                <p className="mt-0.5 text-sm font-semibold text-[#1C0800]">
+                <p className="text-[10px] text-ink/40">{sub.trialEndDate ? 'Trial ends' : 'Renews'}</p>
+                <p className="mt-0.5 text-sm font-semibold text-ink">
                   {new Date((sub.trialEndDate ?? sub.subscriptionEndDate) as string).toLocaleDateString('en-IN', {
                     day: 'numeric', month: 'short', year: 'numeric',
                   })}
@@ -831,12 +831,12 @@ function FeaturesSection({ settings }: { settings: Settings }) {
             )}
           </div>
         ) : (
-          <p className="text-xs text-[#1C0800]/30">Loading subscription…</p>
+          <p className="text-xs text-ink/30">Loading subscription…</p>
         )}
       </SectionCard>
 
       <SectionCard title="Feature Flags">
-        <p className="mb-4 text-xs text-[#1C0800]/40">
+        <p className="mb-4 text-xs text-ink/40">
           These features are enabled or disabled by the Super Admin. Contact support to request changes.
         </p>
         {flags ? (
@@ -846,13 +846,13 @@ function FeaturesSection({ settings }: { settings: Settings }) {
               const isEnum = key === 'customerIdentification';
               const enabled = typeof raw === 'boolean' ? raw : (raw !== undefined && raw !== 'disabled');
               return (
-                <div key={key} className="flex items-center gap-2.5 rounded-lg border border-[#E8D5C0] px-3 py-2">
-                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${enabled ? 'bg-green-500' : 'bg-[#1C0800]/15'}`} />
-                  <span className="min-w-0 flex-1 truncate text-xs text-[#1C0800]/70">{label}</span>
+                <div key={key} className="flex items-center gap-2.5 rounded-lg border border-border px-3 py-2">
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${enabled ? 'bg-green-500' : 'bg-ink/15'}`} />
+                  <span className="min-w-0 flex-1 truncate text-xs text-ink/70">{label}</span>
                   {isEnum && raw ? (
-                    <span className="shrink-0 font-mono text-[9px] text-[#1C0800]/40">{String(raw)}</span>
+                    <span className="shrink-0 font-mono text-[9px] text-ink/40">{String(raw)}</span>
                   ) : (
-                    <span className={`shrink-0 text-[10px] font-bold ${enabled ? 'text-green-600' : 'text-[#1C0800]/25'}`}>
+                    <span className={`shrink-0 text-[10px] font-bold ${enabled ? 'text-green-600' : 'text-ink/25'}`}>
                       {enabled ? 'ON' : 'OFF'}
                     </span>
                   )}
@@ -861,8 +861,8 @@ function FeaturesSection({ settings }: { settings: Settings }) {
             })}
           </div>
         ) : (
-          <div className="rounded-lg bg-[#1C0800]/[0.03] py-8 text-center">
-            <p className="text-xs text-[#1C0800]/40">
+          <div className="rounded-lg bg-ink/[0.03] py-8 text-center">
+            <p className="text-xs text-ink/40">
               Feature flag details are managed by the Super Admin<br />and are not exposed in this panel.
             </p>
           </div>
@@ -946,9 +946,9 @@ function SecuritySection({ settings }: { settings: Settings }) {
 
       <SectionCard title="Active Sessions">
         <div className="mb-4 flex items-center justify-between">
-          <p className="text-xs text-[#1C0800]/50">Devices connected to this hotel account.</p>
+          <p className="text-xs text-ink/50">Devices connected to this hotel account.</p>
           <div className="flex items-center gap-2">
-            <button onClick={() => void loadDevices()} className="flex items-center gap-1.5 text-[11px] text-[#1C0800]/40 hover:text-[#1C0800]/70">
+            <button onClick={() => void loadDevices()} className="flex items-center gap-1.5 text-[11px] text-ink/40 hover:text-ink/70">
               <RefreshCw size={11} /> Refresh
             </button>
             {devices.length > 0 && (
@@ -962,18 +962,18 @@ function SecuritySection({ settings }: { settings: Settings }) {
           </div>
         </div>
         {devLoading ? (
-          <p className="py-6 text-center text-xs text-[#1C0800]/30">Loading…</p>
+          <p className="py-6 text-center text-xs text-ink/30">Loading…</p>
         ) : devices.length === 0 ? (
-          <p className="py-6 text-center text-xs text-[#1C0800]/30">No active sessions.</p>
+          <p className="py-6 text-center text-xs text-ink/30">No active sessions.</p>
         ) : (
-          <div className="divide-y divide-[#E8D5C0]/60 rounded-lg border border-[#E8D5C0]">
+          <div className="divide-y divide-border/60 rounded-lg border border-border">
             {devices.map(dev => (
               <div key={dev._id} className="flex items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-mono text-xs font-semibold text-[#1C0800]">
+                  <p className="truncate font-mono text-xs font-semibold text-ink">
                     {dev.deviceId ? (dev.deviceId.length > 16 ? `${dev.deviceId.slice(0, 16)}…` : dev.deviceId) : 'Unknown device'}
                   </p>
-                  <p className="text-[10px] text-[#1C0800]/40">Last seen: {fmtTime(dev.lastSeen)}</p>
+                  <p className="text-[10px] text-ink/40">Last seen: {fmtTime(dev.lastSeen)}</p>
                 </div>
                 {dev.online && (
                   <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
@@ -993,24 +993,24 @@ function SecuritySection({ settings }: { settings: Settings }) {
       </SectionCard>
 
       <SectionCard title="Admin Password">
-        <p className="mb-4 text-xs text-[#1C0800]/60">
+        <p className="mb-4 text-xs text-ink/60">
           Admin credentials are managed by the Super Admin. To change your password, submit a reset request and the team will assist you.
         </p>
         {settings.phone ? (
           <div className="flex items-center gap-4">
-            <div className="flex-1 rounded-lg border border-[#E8D5C0] px-4 py-3">
-              <p className="text-[10px] text-[#1C0800]/40">Registered Phone</p>
-              <p className="mt-0.5 text-sm font-semibold text-[#1C0800]">{settings.phone}</p>
+            <div className="flex-1 rounded-lg border border-border px-4 py-3">
+              <p className="text-[10px] text-ink/40">Registered Phone</p>
+              <p className="mt-0.5 text-sm font-semibold text-ink">{settings.phone}</p>
             </div>
             <button
               onClick={() => void handleResetRequest()}
-              className="shrink-0 rounded-lg border border-[#E8D5C0] bg-white px-4 py-2.5 text-xs font-semibold text-[#1C0800]/60 hover:bg-[#1C0800]/5"
+              className="shrink-0 rounded-lg border border-border bg-canvas px-4 py-2.5 text-xs font-semibold text-ink/60 hover:bg-ink/5"
             >
               Request Reset
             </button>
           </div>
         ) : (
-          <p className="text-xs text-[#1C0800]/40">
+          <p className="text-xs text-ink/40">
             Add a phone number in the Profile tab to enable password reset requests.
           </p>
         )}
@@ -1047,17 +1047,17 @@ export function SettingsPage() {
 
   if (loading || !settings) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-[#1C0800]/30">
+      <div className="flex h-full items-center justify-center text-sm text-ink/30">
         Loading settings…
       </div>
     );
   }
 
   return (
-    <div className="flex h-full overflow-hidden bg-[#FFF6EE]">
+    <div className="flex h-full overflow-hidden bg-mist">
       {/* Left nav */}
-      <nav className="flex w-44 shrink-0 flex-col border-r border-[#E8D5C0] bg-[#FFF6EE] pt-5">
-        <p className="px-4 pb-3 text-[9px] font-bold uppercase tracking-widest text-[#1C0800]/30">
+      <nav className="flex w-44 shrink-0 flex-col border-r border-border bg-mist pt-5">
+        <p className="px-4 pb-3 text-[9px] font-bold uppercase tracking-widest text-ink/30">
           Settings
         </p>
         <ul className="space-y-0.5 px-2">
@@ -1067,8 +1067,8 @@ export function SettingsPage() {
                 onClick={() => setTab(id)}
                 className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors ${
                   tab === id
-                    ? 'bg-[#E8380D] text-white'
-                    : 'text-[#1C0800]/50 hover:bg-[#1C0800]/5 hover:text-[#1C0800]'
+                    ? 'bg-brand text-white'
+                    : 'text-ink/50 hover:bg-ink/5 hover:text-ink'
                 }`}
               >
                 <Icon size={14} />

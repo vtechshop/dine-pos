@@ -14,7 +14,7 @@ interface Props {
 }
 
 const inp =
-  'h-9 w-full rounded-lg border border-[#E8D5C0] bg-white px-3 text-sm text-[#1C0800] outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20';
+  'h-9 w-full rounded-lg border border-border bg-canvas px-3 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20';
 
 export function StaffDrawer({ role, staff, onSave, onClose }: Props) {
   const [name, setName] = useState(staff?.name ?? '');
@@ -82,15 +82,15 @@ export function StaffDrawer({ role, staff, onSave, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/20" onClick={onClose} />
-      <aside className="flex w-80 flex-col bg-[#FFF6EE]">
+      <aside className="flex w-80 flex-col bg-mist">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#E8D5C0] px-5 py-4">
-          <h2 className="text-sm font-semibold text-[#1C0800]">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <h2 className="text-sm font-semibold text-ink">
             {isEdit ? `Edit ${roleLabel}` : `Add ${roleLabel}`}
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-[#1C0800]/40 hover:bg-[#1C0800]/5"
+            className="rounded-lg p-1.5 text-ink/40 hover:bg-ink/5"
           >
             <X size={16} />
           </button>
@@ -103,7 +103,7 @@ export function StaffDrawer({ role, staff, onSave, onClose }: Props) {
           )}
 
           <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[#1C0800]/40">
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-ink/40">
               Name <span className="text-red-400">*</span>
             </label>
             <input
@@ -116,7 +116,7 @@ export function StaffDrawer({ role, staff, onSave, onClose }: Props) {
           </div>
 
           <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[#1C0800]/40">
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-ink/40">
               Employee Code <span className="text-red-400">*</span>
             </label>
             <input
@@ -129,10 +129,10 @@ export function StaffDrawer({ role, staff, onSave, onClose }: Props) {
           </div>
 
           <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[#1C0800]/40">
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-ink/40">
               PIN{!isEdit && <span className="ml-1 text-red-400">*</span>}
               {isEdit && (
-                <span className="ml-2 normal-case tracking-normal text-[#1C0800]/30">
+                <span className="ml-2 normal-case tracking-normal text-ink/30">
                   leave blank to keep existing
                 </span>
               )}
@@ -148,8 +148,8 @@ export function StaffDrawer({ role, staff, onSave, onClose }: Props) {
           </div>
 
           <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[#1C0800]/40">
-              Mobile <span className="text-[#1C0800]/30 normal-case tracking-normal">(optional)</span>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-ink/40">
+              Mobile <span className="normal-case tracking-normal text-ink/30">(optional)</span>
             </label>
             <input
               type="tel"
@@ -162,17 +162,17 @@ export function StaffDrawer({ role, staff, onSave, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-[#E8D5C0] px-5 py-4">
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
           <button
             onClick={onClose}
-            className="rounded-lg border border-[#E8D5C0] px-4 py-2 text-xs text-[#1C0800]/60 hover:bg-[#1C0800]/5"
+            className="rounded-lg border border-border px-4 py-2 text-xs text-ink/60 hover:bg-ink/5"
           >
             Cancel
           </button>
           <button
             onClick={() => void handleSubmit()}
             disabled={saving}
-            className="rounded-lg bg-[#E8380D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#E8380D]/90 disabled:opacity-40"
+            className="rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-40"
           >
             {saving ? 'Saving…' : isEdit ? 'Update' : `Add ${roleLabel}`}
           </button>
