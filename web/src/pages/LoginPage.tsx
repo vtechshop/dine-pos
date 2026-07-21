@@ -36,7 +36,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-mist px-4">
       <div className="w-full max-w-sm">
         {/* Brand */}
         <div className="mb-8 text-center">
@@ -45,16 +45,16 @@ export function LoginPage() {
             alt="Dine POS"
             className="mx-auto mb-3 h-14 w-14 rounded-2xl object-contain shadow-md"
           />
-          <h1 className="text-2xl font-bold text-gray-900">Dine POS</h1>
-          <p className="mt-1 text-sm text-gray-500">Sign in to your Dine POS account</p>
+          <h1 className="text-2xl font-bold text-ink">Dine POS</h1>
+          <p className="mt-1 text-sm text-ink/50">Sign in to your Dine POS account</p>
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+        <div className="rounded-2xl border border-border bg-canvas p-8 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* User ID */}
             <div>
-              <label htmlFor="userId" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="userId" className="block text-sm font-medium text-ink/70">
                 Hotel ID / User ID
               </label>
               <input
@@ -64,14 +64,14 @@ export function LoginPage() {
                 required
                 value={userId}
                 onChange={e => setUserId(e.target.value)}
-                className="mt-1.5 block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-[#E8380D]/50 focus:ring-2 focus:ring-[#E8380D]/20"
+                className="mt-1.5 block w-full rounded-lg border border-border px-3.5 py-2.5 text-sm text-ink placeholder-ink/40 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
                 placeholder="Enter your ID"
               />
             </div>
 
             {/* Password */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-sm font-medium text-ink/70">
                 Password
               </label>
               <div className="relative mt-1.5">
@@ -82,13 +82,13 @@ export function LoginPage() {
                   required
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 pr-10 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-[#E8380D]/50 focus:ring-2 focus:ring-[#E8380D]/20"
+                  className="block w-full rounded-lg border border-border px-3.5 py-2.5 pr-10 text-sm text-ink placeholder-ink/40 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
                   placeholder="Enter your password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPwd(v => !v)}
-                  className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600"
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-ink/40 hover:text-ink/60"
                   tabIndex={-1}
                 >
                   {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -107,7 +107,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#E8380D] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#E8380D]/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading && <Spinner size="sm" />}
               {loading ? 'Signing in…' : 'Sign in'}
@@ -115,25 +115,25 @@ export function LoginPage() {
           </form>
 
           {/* Role hint */}
-          <p className="mt-5 text-center text-[11px] text-gray-400">
+          <p className="mt-5 text-center text-[11px] text-ink/40">
             Hotel&nbsp;Owner&nbsp;·&nbsp;Manager&nbsp;·&nbsp;Cashier&nbsp;·&nbsp;Waiter&nbsp;·&nbsp;Kitchen
           </p>
         </div>
 
         {/* Footer */}
-        <div className="mt-6 flex flex-col items-center gap-2.5 text-xs text-gray-400">
+        <div className="mt-6 flex flex-col items-center gap-2.5 text-xs text-ink/40">
           <span>
             Need help?{' '}
             <a
               href="mailto:support@dinepos.com"
-              className="font-medium text-[#E8380D] hover:underline"
+              className="font-medium text-brand hover:underline"
             >
               Contact Support
             </a>
           </span>
           <button
             type="button"
-            className="font-medium text-gray-500 transition hover:text-gray-700"
+            className="font-medium text-ink/50 transition hover:text-ink/70"
             onClick={() =>
               setError(
                 'To reset your password, contact support at support@dinepos.com',
@@ -142,7 +142,7 @@ export function LoginPage() {
           >
             Forgot Password
           </button>
-          <span className="text-gray-300">Dine POS · {APP_VERSION}</span>
+          <span className="text-ink/30">Dine POS · {APP_VERSION}</span>
         </div>
       </div>
     </div>

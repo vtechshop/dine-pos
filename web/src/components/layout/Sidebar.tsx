@@ -64,7 +64,7 @@ function NavItemRow({ item }: { item: NavItem }) {
       className={({ isActive }) =>
         `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
           isActive
-            ? 'bg-[#E8380D] text-white'
+            ? 'bg-brand text-white'
             : 'text-white/50 hover:bg-white/[0.08] hover:text-white'
         }`
       }
@@ -89,7 +89,7 @@ export function Sidebar() {
   const isAdmin = role === 'admin';
 
   return (
-    <aside className="flex h-full w-52 shrink-0 flex-col border-r border-white/10 bg-[#1C0800]">
+    <aside className="flex h-full w-52 shrink-0 flex-col border-r border-white/10 bg-ink">
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
         {NAV_GROUPS.map((group, gi) => {
           const visibleItems = isAdmin

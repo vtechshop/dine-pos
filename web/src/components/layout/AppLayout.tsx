@@ -20,7 +20,7 @@ export function AppLayout() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#1C0800]">
+    <div className="flex h-screen flex-col overflow-hidden bg-ink">
       {/* ── Top bar ──────────────────────────────────────────────────── */}
       <TopBar />
 
@@ -30,7 +30,7 @@ export function AppLayout() {
         <Sidebar />
 
         {/* Main page content — each page controls its own scroll */}
-        <main className="flex flex-1 flex-col overflow-hidden bg-[#FFF6EE]">
+        <main className="flex flex-1 flex-col overflow-hidden bg-mist">
           <Outlet />
         </main>
 
