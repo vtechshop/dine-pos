@@ -13,6 +13,9 @@ import { LoginPage }            from './pages/LoginPage';
 import { RegisterPage }         from './pages/RegisterPage';
 import { RegisterSuccessPage }  from './pages/RegisterSuccessPage';
 import { SuperAdminLoginPage }  from './pages/super-admin/SuperAdminLoginPage';
+import { SuperAdminRoute }      from './components/SuperAdminRoute';
+import { SuperAdminLayout }     from './components/layout/SuperAdminLayout';
+import { HotelsPage }           from './pages/super-admin/HotelsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
@@ -63,6 +66,14 @@ export function App() {
                   <Route path="/register"          element={<RegisterPage />} />
                   <Route path="/register/success"  element={<RegisterSuccessPage />} />
                   <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
+
+                  {/* Super Admin protected routes */}
+                  <Route element={<SuperAdminRoute />}>
+                    <Route element={<SuperAdminLayout />}>
+                      <Route path="/super-admin"        element={<Navigate to="/super-admin/hotels" replace />} />
+                      <Route path="/super-admin/hotels" element={<HotelsPage />} />
+                    </Route>
+                  </Route>
 
                   <Route element={<AppLayout />}>
                     <Route index element={<Navigate to="/dashboard" replace />} />
