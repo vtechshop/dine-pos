@@ -78,9 +78,9 @@ export function InventoryPage() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-5 py-3">
+      <div className="flex shrink-0 items-center justify-between border-b border-border bg-canvas px-5 py-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-base font-semibold text-gray-800">Inventory</h1>
+          <h1 className="text-base font-semibold text-ink">Inventory</h1>
           {lowStock.length > 0 && !loading && (
             <span className="flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-[11px] font-semibold text-orange-600">
               <AlertTriangle size={11} />
@@ -92,33 +92,33 @@ export function InventoryPage() {
           <div className="relative">
             <Search
               size={13}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/40"
             />
             <input
               ref={searchRef}
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search… (F1)"
-              className="h-8 w-44 rounded-lg border border-gray-200 pl-8 pr-3 text-xs outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
+              className="h-8 w-44 rounded-lg border border-border pl-8 pr-3 text-xs outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
             />
           </div>
           <button
             onClick={() => void load()}
             disabled={loading}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-40"
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs text-ink/50 hover:bg-mist disabled:opacity-40"
           >
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
           </button>
           <button
             onClick={() => setDrawer({ mode: 'form', ingredient: null })}
-            className="flex h-8 items-center gap-1.5 rounded-lg bg-[#E8380D] px-3 text-xs font-semibold text-white hover:bg-[#E8380D]/90"
+            className="flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand/90"
           >
             <Plus size={13} />Add Ingredient (F2)
           </button>
         </div>
       </div>
 
-      {/* Low-stock alert banner */}
+      {/* Low-stock alert banner — orange is semantic for low-stock, keep all */}
       {lowStock.length > 0 && !loading && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-orange-100 bg-orange-50 px-5 py-2">
           <span className="text-xs font-semibold text-orange-700">Low stock:</span>
@@ -147,7 +147,7 @@ export function InventoryPage() {
             <Spinner size="lg" />
           </div>
         ) : visible.length === 0 ? (
-          <div className="flex h-48 flex-col items-center justify-center text-gray-400">
+          <div className="flex h-48 flex-col items-center justify-center text-ink/40">
             <Package size={32} className="mb-3 opacity-30" />
             <p className="text-sm">
               {search ? 'No ingredients match' : 'No ingredients yet'}
@@ -155,7 +155,7 @@ export function InventoryPage() {
             {!search && (
               <button
                 onClick={() => setDrawer({ mode: 'form', ingredient: null })}
-                className="mt-3 rounded-lg bg-[#E8380D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#E8380D]/90"
+                className="mt-3 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90"
               >
                 Add First Ingredient
               </button>
@@ -164,20 +164,20 @@ export function InventoryPage() {
         ) : (
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50 text-left">
-                <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <tr className="border-b border-border bg-mist text-left">
+                <th className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink/40">
                   Ingredient
                 </th>
-                <th className="w-20 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <th className="w-20 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink/40">
                   Unit
                 </th>
-                <th className="w-28 px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <th className="w-28 px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">
                   In Stock
                 </th>
-                <th className="w-28 px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <th className="w-28 px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">
                   Alert At
                 </th>
-                <th className="w-28 px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <th className="w-28 px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">
                   Cost/Unit
                 </th>
                 <th className="w-44 px-4 py-2.5" />
@@ -189,8 +189,8 @@ export function InventoryPage() {
                 return (
                   <tr
                     key={i._id}
-                    className={`border-b border-gray-100 hover:bg-gray-50 ${
-                      isLow ? 'bg-orange-50/40' : ''
+                    className={`border-b border-border hover:bg-mist ${
+                      isLow ? 'bg-orange-50/40' : 'bg-canvas'
                     }`}
                   >
                     <td className="px-4 py-3">
@@ -198,21 +198,21 @@ export function InventoryPage() {
                         {isLow && (
                           <AlertTriangle size={12} className="shrink-0 text-orange-500" />
                         )}
-                        <span className="font-medium text-gray-800">{i.name}</span>
+                        <span className="font-medium text-ink">{i.name}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{i.unit}</td>
+                    <td className="px-4 py-3 text-ink/50">{i.unit}</td>
                     <td
                       className={`px-4 py-3 text-right font-mono font-semibold tabular-nums ${
-                        isLow ? 'text-orange-600' : 'text-gray-800'
+                        isLow ? 'text-orange-600' : 'text-ink'
                       }`}
                     >
                       {i.currentStock}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-gray-400">
+                    <td className="px-4 py-3 text-right font-mono tabular-nums text-ink/40">
                       {i.lowStockThreshold}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-gray-600">
+                    <td className="px-4 py-3 text-right font-mono tabular-nums text-ink/60">
                       ₹{i.costPerUnit.toFixed(2)}
                     </td>
                     <td className="px-4 py-3">
@@ -225,13 +225,13 @@ export function InventoryPage() {
                         </button>
                         <button
                           onClick={() => setDrawer({ mode: 'form', ingredient: i })}
-                          className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] text-gray-500 hover:bg-gray-100"
+                          className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-ink/50 hover:bg-mist"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => { void handleDelete(i); }}
-                          className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] text-red-500 hover:bg-red-50"
+                          className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-red-500 hover:bg-red-50"
                         >
                           Delete
                         </button>

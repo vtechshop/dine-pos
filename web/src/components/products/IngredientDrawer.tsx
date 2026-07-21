@@ -89,7 +89,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
   useShortcut('Enter', () => { void handleSave(); }, !saving);
 
   const field =
-    'block w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20';
+    'block w-full rounded-lg border border-border px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20';
 
   return (
     <div
@@ -97,11 +97,11 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="flex h-full w-full max-w-sm flex-col bg-white shadow-2xl"
+        className="flex h-full w-full max-w-sm flex-col bg-canvas shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-gray-900 px-5 py-3 text-white">
+        <div className="flex shrink-0 items-center justify-between border-b border-border bg-ink px-5 py-3 text-white">
           <h2 className="text-sm font-semibold">
             {mode === 'restock'
               ? `Restock: ${ingredient?.name ?? ''}`
@@ -111,7 +111,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-700"
+            className="rounded-lg p-1.5 text-white/40 hover:bg-white/10"
           >
             <X size={16} />
           </button>
@@ -128,15 +128,15 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
           {mode === 'restock' ? (
             <>
               {/* Current state summary */}
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
+              <div className="rounded-lg border border-border bg-mist px-4 py-3 text-sm">
                 <div className="mb-1 flex justify-between">
-                  <span className="text-gray-500">Current Stock</span>
+                  <span className="text-ink/50">Current Stock</span>
                   <span className="font-semibold">
                     {ingredient?.currentStock} {ingredient?.unit}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Low Stock Alert</span>
+                  <span className="text-ink/50">Low Stock Alert</span>
                   <span className="font-semibold">
                     {ingredient?.lowStockThreshold} {ingredient?.unit}
                   </span>
@@ -144,7 +144,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
                   Quantity to Add ({ingredient?.unit})
                 </label>
                 <input
@@ -160,7 +160,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
               </div>
 
               {qty > 0 && ingredient && (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-ink/50">
                   New total:{' '}
                   <span className="font-semibold text-green-600">
                     {(ingredient.currentStock + qty).toFixed(2)} {ingredient.unit}
@@ -171,7 +171,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
           ) : (
             <>
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
                   Name *
                 </label>
                 <input
@@ -184,7 +184,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
                   Unit *
                 </label>
                 <div className="mb-2 flex flex-wrap gap-2">
@@ -195,8 +195,8 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
                       onClick={() => set('unit', u)}
                       className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${
                         form.unit === u
-                          ? 'border-[#E8380D] bg-[#E8380D]/5 text-[#E8380D]'
-                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                          ? 'border-brand bg-brand/5 text-brand'
+                          : 'border-border bg-canvas text-ink/50 hover:bg-mist'
                       }`}
                     >
                       {u}
@@ -213,7 +213,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
                     Current Stock
                   </label>
                   <input
@@ -226,7 +226,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
                     Low Stock Alert
                   </label>
                   <input
@@ -243,7 +243,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
                   Cost Per Unit (₹)
                 </label>
                 <input
@@ -260,10 +260,10 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex shrink-0 gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3">
+        <div className="flex shrink-0 gap-2 border-t border-border bg-mist px-5 py-3">
           <button
             onClick={onClose}
-            className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+            className="flex-1 rounded-lg border border-border bg-canvas px-4 py-2 text-sm font-medium text-ink/60 transition-colors hover:bg-mist"
           >
             Cancel
           </button>
@@ -273,7 +273,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
             className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-40 ${
               mode === 'restock'
                 ? 'bg-green-600 hover:bg-green-700'
-                : 'bg-[#E8380D] hover:bg-[#E8380D]/90'
+                : 'bg-brand hover:bg-brand/90'
             }`}
           >
             {saving
