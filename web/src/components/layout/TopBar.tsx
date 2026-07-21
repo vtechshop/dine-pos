@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Hotel, LogOut, User } from 'lucide-react';
+import { Hotel, LogOut, User, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { NotificationBell } from '../ui/NotificationBell';
 import { LiveBadge } from '../ui/LiveBadge';
 
-export function TopBar() {
+export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { hotelName, logout, role } = useAuth();
   const { connected, reconnecting } = useSocket();
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -19,6 +19,15 @@ export function TopBar() {
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-ink px-5">
         {/* Brand */}
         <div className="flex items-center gap-2.5">
+          {/* Hamburger — mobile only */}
+          <button
+            onClick={onMenuClick}
+            aria-label="Open navigation"
+            className="rounded-lg p-1.5 text-white/40 hover:bg-white/[0.08] hover:text-white md:hidden"
+          >
+            <Menu size={18} />
+          </button>
+
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand">
             <Hotel size={14} className="text-white" />
           </div>

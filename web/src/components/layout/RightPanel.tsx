@@ -6,7 +6,7 @@ export function RightPanel() {
   const { orders } = useLiveOrders();
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-canvas">
+    <aside className="hidden lg:flex w-72 shrink-0 flex-col border-l border-border bg-canvas">
       {/* Header */}
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2">

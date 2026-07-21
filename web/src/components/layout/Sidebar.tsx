@@ -10,6 +10,7 @@ import {
   Settings,
   CalendarDays,
   ChefHat,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -53,6 +54,13 @@ const ADMIN_ONLY_ROUTES = new Set([
   '/reports', '/settings', '/reservations',
 ]);
 
+// ── Props ─────────────────────────────────────────────────────────────────────
+
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 function NavItemRow({ item }: { item: NavItem }) {
@@ -84,40 +92,68 @@ function NavItemRow({ item }: { item: NavItem }) {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
 
   return (
-    <aside className="flex h-full w-52 shrink-0 flex-col border-r border-white/10 bg-ink">
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
-        {NAV_GROUPS.map((group, gi) => {
-          const visibleItems = isAdmin
-            ? group.items
-            : group.items.filter(item => !ADMIN_ONLY_ROUTES.has(item.to));
-          if (visibleItems.length === 0) return null;
-          return (
-            <div key={gi}>
-              {group.heading && (
-                <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-white/25">
-                  {group.heading}
-                </p>
-              )}
-              <ul className="space-y-0.5">
-                {visibleItems.map(item => (
-                  <li key={item.to}>
-                    <NavItemRow item={item} />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-      </nav>
+    <>
+      {/* Mobile backdrop — click to close */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
 
-      <div className="border-t border-white/10 px-4 py-3">
-        <p className="text-[10px] text-white/20">Dine POS Web · v1.0</p>
-      </div>
-    </aside>
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-52 flex-col border-r border-white/10 bg-ink transition-transform duration-200 ease-in-out md:static md:h-full md:shrink-0 md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      >
+        {/* Mobile close header */}
+        <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 md:hidden">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">
+            Navigation
+          </span>
+          <button
+            onClick={onClose}
+            aria-label="Close navigation"
+            className="rounded-lg p-1 text-white/40 hover:bg-white/[0.08] hover:text-white"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Nav — onClick closes sidebar on mobile after navigating */}
+        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4" onClick={onClose}>
+          {NAV_GROUPS.map((group, gi) => {
+            const visibleItems = isAdmin
+              ? group.items
+              : group.items.filter(item => !ADMIN_ONLY_ROUTES.has(item.to));
+            if (visibleItems.length === 0) return null;
+            return (
+              <div key={gi}>
+                {group.heading && (
+                  <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-white/25">
+                    {group.heading}
+                  </p>
+                )}
+                <ul className="space-y-0.5">
+                  {visibleItems.map(item => (
+                    <li key={item.to}>
+                      <NavItemRow item={item} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </nav>
+
+        <div className="border-t border-white/10 px-4 py-3">
+          <p className="text-[10px] text-white/20">Dine POS Web · v1.0</p>
+        </div>
+      </aside>
+    </>
   );
 }
