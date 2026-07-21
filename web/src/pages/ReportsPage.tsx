@@ -145,14 +145,14 @@ function KPICard({
   label: string; value: string; sub?: string; accent?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-[#E8D5C0] bg-white px-5 py-4">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-[#1C0800]/40">
+    <div className="rounded-xl border border-border bg-canvas px-5 py-4">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">
         {label}
       </p>
-      <p className={`mt-1 text-2xl font-bold tabular-nums ${accent ? 'text-[#E8380D]' : 'text-[#1C0800]'}`}>
+      <p className={`mt-1 text-2xl font-bold tabular-nums ${accent ? 'text-brand' : 'text-ink'}`}>
         {value}
       </p>
-      {sub && <p className="mt-0.5 text-xs text-[#1C0800]/40">{sub}</p>}
+      {sub && <p className="mt-0.5 text-xs text-ink/40">{sub}</p>}
     </div>
   );
 }
@@ -172,19 +172,19 @@ function HorizBars({
         .filter(d => d.value > 0)
         .map(d => (
           <div key={d.label} className="flex items-center gap-3">
-            <span className="w-20 shrink-0 text-right text-xs capitalize text-[#1C0800]/50">
+            <span className="w-20 shrink-0 text-right text-xs capitalize text-ink/50">
               {d.label}
             </span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#1C0800]/5">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-ink/5">
               <div
-                className="h-2 rounded-full bg-[#E8380D] transition-all duration-300"
+                className="h-2 rounded-full bg-brand transition-all duration-300"
                 style={{ width: `${(d.value / max) * 100}%` }}
               />
             </div>
-            <span className="w-28 shrink-0 text-right text-xs font-semibold tabular-nums text-[#1C0800]">
+            <span className="w-28 shrink-0 text-right text-xs font-semibold tabular-nums text-ink">
               {fmtCur(d.value, sym)}
             </span>
-            <span className="w-9 shrink-0 text-right text-[10px] tabular-nums text-[#1C0800]/40">
+            <span className="w-9 shrink-0 text-right text-[10px] tabular-nums text-ink/40">
               {total > 0 ? `${Math.round((d.value / total) * 100)}%` : '—'}
             </span>
           </div>
@@ -215,10 +215,10 @@ function VertBars({
             title={`${d.label}: ${sym ?? ''}${d.value.toLocaleString('en-IN')}`}
           >
             <div
-              className="w-full rounded-sm bg-[#E8380D]/70 transition-all group-hover:bg-[#E8380D]"
+              className="w-full rounded-sm bg-brand/70 transition-all group-hover:bg-brand"
               style={{ height: `${pct}%`, minHeight: d.value > 0 ? 3 : 0 }}
             />
-            <span className="mt-1 block w-full truncate text-center text-[8px] text-[#1C0800]/40">
+            <span className="mt-1 block w-full truncate text-center text-[8px] text-ink/40">
               {d.label}
             </span>
           </div>
@@ -233,7 +233,7 @@ function VertBars({
 function SectionHead({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
     <div className="mb-4 flex items-center justify-between">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-[#1C0800]/40">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-ink/40">
         {title}
       </h3>
       {action}
@@ -243,7 +243,7 @@ function SectionHead({ title, action }: { title: string; action?: React.ReactNod
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-xl border border-[#E8D5C0] bg-white p-5 ${className}`}>
+    <div className={`rounded-xl border border-border bg-canvas p-5 ${className}`}>
       {children}
     </div>
   );
@@ -521,17 +521,17 @@ export function ReportsPage() {
   return (
     <div className="flex h-full flex-col">
       {/* ── Top bar ── */}
-      <div className="shrink-0 border-b border-[#E8D5C0] bg-white">
+      <div className="shrink-0 border-b border-border bg-canvas">
         {/* Tab row + actions */}
-        <div className="flex items-center border-b border-[#E8D5C0] px-5">
+        <div className="flex items-center border-b border-border px-5">
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-3 text-xs font-semibold transition-colors ${
                 tab === t.id
-                  ? 'border-[#E8380D] text-[#E8380D]'
-                  : 'border-transparent text-[#1C0800]/40 hover:text-[#1C0800]'
+                  ? 'border-brand text-brand'
+                  : 'border-transparent text-ink/40 hover:text-ink'
               }`}
             >
               {t.icon}
@@ -542,14 +542,14 @@ export function ReportsPage() {
           <div className="ml-auto flex items-center gap-2 py-2">
             <button
               onClick={handleCSV}
-              className="flex items-center gap-1.5 rounded-lg border border-[#E8D5C0] px-3 py-1.5 text-xs text-[#1C0800]/50 hover:bg-[#1C0800]/5 hover:text-[#1C0800]"
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5 hover:text-ink"
             >
               <Download size={12} />
               CSV
             </button>
             <button
               onClick={() => window.print()}
-              className="flex items-center gap-1.5 rounded-lg border border-[#E8D5C0] px-3 py-1.5 text-xs text-[#1C0800]/50 hover:bg-[#1C0800]/5 hover:text-[#1C0800]"
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5 hover:text-ink"
             >
               <Printer size={12} />
               Print / PDF
@@ -566,8 +566,8 @@ export function ReportsPage() {
                 onClick={() => setPreset(p.id)}
                 className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
                   preset === p.id
-                    ? 'bg-[#E8380D] text-white'
-                    : 'bg-[#1C0800]/5 text-[#1C0800]/50 hover:bg-[#1C0800]/10'
+                    ? 'bg-brand text-white'
+                    : 'bg-ink/5 text-ink/50 hover:bg-ink/10'
                 }`}
               >
                 {p.label}
@@ -579,20 +579,20 @@ export function ReportsPage() {
                   type="date"
                   value={customFrom}
                   onChange={e => setCustomFrom(e.target.value)}
-                  className="h-7 rounded-lg border border-[#E8D5C0] bg-[#FFF6EE] px-2 text-xs text-[#1C0800] outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
+                  className="h-7 rounded-lg border border-border bg-mist px-2 text-xs text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
                 />
-                <span className="text-xs text-[#1C0800]/30">—</span>
+                <span className="text-xs text-ink/30">—</span>
                 <input
                   type="date"
                   value={customTo}
                   min={customFrom}
                   onChange={e => setCustomTo(e.target.value)}
-                  className="h-7 rounded-lg border border-[#E8D5C0] bg-[#FFF6EE] px-2 text-xs text-[#1C0800] outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
+                  className="h-7 rounded-lg border border-border bg-mist px-2 text-xs text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
                 />
               </div>
             )}
             {preset !== 'custom' && (
-              <span className="ml-2 text-xs text-[#1C0800]/30">
+              <span className="ml-2 text-xs text-ink/30">
                 {isSingleDay
                   ? fmtDisplayDate(from)
                   : `${fmtDisplayDate(from)} – ${fmtDisplayDate(to)} (${days + 1}d)`}
@@ -603,13 +603,13 @@ export function ReportsPage() {
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-y-auto bg-[#FFF6EE]">
+      <div className="flex-1 overflow-y-auto bg-mist">
 
         {/* ════════════════ OVERVIEW TAB ════════════════ */}
         {tab === 'overview' && (
           <div className="p-5 space-y-5">
             {overviewError && (
-              <div className="rounded-lg border border-[#E8380D]/20 bg-[#E8380D]/10 px-4 py-3 text-sm text-[#E8380D]">
+              <div className="rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
                 {overviewError}
               </div>
             )}
@@ -693,20 +693,20 @@ export function ReportsPage() {
                     <SectionHead title="Parcel Orders" />
                     <div className="flex gap-8">
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-[#1C0800]/40">Orders</p>
-                        <p className="mt-0.5 text-xl font-bold tabular-nums text-[#1C0800]">
+                        <p className="text-[10px] uppercase tracking-wider text-ink/40">Orders</p>
+                        <p className="mt-0.5 text-xl font-bold tabular-nums text-ink">
                           {sales.parcelOrders}
                         </p>
                       </div>
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-[#1C0800]/40">Revenue</p>
-                        <p className="mt-0.5 text-xl font-bold tabular-nums text-[#1C0800]">
+                        <p className="text-[10px] uppercase tracking-wider text-ink/40">Revenue</p>
+                        <p className="mt-0.5 text-xl font-bold tabular-nums text-ink">
                           {fmtCur(sales.parcelRevenue, sym)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-[#1C0800]/40">% of Total</p>
-                        <p className="mt-0.5 text-xl font-bold tabular-nums text-[#1C0800]">
+                        <p className="text-[10px] uppercase tracking-wider text-ink/40">% of Total</p>
+                        <p className="mt-0.5 text-xl font-bold tabular-nums text-ink">
                           {sales.totalSales > 0
                             ? `${Math.round((sales.parcelRevenue / sales.totalSales) * 100)}%`
                             : '—'}
@@ -725,16 +725,16 @@ export function ReportsPage() {
           <div className="p-5 space-y-5">
             {/* Date picker */}
             <div className="flex items-center gap-3">
-              <span className="text-xs text-[#1C0800]/50">Date</span>
+              <span className="text-xs text-ink/50">Date</span>
               <input
                 type="date"
                 value={productDate}
                 onChange={e => setProductDate(e.target.value)}
-                className="h-8 rounded-lg border border-[#E8D5C0] bg-white px-3 text-xs text-[#1C0800] outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
+                className="h-8 rounded-lg border border-border bg-canvas px-3 text-xs text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
               />
               <button
                 onClick={() => setProductDate(todayStr())}
-                className="rounded-lg border border-[#E8D5C0] px-3 py-1.5 text-xs text-[#1C0800]/50 hover:bg-[#1C0800]/5"
+                className="rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5"
               >
                 Today
               </button>
@@ -742,7 +742,7 @@ export function ReportsPage() {
             </div>
 
             {prodError && (
-              <div className="rounded-lg border border-[#E8380D]/20 bg-[#E8380D]/10 px-4 py-3 text-sm text-[#E8380D]">
+              <div className="rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
                 {prodError}
               </div>
             )}
@@ -768,43 +768,43 @@ export function ReportsPage() {
 
                 {/* Full table */}
                 <Card className="overflow-hidden !p-0">
-                  <div className="flex items-center justify-between border-b border-[#E8D5C0] px-5 py-3">
-                    <h3 className="text-sm font-semibold text-[#1C0800]">
+                  <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                    <h3 className="text-sm font-semibold text-ink">
                       Top Products — {fmtDisplayDate(productDate)}
                     </h3>
-                    <span className="text-xs text-[#1C0800]/40">
+                    <span className="text-xs text-ink/40">
                       {products.products.length} items
                     </span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-sm">
                       <thead>
-                        <tr className="bg-[#FFF6EE]">
-                          <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">#</th>
-                          <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">Product</th>
-                          <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">Qty</th>
-                          <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">Revenue</th>
-                          <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">% Share</th>
+                        <tr className="bg-mist">
+                          <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">#</th>
+                          <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">Product</th>
+                          <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Qty</th>
+                          <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Revenue</th>
+                          <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">% Share</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#E8D5C0]">
+                      <tbody className="divide-y divide-border">
                         {products.products.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="px-5 py-8 text-center text-xs text-[#1C0800]/30">
+                            <td colSpan={5} className="px-5 py-8 text-center text-xs text-ink/30">
                               No orders on this date
                             </td>
                           </tr>
                         ) : (() => {
                           const totalRevenue = products.products.reduce((s, p) => s + p.totalRevenue, 0);
                           return products.products.map((p, i) => (
-                            <tr key={p.productName} className="hover:bg-[#FFF6EE]">
-                              <td className="px-5 py-2.5 text-xs tabular-nums text-[#1C0800]/30">{i + 1}</td>
-                              <td className="px-5 py-2.5 text-sm text-[#1C0800]">{p.productName}</td>
-                              <td className="px-5 py-2.5 text-right text-sm tabular-nums text-[#1C0800]">{p.totalQuantity}</td>
-                              <td className="px-5 py-2.5 text-right text-sm font-semibold tabular-nums text-[#1C0800]">
+                            <tr key={p.productName} className="hover:bg-mist">
+                              <td className="px-5 py-2.5 text-xs tabular-nums text-ink/30">{i + 1}</td>
+                              <td className="px-5 py-2.5 text-sm text-ink">{p.productName}</td>
+                              <td className="px-5 py-2.5 text-right text-sm tabular-nums text-ink">{p.totalQuantity}</td>
+                              <td className="px-5 py-2.5 text-right text-sm font-semibold tabular-nums text-ink">
                                 {fmtCur(p.totalRevenue, sym)}
                               </td>
-                              <td className="px-5 py-2.5 text-right text-xs tabular-nums text-[#1C0800]/40">
+                              <td className="px-5 py-2.5 text-right text-xs tabular-nums text-ink/40">
                                 {totalRevenue > 0 ? `${Math.round((p.totalRevenue / totalRevenue) * 100)}%` : '—'}
                               </td>
                             </tr>
@@ -823,7 +823,7 @@ export function ReportsPage() {
         {tab === 'gst' && (
           <div className="p-5 space-y-5">
             {gstError && (
-              <div className="rounded-lg border border-[#E8380D]/20 bg-[#E8380D]/10 px-4 py-3 text-sm text-[#E8380D]">
+              <div className="rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
                 {gstError}
               </div>
             )}
@@ -842,14 +842,14 @@ export function ReportsPage() {
 
                 {/* Rate-wise table */}
                 <Card className="overflow-hidden !p-0">
-                  <div className="flex items-center justify-between border-b border-[#E8D5C0] px-5 py-3">
-                    <h3 className="text-sm font-semibold text-[#1C0800]">
+                  <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                    <h3 className="text-sm font-semibold text-ink">
                       Rate-wise GST Breakup
                     </h3>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={exportGSTCSV}
-                        className="flex items-center gap-1.5 rounded-lg border border-[#E8D5C0] px-3 py-1.5 text-xs text-[#1C0800]/50 hover:bg-[#1C0800]/5"
+                        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5"
                       >
                         <Download size={11} />
                         GST CSV
@@ -857,7 +857,7 @@ export function ReportsPage() {
                       <button
                         onClick={() => void exportTallyCSV()}
                         disabled={exportingTally}
-                        className="flex items-center gap-1.5 rounded-lg border border-[#E8D5C0] px-3 py-1.5 text-xs text-[#1C0800]/50 hover:bg-[#1C0800]/5 disabled:opacity-40"
+                        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5 disabled:opacity-40"
                       >
                         {exportingTally ? <RefreshCw size={11} className="animate-spin" /> : <Download size={11} />}
                         Tally CSV
@@ -866,7 +866,7 @@ export function ReportsPage() {
                         onClick={() => void exportGSTR1()}
                         disabled={exportingGSTR || days > 91}
                         title={days > 91 ? 'GSTR-1 export is limited to 92 days' : undefined}
-                        className="flex items-center gap-1.5 rounded-lg bg-[#E8380D] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#E8380D]/90 disabled:opacity-40"
+                        className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-40"
                       >
                         {exportingGSTR ? <RefreshCw size={11} className="animate-spin" /> : <Download size={11} />}
                         GSTR-1 JSON
@@ -877,40 +877,40 @@ export function ReportsPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-sm">
                       <thead>
-                        <tr className="bg-[#FFF6EE]">
+                        <tr className="bg-mist">
                           {['Tax %', 'Taxable Value', 'CGST', 'SGST', 'Total Tax', 'Total Value', 'Items'].map(h => (
-                            <th key={h} className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40 first:text-left">
+                            <th key={h} className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40 first:text-left">
                               {h}
                             </th>
                           ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#E8D5C0]">
+                      <tbody className="divide-y divide-border">
                         {gst.rows.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="px-5 py-8 text-center text-xs text-[#1C0800]/30">
+                            <td colSpan={7} className="px-5 py-8 text-center text-xs text-ink/30">
                               No taxable orders in this period
                             </td>
                           </tr>
                         ) : (
                           <>
                             {gst.rows.map(r => (
-                              <tr key={r.taxPercent} className="hover:bg-[#FFF6EE]">
-                                <td className="px-5 py-2.5 text-sm text-[#1C0800]">{r.taxPercent}%</td>
+                              <tr key={r.taxPercent} className="hover:bg-mist">
+                                <td className="px-5 py-2.5 text-sm text-ink">{r.taxPercent}%</td>
                                 <td className="px-5 py-2.5 text-right tabular-nums">{fmtCur(r.taxableValue, sym)}</td>
                                 <td className="px-5 py-2.5 text-right tabular-nums">{fmtCur(r.cgst, sym)}</td>
                                 <td className="px-5 py-2.5 text-right tabular-nums">{fmtCur(r.sgst, sym)}</td>
                                 <td className="px-5 py-2.5 text-right tabular-nums">{fmtCur(r.totalTax, sym)}</td>
                                 <td className="px-5 py-2.5 text-right tabular-nums">{fmtCur(r.totalValue, sym)}</td>
-                                <td className="px-5 py-2.5 text-right tabular-nums text-[#1C0800]/60">{r.totalItems}</td>
+                                <td className="px-5 py-2.5 text-right tabular-nums text-ink/60">{r.totalItems}</td>
                               </tr>
                             ))}
-                            <tr className="border-t-2 border-[#E8D5C0] bg-[#FFF6EE] font-semibold">
-                              <td className="px-5 py-2.5 text-sm text-[#1C0800]">Total</td>
+                            <tr className="border-t-2 border-border bg-mist font-semibold">
+                              <td className="px-5 py-2.5 text-sm text-ink">Total</td>
                               <td className="px-5 py-2.5 text-right tabular-nums">{fmtCur(gst.totalTaxableValue, sym)}</td>
                               <td className="px-5 py-2.5 text-right tabular-nums">{fmtCur(gst.totalCGST, sym)}</td>
                               <td className="px-5 py-2.5 text-right tabular-nums">{fmtCur(gst.totalSGST, sym)}</td>
-                              <td className="px-5 py-2.5 text-right tabular-nums text-[#E8380D]">{fmtCur(gst.totalTax, sym)}</td>
+                              <td className="px-5 py-2.5 text-right tabular-nums text-brand">{fmtCur(gst.totalTax, sym)}</td>
                               <td className="px-5 py-2.5 text-right tabular-nums">{fmtCur(gst.totalValue, sym)}</td>
                               <td className="px-5 py-2.5" />
                             </tr>
@@ -936,24 +936,24 @@ export function ReportsPage() {
           <div className="p-5 space-y-5">
             {!expFeature ? (
               <div className="flex h-48 flex-col items-center justify-center text-center">
-                <TrendingDown size={36} className="mb-3 text-[#1C0800]/10" />
-                <p className="text-sm text-[#1C0800]/40">Expenses feature not enabled</p>
-                <p className="mt-1 text-xs text-[#1C0800]/25">Enable it in hotel settings.</p>
+                <TrendingDown size={36} className="mb-3 text-ink/10" />
+                <p className="text-sm text-ink/40">Expenses feature not enabled</p>
+                <p className="mt-1 text-xs text-ink/25">Enable it in hotel settings.</p>
               </div>
             ) : (
               <>
                 {/* Date picker */}
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-[#1C0800]/50">Date</span>
+                  <span className="text-xs text-ink/50">Date</span>
                   <input
                     type="date"
                     value={expenseDate}
                     onChange={e => setExpenseDate(e.target.value)}
-                    className="h-8 rounded-lg border border-[#E8D5C0] bg-white px-3 text-xs text-[#1C0800] outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
+                    className="h-8 rounded-lg border border-border bg-canvas px-3 text-xs text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
                   />
                   <button
                     onClick={() => setExpenseDate(todayStr())}
-                    className="rounded-lg border border-[#E8D5C0] px-3 py-1.5 text-xs text-[#1C0800]/50 hover:bg-[#1C0800]/5"
+                    className="rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5"
                   >
                     Today
                   </button>
@@ -961,7 +961,7 @@ export function ReportsPage() {
                 </div>
 
                 {pnlError && (
-                  <div className="rounded-lg border border-[#E8380D]/20 bg-[#E8380D]/10 px-4 py-3 text-sm text-[#E8380D]">
+                  <div className="rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
                     {pnlError}
                   </div>
                 )}
@@ -996,13 +996,13 @@ export function ReportsPage() {
                     {/* Expense breakdown */}
                     {pnl.breakdown.length > 0 && (
                       <Card className="overflow-hidden !p-0">
-                        <div className="flex items-center justify-between border-b border-[#E8D5C0] px-5 py-3">
-                          <h3 className="text-sm font-semibold text-[#1C0800]">
+                        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                          <h3 className="text-sm font-semibold text-ink">
                             Expense Breakdown — {fmtDisplayDate(expenseDate)}
                           </h3>
                           <button
                             onClick={exportExpensesCSV}
-                            className="flex items-center gap-1.5 rounded-lg border border-[#E8D5C0] px-3 py-1.5 text-xs text-[#1C0800]/50 hover:bg-[#1C0800]/5"
+                            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5"
                           >
                             <Download size={11} />
                             CSV
@@ -1011,22 +1011,22 @@ export function ReportsPage() {
                         <div className="overflow-x-auto">
                           <table className="w-full border-collapse text-sm">
                             <thead>
-                              <tr className="bg-[#FFF6EE]">
-                                <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">Category</th>
-                                <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">Count</th>
-                                <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">Total</th>
-                                <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">% of Expenses</th>
+                              <tr className="bg-mist">
+                                <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">Category</th>
+                                <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Count</th>
+                                <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Total</th>
+                                <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">% of Expenses</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-[#E8D5C0]">
+                            <tbody className="divide-y divide-border">
                               {pnl.breakdown.map(b => (
-                                <tr key={b._id} className="hover:bg-[#FFF6EE]">
-                                  <td className="px-5 py-2.5 text-sm capitalize text-[#1C0800]">{b._id}</td>
-                                  <td className="px-5 py-2.5 text-right tabular-nums text-[#1C0800]/60">{b.count}</td>
-                                  <td className="px-5 py-2.5 text-right font-semibold tabular-nums text-[#1C0800]">
+                                <tr key={b._id} className="hover:bg-mist">
+                                  <td className="px-5 py-2.5 text-sm capitalize text-ink">{b._id}</td>
+                                  <td className="px-5 py-2.5 text-right tabular-nums text-ink/60">{b.count}</td>
+                                  <td className="px-5 py-2.5 text-right font-semibold tabular-nums text-ink">
                                     {fmtCur(b.total, sym)}
                                   </td>
-                                  <td className="px-5 py-2.5 text-right tabular-nums text-[#1C0800]/40">
+                                  <td className="px-5 py-2.5 text-right tabular-nums text-ink/40">
                                     {pnl.expenses > 0
                                       ? `${Math.round((b.total / pnl.expenses) * 100)}%`
                                       : '—'}
@@ -1038,7 +1038,7 @@ export function ReportsPage() {
                         </div>
 
                         {/* Horizontal breakdown bars */}
-                        <div className="border-t border-[#E8D5C0] p-5">
+                        <div className="border-t border-border p-5">
                           <HorizBars
                             sym={sym}
                             data={pnl.breakdown.map(b => ({ label: b._id, value: b.total }))}
