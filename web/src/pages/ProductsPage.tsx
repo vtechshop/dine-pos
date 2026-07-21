@@ -87,9 +87,9 @@ export function ProductsPage() {
   return (
     <div className="flex h-full flex-col">
       {/* Page header + tabs */}
-      <div className="flex shrink-0 flex-col border-b border-gray-200 bg-white">
+      <div className="flex shrink-0 flex-col border-b border-border bg-canvas">
         <div className="px-5 py-3">
-          <h1 className="text-base font-semibold text-gray-800">Products</h1>
+          <h1 className="text-base font-semibold text-ink">Products</h1>
         </div>
         <div className="flex gap-0 px-5">
           {(['products', 'categories'] as Tab[]).map(t => (
@@ -98,13 +98,13 @@ export function ProductsPage() {
               onClick={() => setTab(t)}
               className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium capitalize transition-colors ${
                 tab === t
-                  ? 'border-[#E8380D] text-[#E8380D]'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-brand text-brand'
+                  : 'border-transparent text-ink/50 hover:text-ink/70'
               }`}
             >
               {t === 'products' ? 'Products' : 'Categories'}
               {t === 'categories' && !catLoading && (
-                <span className="ml-1.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">
+                <span className="ml-1.5 rounded-full bg-border/40 px-1.5 py-0.5 text-[10px] text-ink/50">
                   {categories.length}
                 </span>
               )}
@@ -258,22 +258,22 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
   return (
     <div className="flex h-full flex-col">
       {/* Toolbar */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-100 bg-white px-5 py-2.5">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-canvas px-5 py-2.5">
         <div className="relative">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/40" />
           <input
             ref={searchRef}
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search… (F1)"
-            className="h-8 w-48 rounded-lg border border-gray-200 pl-8 pr-3 text-xs outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
+            className="h-8 w-48 rounded-lg border border-border pl-8 pr-3 text-xs outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
           />
         </div>
 
         <select
           value={catFilter}
           onChange={e => setCatFilter(e.target.value)}
-          className="h-8 rounded-lg border border-gray-200 px-2 text-xs text-gray-600 outline-none focus:border-[#E8380D]/50"
+          className="h-8 rounded-lg border border-border px-2 text-xs text-ink/60 outline-none focus:border-brand/50"
         >
           <option value="">All Categories</option>
           {categories.map(c => (
@@ -288,7 +288,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
             className={`h-8 rounded-lg border px-3 text-xs font-medium transition-colors ${
               vegFilter === v
                 ? 'border-blue-500 bg-blue-50 text-blue-700'
-                : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                : 'border-border bg-canvas text-ink/50 hover:bg-mist'
             }`}
           >
             {v === 'all' ? 'All' : v === 'veg' ? '● Veg' : '● Non-veg'}
@@ -300,7 +300,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
           className={`h-8 rounded-lg border px-3 text-xs font-medium transition-colors ${
             availFilter === true
               ? 'border-green-500 bg-green-50 text-green-700'
-              : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+              : 'border-border bg-canvas text-ink/50 hover:bg-mist'
           }`}
         >
           Available only
@@ -309,26 +309,26 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
         <div className="flex-1" />
 
         {importMsg && (
-          <span className="text-xs text-gray-400">{importMsg}</span>
+          <span className="text-xs text-ink/40">{importMsg}</span>
         )}
 
         <button
           onClick={() => void load()}
           disabled={loading}
-          className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-40"
+          className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs text-ink/50 hover:bg-mist disabled:opacity-40"
         >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
         </button>
 
         <button
           onClick={handleExport}
-          className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs text-gray-600 hover:bg-gray-50"
+          className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs text-ink/60 hover:bg-mist"
         >
           <Download size={12} />Export CSV
         </button>
 
         <label
-          className={`flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs text-gray-600 hover:bg-gray-50 ${
+          className={`flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 text-xs text-ink/60 hover:bg-mist ${
             importing ? 'pointer-events-none opacity-50' : ''
           }`}
         >
@@ -345,14 +345,14 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
 
         <button
           onClick={() => setEditing('new')}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-[#E8380D] px-3 text-xs font-semibold text-white hover:bg-[#E8380D]/90"
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand/90"
         >
           <Plus size={13} />New (F2)
         </button>
       </div>
 
       {/* Count + clear */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 bg-gray-50/60 px-5 py-1 text-xs text-gray-400">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-mist/60 px-5 py-1 text-xs text-ink/40">
         <span>
           {visible.length} of {products.length} product{products.length !== 1 ? 's' : ''}
         </span>
@@ -361,7 +361,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
             onClick={() => {
               setSearch(''); setCatFilter(''); setVegFilter('all'); setAvailFilter(null);
             }}
-            className="text-[#E8380D] hover:underline"
+            className="text-brand hover:underline"
           >
             Clear filters
           </button>
@@ -381,12 +381,12 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
             <Spinner size="lg" />
           </div>
         ) : visible.length === 0 ? (
-          <div className="flex h-48 flex-col items-center justify-center text-gray-400">
+          <div className="flex h-48 flex-col items-center justify-center text-ink/40">
             <p className="text-sm">{hasFilter ? 'No products match the filters' : 'No products yet'}</p>
             {!hasFilter && (
               <button
                 onClick={() => setEditing('new')}
-                className="mt-3 rounded-lg bg-[#E8380D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#E8380D]/90"
+                className="mt-3 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90"
               >
                 Add First Product
               </button>
@@ -395,24 +395,24 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
         ) : (
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50 text-left">
+              <tr className="border-b border-border bg-mist text-left">
                 <th className="w-7 px-3 py-2.5" />
-                <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink/40">
                   Name
                 </th>
-                <th className="w-36 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <th className="w-36 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink/40">
                   Category
                 </th>
-                <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">
                   Price
                 </th>
-                <th className="w-16 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <th className="w-16 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-ink/40">
                   Tax%
                 </th>
-                <th className="w-20 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <th className="w-20 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-ink/40">
                   Stock
                 </th>
-                <th className="w-24 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <th className="w-24 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-ink/40">
                   Avail.
                 </th>
                 <th className="w-20 px-3 py-2.5" />
@@ -423,7 +423,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                 const color = p.category?.color ?? '#888';
                 const name  = p.category?.name  ?? '—';
                 return (
-                  <tr key={p._id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <tr key={p._id} className="border-b border-border hover:bg-mist">
                     {/* Veg indicator */}
                     <td className="px-3 py-2.5 text-center">
                       <span
@@ -440,9 +440,9 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                     </td>
                     {/* Name */}
                     <td className="px-3 py-2.5">
-                      <div className="font-medium text-gray-800">{p.name}</div>
+                      <div className="font-medium text-ink">{p.name}</div>
                       {p.shortCode && (
-                        <div className="font-mono text-[10px] text-gray-400">{p.shortCode}</div>
+                        <div className="font-mono text-[10px] text-ink/40">{p.shortCode}</div>
                       )}
                     </td>
                     {/* Category badge */}
@@ -455,19 +455,19 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                       </span>
                     </td>
                     {/* Price */}
-                    <td className="px-3 py-2.5 text-right font-mono font-semibold text-gray-800">
+                    <td className="px-3 py-2.5 text-right font-mono font-semibold text-ink">
                       ₹{p.price.toFixed(2)}
                     </td>
                     {/* Tax */}
-                    <td className="px-3 py-2.5 text-center text-xs text-gray-500">
+                    <td className="px-3 py-2.5 text-center text-xs text-ink/50">
                       {p.taxPercent}%
                     </td>
                     {/* Stock */}
                     <td className="px-3 py-2.5 text-center text-xs">
                       {p.stock === -1 ? (
-                        <span className="text-gray-400">∞</span>
+                        <span className="text-ink/40">∞</span>
                       ) : (
-                        <span className={p.stock <= 5 ? 'font-semibold text-orange-500' : 'text-gray-700'}>
+                        <span className={p.stock <= 5 ? 'font-semibold text-orange-500' : 'text-ink/70'}>
                           {p.stock}
                         </span>
                       )}
@@ -493,13 +493,13 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => setEditing(p)}
-                          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                          className="rounded-lg p-1.5 text-ink/40 hover:bg-border/40 hover:text-ink/70"
                         >
                           <Edit2 size={13} />
                         </button>
                         <button
                           onClick={() => { void handleDelete(p); }}
-                          className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                          className="rounded-lg p-1.5 text-ink/40 hover:bg-red-50 hover:text-red-600"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -568,11 +568,11 @@ function CategoriesPanel({
   return (
     <div className="flex h-full flex-col">
       {/* Toolbar */}
-      <div className="flex shrink-0 items-center justify-between border-b border-gray-100 bg-white px-5 py-2.5">
-        <span className="text-xs text-gray-400">{categories.length} categories</span>
+      <div className="flex shrink-0 items-center justify-between border-b border-border bg-canvas px-5 py-2.5">
+        <span className="text-xs text-ink/40">{categories.length} categories</span>
         <button
           onClick={() => setEditing('new')}
-          className="flex items-center gap-1.5 rounded-lg bg-[#E8380D] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#E8380D]/90"
+          className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"
         >
           <Plus size={13} />New (F2)
         </button>
@@ -581,11 +581,11 @@ function CategoriesPanel({
       {/* Grid */}
       <div className="flex-1 overflow-y-auto p-5">
         {categories.length === 0 ? (
-          <div className="flex h-48 flex-col items-center justify-center text-gray-400">
+          <div className="flex h-48 flex-col items-center justify-center text-ink/40">
             <p className="text-sm">No categories yet</p>
             <button
               onClick={() => setEditing('new')}
-              className="mt-3 rounded-lg bg-[#E8380D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#E8380D]/90"
+              className="mt-3 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90"
             >
               Add First Category
             </button>
@@ -595,16 +595,16 @@ function CategoriesPanel({
             {categories.map(c => (
               <div
                 key={c._id}
-                className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm"
+                className="flex items-center gap-3 rounded-xl border border-border bg-canvas px-4 py-3 shadow-sm"
               >
                 <div
                   className="h-10 w-10 shrink-0 rounded-lg"
                   style={{ backgroundColor: c.color }}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold text-gray-800">{c.name}</div>
+                  <div className="truncate font-semibold text-ink">{c.name}</div>
                   <div className="mt-0.5 flex items-center gap-2">
-                    <span className="text-[10px] text-gray-400">#{c.sortOrder}</span>
+                    <span className="text-[10px] text-ink/40">#{c.sortOrder}</span>
                     <span
                       className={`text-[10px] font-medium ${
                         c.isActive ? 'text-green-600' : 'text-gray-400'
@@ -617,14 +617,14 @@ function CategoriesPanel({
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     onClick={() => setEditing(c)}
-                    className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                    className="rounded-lg p-1.5 text-ink/40 hover:bg-border/40 hover:text-ink/70"
                   >
                     <Edit2 size={13} />
                   </button>
                   <button
                     onClick={() => { void handleDelete(c); }}
                     disabled={deleting === c._id}
-                    className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                    className="rounded-lg p-1.5 text-ink/40 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
                   >
                     <Trash2 size={13} />
                   </button>
