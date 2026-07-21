@@ -150,6 +150,9 @@ export function LoginPage() {
           >
             Forgot Password
           </button>
+          <Link to="/super-admin/login" className="text-ink/40 transition hover:text-ink/60">
+            Super Admin
+          </Link>
           <span className="text-ink/30">Dine POS · {APP_VERSION}</span>
         </div>
       </div>

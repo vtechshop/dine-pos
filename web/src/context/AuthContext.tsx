@@ -9,6 +9,7 @@ import {
 import type { ReactNode } from 'react';
 import { loginApi, logoutApi, decodeJwtPayload } from '../api/auth';
 import { configureAuth } from '../api/client';
+import { saLogin } from '../api/superAdmin';
 
 interface AuthState {
   token:           string | null;
@@ -20,6 +21,7 @@ interface AuthState {
 
 interface AuthContextType extends AuthState {
   login(userId: string, password: string): Promise<void>;
+  loginSuperAdmin(userId: string, password: string): Promise<void>;
   logout(): void;
   setHotelName(name: string): void;
 }
@@ -100,6 +102,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const loginSuperAdmin = useCallback(async (userId: string, password: string) => {
+    const res = await saLogin(userId, password);
+    localStorage.setItem(KEYS.token, res.token);
+    localStorage.setItem(KEYS.role,  'superadmin');
+    setState({
+      token:           res.token,
+      hotelId:         null,
+      hotelName:       null,
+      role:            'superadmin',
+      isAuthenticated: true,
+    });
+  }, []);
+
   // H-02: revoke the refresh token on the server before clearing local state.
   // Fire-and-forget: if the network call fails the token self-expires in 30 days.
   const logout = useCallback(() => {
@@ -117,8 +132,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ ...state, login, logout, setHotelName }),
-    [state, login, logout, setHotelName],
+    () => ({ ...state, login, loginSuperAdmin, logout, setHotelName }),
+    [state, login, loginSuperAdmin, logout, setHotelName],
   );
 
   return (

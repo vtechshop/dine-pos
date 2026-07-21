@@ -89,11 +89,11 @@ export async function apiFetch<T>(path: string, init: ExtendedInit = {}): Promis
         // Retry the original request with the new token now in localStorage
         return apiFetch<T>(path, { ...init, _isRetry: true });
       }
-      // Refresh failed: clear auth state and force back to login
+      // Refresh failed: clear auth state and force back to correct login page.
+      // Super admin tokens have no refresh — route them to the SA login.
       _onAuthExpired?.();
-      // Hard navigation ensures the user lands on /login even if the React
-      // tree has partially unmounted (e.g., error boundaries caught a throw)
-      window.location.replace('/login');
+      const isSA = localStorage.getItem('pos_role') === 'superadmin';
+      window.location.replace(isSA ? '/super-admin/login' : '/login');
     }
     const body = (await res.json().catch(() => ({}))) as { message?: string };
     throw new ApiError(res.status, body.message ?? `HTTP ${res.status}`);
