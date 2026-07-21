@@ -26,7 +26,7 @@ export function TopBar() {
           {hotelName && (
             <>
               <span className="text-white/25">/</span>
-              <span className="max-w-48 truncate text-sm text-white/50">{hotelName}</span>
+              <span className="max-w-48 truncate text-sm text-white/50" title={hotelName}>{hotelName}</span>
             </>
           )}
         </div>
@@ -61,8 +61,8 @@ export function TopBar() {
             <span className="hidden text-sm text-white/70 sm:block">{roleLabel}</span>
             <button
               onClick={() => setConfirmLogout(true)}
+              aria-label="Sign out"
               className="ml-1 rounded-lg p-1.5 text-white/30 transition-colors hover:bg-white/[0.08] hover:text-white/70"
-              title="Sign out"
             >
               <LogOut size={15} />
             </button>

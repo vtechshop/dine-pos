@@ -393,6 +393,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
             )}
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-mist text-left">
@@ -427,6 +428,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                     {/* Veg indicator */}
                     <td className="px-3 py-2.5 text-center">
                       <span
+                        aria-hidden="true"
                         className={`inline-flex h-3 w-3 items-center justify-center rounded-sm border-2 ${
                           p.isVeg ? 'border-green-600' : 'border-red-600'
                         }`}
@@ -437,6 +439,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                           }`}
                         />
                       </span>
+                      <span className="sr-only">{p.isVeg ? 'Veg' : 'Non-veg'}</span>
                     </td>
                     {/* Name */}
                     <td className="px-3 py-2.5">
@@ -493,12 +496,14 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => setEditing(p)}
+                          aria-label={`Edit ${p.name}`}
                           className="rounded-lg p-1.5 text-ink/40 hover:bg-border/40 hover:text-ink/70"
                         >
                           <Edit2 size={13} />
                         </button>
                         <button
                           onClick={() => { void handleDelete(p); }}
+                          aria-label={`Delete ${p.name}`}
                           className="rounded-lg p-1.5 text-ink/40 hover:bg-red-50 hover:text-red-600"
                         >
                           <Trash2 size={13} />
@@ -510,6 +515,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

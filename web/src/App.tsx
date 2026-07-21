@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -6,17 +7,28 @@ import { SocketProvider } from './context/SocketContext';
 import { KeyboardProvider } from './context/KeyboardContext';
 import { LiveOrdersProvider } from './context/LiveOrdersContext';
 import { AppLayout } from './components/layout/AppLayout';
+import { Spinner } from './components/ui/Spinner';
+// Critical path — always bundled (login + dashboard render on first load)
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
-import { ProductsPage } from './pages/ProductsPage';
-import { InventoryPage } from './pages/InventoryPage';
-import { CustomersPage } from './pages/CustomersPage';
-import { ReportsPage } from './pages/ReportsPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { OrdersPage } from './pages/OrdersPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
-import { ReservationsPage } from './pages/ReservationsPage';
+// Heavy pages — code-split to reduce initial JS parse time
+const OrdersPage      = lazy(() => import('./pages/OrdersPage').then(m => ({ default: m.OrdersPage })));
+const ProductsPage    = lazy(() => import('./pages/ProductsPage').then(m => ({ default: m.ProductsPage })));
+const InventoryPage   = lazy(() => import('./pages/InventoryPage').then(m => ({ default: m.InventoryPage })));
+const CustomersPage   = lazy(() => import('./pages/CustomersPage').then(m => ({ default: m.CustomersPage })));
+const ReportsPage     = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
+const SettingsPage    = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const ReservationsPage = lazy(() => import('./pages/ReservationsPage').then(m => ({ default: m.ReservationsPage })));
+
+function PageFallback() {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <Spinner size="lg" />
+    </div>
+  );
+}
 
 // Redirect non-admin roles away from pages they are not permitted to view
 function AdminOnly({ children }: { children: React.ReactNode }) {
@@ -49,15 +61,15 @@ export function App() {
                   <Route element={<AppLayout />}>
                     <Route index element={<Navigate to="/dashboard" replace />} />
                     <Route path="/dashboard"   element={<DashboardPage />} />
-                    <Route path="/orders"      element={<AdminOnly><OrdersPage /></AdminOnly>} />
                     <Route path="/tables"      element={<TablesPage />} />
-                    <Route path="/customers"   element={<AdminOnly><CustomersPage /></AdminOnly>} />
-                    <Route path="/products"    element={<AdminOnly><ProductsPage /></AdminOnly>} />
-                    <Route path="/inventory"   element={<AdminOnly><InventoryPage /></AdminOnly>} />
-                    <Route path="/reports"     element={<AdminOnly><ReportsPage /></AdminOnly>} />
-                    <Route path="/settings"    element={<AdminOnly><SettingsPage /></AdminOnly>} />
-                    <Route path="/reservations" element={<AdminOnly><ReservationsPage /></AdminOnly>} />
                     <Route path="/kitchen"     element={<KitchenPage />} />
+                    <Route path="/orders"      element={<AdminOnly><Suspense fallback={<PageFallback />}><OrdersPage /></Suspense></AdminOnly>} />
+                    <Route path="/customers"   element={<AdminOnly><Suspense fallback={<PageFallback />}><CustomersPage /></Suspense></AdminOnly>} />
+                    <Route path="/products"    element={<AdminOnly><Suspense fallback={<PageFallback />}><ProductsPage /></Suspense></AdminOnly>} />
+                    <Route path="/inventory"   element={<AdminOnly><Suspense fallback={<PageFallback />}><InventoryPage /></Suspense></AdminOnly>} />
+                    <Route path="/reports"     element={<AdminOnly><Suspense fallback={<PageFallback />}><ReportsPage /></Suspense></AdminOnly>} />
+                    <Route path="/settings"    element={<AdminOnly><Suspense fallback={<PageFallback />}><SettingsPage /></Suspense></AdminOnly>} />
+                    <Route path="/reservations" element={<AdminOnly><Suspense fallback={<PageFallback />}><ReservationsPage /></Suspense></AdminOnly>} />
 
                     {/* Role landing pages redirect to dashboard until role-specific views are built */}
                     <Route path="/cashier" element={<Navigate to="/dashboard" replace />} />

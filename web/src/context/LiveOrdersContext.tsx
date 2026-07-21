@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useReducer } from 'react';
+import { createContext, useContext, useEffect, useReducer, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { LiveOrder, LiveOrderItem } from '../types';
 import { useSocket } from './SocketContext';
@@ -124,10 +124,15 @@ export function LiveOrdersProvider({ children }: { children: ReactNode }) {
       .catch(() => {}); // non-critical — socket will deliver subsequent events
   }, [reconnectCount]);
 
-  const markRead = () => dispatch({ type: 'MARK_READ' });
+  const markRead = useCallback(() => dispatch({ type: 'MARK_READ' }), []);
+
+  const value = useMemo(
+    () => ({ orders: state.orders, unreadCount: state.unreadCount, markRead }),
+    [state.orders, state.unreadCount, markRead],
+  );
 
   return (
-    <LiveOrdersContext.Provider value={{ orders: state.orders, unreadCount: state.unreadCount, markRead }}>
+    <LiveOrdersContext.Provider value={value}>
       {children}
     </LiveOrdersContext.Provider>
   );

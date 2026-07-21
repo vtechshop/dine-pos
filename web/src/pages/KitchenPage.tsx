@@ -1,17 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { RefreshCw, ChefHat, Clock } from 'lucide-react';
 import type { KDSOrder } from '../types';
 import { fetchKitchenOrders, updateOrderStatus } from '../api/orders';
 import { Spinner } from '../components/ui/Spinner';
+import { useSocket } from '../context/SocketContext';
 
-// ── Elapsed time ──────────────────────────────────────────────────────────────
+// ── Elapsed time (pure computation — no per-card timer) ───────────────────────
 
-function useElapsed(createdAt: string): string {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, []);
+function elapsed(createdAt: string, now: number): string {
   const secs = Math.floor((now - new Date(createdAt).getTime()) / 1000);
   if (secs < 60)  return `${secs}s ago`;
   const mins = Math.floor(secs / 60);
@@ -23,12 +19,12 @@ function useElapsed(createdAt: string): string {
 
 interface OrderCardProps {
   order: KDSOrder;
+  now: number;
   onAction(id: string, status: string): void;
   acting: boolean;
 }
 
-function OrderCard({ order, onAction, acting }: OrderCardProps) {
-  const elapsed = useElapsed(order.createdAt);
+const OrderCard = memo(function OrderCard({ order, now, onAction, acting }: OrderCardProps) {
   const isPending    = order.status === 'pending';
   const isPreparing  = order.status === 'preparing';
 
@@ -50,7 +46,7 @@ function OrderCard({ order, onAction, acting }: OrderCardProps) {
         </div>
         <div className="flex items-center gap-1 text-xs text-ink/50">
           <Clock size={11} />
-          {elapsed}
+          {elapsed(order.createdAt, now)}
         </div>
       </div>
 
@@ -102,20 +98,30 @@ function OrderCard({ order, onAction, acting }: OrderCardProps) {
       </div>
     </div>
   );
-}
+});
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function KitchenPage() {
-  const [orders,  setOrders]  = useState<KDSOrder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
-  const [acting,  setActing]  = useState(false);
+  const { socket } = useSocket();
+  const [orders,       setOrders]       = useState<KDSOrder[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState<string | null>(null);
+  const [acting,       setActing]       = useState(false);
+  const [now,          setNow]          = useState(() => Date.now());
+  const [lastRefreshed, setLastRefreshed] = useState<number | null>(null);
+
+  // Single shared 30-second clock tick for all order cards — replaces N per-card intervals
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const load = useCallback(async () => {
     setError(null);
     try {
       setOrders(await fetchKitchenOrders());
+      setLastRefreshed(Date.now());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load kitchen orders');
     } finally {
@@ -123,13 +129,26 @@ export function KitchenPage() {
     }
   }, []);
 
+  // Initial load + 20s polling fallback
   useEffect(() => {
     void load();
     const id = setInterval(() => void load(), 20_000);
     return () => clearInterval(id);
   }, [load]);
 
-  async function handleAction(orderId: string, newStatus: string) {
+  // Real-time: reload immediately when socket fires a relevant event
+  useEffect(() => {
+    if (!socket) return;
+    const handler = () => { void load(); };
+    socket.on('new_order', handler);
+    socket.on('order_status_updated', handler);
+    return () => {
+      socket.off('new_order', handler);
+      socket.off('order_status_updated', handler);
+    };
+  }, [socket, load]);
+
+  const handleAction = useCallback(async (orderId: string, newStatus: string) => {
     setActing(true);
     try {
       await updateOrderStatus(orderId, newStatus);
@@ -139,10 +158,14 @@ export function KitchenPage() {
     } finally {
       setActing(false);
     }
-  }
+  }, [load]);
 
   const pending   = orders.filter(o => o.status === 'pending');
   const preparing = orders.filter(o => o.status === 'preparing');
+
+  const refreshedLabel = lastRefreshed
+    ? `Updated ${Math.round((now - lastRefreshed) / 1000)}s ago`
+    : 'Loading…';
 
   return (
     <div className="flex h-full flex-col">
@@ -153,12 +176,13 @@ export function KitchenPage() {
           <h1 className="text-base font-semibold text-ink">Kitchen Display</h1>
           <span className="flex items-center gap-1 text-xs text-ink/40">
             <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
-            Live · auto-refreshes every 20s
+            Live · {refreshedLabel}
           </span>
         </div>
         <button
           onClick={() => void load()}
           disabled={loading}
+          aria-label="Refresh kitchen orders"
           className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-ink/40 transition-colors hover:bg-ink/5 hover:text-ink/70 disabled:opacity-40"
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
@@ -198,7 +222,7 @@ export function KitchenPage() {
                   <p className="text-xs text-ink/25">No pending orders</p>
                 ) : (
                   pending.map(o => (
-                    <OrderCard key={o._id} order={o} onAction={handleAction} acting={acting} />
+                    <OrderCard key={o._id} order={o} now={now} onAction={handleAction} acting={acting} />
                   ))
                 )}
               </div>
@@ -217,7 +241,7 @@ export function KitchenPage() {
                   <p className="text-xs text-ink/25">No orders in progress</p>
                 ) : (
                   preparing.map(o => (
-                    <OrderCard key={o._id} order={o} onAction={handleAction} acting={acting} />
+                    <OrderCard key={o._id} order={o} now={now} onAction={handleAction} acting={acting} />
                   ))
                 )}
               </div>

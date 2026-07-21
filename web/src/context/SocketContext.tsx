@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
@@ -85,8 +85,13 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, [isAuthenticated, token, hotelId]);
 
+  const value = useMemo(
+    () => ({ socket, connected, reconnecting, reconnectCount }),
+    [socket, connected, reconnecting, reconnectCount],
+  );
+
   return (
-    <SocketContext.Provider value={{ socket, connected, reconnecting, reconnectCount }}>
+    <SocketContext.Provider value={value}>
       {children}
     </SocketContext.Provider>
   );

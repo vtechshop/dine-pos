@@ -162,6 +162,7 @@ export function InventoryPage() {
             )}
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-mist text-left">
@@ -242,6 +243,7 @@ export function InventoryPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

@@ -1,3 +1,24 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    /* Space-separated RGB — enables Tailwind opacity modifiers (bg-brand/20, text-ink/40) */
+    --brand:  232 56 13;   /* #E8380D — primary CTA */
+    --ink:    28 8 0;      /* #1C0800 — shell bg + primary text */
+    --canvas: 253 250 247; /* #FDFAF7 — lightest surface */
+    --mist:   255 246 238; /* #FFF6EE — main content background */
+    --border: 232 213 192; /* #E8D5C0 — dividers and input borders */
+  }
+
+  /* RC2: Keyboard focus ring — visible only on keyboard navigation, not mouse clicks */
+  :focus-visible {
+    outline: 2px solid rgb(var(--brand) / 0.7);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+}

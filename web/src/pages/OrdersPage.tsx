@@ -149,7 +149,9 @@ export function OrdersPage() {
           {/* Search */}
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/30" />
+            <label htmlFor="orders-search" className="sr-only">Search orders by number, table, or name</label>
             <input
+              id="orders-search"
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -203,6 +205,7 @@ export function OrdersPage() {
             <p className="text-sm">No orders found</p>
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-canvas">
               <tr className="border-b border-border text-left">
@@ -297,6 +300,7 @@ export function OrdersPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

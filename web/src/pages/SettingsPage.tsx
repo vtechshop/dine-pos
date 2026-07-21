@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId, isValidElement, cloneElement } from 'react';
+import type { ReactElement } from 'react';
 import {
   User, Building2, Users, Printer, Heart, Flag, Shield,
   Plus, Pencil, Trash2, RefreshCw, LogOut, Wifi, WifiOff, Check,
@@ -15,6 +16,7 @@ import type { StaffMember } from '../api/staff';
 import { fetchSessionDevices, logoutDevice, logoutAllDevices } from '../api/devices';
 import type { SessionDevice } from '../api/devices';
 import { fetchPrinterDevices } from '../api/dashboard';
+import { apiFetch } from '../api/client';
 import { StaffDrawer } from '../components/settings/StaffDrawer';
 import type { Settings, PrinterDeviceStatus, LoyaltySettings } from '../types';
 
@@ -24,12 +26,15 @@ const inp =
   'h-9 w-full rounded-lg border border-border bg-canvas px-3 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20';
 
 function F({ label, children }: { label: string; children: React.ReactNode }) {
+  const id = useId();
   return (
     <div>
-      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-ink/40">
+      <label htmlFor={id} className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-ink/40">
         {label}
       </label>
-      {children}
+      {children && isValidElement(children)
+        ? cloneElement(children as ReactElement<{ id?: string }>, { id })
+        : children}
     </div>
   );
 }
@@ -367,10 +372,10 @@ function StaffTable({ members, role, confirmDelId, onAdd, onEdit, onToggle, onDe
                 </div>
               ) : (
                 <div className="flex shrink-0 items-center gap-1">
-                  <button onClick={() => onEdit(m)} className="rounded-lg p-1.5 text-ink/40 hover:bg-ink/5">
+                  <button onClick={() => onEdit(m)} aria-label={`Edit ${m.name}`} className="rounded-lg p-1.5 text-ink/40 hover:bg-ink/5">
                     <Pencil size={12} />
                   </button>
-                  <button onClick={() => onDeleteRequest(m._id)} className="rounded-lg p-1.5 text-red-400 hover:bg-red-50">
+                  <button onClick={() => onDeleteRequest(m._id)} aria-label={`Delete ${m.name}`} className="rounded-lg p-1.5 text-red-400 hover:bg-red-50">
                     <Trash2 size={12} />
                   </button>
                 </div>
@@ -798,9 +803,12 @@ const PLAN_LABELS: Record<string, string> = {
 
 function FeaturesSection({ settings }: { settings: Settings }) {
   const [sub, setSub] = useState<SubscriptionInfo | null>(null);
+  const [subError, setSubError] = useState(false);
 
   useEffect(() => {
-    fetchSubscription().then(setSub).catch(() => {});
+    fetchSubscription()
+      .then(s => { setSub(s); setSubError(false); })
+      .catch(() => setSubError(true));
   }, []);
 
   const flags = settings.features;
@@ -830,6 +838,8 @@ function FeaturesSection({ settings }: { settings: Settings }) {
               </div>
             )}
           </div>
+        ) : subError ? (
+          <p className="text-xs text-red-500">Unable to load subscription. Please refresh.</p>
         ) : (
           <p className="text-xs text-ink/30">Loading subscription…</p>
         )}
@@ -918,13 +928,10 @@ function SecuritySection({ settings }: { settings: Settings }) {
   const handleResetRequest = async () => {
     if (!settings.phone) return;
     try {
-      const base = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:5000/api';
-      const res = await fetch(`${base}/hotels/reset-request`, {
+      await apiFetch('/hotels/reset-request', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: settings.phone }),
       });
-      if (!res.ok) throw new Error('Failed');
       setNotice('Reset request sent. The Super Admin team will contact you shortly.');
       setTimeout(() => setNotice(null), 6000);
     } catch {

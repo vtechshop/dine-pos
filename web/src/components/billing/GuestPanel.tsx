@@ -1,7 +1,7 @@
 import type { GuestBill, Guest, SessionSummary } from '../../types';
 import { GuestCard } from './GuestCard';
 import { mergeGuests, transferGuest, markGuestLeft } from '../../api/billing';
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { MergeGuestModal } from './MergeGuestModal';
 import { TransferGuestModal } from './TransferGuestModal';
 
@@ -21,7 +21,7 @@ function fmt(n: number, sym: string) {
   return `${sym}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function GuestPanel({
+export const GuestPanel = memo(function GuestPanel({
   sessionId,
   guestBills,
   openSessions,
@@ -79,7 +79,7 @@ export function GuestPanel({
     <div className="flex flex-col h-full">
       {/* Guest list */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-ink/40 mb-3">
           Guests · {guestBills.length}
         </p>
 
@@ -88,7 +88,7 @@ export function GuestPanel({
         )}
 
         {guestBills.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">No guests on this table</p>
+          <p className="text-sm text-ink/40 text-center py-8">No guests on this table</p>
         ) : (
           guestBills.map(({ guest, orders }) => (
             <GuestCard
@@ -109,18 +109,18 @@ export function GuestPanel({
       </div>
 
       {/* Summary footer */}
-      <div className="border-t border-gray-200 bg-gray-50 px-4 py-3 space-y-1">
-        <div className="flex justify-between text-xs text-gray-500">
+      <div className="border-t border-border bg-mist px-4 py-3 space-y-1">
+        <div className="flex justify-between text-xs text-ink/50">
           <span>Active</span>
           <span className="tabular-nums">{fmt(activeTotal, currencySymbol)}</span>
         </div>
         {billedTotal > 0 && (
-          <div className="flex justify-between text-xs text-gray-500">
+          <div className="flex justify-between text-xs text-ink/50">
             <span>Billed</span>
             <span className="tabular-nums">{fmt(billedTotal, currencySymbol)}</span>
           </div>
         )}
-        <div className="flex justify-between text-sm font-bold text-gray-900 pt-1 border-t border-gray-200">
+        <div className="flex justify-between text-sm font-bold text-ink pt-1 border-t border-border">
           <span>Grand Total</span>
           <span className="tabular-nums">{fmt(grandTotal, currencySymbol)}</span>
         </div>
@@ -148,4 +148,4 @@ export function GuestPanel({
       )}
     </div>
   );
-}
+});

@@ -4,6 +4,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useMemo,
 } from 'react';
 import type { ReactNode } from 'react';
 import { loginApi, logoutApi, decodeJwtPayload } from '../api/auth';
@@ -111,8 +112,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState(s => ({ ...s, hotelName: name }));
   }, []);
 
+  const value = useMemo(
+    () => ({ ...state, login, logout, setHotelName }),
+    [state, login, logout, setHotelName],
+  );
+
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, setHotelName }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
