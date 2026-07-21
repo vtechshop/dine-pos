@@ -107,11 +107,11 @@ export function OrdersPage() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#E8D5C0] bg-white px-5 py-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-canvas px-5 py-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-base font-semibold text-[#1C0800]">Orders</h1>
+          <h1 className="text-base font-semibold text-ink">Orders</h1>
           {!loading && (
-            <span className="rounded-full bg-[#1C0800]/8 px-2.5 py-0.5 text-xs font-medium text-[#1C0800]/50">
+            <span className="rounded-full bg-ink/[0.08] px-2.5 py-0.5 text-xs font-medium text-ink/50">
               {total}
             </span>
           )}
@@ -119,15 +119,15 @@ export function OrdersPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Range quick-select */}
-          <div className="flex items-center rounded-lg border border-[#E8D5C0] overflow-hidden">
+          <div className="flex items-center rounded-lg border border-border overflow-hidden">
             {RANGE_OPTIONS.map(r => (
               <button
                 key={r.key}
                 onClick={() => { setRangeMode(r.key); setExpanded(null); }}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                   rangeMode === r.key
-                    ? 'bg-[#E8380D] text-white'
-                    : 'bg-white text-[#1C0800]/50 hover:bg-[#1C0800]/5'
+                    ? 'bg-brand text-white'
+                    : 'bg-canvas text-ink/50 hover:bg-ink/5'
                 }`}
               >
                 {r.label}
@@ -142,26 +142,26 @@ export function OrdersPage() {
               value={date}
               max={todayStr()}
               onChange={e => setDate(e.target.value)}
-              className="h-8 rounded-lg border border-[#E8D5C0] bg-[#FFF6EE] px-3 text-xs text-[#1C0800] outline-none focus:border-[#E8380D]/50"
+              className="h-8 rounded-lg border border-border bg-mist px-3 text-xs text-ink outline-none focus:border-brand/50"
             />
           )}
 
           {/* Search */}
           <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#1C0800]/30" />
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/30" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Order # / table / name"
-              className="h-8 w-44 rounded-lg border border-[#E8D5C0] bg-[#FFF6EE] pl-7 pr-3 text-xs text-[#1C0800] placeholder-[#1C0800]/30 outline-none focus:border-[#E8380D]/50"
+              className="h-8 w-44 rounded-lg border border-border bg-mist pl-7 pr-3 text-xs text-ink placeholder-ink/30 outline-none focus:border-brand/50"
             />
           </div>
 
           <button
             onClick={() => void load(1)}
             disabled={loading}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-[#1C0800]/40 transition-colors hover:bg-[#1C0800]/5 hover:text-[#1C0800]/70 disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-ink/40 transition-colors hover:bg-ink/5 hover:text-ink/70 disabled:opacity-40"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             Refresh
@@ -170,15 +170,15 @@ export function OrdersPage() {
       </div>
 
       {/* Status chips */}
-      <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-[#E8D5C0] bg-white px-5 pb-2 pt-2">
+      <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border bg-canvas px-5 pb-2 pt-2">
         {STATUSES.map(s => (
           <button
             key={s}
             onClick={() => setStatus(s)}
             className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors ${
               status === s
-                ? 'bg-[#E8380D] text-white'
-                : 'bg-[#1C0800]/5 text-[#1C0800]/50 hover:bg-[#1C0800]/10 hover:text-[#1C0800]'
+                ? 'bg-brand text-white'
+                : 'bg-ink/5 text-ink/50 hover:bg-ink/10 hover:text-ink'
             }`}
           >
             {s === 'all' ? 'All orders' : s}
@@ -189,7 +189,7 @@ export function OrdersPage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {error && (
-          <div className="m-4 rounded-lg border border-[#E8380D]/20 bg-[#E8380D]/10 px-4 py-3 text-sm text-[#E8380D]">
+          <div className="m-4 rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
             {error}
           </div>
         )}
@@ -199,19 +199,19 @@ export function OrdersPage() {
             <Spinner size="lg" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex h-48 flex-col items-center justify-center text-center text-[#1C0800]/30">
+          <div className="flex h-48 flex-col items-center justify-center text-center text-ink/30">
             <p className="text-sm">No orders found</p>
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-white">
-              <tr className="border-b border-[#E8D5C0] text-left">
-                <th className="px-5 py-2.5 text-xs font-semibold text-[#1C0800]/40">Order</th>
-                <th className="px-3 py-2.5 text-xs font-semibold text-[#1C0800]/40">Table</th>
-                <th className="px-3 py-2.5 text-xs font-semibold text-[#1C0800]/40">Source</th>
-                <th className="px-3 py-2.5 text-xs font-semibold text-[#1C0800]/40">Time</th>
-                <th className="px-3 py-2.5 text-xs font-semibold text-[#1C0800]/40">Status</th>
-                <th className="px-5 py-2.5 text-right text-xs font-semibold text-[#1C0800]/40">Amount</th>
+            <thead className="sticky top-0 bg-canvas">
+              <tr className="border-b border-border text-left">
+                <th className="px-5 py-2.5 text-xs font-semibold text-ink/40">Order</th>
+                <th className="px-3 py-2.5 text-xs font-semibold text-ink/40">Table</th>
+                <th className="px-3 py-2.5 text-xs font-semibold text-ink/40">Source</th>
+                <th className="px-3 py-2.5 text-xs font-semibold text-ink/40">Time</th>
+                <th className="px-3 py-2.5 text-xs font-semibold text-ink/40">Status</th>
+                <th className="px-5 py-2.5 text-right text-xs font-semibold text-ink/40">Amount</th>
               </tr>
             </thead>
             <tbody>
@@ -219,45 +219,45 @@ export function OrdersPage() {
                 <Fragment key={order._id}>
                   <tr
                     onClick={() => setExpanded(expanded === order._id ? null : order._id)}
-                    className="cursor-pointer border-b border-[#E8D5C0]/60 transition-colors hover:bg-[#FFF6EE]"
+                    className="cursor-pointer border-b border-border/60 transition-colors hover:bg-mist"
                   >
                     <td className="px-5 py-3">
-                      <span className="font-mono text-xs font-semibold text-[#1C0800]">
+                      <span className="font-mono text-xs font-semibold text-ink">
                         #{order.orderNumber}
                       </span>
                       {order.isParcel && (
-                        <span className="ml-2 rounded bg-[#E8380D]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#E8380D]">
+                        <span className="ml-2 rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-medium text-brand">
                           Parcel
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-3 font-medium text-[#1C0800]">{order.tableNumber}</td>
-                    <td className="px-3 py-3 text-xs text-[#1C0800]/50">
+                    <td className="px-3 py-3 font-medium text-ink">{order.tableNumber}</td>
+                    <td className="px-3 py-3 text-xs text-ink/50">
                       {SOURCE_LABELS[order.orderSource] ?? order.orderSource}
                     </td>
-                    <td className="px-3 py-3 text-xs text-[#1C0800]/50">
+                    <td className="px-3 py-3 text-xs text-ink/50">
                       <div>{fmtTime(order.createdAt)}</div>
-                      <div className="text-[10px] text-[#1C0800]/30">{fmtDate(order.createdAt)}</div>
+                      <div className="text-[10px] text-ink/30">{fmtDate(order.createdAt)}</div>
                     </td>
                     <td className="px-3 py-3">
                       <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium capitalize ${STATUS_COLORS[order.status] ?? ''}`}>
                         {order.status}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-right font-semibold tabular-nums text-[#1C0800]">
+                    <td className="px-5 py-3 text-right font-semibold tabular-nums text-ink">
                       {sym}{order.grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                     </td>
                   </tr>
 
                   {expanded === order._id && (
-                    <tr key={`${order._id}-detail`} className="bg-[#FFF6EE]/60">
+                    <tr key={`${order._id}-detail`} className="bg-mist/60">
                       <td colSpan={6} className="px-5 py-3">
                         <div className="flex flex-wrap gap-6">
                           <div className="min-w-48">
-                            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#1C0800]/30">Items</p>
+                            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-ink/30">Items</p>
                             <ul className="space-y-1">
                               {order.items.map((item, i) => (
-                                <li key={i} className="flex justify-between gap-4 text-xs text-[#1C0800]/70">
+                                <li key={i} className="flex justify-between gap-4 text-xs text-ink/70">
                                   <span>{item.quantity}× {item.productName}</span>
                                   <span className="tabular-nums">{sym}{item.total.toFixed(2)}</span>
                                 </li>
@@ -265,8 +265,8 @@ export function OrdersPage() {
                             </ul>
                           </div>
                           <div>
-                            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#1C0800]/30">Summary</p>
-                            <div className="space-y-0.5 text-xs text-[#1C0800]/60">
+                            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-ink/30">Summary</p>
+                            <div className="space-y-0.5 text-xs text-ink/60">
                               <div className="flex justify-between gap-8">
                                 <span>Subtotal</span>
                                 <span className="tabular-nums">{sym}{order.subtotal.toFixed(2)}</span>
@@ -278,15 +278,15 @@ export function OrdersPage() {
                               {(order.discountAmount ?? 0) > 0 && (
                                 <div className="flex justify-between gap-8">
                                   <span>Discount</span>
-                                  <span className="tabular-nums text-[#E8380D]">-{sym}{(order.discountAmount ?? 0).toFixed(2)}</span>
+                                  <span className="tabular-nums text-brand">-{sym}{(order.discountAmount ?? 0).toFixed(2)}</span>
                                 </div>
                               )}
                             </div>
                           </div>
                           {order.customerName && (
                             <div>
-                              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#1C0800]/30">Customer</p>
-                              <p className="text-xs text-[#1C0800]/70">{order.customerName}</p>
+                              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-ink/30">Customer</p>
+                              <p className="text-xs text-ink/70">{order.customerName}</p>
                             </div>
                           )}
                         </div>
@@ -302,22 +302,22 @@ export function OrdersPage() {
 
       {/* Pagination */}
       {pages > 1 && (
-        <div className="flex shrink-0 items-center justify-between border-t border-[#E8D5C0] bg-white px-5 py-2.5">
-          <span className="text-xs text-[#1C0800]/40">
+        <div className="flex shrink-0 items-center justify-between border-t border-border bg-canvas px-5 py-2.5">
+          <span className="text-xs text-ink/40">
             Page {page} of {pages} · {total} orders
           </span>
           <div className="flex items-center gap-1">
             <button
               disabled={page <= 1 || loading}
               onClick={() => void load(page - 1)}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#E8D5C0] text-[#1C0800]/40 transition-colors hover:bg-[#1C0800]/5 disabled:opacity-30"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-border text-ink/40 transition-colors hover:bg-ink/5 disabled:opacity-30"
             >
               <ChevronLeft size={14} />
             </button>
             <button
               disabled={page >= pages || loading}
               onClick={() => void load(page + 1)}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#E8D5C0] text-[#1C0800]/40 transition-colors hover:bg-[#1C0800]/5 disabled:opacity-30"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-border text-ink/40 transition-colors hover:bg-ink/5 disabled:opacity-30"
             >
               <ChevronRight size={14} />
             </button>
