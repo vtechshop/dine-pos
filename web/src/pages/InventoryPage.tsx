@@ -56,6 +56,9 @@ export function InventoryPage() {
 
   const lowStockIds = useMemo(() => new Set(lowStock.map(i => i._id)), [lowStock]);
 
+  const [visibleCount, setVisibleCount] = useState(50);
+  useEffect(() => { setVisibleCount(50); }, [visible]);
+
   async function handleDelete(i: Ingredient) {
     if (!confirm(`Delete "${i.name}"?`)) return;
     try {
@@ -164,6 +167,7 @@ export function InventoryPage() {
             )}
           </div>
         ) : (
+          <>
           <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
@@ -187,7 +191,7 @@ export function InventoryPage() {
               </tr>
             </thead>
             <tbody>
-              {visible.map(i => {
+              {visible.slice(0, visibleCount).map(i => {
                 const isLow = lowStockIds.has(i._id);
                 return (
                   <tr
@@ -246,6 +250,18 @@ export function InventoryPage() {
             </tbody>
           </table>
           </div>
+          {visible.length > visibleCount && (
+            <div className="flex items-center justify-center gap-3 py-4 text-xs">
+              <span className="text-ink/40">Showing {visibleCount} of {visible.length}</span>
+              <button
+                onClick={() => setVisibleCount(c => c + 50)}
+                className="rounded-lg border border-border px-3 py-1.5 text-ink/50 hover:bg-mist"
+              >
+                Load {Math.min(50, visible.length - visibleCount)} more
+              </button>
+            </div>
+          )}
+          </>
         )}
       </div>
 

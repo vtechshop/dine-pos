@@ -178,6 +178,9 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
     return ps;
   }, [products, catFilter, vegFilter, availFilter, search]);
 
+  const [visibleCount, setVisibleCount] = useState(50);
+  useEffect(() => { setVisibleCount(50); }, [visible]);
+
   async function toggleAvail(p: Product) {
     if (toggling.has(p._id)) return;
     setToggling(prev => new Set([...prev, p._id]));
@@ -395,6 +398,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
             )}
           </div>
         ) : (
+          <>
           <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
@@ -422,7 +426,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
               </tr>
             </thead>
             <tbody>
-              {visible.map(p => {
+              {visible.slice(0, visibleCount).map(p => {
                 const color = p.category?.color ?? '#888';
                 const name  = p.category?.name  ?? '—';
                 return (
@@ -518,6 +522,18 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
             </tbody>
           </table>
           </div>
+          {visible.length > visibleCount && (
+            <div className="flex items-center justify-center gap-3 py-4 text-xs">
+              <span className="text-ink/40">Showing {visibleCount} of {visible.length}</span>
+              <button
+                onClick={() => setVisibleCount(c => c + 50)}
+                className="rounded-lg border border-border px-3 py-1.5 text-ink/50 hover:bg-mist"
+              >
+                Load {Math.min(50, visible.length - visibleCount)} more
+              </button>
+            </div>
+          )}
+          </>
         )}
       </div>
 
