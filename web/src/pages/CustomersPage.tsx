@@ -184,9 +184,9 @@ export function CustomersPage() {
   if (!featureEnabled) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-center">
-        <Star size={40} className="mb-3 text-[#1C0800]/10" />
-        <p className="text-sm font-medium text-[#1C0800]/40">Loyalty program not enabled</p>
-        <p className="mt-1 text-xs text-[#1C0800]/25">
+        <Star size={40} className="mb-3 text-ink/10" />
+        <p className="text-sm font-medium text-ink/40">Loyalty program not enabled</p>
+        <p className="mt-1 text-xs text-ink/25">
           Enable it in hotel settings to access Customers &amp; CRM.
         </p>
       </div>
@@ -198,17 +198,17 @@ export function CustomersPage() {
   return (
     <div className="flex h-full flex-col">
       {/* ── Header / tabs / toolbar ── */}
-      <div className="shrink-0 border-b border-[#E8D5C0] bg-white">
+      <div className="shrink-0 border-b border-border bg-canvas">
         {/* Tab row */}
-        <div className="flex items-center border-b border-[#E8D5C0] px-5">
+        <div className="flex items-center border-b border-border px-5">
           {(['customers', 'loyalty'] as Tab[]).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-3 text-xs font-semibold capitalize transition-colors ${
                 activeTab === tab
-                  ? 'border-[#E8380D] text-[#E8380D]'
-                  : 'border-transparent text-[#1C0800]/40 hover:text-[#1C0800]'
+                  ? 'border-brand text-brand'
+                  : 'border-transparent text-ink/40 hover:text-ink'
               }`}
             >
               {tab === 'customers'
@@ -217,7 +217,7 @@ export function CustomersPage() {
               }
             </button>
           ))}
-          <span className="ml-auto pr-1 text-[10px] text-[#1C0800]/30">
+          <span className="ml-auto pr-1 text-[10px] text-ink/30">
             {total > 0 ? `${total} total` : ''}
           </span>
         </div>
@@ -226,14 +226,14 @@ export function CustomersPage() {
         {activeTab === 'customers' && (
           <div className="flex items-center gap-2 px-4 py-2.5">
             <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#1C0800]/30" />
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/30" />
               <input
                 ref={searchInputRef}
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Name or phone… (F4)"
-                className="h-8 w-52 rounded-lg border border-[#E8D5C0] bg-[#FFF6EE] pl-8 pr-3 text-xs text-[#1C0800] placeholder-[#1C0800]/30 outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
+                className="h-8 w-52 rounded-lg border border-border bg-mist pl-8 pr-3 text-xs text-ink placeholder-ink/30 outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
               />
             </div>
 
@@ -244,8 +244,8 @@ export function CustomersPage() {
                   onClick={() => setStatusFilter(f)}
                   className={`rounded-lg px-2.5 py-1.5 text-xs font-medium capitalize transition-colors ${
                     statusFilter === f
-                      ? 'bg-[#E8380D] text-white'
-                      : 'bg-[#1C0800]/5 text-[#1C0800]/50 hover:bg-[#1C0800]/10'
+                      ? 'bg-brand text-white'
+                      : 'bg-ink/5 text-ink/50 hover:bg-ink/10'
                   }`}
                 >
                   {f}
@@ -264,8 +264,8 @@ export function CustomersPage() {
                   onClick={() => setSortMode(mode)}
                   className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
                     sortMode === mode
-                      ? 'bg-[#1C0800] text-white'
-                      : 'bg-[#1C0800]/5 text-[#1C0800]/50 hover:bg-[#1C0800]/10'
+                      ? 'bg-ink text-white'
+                      : 'bg-ink/5 text-ink/50 hover:bg-ink/10'
                   }`}
                 >
                   {label}
@@ -276,7 +276,7 @@ export function CustomersPage() {
             <button
               onClick={() => { setCustomers([]); void loadCustomers(search, 1, false); }}
               disabled={listLoading}
-              className="ml-auto rounded-lg p-1.5 text-[#1C0800]/30 hover:bg-[#1C0800]/5 disabled:opacity-40"
+              className="ml-auto rounded-lg p-1.5 text-ink/30 hover:bg-ink/5 disabled:opacity-40"
               title="Refresh"
             >
               <RefreshCw size={13} className={listLoading ? 'animate-spin' : ''} />
@@ -289,7 +289,7 @@ export function CustomersPage() {
       {activeTab === 'customers' ? (
         <div className="flex flex-1 overflow-hidden">
           {/* Left panel: customer list */}
-          <div className="flex w-80 shrink-0 flex-col overflow-hidden border-r border-[#E8D5C0] bg-white">
+          <div className="flex w-80 shrink-0 flex-col overflow-hidden border-r border-border bg-canvas">
             <div className="flex-1 overflow-y-auto">
               {listError && (
                 <div className="border-b border-red-100 bg-red-50 px-4 py-2.5 text-xs text-red-600">
@@ -302,8 +302,8 @@ export function CustomersPage() {
                   <Spinner size="md" />
                 </div>
               ) : visibleCustomers.length === 0 ? (
-                <div className="flex h-48 flex-col items-center justify-center text-center text-[#1C0800]/30">
-                  <Users size={24} className="mb-2 text-[#1C0800]/15" />
+                <div className="flex h-48 flex-col items-center justify-center text-center text-ink/30">
+                  <Users size={24} className="mb-2 text-ink/15" />
                   <p className="text-sm">
                     {search ? 'No customers found' : 'No customers yet'}
                   </p>
@@ -323,7 +323,7 @@ export function CustomersPage() {
                 <div className="px-4 py-3">
                   <button
                     onClick={() => void loadCustomers(search, page + 1, true)}
-                    className="w-full rounded-lg border border-[#E8D5C0] py-2 text-xs text-[#1C0800]/50 hover:bg-[#1C0800]/5"
+                    className="w-full rounded-lg border border-border py-2 text-xs text-ink/50 hover:bg-ink/5"
                   >
                     Load more ({total - customers.length} remaining)
                   </button>
@@ -339,7 +339,7 @@ export function CustomersPage() {
           </div>
 
           {/* Right panel: detail */}
-          <div className="flex flex-1 flex-col overflow-hidden bg-[#FFF6EE]">
+          <div className="flex flex-1 flex-col overflow-hidden bg-mist">
             {selectedId?.startsWith('orderonly:') ? (
               (() => {
                 const oc = orderCustomersMap.get(selectedId.slice('orderonly:'.length));
@@ -362,9 +362,9 @@ export function CustomersPage() {
               />
             ) : (
               <div className="flex h-full flex-col items-center justify-center text-center">
-                <Users size={36} className="mb-3 text-[#1C0800]/10" />
-                <p className="text-sm text-[#1C0800]/30">Select a customer to view details</p>
-                <p className="mt-1 text-xs text-[#1C0800]/20">Search by name or phone number</p>
+                <Users size={36} className="mb-3 text-ink/10" />
+                <p className="text-sm text-ink/30">Select a customer to view details</p>
+                <p className="mt-1 text-xs text-ink/20">Search by name or phone number</p>
               </div>
             )}
           </div>
@@ -374,10 +374,10 @@ export function CustomersPage() {
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
           {/* Config card */}
           {config && (
-            <div className="rounded-xl border border-[#E8D5C0] bg-white p-5">
+            <div className="rounded-xl border border-border bg-canvas p-5">
               <div className="mb-4 flex items-center gap-2">
-                <Star size={14} className="text-[#E8380D]" />
-                <h2 className="text-sm font-semibold text-[#1C0800]">
+                <Star size={14} className="text-brand" />
+                <h2 className="text-sm font-semibold text-ink">
                   {rewardName} Program
                 </h2>
               </div>
@@ -388,9 +388,9 @@ export function CustomersPage() {
                   { label: 'Max redeem',  value: `${config.maximumRedeemPercent}% of bill` },
                   { label: 'Expiry',      value: config.expiryDays === 0 ? 'Never' : `${config.expiryDays} days` },
                 ].map(({ label, value }) => (
-                  <div key={label} className="rounded-lg bg-[#FFF6EE] px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-wider text-[#1C0800]/40">{label}</p>
-                    <p className="mt-0.5 text-sm font-semibold text-[#1C0800]">{value}</p>
+                  <div key={label} className="rounded-lg bg-mist px-3 py-2.5">
+                    <p className="text-[10px] uppercase tracking-wider text-ink/40">{label}</p>
+                    <p className="mt-0.5 text-sm font-semibold text-ink">{value}</p>
                   </div>
                 ))}
               </div>
@@ -404,25 +404,25 @@ export function CustomersPage() {
           ) : (
             <div className="grid gap-6 lg:grid-cols-2">
               {/* Top Customers */}
-              <div className="overflow-hidden rounded-xl border border-[#E8D5C0] bg-white">
-                <div className="flex items-center gap-2 border-b border-[#E8D5C0] px-5 py-3">
-                  <Award size={14} className="text-[#E8380D]" />
-                  <h3 className="text-sm font-semibold text-[#1C0800]">
+              <div className="overflow-hidden rounded-xl border border-border bg-canvas">
+                <div className="flex items-center gap-2 border-b border-border px-5 py-3">
+                  <Award size={14} className="text-brand" />
+                  <h3 className="text-sm font-semibold text-ink">
                     Top by {rewardName} Balance
                   </h3>
                 </div>
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-[#FFF6EE]">
-                      <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">#</th>
-                      <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">Customer</th>
-                      <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">{rewardName}</th>
+                    <tr className="bg-mist">
+                      <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">#</th>
+                      <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">Customer</th>
+                      <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">{rewardName}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#E8D5C0]">
+                  <tbody className="divide-y divide-border">
                     {topByBalance.length === 0 ? (
                       <tr>
-                        <td colSpan={3} className="px-5 py-6 text-center text-xs text-[#1C0800]/30">
+                        <td colSpan={3} className="px-5 py-6 text-center text-xs text-ink/30">
                           No customers yet
                         </td>
                       </tr>
@@ -430,14 +430,14 @@ export function CustomersPage() {
                       <tr
                         key={c._id}
                         onClick={() => { setActiveTab('customers'); setSelectedId(c._id); }}
-                        className="cursor-pointer transition-colors hover:bg-[#FFF6EE]"
+                        className="cursor-pointer transition-colors hover:bg-mist"
                       >
-                        <td className="px-5 py-2.5 text-xs tabular-nums text-[#1C0800]/30">{i + 1}</td>
+                        <td className="px-5 py-2.5 text-xs tabular-nums text-ink/30">{i + 1}</td>
                         <td className="px-5 py-2.5">
-                          <p className="text-xs font-medium text-[#1C0800]">{c.name}</p>
-                          <p className="text-[10px] text-[#1C0800]/40">{c.phone ?? '—'}</p>
+                          <p className="text-xs font-medium text-ink">{c.name}</p>
+                          <p className="text-[10px] text-ink/40">{c.phone ?? '—'}</p>
                         </td>
-                        <td className="px-5 py-2.5 text-right text-sm font-bold tabular-nums text-[#E8380D]">
+                        <td className="px-5 py-2.5 text-right text-sm font-bold tabular-nums text-brand">
                           {c.loyaltyBalance.toLocaleString()}
                         </td>
                       </tr>
@@ -447,23 +447,23 @@ export function CustomersPage() {
               </div>
 
               {/* Repeat Customers */}
-              <div className="overflow-hidden rounded-xl border border-[#E8D5C0] bg-white">
-                <div className="flex items-center gap-2 border-b border-[#E8D5C0] px-5 py-3">
-                  <TrendingUp size={14} className="text-[#E8380D]" />
-                  <h3 className="text-sm font-semibold text-[#1C0800]">Most Frequent Visitors</h3>
+              <div className="overflow-hidden rounded-xl border border-border bg-canvas">
+                <div className="flex items-center gap-2 border-b border-border px-5 py-3">
+                  <TrendingUp size={14} className="text-brand" />
+                  <h3 className="text-sm font-semibold text-ink">Most Frequent Visitors</h3>
                 </div>
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-[#FFF6EE]">
-                      <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">#</th>
-                      <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">Customer</th>
-                      <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-[#1C0800]/40">Visits</th>
+                    <tr className="bg-mist">
+                      <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">#</th>
+                      <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">Customer</th>
+                      <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Visits</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#E8D5C0]">
+                  <tbody className="divide-y divide-border">
                     {topByVisits.length === 0 ? (
                       <tr>
-                        <td colSpan={3} className="px-5 py-6 text-center text-xs text-[#1C0800]/30">
+                        <td colSpan={3} className="px-5 py-6 text-center text-xs text-ink/30">
                           No customers yet
                         </td>
                       </tr>
@@ -471,14 +471,14 @@ export function CustomersPage() {
                       <tr
                         key={c._id}
                         onClick={() => { setActiveTab('customers'); setSelectedId(c._id); }}
-                        className="cursor-pointer transition-colors hover:bg-[#FFF6EE]"
+                        className="cursor-pointer transition-colors hover:bg-mist"
                       >
-                        <td className="px-5 py-2.5 text-xs tabular-nums text-[#1C0800]/30">{i + 1}</td>
+                        <td className="px-5 py-2.5 text-xs tabular-nums text-ink/30">{i + 1}</td>
                         <td className="px-5 py-2.5">
-                          <p className="text-xs font-medium text-[#1C0800]">{c.name}</p>
-                          <p className="text-[10px] text-[#1C0800]/40">{c.phone ?? '—'}</p>
+                          <p className="text-xs font-medium text-ink">{c.name}</p>
+                          <p className="text-[10px] text-ink/40">{c.phone ?? '—'}</p>
                         </td>
-                        <td className="px-5 py-2.5 text-right text-sm font-bold tabular-nums text-[#1C0800]">
+                        <td className="px-5 py-2.5 text-right text-sm font-bold tabular-nums text-ink">
                           {c.visitCount}
                         </td>
                       </tr>

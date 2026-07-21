@@ -39,17 +39,17 @@ export function CustomerRow({ customer, isSelected, onClick }: Props) {
   return (
     <button
       onClick={onClick}
-      className={`w-full border-b border-[#E8D5C0] border-l-2 flex items-start gap-3 px-4 py-3 text-left transition-colors ${
+      className={`w-full border-b border-border border-l-2 flex items-start gap-3 px-4 py-3 text-left transition-colors ${
         isSelected
-          ? 'border-l-[#E8380D] bg-[#E8380D]/[0.06]'
-          : 'border-l-transparent hover:bg-[#1C0800]/[0.03]'
+          ? 'border-l-brand bg-brand/[0.06]'
+          : 'border-l-transparent hover:bg-ink/[0.03]'
       }`}
     >
       <div
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
           status === 'blocked'
             ? 'bg-red-100 text-red-600'
-            : 'bg-[#E8380D]/15 text-[#E8380D]'
+            : 'bg-brand/15 text-brand'
         }`}
       >
         {initials(name)}
@@ -57,32 +57,32 @@ export function CustomerRow({ customer, isSelected, onClick }: Props) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-medium text-[#1C0800]">{name}</span>
+          <span className="truncate text-sm font-medium text-ink">{name}</span>
           {status === 'blocked' && (
             <span className="shrink-0 rounded bg-red-50 px-1 text-[9px] font-semibold uppercase tracking-wide text-red-500">
               Blocked
             </span>
           )}
         </div>
-        <p className="mt-0.5 text-xs text-[#1C0800]/40">{formatPhone(phone)}</p>
+        <p className="mt-0.5 text-xs text-ink/40">{formatPhone(phone)}</p>
       </div>
 
       <div className="shrink-0 text-right">
         {customer._orderOnly ? (
           <>
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-[#1C0800]/30">
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-ink/30">
               History only
             </p>
-            <p className="mt-0.5 text-[10px] text-[#1C0800]/30">
+            <p className="mt-0.5 text-[10px] text-ink/30">
               {visitCount}× · {timeAgo(lastVisitAt)}
             </p>
           </>
         ) : (
           <>
-            <p className="text-xs font-semibold text-[#1C0800] tabular-nums">
+            <p className="text-xs font-semibold text-ink tabular-nums">
               {loyaltyBalance > 0 ? `${loyaltyBalance.toLocaleString()} pts` : '—'}
             </p>
-            <p className="mt-0.5 text-[10px] text-[#1C0800]/30">
+            <p className="mt-0.5 text-[10px] text-ink/30">
               {visitCount}v · {timeAgo(lastVisitAt)}
             </p>
           </>

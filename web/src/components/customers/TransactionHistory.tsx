@@ -66,7 +66,7 @@ export function TransactionHistory({ customerId, rewardName }: Props) {
 
   if (txns.length === 0) {
     return (
-      <p className="py-6 text-center text-xs text-[#1C0800]/30">
+      <p className="py-6 text-center text-xs text-ink/30">
         No {rewardName} transactions yet
       </p>
     );
@@ -74,7 +74,7 @@ export function TransactionHistory({ customerId, rewardName }: Props) {
 
   return (
     <div>
-      <div className="divide-y divide-[#E8D5C0]">
+      <div className="divide-y divide-border">
         {txns.map(tx => {
           const { label, cls } = TYPE_CFG[tx.transactionType];
           const positive = tx.points > 0;
@@ -84,14 +84,14 @@ export function TransactionHistory({ customerId, rewardName }: Props) {
                 {label}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs text-[#1C0800]/70">{tx.remarks || '—'}</p>
-                <p className="mt-0.5 text-[10px] text-[#1C0800]/30">{fmtDateTime(tx.createdAt)}</p>
+                <p className="truncate text-xs text-ink/70">{tx.remarks || '—'}</p>
+                <p className="mt-0.5 text-[10px] text-ink/30">{fmtDateTime(tx.createdAt)}</p>
               </div>
               <div className="shrink-0 text-right">
                 <p className={`text-xs font-semibold tabular-nums ${positive ? 'text-green-600' : 'text-red-500'}`}>
                   {positive ? '+' : ''}{tx.points}
                 </p>
-                <p className="mt-0.5 text-[10px] tabular-nums text-[#1C0800]/30">
+                <p className="mt-0.5 text-[10px] tabular-nums text-ink/30">
                   {tx.balanceAfter} bal
                 </p>
               </div>
@@ -104,7 +104,7 @@ export function TransactionHistory({ customerId, rewardName }: Props) {
         <button
           onClick={() => void load(page + 1, true)}
           disabled={loading}
-          className="mt-3 w-full rounded-lg border border-[#E8D5C0] py-2 text-xs text-[#1C0800]/50 hover:bg-[#1C0800]/5 disabled:opacity-40"
+          className="mt-3 w-full rounded-lg border border-border py-2 text-xs text-ink/50 hover:bg-ink/5 disabled:opacity-40"
         >
           {loading ? 'Loading…' : `Load more (${total - txns.length} remaining)`}
         </button>

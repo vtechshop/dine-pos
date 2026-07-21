@@ -44,7 +44,7 @@ const TAG_COLORS: Record<string, string> = {
 };
 
 function TagChip({ tag }: { tag: string }) {
-  const cls = TAG_COLORS[tag] ?? 'bg-[#1C0800]/5 text-[#1C0800]/60 border-[#E8D5C0]';
+  const cls = TAG_COLORS[tag] ?? 'bg-ink/5 text-ink/60 border-border';
   return (
     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${cls}`}>
       {tag}
@@ -159,13 +159,13 @@ export function CustomerDetail({
   return (
     <div className="h-full overflow-y-auto">
       {/* Header */}
-      <div className="border-b border-[#E8D5C0] bg-white px-6 py-5">
+      <div className="border-b border-border bg-canvas px-6 py-5">
         <div className="flex items-start gap-4">
           <div
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
               customer.status === 'blocked'
                 ? 'bg-red-100 text-red-600'
-                : 'bg-[#E8380D]/15 text-[#E8380D]'
+                : 'bg-brand/15 text-brand'
             }`}
           >
             {initials(customer.name)}
@@ -173,7 +173,7 @@ export function CustomerDetail({
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-semibold text-[#1C0800]">{customer.name}</h2>
+              <h2 className="text-base font-semibold text-ink">{customer.name}</h2>
               {customer.status === 'blocked' && (
                 <span className="rounded bg-red-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-500">
                   Blocked
@@ -185,7 +185,7 @@ export function CustomerDetail({
                 </span>
               )}
             </div>
-            <p className="mt-0.5 text-[10px] text-[#1C0800]/40">{customer.customerId}</p>
+            <p className="mt-0.5 text-[10px] text-ink/40">{customer.customerId}</p>
 
             {customer.tags.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1">
@@ -197,26 +197,26 @@ export function CustomerDetail({
 
         {/* Contact grid */}
         <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2">
-          <div className="flex items-center gap-1.5 text-xs text-[#1C0800]/60">
-            <Phone size={11} className="shrink-0 text-[#1C0800]/30" />
+          <div className="flex items-center gap-1.5 text-xs text-ink/60">
+            <Phone size={11} className="shrink-0 text-ink/30" />
             {formatPhone(customer.phone)}
           </div>
           {customer.email && (
-            <div className="flex items-center gap-1.5 text-xs text-[#1C0800]/60">
-              <Mail size={11} className="shrink-0 text-[#1C0800]/30" />
+            <div className="flex items-center gap-1.5 text-xs text-ink/60">
+              <Mail size={11} className="shrink-0 text-ink/30" />
               <span className="truncate">{customer.email}</span>
             </div>
           )}
           {customer.birthday && (
-            <div className="flex items-center gap-1.5 text-xs text-[#1C0800]/60">
-              <Calendar size={11} className="shrink-0 text-[#1C0800]/30" />
+            <div className="flex items-center gap-1.5 text-xs text-ink/60">
+              <Calendar size={11} className="shrink-0 text-ink/30" />
               {formatBirthday(customer.birthday)}
             </div>
           )}
-          <div className="flex items-center gap-1.5 text-xs text-[#1C0800]/60">
+          <div className="flex items-center gap-1.5 text-xs text-ink/60">
             <Heart
               size={11}
-              className={`shrink-0 ${customer.marketingOptIn ? 'text-[#E8380D]' : 'text-[#1C0800]/20'}`}
+              className={`shrink-0 ${customer.marketingOptIn ? 'text-brand' : 'text-ink/20'}`}
             />
             {customer.marketingOptIn ? 'Marketing opt-in' : 'No marketing'}
           </div>
@@ -224,7 +224,7 @@ export function CustomerDetail({
       </div>
 
       {/* Stats strip */}
-      <div className="grid grid-cols-4 divide-x divide-[#E8D5C0] border-b border-[#E8D5C0] bg-[#FFF6EE]">
+      <div className="grid grid-cols-4 divide-x divide-border border-b border-border bg-mist">
         {[
           { label: 'Visits',    value: customer.visitCount.toString() },
           { label: 'Lifetime',  value: formatCurrency(customer.lifetimeSpend, currencySymbol) },
@@ -232,28 +232,28 @@ export function CustomerDetail({
           { label: 'Last Visit', value: formatDate(customer.lastVisitAt) },
         ].map(({ label, value }) => (
           <div key={label} className="px-3 py-3 text-center">
-            <p className="text-[10px] uppercase tracking-wider text-[#1C0800]/40">{label}</p>
-            <p className="mt-0.5 text-sm font-semibold tabular-nums text-[#1C0800]">{value}</p>
+            <p className="text-[10px] uppercase tracking-wider text-ink/40">{label}</p>
+            <p className="mt-0.5 text-sm font-semibold tabular-nums text-ink">{value}</p>
           </div>
         ))}
       </div>
 
       {/* Loyalty section */}
-      <div className="border-b border-[#E8D5C0] px-6 py-5">
+      <div className="border-b border-border px-6 py-5">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Star size={13} className="text-[#E8380D]" />
-            <span className="text-sm font-semibold text-[#1C0800]">{rewardName} Balance</span>
+            <Star size={13} className="text-brand" />
+            <span className="text-sm font-semibold text-ink">{rewardName} Balance</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xl font-bold tabular-nums text-[#E8380D]">
+            <span className="text-xl font-bold tabular-nums text-brand">
               {customer.loyaltyBalance.toLocaleString()}
             </span>
-            <span className="text-xs text-[#1C0800]/40">{rewardName}</span>
+            <span className="text-xs text-ink/40">{rewardName}</span>
           </div>
         </div>
 
-        <p className="text-[10px] text-[#1C0800]/30">
+        <p className="text-[10px] text-ink/30">
           Member since {formatDate(customer.firstVisitAt)}
         </p>
 
@@ -262,20 +262,20 @@ export function CustomerDetail({
             {!showAdjust ? (
               <button
                 onClick={() => setShowAdjust(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-[#E8D5C0] px-3 py-1.5 text-xs text-[#1C0800]/50 hover:bg-[#1C0800]/5 hover:text-[#1C0800]"
+                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5 hover:text-ink"
               >
                 <Plus size={11} />
                 Adjust {rewardName}
               </button>
             ) : (
-              <div className="space-y-2 rounded-lg border border-[#E8D5C0] bg-[#FFF6EE] p-3">
+              <div className="space-y-2 rounded-lg border border-border bg-mist p-3">
                 <input
                   ref={ptsRef}
                   type="number"
                   value={adjustPts}
                   onChange={e => setAdjustPts(e.target.value)}
                   placeholder="Points (positive or negative)"
-                  className="w-full rounded-lg border border-[#E8D5C0] bg-white px-3 py-1.5 text-xs text-[#1C0800] placeholder-[#1C0800]/30 outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
+                  className="w-full rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs text-ink placeholder-ink/30 outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
                   onKeyDown={e => e.key === 'Escape' && cancelAdjust()}
                 />
                 <input
@@ -283,7 +283,7 @@ export function CustomerDetail({
                   value={adjustRemarks}
                   onChange={e => setAdjustRemarks(e.target.value)}
                   placeholder="Remarks (required)"
-                  className="w-full rounded-lg border border-[#E8D5C0] bg-white px-3 py-1.5 text-xs text-[#1C0800] placeholder-[#1C0800]/30 outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20"
+                  className="w-full rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs text-ink placeholder-ink/30 outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
                   onKeyDown={e => {
                     if (e.key === 'Enter')  void handleAdjust();
                     if (e.key === 'Escape') cancelAdjust();
@@ -296,13 +296,13 @@ export function CustomerDetail({
                   <button
                     onClick={() => void handleAdjust()}
                     disabled={adjusting || !adjustPts || !adjustRemarks}
-                    className="rounded-lg bg-[#E8380D] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#E8380D]/90 disabled:opacity-40"
+                    className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-40"
                   >
                     {adjusting ? 'Saving…' : 'Apply'}
                   </button>
                   <button
                     onClick={cancelAdjust}
-                    className="rounded-lg border border-[#E8D5C0] px-3 py-1.5 text-xs text-[#1C0800]/50 hover:bg-[#1C0800]/5"
+                    className="rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5"
                   >
                     Cancel
                   </button>
@@ -315,7 +315,7 @@ export function CustomerDetail({
 
       {/* Transaction history */}
       <div className="px-6 py-5">
-        <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-[#1C0800]/40">
+        <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-ink/40">
           Transaction History
         </h3>
         <TransactionHistory
@@ -327,10 +327,10 @@ export function CustomerDetail({
 
       {customer.notes ? (
         <div className="px-6 pb-6">
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#1C0800]/40">
+          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ink/40">
             Notes
           </h3>
-          <p className="whitespace-pre-wrap text-xs text-[#1C0800]/60">{customer.notes}</p>
+          <p className="whitespace-pre-wrap text-xs text-ink/60">{customer.notes}</p>
         </div>
       ) : null}
     </div>
