@@ -261,7 +261,9 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-canvas px-5 py-2.5">
         <div className="relative">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/40" />
+          <label htmlFor="products-search" className="sr-only">Search products</label>
           <input
+            id="products-search"
             ref={searchRef}
             value={search}
             onChange={e => setSearch(e.target.value)}

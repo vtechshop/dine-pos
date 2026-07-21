@@ -94,7 +94,9 @@ export function InventoryPage() {
               size={13}
               className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/40"
             />
+            <label htmlFor="inventory-search" className="sr-only">Search ingredients</label>
             <input
+              id="inventory-search"
               ref={searchRef}
               value={search}
               onChange={e => setSearch(e.target.value)}

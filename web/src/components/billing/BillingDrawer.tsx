@@ -6,7 +6,6 @@ import type { SplitDetails } from '../../api/billing';
 import { GuestPanel } from './GuestPanel';
 import { PaymentPanel } from './PaymentPanel';
 import { ReceiptView } from './ReceiptView';
-import { Spinner } from '../ui/Spinner';
 import { useSocket } from '../../context/SocketContext';
 import { useShortcut } from '../../hooks/useShortcut';
 
@@ -42,6 +41,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod]     = useState<PaymentMethod>('cash');
   const [splitDetails, setSplitDetails]       = useState<SplitDetails>({ cash: 0, card: 0, upi: 0 });
+  const [paidAmount, setPaidAmount]           = useState(0);
   const [confirming, setConfirming]           = useState(false);
   const [actionError, setActionError]         = useState<string | null>(null);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
@@ -92,6 +92,9 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
     BILLING_EVENTS.forEach(ev => socket.on(ev, handler));
     return () => { BILLING_EVENTS.forEach(ev => socket.off(ev, handler)); };
   }, [socket, bill, sessionId, load]);
+
+  // Reset cash paid amount whenever payment method changes
+  useEffect(() => { setPaidAmount(0); }, [paymentMethod]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -168,6 +171,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
           action: 'bill',
           paymentMethod,
           splitDetails: paymentMethod === 'split' ? splitDetails : undefined,
+          paidAmount: paymentMethod === 'cash' && paidAmount > 0 ? paidAmount : undefined,
         });
         setReceipt({
           mode: 'guest',
@@ -178,6 +182,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
         await load();
         setSelectedGuestId(null);
         setSplitDetails({ cash: 0, card: 0, upi: 0 });
+        setPaidAmount(0);
       }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Payment failed');
@@ -199,6 +204,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
     setSelectedGuestId(guestId);
     setMode('guest');
     setSplitDetails({ cash: 0, card: 0, upi: 0 });
+    setPaidAmount(0);
     setConfirmFlash(true);
     setTimeout(() => setConfirmFlash(false), 1200);
   }
@@ -208,16 +214,16 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
   return (
     <div className="fixed inset-0 z-50 flex items-stretch bg-black/60" onClick={onClose}>
       <div
-        className="relative ml-auto flex h-full w-full max-w-4xl flex-col bg-white shadow-2xl"
+        className="relative ml-auto flex h-full w-full max-w-4xl flex-col bg-canvas shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex shrink-0 items-center gap-3 border-b border-gray-200 bg-gray-900 px-5 py-3 text-white">
+        <div className="flex shrink-0 items-center gap-3 border-b border-white/10 bg-ink px-5 py-3 text-white">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-base font-bold">{tableLabel}</span>
               {bill && (
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-white/40">
                   · Open {elapsedLabel(bill.session.openedAt)}
                   · {bill.guests.length} guest{bill.guests.length !== 1 ? 's' : ''}
                 </span>
@@ -228,14 +234,16 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
           <button
             onClick={() => void load()}
             disabled={loading}
-            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-700 disabled:opacity-40"
+            aria-label="Refresh bill"
+            className="rounded-lg p-1.5 text-white/40 hover:bg-white/10 disabled:opacity-40"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
 
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-700"
+            aria-label="Close billing drawer"
+            className="rounded-lg p-1.5 text-white/40 hover:bg-white/10"
           >
             <X size={16} />
           </button>
@@ -243,8 +251,33 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
 
         {/* Body */}
         {loading && !bill ? (
-          <div className="flex flex-1 items-center justify-center">
-            <Spinner size="lg" />
+          /* Skeleton loaders */
+          <div className="flex flex-1 flex-col overflow-hidden sm:flex-row animate-pulse">
+            {/* Left skeleton */}
+            <div className="flex flex-col gap-3 border-b border-border p-4 sm:w-[55%] sm:border-b-0 sm:border-r">
+              <div className="h-2.5 w-20 rounded bg-border" />
+              {[0, 1, 2].map(i => (
+                <div key={i} className="rounded-xl border border-border p-3 space-y-2">
+                  <div className="flex justify-between">
+                    <div className="h-2.5 w-16 rounded bg-border" />
+                    <div className="h-2.5 w-14 rounded bg-border" />
+                  </div>
+                  <div className="h-2.5 w-28 rounded bg-border" />
+                  <div className="h-7 w-full rounded-lg bg-border/60" />
+                </div>
+              ))}
+            </div>
+            {/* Right skeleton */}
+            <div className="flex flex-col gap-4 p-4 sm:w-[45%]">
+              <div className="h-2.5 w-16 rounded bg-border" />
+              <div className="h-20 rounded-xl bg-border" />
+              <div className="flex gap-2">
+                {[0, 1, 2, 3, 4].map(i => (
+                  <div key={i} className="flex-1 h-9 rounded-lg bg-border/60" />
+                ))}
+              </div>
+              <div className="h-12 rounded-xl bg-border" />
+            </div>
           </div>
         ) : error ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
@@ -257,9 +290,9 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
             </button>
           </div>
         ) : (
-          <div className="flex flex-1 overflow-hidden">
+          <div className="flex flex-1 flex-col overflow-y-auto sm:flex-row sm:overflow-hidden">
             {/* Left: Guest panel */}
-            <div className="flex w-[55%] flex-col overflow-hidden border-r border-gray-200">
+            <div className="flex flex-col border-b border-border sm:w-[55%] sm:border-b-0 sm:border-r sm:overflow-hidden">
               {bill && (
                 <GuestPanel
                   sessionId={sessionId}
@@ -276,7 +309,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
             </div>
 
             {/* Right: Payment panel or receipt overlay */}
-            <div className="flex w-[45%] flex-col overflow-hidden">
+            <div className="flex flex-col sm:w-[45%] sm:overflow-hidden">
               {receipt ? (
                 <ReceiptView
                   guest={receipt.guestBill?.guest ?? null}
@@ -296,7 +329,11 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
                   {bill && (
                     <PaymentPanel
                       mode={mode}
-                      onModeChange={m => { setMode(m); if (m === 'table') setSelectedGuestId(null); }}
+                      onModeChange={m => {
+                        setMode(m);
+                        if (m === 'table') setSelectedGuestId(null);
+                        setPaidAmount(0);
+                      }}
                       selectedGuestBill={selectedGuestBill}
                       grandTotal={grandTotal}
                       activeGuestCount={activeGuestCount}
@@ -305,6 +342,8 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
                       onPaymentMethodChange={setPaymentMethod}
                       splitDetails={splitDetails}
                       onSplitChange={setSplitDetails}
+                      paidAmount={paidAmount}
+                      onPaidAmountChange={setPaidAmount}
                       canConfirm={canConfirm}
                       confirming={confirming}
                       onConfirm={() => void handleConfirm()}
@@ -320,36 +359,36 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
 
       {/* Close confirmation dialog */}
       {showCloseConfirm && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-none" onClick={e => e.stopPropagation()}>
-          <div className="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
-            <h2 className="text-base font-bold text-gray-900 mb-1">Close Dining Session?</h2>
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40" onClick={e => e.stopPropagation()}>
+          <div className="mx-4 w-full max-w-sm rounded-2xl bg-canvas p-6 shadow-2xl">
+            <h2 className="text-base font-bold text-ink mb-1">Close Dining Session?</h2>
             <p className="text-xs text-red-600 mb-4 font-medium">
               This action closes the dining session and cannot be undone.
             </p>
-            <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 mb-5 space-y-2 text-sm">
+            <div className="rounded-xl bg-mist border border-border px-4 py-3 mb-5 space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-500">Table</span>
-                <span className="font-semibold text-gray-800">{tableLabel}</span>
+                <span className="text-ink/50">Table</span>
+                <span className="font-semibold text-ink">{tableLabel}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Active Guests</span>
-                <span className="font-semibold text-gray-800">{activeGuestCount}</span>
+                <span className="text-ink/50">Active Guests</span>
+                <span className="font-semibold text-ink">{activeGuestCount}</span>
               </div>
-              <div className="flex justify-between border-t border-gray-200 pt-2 mt-1">
-                <span className="text-gray-700 font-medium">Running Total</span>
-                <span className="font-bold text-gray-900 tabular-nums">
+              <div className="flex justify-between border-t border-border pt-2 mt-1">
+                <span className="text-ink/70 font-medium">Running Total</span>
+                <span className="font-bold text-ink tabular-nums">
                   {currencySymbol}{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-gray-400">Payment</span>
-                <span className="text-gray-600 font-medium capitalize">{paymentMethod}</span>
+                <span className="text-ink/40">Payment</span>
+                <span className="text-ink/60 font-medium capitalize">{paymentMethod}</span>
               </div>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowCloseConfirm(false)}
-                className="flex-1 rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex-1 rounded-xl border border-border bg-canvas py-2.5 text-sm font-medium text-ink/70 hover:bg-mist transition-colors"
               >
                 Cancel (Esc)
               </button>
