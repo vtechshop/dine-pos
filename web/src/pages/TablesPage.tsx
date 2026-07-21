@@ -269,7 +269,7 @@ export function TablesPage() {
                     <TableForm
                       initial={{
                         number: String(table.number),
-                        name: table.name,
+                        name: table.name || `T${table.number}`,
                         capacity: String(table.capacity),
                         shape: table.shape,
                       }}
