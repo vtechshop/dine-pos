@@ -21,6 +21,7 @@ function fmtDate(iso: string) {
   });
 }
 
+// Semantic status colors — preserved as-is (blue/green/gray/red for status states)
 const STATUS_STYLE: Record<Reservation['status'], string> = {
   confirmed: 'bg-blue-50 text-blue-700 border-blue-200',
   seated:    'bg-green-50 text-green-700 border-green-200',
@@ -78,44 +79,44 @@ function AddForm({ onSave, onCancel, saving, error }: AddFormProps) {
   }
 
   const inputCls =
-    'block w-full rounded-lg border border-[#E8D5C0] bg-white px-3 py-2 text-sm text-[#1C0800] outline-none focus:border-[#E8380D]/50 focus:ring-1 focus:ring-[#E8380D]/20';
+    'block w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20';
 
   const valid = form.customerName.trim() && form.phone.trim() && form.partySize && form.date && form.time;
 
   return (
     <div className="space-y-3">
       {error && (
-        <div className="rounded-lg bg-[#E8380D]/10 px-3 py-2 text-xs text-[#E8380D]">{error}</div>
+        <div className="rounded-lg bg-brand/10 px-3 py-2 text-xs text-brand">{error}</div>
       )}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="mb-1 block text-xs font-semibold text-[#1C0800]/50">Name *</label>
+          <label className="mb-1 block text-xs font-semibold text-ink/50">Name *</label>
           <input className={inputCls} value={form.customerName} onChange={e => set('customerName', e.target.value)} placeholder="Guest name" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-semibold text-[#1C0800]/50">Phone *</label>
+          <label className="mb-1 block text-xs font-semibold text-ink/50">Phone *</label>
           <input className={inputCls} type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="10-digit number" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-semibold text-[#1C0800]/50">Date *</label>
+          <label className="mb-1 block text-xs font-semibold text-ink/50">Date *</label>
           <input className={inputCls} type="date" value={form.date} min={todayStr()} onChange={e => set('date', e.target.value)} />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-semibold text-[#1C0800]/50">Time *</label>
+          <label className="mb-1 block text-xs font-semibold text-ink/50">Time *</label>
           <select className={inputCls} value={form.time} onChange={e => set('time', e.target.value)}>
             {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-semibold text-[#1C0800]/50">Party size *</label>
+          <label className="mb-1 block text-xs font-semibold text-ink/50">Party size *</label>
           <input className={inputCls} type="number" min={1} max={50} value={form.partySize} onChange={e => set('partySize', e.target.value)} />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-semibold text-[#1C0800]/50">Table # (optional)</label>
+          <label className="mb-1 block text-xs font-semibold text-ink/50">Table # (optional)</label>
           <input className={inputCls} type="number" value={form.tableNumber} onChange={e => set('tableNumber', e.target.value)} placeholder="—" />
         </div>
         <div className="col-span-2">
-          <label className="mb-1 block text-xs font-semibold text-[#1C0800]/50">Notes</label>
+          <label className="mb-1 block text-xs font-semibold text-ink/50">Notes</label>
           <input className={inputCls} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Occasion, dietary requirements…" />
         </div>
       </div>
@@ -123,14 +124,14 @@ function AddForm({ onSave, onCancel, saving, error }: AddFormProps) {
         <button
           onClick={() => onSave(form)}
           disabled={saving || !valid}
-          className="flex items-center gap-1.5 rounded-lg bg-[#E8380D] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#C93008] disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
         >
           <Check size={13} />
           {saving ? 'Saving…' : 'Book reservation'}
         </button>
         <button
           onClick={onCancel}
-          className="flex items-center gap-1.5 rounded-lg border border-[#E8D5C0] px-4 py-2 text-xs font-semibold text-[#1C0800]/50 transition-colors hover:bg-[#1C0800]/5"
+          className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-xs font-semibold text-ink/50 transition-colors hover:bg-ink/5"
         >
           <X size={13} />
           Cancel
@@ -156,40 +157,40 @@ function ResRow({ res, onStatusChange, onDelete, acting }: ResRowProps) {
   const isActive = res.status === 'confirmed';
 
   return (
-    <div className="rounded-xl border border-[#E8D5C0] bg-white p-4 transition-shadow hover:shadow-sm">
+    <div className="rounded-xl border border-border bg-canvas p-4 transition-shadow hover:shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-[#1C0800]">{res.customerName}</p>
+            <p className="font-semibold text-ink">{res.customerName}</p>
             <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[res.status]}`}>
               {STATUS_LABELS[res.status]}
             </span>
           </div>
 
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-            <span className="flex items-center gap-1 text-xs text-[#1C0800]/50">
+            <span className="flex items-center gap-1 text-xs text-ink/50">
               <CalendarDays size={11} />
               {fmtDate(res.date.slice(0, 10))}
             </span>
-            <span className="flex items-center gap-1 text-xs text-[#1C0800]/50">
+            <span className="flex items-center gap-1 text-xs text-ink/50">
               <Clock size={11} />
               {res.time}
             </span>
-            <span className="flex items-center gap-1 text-xs text-[#1C0800]/50">
+            <span className="flex items-center gap-1 text-xs text-ink/50">
               <Users size={11} />
               {res.partySize} guests
             </span>
-            <span className="flex items-center gap-1 text-xs text-[#1C0800]/50">
+            <span className="flex items-center gap-1 text-xs text-ink/50">
               <Phone size={11} />
               {res.phone}
             </span>
             {res.tableNumber && (
-              <span className="text-xs text-[#1C0800]/50">Table {res.tableNumber}</span>
+              <span className="text-xs text-ink/50">Table {res.tableNumber}</span>
             )}
           </div>
 
           {res.notes && (
-            <p className="mt-1.5 text-xs italic text-[#1C0800]/40">{res.notes}</p>
+            <p className="mt-1.5 text-xs italic text-ink/40">{res.notes}</p>
           )}
         </div>
 
@@ -198,18 +199,18 @@ function ResRow({ res, onStatusChange, onDelete, acting }: ResRowProps) {
           <div className="relative shrink-0">
             <button
               onClick={() => setMenuOpen(o => !o)}
-              className="flex items-center gap-1 rounded-lg border border-[#E8D5C0] px-2.5 py-1.5 text-xs text-[#1C0800]/50 transition-colors hover:bg-[#1C0800]/5"
+              className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-ink/50 transition-colors hover:bg-ink/5"
             >
               Actions <ChevronDown size={11} />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-full z-10 mt-1 w-36 rounded-xl border border-[#E8D5C0] bg-white shadow-lg">
+              <div className="absolute right-0 top-full z-10 mt-1 w-36 rounded-xl border border-border bg-canvas shadow-lg">
                 {(['seated', 'cancelled', 'no-show'] as Reservation['status'][]).map(s => (
                   <button
                     key={s}
                     disabled={acting}
                     onClick={() => { onStatusChange(res._id, s); setMenuOpen(false); }}
-                    className="block w-full px-4 py-2.5 text-left text-xs text-[#1C0800]/70 transition-colors hover:bg-[#FFF6EE] first:rounded-t-xl last:rounded-b-xl capitalize disabled:opacity-50"
+                    className="block w-full px-4 py-2.5 text-left text-xs text-ink/70 transition-colors hover:bg-mist first:rounded-t-xl last:rounded-b-xl capitalize disabled:opacity-50"
                   >
                     Mark as {STATUS_LABELS[s]}
                   </button>
@@ -221,14 +222,14 @@ function ResRow({ res, onStatusChange, onDelete, acting }: ResRowProps) {
 
         {confirmDelete ? (
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs text-[#E8380D]">Delete?</span>
-            <button onClick={() => onDelete(res._id)} className="text-xs font-semibold text-[#E8380D] hover:underline">Yes</button>
-            <button onClick={() => setConfirmDelete(false)} className="text-xs text-[#1C0800]/40 hover:underline">No</button>
+            <span className="text-xs text-brand">Delete?</span>
+            <button onClick={() => onDelete(res._id)} className="text-xs font-semibold text-brand hover:underline">Yes</button>
+            <button onClick={() => setConfirmDelete(false)} className="text-xs text-ink/40 hover:underline">No</button>
           </div>
         ) : (
           <button
             onClick={() => setConfirmDelete(true)}
-            className="shrink-0 text-xs text-[#1C0800]/20 transition-colors hover:text-[#E8380D]"
+            className="shrink-0 text-xs text-ink/20 transition-colors hover:text-brand"
           >
             <X size={14} />
           </button>
@@ -319,22 +320,22 @@ export function ReservationsPage() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-[#E8D5C0] bg-white px-5 py-3">
+      <div className="flex shrink-0 items-center justify-between border-b border-border bg-canvas px-5 py-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-base font-semibold text-[#1C0800]">Reservations</h1>
-          <span className="text-xs text-[#1C0800]/40">{total} for {fmtDate(date)}</span>
+          <h1 className="text-base font-semibold text-ink">Reservations</h1>
+          <span className="text-xs text-ink/40">{total} for {fmtDate(date)}</span>
         </div>
         <div className="flex items-center gap-2">
           <input
             type="date"
             value={date}
             onChange={e => setDate(e.target.value)}
-            className="h-8 rounded-lg border border-[#E8D5C0] bg-[#FFF6EE] px-3 text-xs text-[#1C0800] outline-none focus:border-[#E8380D]/50"
+            className="h-8 rounded-lg border border-border bg-mist px-3 text-xs text-ink outline-none focus:border-brand/50"
           />
           <button
             onClick={() => void load()}
             disabled={loading}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-[#1C0800]/40 transition-colors hover:bg-[#1C0800]/5 hover:text-[#1C0800]/70 disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-ink/40 transition-colors hover:bg-ink/5 hover:text-ink/70 disabled:opacity-40"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             Refresh
@@ -342,7 +343,7 @@ export function ReservationsPage() {
           {!addOpen && (
             <button
               onClick={() => { setAddOpen(true); setFormError(null); }}
-              className="flex items-center gap-1.5 rounded-lg bg-[#E8380D] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#C93008]"
+              className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand/90"
             >
               <Plus size={13} />
               New reservation
@@ -354,15 +355,15 @@ export function ReservationsPage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-5">
         {error && (
-          <div className="mb-4 rounded-lg border border-[#E8380D]/20 bg-[#E8380D]/10 px-4 py-3 text-sm text-[#E8380D]">
+          <div className="mb-4 rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
             {error}
           </div>
         )}
 
         {/* Add form */}
         {addOpen && (
-          <div className="mb-5 rounded-xl border border-[#E8D5C0] bg-[#FFF6EE] p-5">
-            <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-[#1C0800]/40">New Reservation</p>
+          <div className="mb-5 rounded-xl border border-border bg-mist p-5">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-ink/40">New Reservation</p>
             <AddForm
               onSave={handleAdd}
               onCancel={() => { setAddOpen(false); setFormError(null); }}
@@ -377,12 +378,12 @@ export function ReservationsPage() {
             <Spinner size="lg" />
           </div>
         ) : reservations.length === 0 ? (
-          <div className="flex h-48 flex-col items-center justify-center text-center text-[#1C0800]/30">
+          <div className="flex h-48 flex-col items-center justify-center text-center text-ink/30">
             <CalendarDays size={40} className="mb-3 opacity-15" />
             <p className="text-sm">No reservations for {fmtDate(date)}</p>
             <button
               onClick={() => setAddOpen(true)}
-              className="mt-3 text-xs font-semibold text-[#E8380D] hover:underline"
+              className="mt-3 text-xs font-semibold text-brand hover:underline"
             >
               Book one now
             </button>
@@ -391,7 +392,7 @@ export function ReservationsPage() {
           <div className="space-y-5">
             {confirmed.length > 0 && (
               <section>
-                <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-[#1C0800]/40">
+                <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-ink/40">
                   Upcoming ({confirmed.length})
                 </h2>
                 <div className="space-y-3">
@@ -409,7 +410,7 @@ export function ReservationsPage() {
             )}
             {others.length > 0 && (
               <section>
-                <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-[#1C0800]/40">
+                <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-ink/40">
                   Completed / Other ({others.length})
                 </h2>
                 <div className="space-y-3">
