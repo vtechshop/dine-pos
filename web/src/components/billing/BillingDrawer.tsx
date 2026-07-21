@@ -313,6 +313,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
               {receipt ? (
                 <ReceiptView
                   guest={receipt.guestBill?.guest ?? null}
+                  sessionId={sessionId}
                   tableLabel={receipt.tableLabel}
                   orders={receipt.orders}
                   currencySymbol={currencySymbol}
@@ -333,6 +334,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
                         setMode(m);
                         if (m === 'table') setSelectedGuestId(null);
                         setPaidAmount(0);
+                        setSplitDetails({ cash: 0, card: 0, upi: 0 });
                       }}
                       selectedGuestBill={selectedGuestBill}
                       grandTotal={grandTotal}

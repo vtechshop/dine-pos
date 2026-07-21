@@ -50,6 +50,7 @@ export const GuestPanel = memo(function GuestPanel({
       onRefresh();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Merge failed');
+      throw err;
     }
   }
 
@@ -62,6 +63,7 @@ export const GuestPanel = memo(function GuestPanel({
       onRefresh();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Transfer failed');
+      throw err;
     }
   }
 
