@@ -41,14 +41,14 @@ function OrderCard({ order, onAction, acting }: OrderCardProps) {
       {/* Card header */}
       <div className={`flex items-center justify-between px-4 py-2.5 ${isPending ? 'bg-amber-400/20' : 'bg-blue-400/20'}`}>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-sm font-bold text-[#1C0800]">#{order.orderNumber}</span>
+          <span className="font-mono text-sm font-bold text-ink">#{order.orderNumber}</span>
           {order.isParcel && (
-            <span className="rounded bg-[#E8380D]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#E8380D]">
+            <span className="rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand">
               Parcel
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1 text-xs text-[#1C0800]/50">
+        <div className="flex items-center gap-1 text-xs text-ink/50">
           <Clock size={11} />
           {elapsed}
         </div>
@@ -56,17 +56,17 @@ function OrderCard({ order, onAction, acting }: OrderCardProps) {
 
       {/* Table / customer */}
       <div className="border-b border-current/10 px-4 py-2">
-        <p className="text-xs font-semibold text-[#1C0800]">
+        <p className="text-xs font-semibold text-ink">
           Table {order.tableNumber}
-          {order.customerName && <span className="ml-1.5 font-normal text-[#1C0800]/40">· {order.customerName}</span>}
+          {order.customerName && <span className="ml-1.5 font-normal text-ink/40">· {order.customerName}</span>}
         </p>
       </div>
 
       {/* Items */}
       <ul className="flex-1 space-y-1.5 px-4 py-3">
         {order.items.map((item, i) => (
-          <li key={i} className="flex items-baseline gap-2 text-sm text-[#1C0800]">
-            <span className="w-5 shrink-0 text-right font-bold text-[#E8380D]">{item.quantity}×</span>
+          <li key={i} className="flex items-baseline gap-2 text-sm text-ink">
+            <span className="w-5 shrink-0 text-right font-bold text-brand">{item.quantity}×</span>
             <span>{item.productName}</span>
           </li>
         ))}
@@ -75,7 +75,7 @@ function OrderCard({ order, onAction, acting }: OrderCardProps) {
       {/* Notes */}
       {order.notes && (
         <div className="border-t border-current/10 px-4 py-2">
-          <p className="text-xs italic text-[#1C0800]/50">{order.notes}</p>
+          <p className="text-xs italic text-ink/50">{order.notes}</p>
         </div>
       )}
 
@@ -147,11 +147,11 @@ export function KitchenPage() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-[#E8D5C0] bg-white px-5 py-3">
+      <div className="flex shrink-0 items-center justify-between border-b border-border bg-canvas px-5 py-3">
         <div className="flex items-center gap-3">
-          <ChefHat size={18} className="text-[#E8380D]" />
-          <h1 className="text-base font-semibold text-[#1C0800]">Kitchen Display</h1>
-          <span className="flex items-center gap-1 text-xs text-[#1C0800]/40">
+          <ChefHat size={18} className="text-brand" />
+          <h1 className="text-base font-semibold text-ink">Kitchen Display</h1>
+          <span className="flex items-center gap-1 text-xs text-ink/40">
             <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
             Live · auto-refreshes every 20s
           </span>
@@ -159,7 +159,7 @@ export function KitchenPage() {
         <button
           onClick={() => void load()}
           disabled={loading}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-[#1C0800]/40 transition-colors hover:bg-[#1C0800]/5 hover:text-[#1C0800]/70 disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-ink/40 transition-colors hover:bg-ink/5 hover:text-ink/70 disabled:opacity-40"
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           Refresh
@@ -167,7 +167,7 @@ export function KitchenPage() {
       </div>
 
       {error && (
-        <div className="mx-5 mt-4 rounded-lg border border-[#E8380D]/20 bg-[#E8380D]/10 px-4 py-3 text-sm text-[#E8380D]">
+        <div className="mx-5 mt-4 rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
           {error}
         </div>
       )}
@@ -177,7 +177,7 @@ export function KitchenPage() {
           <Spinner size="lg" />
         </div>
       ) : orders.length === 0 ? (
-        <div className="flex h-full flex-col items-center justify-center text-center text-[#1C0800]/30">
+        <div className="flex h-full flex-col items-center justify-center text-center text-ink/30">
           <ChefHat size={48} className="mb-3 opacity-15" />
           <p className="text-sm font-medium">Kitchen is clear</p>
           <p className="mt-1 text-xs">No pending or active orders</p>
@@ -189,13 +189,13 @@ export function KitchenPage() {
             <div>
               <div className="mb-3 flex items-center gap-2">
                 <div className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-                <h2 className="text-xs font-bold uppercase tracking-widest text-[#1C0800]/50">
+                <h2 className="text-xs font-bold uppercase tracking-widest text-ink/50">
                   Pending ({pending.length})
                 </h2>
               </div>
               <div className="space-y-3">
                 {pending.length === 0 ? (
-                  <p className="text-xs text-[#1C0800]/25">No pending orders</p>
+                  <p className="text-xs text-ink/25">No pending orders</p>
                 ) : (
                   pending.map(o => (
                     <OrderCard key={o._id} order={o} onAction={handleAction} acting={acting} />
@@ -208,13 +208,13 @@ export function KitchenPage() {
             <div>
               <div className="mb-3 flex items-center gap-2">
                 <div className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-                <h2 className="text-xs font-bold uppercase tracking-widest text-[#1C0800]/50">
+                <h2 className="text-xs font-bold uppercase tracking-widest text-ink/50">
                   Preparing ({preparing.length})
                 </h2>
               </div>
               <div className="space-y-3">
                 {preparing.length === 0 ? (
-                  <p className="text-xs text-[#1C0800]/25">No orders in progress</p>
+                  <p className="text-xs text-ink/25">No orders in progress</p>
                 ) : (
                   preparing.map(o => (
                     <OrderCard key={o._id} order={o} onAction={handleAction} acting={acting} />
