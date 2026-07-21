@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import type { Table, SessionSummary, TableGridItem, DailyReport } from '../types';
 import { fetchTables, fetchOpenSessions, openSession } from '../api/tables';
+import { ApiError } from '../api/client';
 import { fetchDailyReport } from '../api/dashboard';
 import { TableCard } from '../components/ui/TableCard';
 import { BillingDrawer } from '../components/billing/BillingDrawer';
@@ -204,8 +205,8 @@ export function DashboardPage() {
     } catch (err) {
       // 409 = race (table just became occupied) — refresh so grid reflects reality
       void load();
-      if (err instanceof Error && !err.message.includes('409')) {
-        setError(err.message || 'Failed to open table');
+      if (!(err instanceof ApiError && err.status === 409)) {
+        setError(err instanceof Error ? err.message : 'Failed to open table');
       }
     } finally {
       setOpeningTableId(null);

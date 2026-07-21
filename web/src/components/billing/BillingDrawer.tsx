@@ -158,7 +158,11 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
 
     try {
       if (mode === 'table') {
-        await bulkBillAndClose(sessionId, paymentMethod);
+        await bulkBillAndClose(
+          sessionId,
+          paymentMethod,
+          paymentMethod === 'split' ? splitDetails : undefined,
+        );
         setReceipt({
           mode: 'table',
           guestBill: null,
@@ -167,7 +171,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
         });
       } else {
         if (!selectedGuestId || !selectedGuestBill) return;
-        await billGuest(sessionId, selectedGuestId, {
+        const { guest: billedGuest } = await billGuest(sessionId, selectedGuestId, {
           action: 'bill',
           paymentMethod,
           splitDetails: paymentMethod === 'split' ? splitDetails : undefined,
@@ -175,7 +179,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
         });
         setReceipt({
           mode: 'guest',
-          guestBill: selectedGuestBill,
+          guestBill: { guest: billedGuest, orders: selectedGuestBill.orders },
           orders: selectedGuestBill.orders,
           tableLabel,
         });

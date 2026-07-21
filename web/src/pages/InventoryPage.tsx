@@ -64,6 +64,7 @@ export function InventoryPage() {
     try {
       await deleteIngredient(i._id);
       setIngredients(prev => prev.filter(x => x._id !== i._id));
+      setLowStock(prev => prev.filter(x => x._id !== i._id));
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Delete failed');
     }

@@ -33,10 +33,11 @@ export async function billGuest(
 export async function bulkBillAndClose(
   sessionId: string,
   paymentMethod: PaymentMethod,
+  splitDetails?: SplitDetails,
 ): Promise<void> {
   await apiFetch<void>(`/sessions/${sessionId}/close`, {
     method: 'PATCH',
-    body: JSON.stringify({ bulkBill: true, paymentMethod }),
+    body: JSON.stringify({ bulkBill: true, paymentMethod, splitDetails }),
   });
 }
 

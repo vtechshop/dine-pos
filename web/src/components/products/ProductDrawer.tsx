@@ -32,10 +32,11 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
 
   useEffect(() => {
     if (product) {
-      const catId =
-        product.category && typeof product.category === 'object'
-          ? product.category._id
-          : '';
+      const catId = product.category
+        ? (typeof product.category === 'object'
+            ? product.category._id
+            : String(product.category))
+        : '';
       setForm({
         name:        product.name,
         price:       product.price,

@@ -45,7 +45,7 @@ function getRange(
   customTo: string,
 ): { from: string; to: string } {
   const now = new Date();
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const fmt = (d: Date) => d.toLocaleDateString('en-CA');
 
   switch (preset) {
     case 'today':
