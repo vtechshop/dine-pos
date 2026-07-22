@@ -64,6 +64,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState(s => ({ ...s, token: newToken, isAuthenticated: true }));
       },
       onAuthExpired: () => {
+        // Super admin sessions are managed via saFetch, not apiFetch.
+        // A 401 on a hotel endpoint while logged in as SA is expected — ignore it.
+        if (localStorage.getItem(KEYS.role) === 'superadmin') return;
         Object.values(KEYS).forEach(k => localStorage.removeItem(k));
         setState({ token: null, hotelId: null, hotelName: null, role: null, isAuthenticated: false });
       },
