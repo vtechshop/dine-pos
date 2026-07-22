@@ -53,9 +53,16 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 // PUT update ingredient (name, unit, threshold, cost)
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
+    const { name, unit, lowStockThreshold, costPerUnit, currentStock } = req.body;
+    const update: Record<string, unknown> = {};
+    if (name              !== undefined) update.name              = name;
+    if (unit              !== undefined) update.unit              = unit;
+    if (lowStockThreshold !== undefined) update.lowStockThreshold = lowStockThreshold;
+    if (costPerUnit       !== undefined) update.costPerUnit       = costPerUnit;
+    if (currentStock      !== undefined) update.currentStock      = currentStock;
     const ingredient = await Ingredient.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
-      req.body,
+      update,
       { new: true, runValidators: true }
     );
     if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });

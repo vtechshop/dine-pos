@@ -692,32 +692,32 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: `Order must be served before it can be completed (current: ${existing.status}).` });
     }
 
-    // Audit log for cancellation
-    if (status === 'cancelled' && existing.status !== 'cancelled') {
-      logAudit(req, 'order.cancelled', 'order', String(existing._id), {
-        orderNumber: existing.orderNumber,
-        prevStatus:  existing.status,
-        grandTotal:  existing.grandTotal,
-      });
-    }
-
-    // Restore stock when cancelling a non-cancelled order
-    if (status === 'cancelled' && existing.status !== 'cancelled') {
-      const bulkOps = existing.items.filter(i => i.product).map(item => ({
-        updateOne: {
-          filter: { _id: item.product, hotelId: req.hotelId, stock: { $gte: 0 } },
-          update: { $inc: { stock: item.quantity }, $set: { isAvailable: true } },
-        },
-      }));
-      if (bulkOps.length > 0) await Product.bulkWrite(bulkOps as any);
-      await applyIngredientStockChange(existing.items, req.hotelId!, 1);
-
-      // F-02: reverse the guest running total that was added when the order was placed.
-      // Uses an aggregation-pipeline update to floor at 0 (handles edge-case data drift).
-      if (existing.guestId) {
-        await Guest.findByIdAndUpdate(existing.guestId, [
-          { $set: { totalAmount: { $max: [0, { $subtract: ['$totalAmount', existing.grandTotal] }] } } },
-        ]);
+    // H-04: atomic cancellation guard — only the first concurrent request runs side-effects
+    if (status === 'cancelled') {
+      const prevDoc = await Order.findOneAndUpdate(
+        { _id: req.params.id, hotelId: req.hotelId, status: { $ne: 'cancelled' } },
+        { $set: { status: 'cancelled' } },
+        { new: false }
+      );
+      if (prevDoc) {
+        logAudit(req, 'order.cancelled', 'order', String(existing._id), {
+          orderNumber: existing.orderNumber,
+          prevStatus:  existing.status,
+          grandTotal:  existing.grandTotal,
+        });
+        const bulkOps = existing.items.filter(i => i.product).map(item => ({
+          updateOne: {
+            filter: { _id: item.product, hotelId: req.hotelId, stock: { $gte: 0 } },
+            update: { $inc: { stock: item.quantity }, $set: { isAvailable: true } },
+          },
+        }));
+        if (bulkOps.length > 0) await Product.bulkWrite(bulkOps as any);
+        await applyIngredientStockChange(existing.items, req.hotelId!, 1);
+        if (existing.guestId) {
+          await Guest.findByIdAndUpdate(existing.guestId, [
+            { $set: { totalAmount: { $max: [0, { $subtract: ['$totalAmount', existing.grandTotal] }] } } },
+          ]);
+        }
       }
     }
 
@@ -778,8 +778,9 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
 });
 
 // PUT update order — field whitelist prevents mass-assignment and MongoDB operator injection
+// H-03: 'status' removed; status transitions must go through PATCH /:id/status
 const ORDER_UPDATE_ALLOWED = new Set([
-  'status', 'paymentStatus', 'paymentMethod', 'notes', 'discount',
+  'paymentStatus', 'paymentMethod', 'notes', 'discount',
   'tableNumber', 'isParcel', 'customerName', 'totalAmount', 'taxAmount',
 ]);
 

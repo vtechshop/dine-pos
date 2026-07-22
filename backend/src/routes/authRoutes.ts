@@ -179,7 +179,13 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
   }
 
   try {
-    const record = await RefreshToken.findOne({ token: hashRefreshToken(refreshToken), revokedAt: null });
+    // H-05: atomic revocation — findOneAndUpdate prevents two concurrent requests
+    // from both passing the revokedAt:null check and each issuing a new token pair
+    const record = await RefreshToken.findOneAndUpdate(
+      { token: hashRefreshToken(refreshToken), revokedAt: null },
+      { revokedAt: new Date() },
+      { new: false }
+    );
     if (!record) {
       return res.status(401).json({ message: 'Invalid or revoked refresh token' });
     }
@@ -192,8 +198,7 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Account not active' });
     }
 
-    // Rotate: revoke old token, issue new pair
-    await RefreshToken.findByIdAndUpdate(record._id, { revokedAt: new Date() });
+    // Token already revoked above; issue new pair
     const [newToken, newRefreshToken] = await Promise.all([
       Promise.resolve(generateToken(record.hotelId.toString(), (hotel as any).hotelName)),
       generateRefreshToken(record.hotelId.toString()),

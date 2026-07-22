@@ -94,6 +94,7 @@ export async function apiFetch<T>(path: string, init: ExtendedInit = {}): Promis
       _onAuthExpired?.();
       const isSA = localStorage.getItem('pos_role') === 'superadmin';
       window.location.replace(isSA ? '/super-admin/login' : '/login');
+      throw new ApiError(401, 'Session expired');
     }
     const body = (await res.json().catch(() => ({}))) as { message?: string };
     throw new ApiError(res.status, body.message ?? `HTTP ${res.status}`);

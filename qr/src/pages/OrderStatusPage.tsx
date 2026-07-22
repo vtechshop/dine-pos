@@ -26,7 +26,7 @@ export function OrderStatusPage({ hotelId, tableNumber }: OrderStatusPageProps) 
   const [error, setError]     = useState<string | null>(null);
 
   const loadBill = useCallback(async () => {
-    if (!guestToken || !tableSessions) return;
+    if (!guestToken || !tableSessions) { setLoading(false); return; }
     try {
       const data = await fetchBill(hotelId, guestToken);
       setBill(data);

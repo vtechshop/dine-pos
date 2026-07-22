@@ -101,6 +101,7 @@ if (process.env.NODE_ENV === 'production' && !process.env.ALLOWED_ORIGINS?.trim(
 }
 
 const app = express();
+app.set('trust proxy', 1); // H-01: trust Render/nginx hop so req.ip is the real client IP
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
 
@@ -436,14 +437,16 @@ io.on('connection', (socket) => {
   socket.on('customer_message', async (data: { hotelId: string; tableNumber: string; message: string }) => {
     try {
       if (!data?.hotelId || !data?.tableNumber || !data?.message) return;
+      // C-01: prevent authenticated sockets from injecting into a foreign hotel
+      if (socket.data.hotelId && socket.data.hotelId !== data.hotelId) return;
+      const resolvedHotelId = socket.data.hotelId ?? data.hotelId;
       const msg = await ChatMessage.create({
-        hotelId: data.hotelId,
+        hotelId: resolvedHotelId,
         tableNumber: data.tableNumber,
         sender: 'customer',
         message: String(data.message).substring(0, 500),
       });
-      // Emit only to this hotel's admin room — never to other hotels
-      io.to(data.tableNumber).to(`admin_${data.hotelId}`).emit('new_message', msg);
+      io.to(data.tableNumber).to(`admin_${resolvedHotelId}`).emit('new_message', msg);
     } catch (err) {
       logger.error('Socket customer_message error', { err: String(err) });
     }

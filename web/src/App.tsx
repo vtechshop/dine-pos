@@ -41,7 +41,7 @@ function PageFallback() {
 // Redirect non-admin roles away from pages they are not permitted to view
 function AdminOnly({ children }: { children: React.ReactNode }) {
   const { role } = useAuth();
-  if (role !== null && role !== 'admin') return <Navigate to="/dashboard" replace />;
+  if (role !== 'admin') return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
