@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Check, X, Copy, Eye, EyeOff, PauseCircle, PlayCircle, CalendarPlus, CreditCard, Sliders, Settings, FileText } from 'lucide-react';
+import { ArrowLeft, Check, X, Copy, Eye, EyeOff, PauseCircle, PlayCircle, CalendarPlus, CreditCard, Sliders, Settings, FileText, Activity } from 'lucide-react';
 import {
   getHotel, approveHotel, rejectHotel, suspendHotel, activateHotel, extendTrial,
   updateFeatures, setPlan, setTrial,
@@ -374,9 +374,18 @@ export function HotelDetailPage() {
             <h1 className="text-xl font-bold text-ink">{hotel.hotelName}</h1>
             <p className="mt-0.5 text-sm text-ink/50">{hotel.ownerName} · {hotel.city}, {hotel.state}</p>
           </div>
-          <span className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize ${STATUS_BADGE[hotel.status] ?? ''}`}>
-            {hotel.status}
-          </span>
+          <div className="flex items-center gap-2">
+            <Link
+              to={`/super-admin/hotels/${hotel._id}/health`}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-ink/60 transition hover:bg-mist hover:text-ink"
+            >
+              <Activity size={13} />
+              Health Score
+            </Link>
+            <span className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize ${STATUS_BADGE[hotel.status] ?? ''}`}>
+              {hotel.status}
+            </span>
+          </div>
         </div>
       </div>
 
