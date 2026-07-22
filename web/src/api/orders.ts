@@ -71,3 +71,61 @@ export interface CashierOrderItem {
 export async function fetchCashierOrders(): Promise<CashierOrderItem[]> {
   return apiFetch<CashierOrderItem[]>('/orders/cashier');
 }
+
+export interface CreateOrderItem {
+  product: string;
+  productName: string;
+  quantity: number;
+  price: number;
+  taxPercent: number;
+  notes?: string;
+}
+
+export interface CreateOrderPayload {
+  items: CreateOrderItem[];
+  orderSource: 'dine-in' | 'takeaway' | 'qr' | 'kiosk' | 'waiter' | 'admin' | 'swiggy' | 'zomato';
+  tableId?: string;
+  tableNumber?: string;
+  sessionId?: string;
+  guestId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  notes?: string;
+  isParcel?: boolean;
+  discountAmount?: number;
+  paymentMethod?: 'cash' | 'upi' | 'card' | 'split';
+  splitDetails?: { cash: number; upi: number; card: number };
+  offlineId?: string;
+}
+
+export async function createOrder(payload: CreateOrderPayload): Promise<CashierOrderItem> {
+  return apiFetch<CashierOrderItem>('/orders', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function cancelOrder(orderId: string): Promise<void> {
+  await apiFetch<unknown>(`/orders/${orderId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'cancelled' }),
+  });
+}
+
+export async function completeOrder(orderId: string): Promise<void> {
+  await apiFetch<unknown>(`/orders/${orderId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'completed' }),
+  });
+}
+
+export async function updateOrderPayment(
+  orderId: string,
+  paymentMethod: string,
+  splitDetails?: { cash: number; upi: number; card: number },
+): Promise<void> {
+  await apiFetch<unknown>(`/orders/${orderId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ paymentMethod, ...(splitDetails ? { splitDetails } : {}) }),
+  });
+}

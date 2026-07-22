@@ -6,6 +6,7 @@ import { SettingsProvider } from './context/SettingsContext';
 import { SocketProvider } from './context/SocketContext';
 import { KeyboardProvider } from './context/KeyboardContext';
 import { LiveOrdersProvider } from './context/LiveOrdersContext';
+import { CashierProvider } from './context/CashierContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { Spinner } from './components/ui/Spinner';
 // Critical path — always bundled (login + dashboard render on first load)
@@ -71,6 +72,7 @@ export function App() {
             */}
             <KeyboardProvider>
               <LiveOrdersProvider>
+                <CashierProvider>
                 <Routes>
                   <Route path="/login"              element={<LoginPage />} />
                   <Route path="/register"          element={<RegisterPage />} />
@@ -108,13 +110,11 @@ export function App() {
                     <Route path="/settings"    element={<AdminOnly><Suspense fallback={<PageFallback />}><SettingsPage /></Suspense></AdminOnly>} />
                     <Route path="/reservations" element={<AdminOnly><Suspense fallback={<PageFallback />}><ReservationsPage /></Suspense></AdminOnly>} />
 
-                    {/* Role landing pages redirect to dashboard until role-specific views are built */}
-                    <Route path="/cashier" element={<Navigate to="/dashboard" replace />} />
                     <Route path="/waiter"  element={<Navigate to="/dashboard" replace />} />
-
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Route>
                 </Routes>
+                </CashierProvider>
               </LiveOrdersProvider>
             </KeyboardProvider>
           </SocketProvider>
