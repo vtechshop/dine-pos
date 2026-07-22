@@ -37,9 +37,10 @@ const KEYS = {
   role:         'pos_role',
 } as const;
 
-// Survives logout so cashiers on the same device don't need to enter the hotel's
-// MongoDB ObjectId manually — it's persisted the first time an admin logs in.
-const DEVICE_HOTEL_KEY = 'pos_device_hotel_id';
+// Both keys survive logout — they describe the POS terminal itself, not the session.
+// Written on admin login; read by the cashier login panel to identify the linked hotel.
+const DEVICE_HOTEL_KEY      = 'pos_device_hotel_id';
+const DEVICE_HOTEL_NAME_KEY = 'pos_device_hotel_name';
 
 function readStorage(): AuthState {
   const token = localStorage.getItem(KEYS.token);
@@ -97,9 +98,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (res.refreshToken) {
       localStorage.setItem(KEYS.refreshToken, res.refreshToken);
     }
-    localStorage.setItem(KEYS.hotelId,   hotelId);
-    localStorage.setItem(DEVICE_HOTEL_KEY, hotelId); // persists for cashier login
-    if (res.hotelName) localStorage.setItem(KEYS.hotelName, res.hotelName);
+    localStorage.setItem(KEYS.hotelId,        hotelId);
+    localStorage.setItem(DEVICE_HOTEL_KEY,    hotelId); // persists for cashier panel
+    if (res.hotelName) {
+      localStorage.setItem(KEYS.hotelName,       res.hotelName);
+      localStorage.setItem(DEVICE_HOTEL_NAME_KEY, res.hotelName); // persists for cashier panel
+    }
     if (role) localStorage.setItem(KEYS.role, role);
 
     setState({

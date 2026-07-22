@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
+import { CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from '../components/ui/Spinner';
 
@@ -23,20 +23,37 @@ export function LoginPage() {
   const [password, setPassword]   = useState('');
   const [showPwd, setShowPwd]     = useState(false);
 
-  // Cashier fields — Hotel ID pre-fills from the device-scoped key written on admin login
-  const [hotelId, setHotelId]           = useState(() => localStorage.getItem('pos_device_hotel_id') ?? '');
+  // Device-linked hotel — read on mount and refreshed when switching to cashier tab.
+  // These two keys are written by AuthContext.login() and survive logout.
+  const [deviceHotelId,   setDeviceHotelId]   = useState(() => localStorage.getItem('pos_device_hotel_id')   ?? '');
+  const [deviceHotelName, setDeviceHotelName] = useState(() => localStorage.getItem('pos_device_hotel_name') ?? '');
+
+  // Cashier credential fields
   const [employeeCode, setEmployeeCode] = useState('');
   const [pin, setPin]                   = useState('');
   const [showPin, setShowPin]           = useState(false);
 
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
 
   if (isAuthenticated) return <Navigate to={roleDestination(role)} replace />;
 
   function switchMode(next: LoginMode) {
     setMode(next);
     setError(null);
+    if (next === 'cashier') {
+      // Re-read so the panel reflects a hotel linked after this page first mounted
+      setDeviceHotelId(localStorage.getItem('pos_device_hotel_id')   ?? '');
+      setDeviceHotelName(localStorage.getItem('pos_device_hotel_name') ?? '');
+    }
+  }
+
+  function handleChangeHotel() {
+    localStorage.removeItem('pos_device_hotel_id');
+    localStorage.removeItem('pos_device_hotel_name');
+    setDeviceHotelId('');
+    setDeviceHotelName('');
+    switchMode('admin');
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -47,7 +64,7 @@ export function LoginPage() {
       if (mode === 'admin') {
         await login(userId.trim(), password);
       } else {
-        await loginCashier(hotelId.trim(), employeeCode.trim().toUpperCase(), pin);
+        await loginCashier(deviceHotelId, employeeCode.trim().toUpperCase(), pin);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -137,28 +154,29 @@ export function LoginPage() {
                   </div>
                 </div>
               </>
-            ) : (
+            ) : deviceHotelId ? (
               <>
-                {/* Hotel ID */}
-                <div>
-                  <label htmlFor="cashierHotelId" className="block text-sm font-medium text-ink/70">
-                    Hotel System ID
-                  </label>
-                  <input
-                    id="cashierHotelId"
-                    type="text"
-                    autoComplete="off"
-                    required
-                    value={hotelId}
-                    onChange={e => setHotelId(e.target.value.trim())}
-                    className="mt-1.5 block w-full rounded-lg border border-border px-3.5 py-2.5 font-mono text-sm text-ink placeholder-ink/40 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
-                    placeholder="Provided by your hotel admin"
-                  />
-                  <p className="mt-1 text-[11px] text-ink/40">
-                    {hotelId
-                      ? 'Auto-filled from this device'
-                      : 'Ask your hotel admin for this ID'}
+                {/* Linked hotel panel */}
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600">
+                    Connected Hotel
                   </p>
+                  <p className="mt-1 text-sm font-semibold text-ink">
+                    {deviceHotelName || 'This Hotel'}
+                  </p>
+                  <div className="mt-2.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-[12px] font-medium text-emerald-600">
+                      <CheckCircle size={13} strokeWidth={2.5} />
+                      This device is linked
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleChangeHotel}
+                      className="text-[12px] font-medium text-brand hover:underline"
+                    >
+                      Change Hotel
+                    </button>
+                  </div>
                 </div>
 
                 {/* Employee Code */}
@@ -206,6 +224,23 @@ export function LoginPage() {
                   </div>
                 </div>
               </>
+            ) : (
+              /* Not linked panel — no submit button rendered below */
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-6 text-center">
+                <p className="text-sm font-semibold text-amber-800">
+                  This POS terminal is not linked to a hotel.
+                </p>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-amber-600">
+                  A Hotel Admin must sign in first to link this device.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => switchMode('admin')}
+                  className="mt-4 rounded-lg bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand/90"
+                >
+                  Login as Hotel Admin
+                </button>
+              </div>
             )}
 
             {/* Error */}
@@ -215,23 +250,27 @@ export function LoginPage() {
               </div>
             )}
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading && <Spinner size="sm" />}
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
+            {/* Submit — hidden when cashier tab is open but device is not linked */}
+            {(mode === 'admin' || !!deviceHotelId) && (
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading && <Spinner size="sm" />}
+                {loading ? 'Signing in…' : 'Sign in'}
+              </button>
+            )}
           </form>
 
           {/* Role hint */}
-          <p className="mt-5 text-center text-[11px] text-ink/40">
-            {mode === 'admin'
-              ? 'Hotel Owner · Manager'
-              : 'Sign in with your employee code and PIN'}
-          </p>
+          {(mode === 'admin' || !!deviceHotelId) && (
+            <p className="mt-5 text-center text-[11px] text-ink/40">
+              {mode === 'admin'
+                ? 'Hotel Admin · Manager'
+                : 'Sign in with your employee code and PIN'}
+            </p>
+          )}
         </div>
 
         {/* Register link */}
