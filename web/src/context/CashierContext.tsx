@@ -7,14 +7,24 @@ import { useAuth } from './AuthContext';
 // ── Public types ──────────────────────────────────────────────────────────────
 
 export type CashierTab =
+  | 'dashboard'
   | 'new-order'
   | 'pending'
   | 'hold'
+  | 'tables'
+  | 'kitchen'
   | 'shift'
   | 'drawer'
   | 'search'
   | 'customers'
-  | 'printers';
+  | 'printers'
+  | 'profile';
+
+export interface OrderPrefill {
+  orderType: 'dine-in' | 'takeaway' | 'delivery';
+  tableId?: string;
+  tableNumber?: string;
+}
 
 export interface CartItem {
   id: string;
@@ -88,6 +98,10 @@ interface CashierContextValue {
   // Navigation
   activeTab: CashierTab;
   setActiveTab: (tab: CashierTab) => void;
+
+  // Order prefill (table → new-order flow)
+  orderPrefill: OrderPrefill | null;
+  setOrderPrefill: (p: OrderPrefill | null) => void;
 
   // Cart
   cart: CartItem[];
@@ -175,7 +189,8 @@ export function CashierProvider({ children }: { children: ReactNode }) {
 
   // ── Cart (in-memory only) ─────────────────────────────────────────────────
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [activeTab, setActiveTab] = useState<CashierTab>('new-order');
+  const [activeTab, setActiveTab] = useState<CashierTab>('dashboard');
+  const [orderPrefill, setOrderPrefill] = useState<OrderPrefill | null>(null);
 
   const addToCart = useCallback((item: Omit<CartItem, 'id'>) => {
     const newId = `${item.productId}_${Date.now()}`;
@@ -279,6 +294,7 @@ export function CashierProvider({ children }: { children: ReactNode }) {
   return (
     <CashierContext.Provider value={{
       activeTab, setActiveTab,
+      orderPrefill, setOrderPrefill,
       cart, addToCart, removeFromCart, updateQty, updateItemNotes, clearCart,
       shift, openShift, closeShift,
       heldBills, holdBill, resumeBill, deleteHeldBill,

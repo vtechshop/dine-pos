@@ -7,6 +7,7 @@ import { SocketProvider } from './context/SocketContext';
 import { KeyboardProvider } from './context/KeyboardContext';
 import { LiveOrdersProvider } from './context/LiveOrdersContext';
 import { CashierProvider } from './context/CashierContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { Spinner } from './components/ui/Spinner';
 // Critical path — always bundled (login + dashboard render on first load)
@@ -73,6 +74,7 @@ export function App() {
             <KeyboardProvider>
               <LiveOrdersProvider>
                 <CashierProvider>
+                <NotificationProvider>
                 <Routes>
                   <Route path="/login"              element={<LoginPage />} />
                   <Route path="/register"          element={<RegisterPage />} />
@@ -114,6 +116,7 @@ export function App() {
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Route>
                 </Routes>
+                </NotificationProvider>
                 </CashierProvider>
               </LiveOrdersProvider>
             </KeyboardProvider>
