@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Check, X, Copy, Eye, EyeOff } from 'lucide-react';
-import { getHotel, approveHotel, rejectHotel, type Hotel, type ApproveResponse } from '../../api/superAdmin';
+import { ArrowLeft, Check, X, Copy, Eye, EyeOff, PauseCircle, PlayCircle, CalendarPlus } from 'lucide-react';
+import {
+  getHotel, approveHotel, rejectHotel, suspendHotel, activateHotel, extendTrial,
+  type Hotel, type ApproveResponse,
+} from '../../api/superAdmin';
 import { Spinner } from '../../components/ui/Spinner';
 
 const STATUS_BADGE: Record<string, string> = {
@@ -35,7 +38,12 @@ function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
-      onClick={() => { navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}
+      onClick={() => {
+        navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        });
+      }}
       className="ml-1.5 text-ink/40 hover:text-brand transition"
       title="Copy"
     >
@@ -55,13 +63,13 @@ function CredentialBox({ creds }: { creds: ApproveResponse['credentials'] }) {
           { label: 'Kitchen PIN', value: creds.kitchenPin },
         ].map(({ label, value }) => (
           <div key={label} className="flex items-center gap-2">
-            <span className="w-28 text-green-700 font-medium">{label}</span>
+            <span className="w-28 font-medium text-green-700">{label}</span>
             <code className="font-mono text-green-900">{value}</code>
             <CopyButton text={value} />
           </div>
         ))}
         <div className="flex items-center gap-2">
-          <span className="w-28 text-green-700 font-medium">Password</span>
+          <span className="w-28 font-medium text-green-700">Password</span>
           <code className="font-mono text-green-900">
             {showPwd ? creds.password : '••••••••'}
           </code>
@@ -76,15 +84,75 @@ function CredentialBox({ creds }: { creds: ApproveResponse['credentials'] }) {
   );
 }
 
+// ── Activity Timeline ─────────────────────────────────────────────────────────
+
+type TLKind = 'info' | 'success' | 'warning' | 'danger' | 'active';
+type TLEvent = { date: string | null; label: string; detail?: string; kind: TLKind };
+
+const DOT_COLOR: Record<TLKind, string> = {
+  info:    'bg-blue-400',
+  success: 'bg-green-500',
+  warning: 'bg-amber-400',
+  danger:  'bg-red-500',
+  active:  'bg-green-500',
+};
+
+function buildTimeline(hotel: Hotel): TLEvent[] {
+  const now    = new Date();
+  const events: TLEvent[] = [];
+
+  events.push({ date: hotel.createdAt, label: 'Application submitted', kind: 'info' });
+
+  if (hotel.status === 'rejected') {
+    events.push({ date: hotel.updatedAt || null, label: 'Application rejected', detail: hotel.rejectionReason || undefined, kind: 'danger' });
+    return events.sort(byDate);
+  }
+
+  if (hotel.approvedAt) {
+    events.push({ date: hotel.approvedAt, label: 'Account approved', kind: 'success' });
+  }
+
+  if (hotel.trialStartDate) {
+    const approvedMs = hotel.approvedAt ? new Date(hotel.approvedAt).getTime() : 0;
+    if (Math.abs(new Date(hotel.trialStartDate).getTime() - approvedMs) > 60_000) {
+      events.push({ date: hotel.trialStartDate, label: 'Trial period started', kind: 'info' });
+    }
+  }
+
+  if (hotel.trialEndDate) {
+    const past = new Date(hotel.trialEndDate) < now;
+    events.push({ date: hotel.trialEndDate, label: past ? 'Trial period ended' : 'Trial ends', kind: past ? 'warning' : 'info' });
+  }
+
+  if (hotel.status === 'suspended') {
+    events.push({ date: null, label: 'Account suspended', kind: 'danger' });
+  } else if (hotel.status === 'expired') {
+    events.push({ date: null, label: 'Subscription expired', kind: 'warning' });
+  } else if (hotel.status === 'active') {
+    events.push({ date: null, label: 'Account active', kind: 'active' });
+  }
+
+  return events.sort(byDate);
+}
+
+function byDate(a: TLEvent, b: TLEvent): number {
+  if (!a.date && !b.date) return 0;
+  if (!a.date) return 1;
+  if (!b.date) return -1;
+  return new Date(a.date).getTime() - new Date(b.date).getTime();
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+
 export function HotelDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const { id }     = useParams<{ id: string }>();
+  const navigate   = useNavigate();
 
   const [hotel,   setHotel]   = useState<Hotel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
 
-  // Approve state
+  // Approve
   const [showApprove,  setShowApprove]  = useState(false);
   const [trialDays,    setTrialDays]    = useState(14);
   const [features,     setFeatures]     = useState<Partial<Hotel['features']>>({});
@@ -92,11 +160,20 @@ export function HotelDetailPage() {
   const [approveError, setApproveError] = useState<string | null>(null);
   const [credentials,  setCredentials]  = useState<ApproveResponse['credentials'] | null>(null);
 
-  // Reject state
+  // Reject
   const [showReject,  setShowReject]  = useState(false);
   const [reason,      setReason]      = useState('');
   const [rejecting,   setRejecting]   = useState(false);
   const [rejectError, setRejectError] = useState<string | null>(null);
+
+  // Manage
+  const [showSuspend,  setShowSuspend]  = useState(false);
+  const [suspending,   setSuspending]   = useState(false);
+  const [activating,   setActivating]   = useState(false);
+  const [showExtend,   setShowExtend]   = useState(false);
+  const [extending,    setExtending]    = useState(false);
+  const [extendDays,   setExtendDays]   = useState(7);
+  const [manageError,  setManageError]  = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -139,6 +216,52 @@ export function HotelDetailPage() {
     }
   }
 
+  async function handleSuspend() {
+    if (!id) return;
+    setSuspending(true);
+    setManageError(null);
+    try {
+      const res = await suspendHotel(id);
+      setHotel(res.hotel);
+      setShowSuspend(false);
+    } catch (err) {
+      setManageError(err instanceof Error ? err.message : 'Suspend failed');
+      setShowSuspend(false);
+    } finally {
+      setSuspending(false);
+    }
+  }
+
+  async function handleActivate() {
+    if (!id) return;
+    setActivating(true);
+    setManageError(null);
+    try {
+      const res = await activateHotel(id);
+      setHotel(res.hotel);
+    } catch (err) {
+      setManageError(err instanceof Error ? err.message : 'Activation failed');
+    } finally {
+      setActivating(false);
+    }
+  }
+
+  async function handleExtendTrial() {
+    if (!id) return;
+    setExtending(true);
+    setManageError(null);
+    try {
+      const res = await extendTrial(id, extendDays);
+      setHotel(res.hotel);
+      setShowExtend(false);
+    } catch (err) {
+      setManageError(err instanceof Error ? err.message : 'Extend trial failed');
+      setShowExtend(false);
+    } finally {
+      setExtending(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center py-24">
@@ -160,7 +283,13 @@ export function HotelDetailPage() {
     );
   }
 
-  const isPending = hotel.status === 'pending';
+  const isPending   = hotel.status === 'pending';
+  const canSuspend  = hotel.status === 'trial' || hotel.status === 'active';
+  const canActivate = hotel.status === 'suspended' || hotel.status === 'expired';
+  const canExtend   = hotel.status === 'trial';
+  const showManage  = !isPending && hotel.status !== 'rejected' && !credentials;
+
+  const timeline = buildTimeline(hotel);
 
   return (
     <div className="p-6">
@@ -186,7 +315,7 @@ export function HotelDetailPage() {
       {/* Credentials box (shown immediately after approval) */}
       {credentials && <CredentialBox creds={credentials} />}
 
-      {/* Approve / Reject actions for pending */}
+      {/* Approve / Reject — pending only */}
       {isPending && !credentials && (
         <div className="mb-6 flex gap-3">
           <button
@@ -204,7 +333,45 @@ export function HotelDetailPage() {
         </div>
       )}
 
-      {/* Hotel info */}
+      {/* Manage — non-pending, non-rejected */}
+      {showManage && (
+        <div className="mb-6 rounded-xl border border-border bg-canvas p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-ink/40">Management</p>
+          <div className="flex flex-wrap gap-2">
+            {canSuspend && (
+              <button
+                onClick={() => { setManageError(null); setShowSuspend(true); }}
+                className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100"
+              >
+                <PauseCircle size={15} /> Suspend
+              </button>
+            )}
+            {canActivate && (
+              <button
+                onClick={handleActivate}
+                disabled={activating}
+                className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700 disabled:opacity-60"
+              >
+                {activating ? <Spinner size="sm" /> : <PlayCircle size={15} />}
+                {activating ? 'Activating…' : 'Activate'}
+              </button>
+            )}
+            {canExtend && (
+              <button
+                onClick={() => { setManageError(null); setShowExtend(true); }}
+                className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-600 transition hover:bg-blue-100"
+              >
+                <CalendarPlus size={15} /> Extend Trial
+              </button>
+            )}
+          </div>
+          {manageError && (
+            <p className="mt-2 text-xs text-red-600">{manageError}</p>
+          )}
+        </div>
+      )}
+
+      {/* Hotel info cards */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-border bg-canvas p-5">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-ink/40">Registration</p>
@@ -217,7 +384,7 @@ export function HotelDetailPage() {
             ].map(({ label, value }) => (
               <div key={label} className="flex justify-between gap-2">
                 <dt className="text-ink/50">{label}</dt>
-                <dd className="font-medium text-ink text-right">{value}</dd>
+                <dd className="text-right font-medium text-ink">{value}</dd>
               </div>
             ))}
           </dl>
@@ -228,13 +395,13 @@ export function HotelDetailPage() {
           <dl className="space-y-2 text-sm">
             {[
               { label: 'Admin ID',      value: hotel.adminId || '—' },
+              { label: 'Plan',          value: hotel.subscriptionType || '—' },
               { label: 'Approved',      value: fmt(hotel.approvedAt) },
-              { label: 'Trial Start',   value: fmt(hotel.trialStartDate) },
               { label: 'Trial End',     value: fmt(hotel.trialEndDate) },
             ].map(({ label, value }) => (
               <div key={label} className="flex justify-between gap-2">
                 <dt className="text-ink/50">{label}</dt>
-                <dd className="font-medium text-ink text-right">{value}</dd>
+                <dd className="text-right font-medium text-ink capitalize">{value}</dd>
               </div>
             ))}
           </dl>
@@ -248,6 +415,32 @@ export function HotelDetailPage() {
         )}
       </div>
 
+      {/* Activity Timeline */}
+      {timeline.length > 0 && (
+        <div className="mt-4 rounded-xl border border-border bg-canvas p-5">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-ink/40">Activity Timeline</p>
+          <div className="relative">
+            <div className="absolute bottom-0 left-[6px] top-0 w-px bg-border" />
+            <ul className="space-y-4">
+              {timeline.map((ev, i) => (
+                <li key={i} className="relative flex gap-3 pl-5">
+                  <span className={`absolute left-0 top-[5px] h-3 w-3 rounded-full border-2 border-canvas ${DOT_COLOR[ev.kind]}`} />
+                  <div>
+                    <p className="text-sm font-medium text-ink">{ev.label}</p>
+                    {ev.date && (
+                      <p className="mt-0.5 text-xs text-ink/40">{fmt(ev.date)}</p>
+                    )}
+                    {ev.detail && (
+                      <p className="mt-0.5 text-xs text-red-600">{ev.detail}</p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {/* ── Approve Modal ── */}
       {showApprove && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
@@ -255,7 +448,7 @@ export function HotelDetailPage() {
             <h2 className="mb-4 text-base font-bold text-ink">Approve Hotel</h2>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-ink/70 mb-1.5">
+              <label className="mb-1.5 block text-sm font-medium text-ink/70">
                 Trial Period (days): <strong>{trialDays}</strong>
               </label>
               <input
@@ -263,7 +456,7 @@ export function HotelDetailPage() {
                 onChange={e => setTrialDays(Number(e.target.value))}
                 className="w-full accent-brand"
               />
-              <div className="flex justify-between text-xs text-ink/40 mt-1">
+              <div className="mt-1 flex justify-between text-xs text-ink/40">
                 <span>1 day</span><span>90 days</span>
               </div>
             </div>
@@ -272,7 +465,7 @@ export function HotelDetailPage() {
               <p className="mb-2 text-sm font-medium text-ink/70">Feature Flags</p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 {FEATURE_LABELS.map(([key, label]) => (
-                  <label key={key} className="flex items-center gap-2 text-sm text-ink cursor-pointer">
+                  <label key={key} className="flex cursor-pointer items-center gap-2 text-sm text-ink">
                     <input
                       type="checkbox"
                       checked={!!(features as any)[key]}
@@ -316,26 +509,21 @@ export function HotelDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-md rounded-2xl border border-border bg-canvas p-6 shadow-xl">
             <h2 className="mb-4 text-base font-bold text-ink">Reject Application</h2>
-
             <div className="mb-4">
-              <label className="block text-sm font-medium text-ink/70 mb-1.5">
-                Reason *
-              </label>
+              <label className="mb-1.5 block text-sm font-medium text-ink/70">Reason *</label>
               <textarea
                 value={reason}
                 onChange={e => setReason(e.target.value)}
                 rows={3}
                 placeholder="Explain why this registration is being rejected…"
-                className="w-full rounded-lg border border-border bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder-ink/40 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20 resize-none"
+                className="w-full resize-none rounded-lg border border-border bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder-ink/40 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
               />
             </div>
-
             {rejectError && (
               <div className="mb-3 rounded-lg border border-red-100 bg-red-50 px-4 py-2 text-sm text-red-600">
                 {rejectError}
               </div>
             )}
-
             <div className="flex gap-3">
               <button
                 onClick={handleReject}
@@ -347,6 +535,71 @@ export function HotelDetailPage() {
               </button>
               <button
                 onClick={() => { setShowReject(false); setReason(''); }}
+                className="rounded-lg border border-border px-4 py-2.5 text-sm text-ink/60 transition hover:bg-mist"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Suspend Modal ── */}
+      {showSuspend && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-canvas p-6 shadow-xl">
+            <h2 className="mb-2 text-base font-bold text-ink">Suspend Hotel?</h2>
+            <p className="mb-5 text-sm text-ink/60">
+              This will immediately revoke all active sessions and lock out{' '}
+              <strong className="text-ink">{hotel.hotelName}</strong>.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleSuspend}
+                disabled={suspending}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+              >
+                {suspending && <Spinner size="sm" />}
+                {suspending ? 'Suspending…' : 'Yes, Suspend'}
+              </button>
+              <button
+                onClick={() => setShowSuspend(false)}
+                className="rounded-lg border border-border px-4 py-2.5 text-sm text-ink/60 transition hover:bg-mist"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Extend Trial Modal ── */}
+      {showExtend && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-canvas p-6 shadow-xl">
+            <h2 className="mb-4 text-base font-bold text-ink">Extend Trial</h2>
+            <label className="mb-1.5 block text-sm font-medium text-ink/70">
+              Add days: <strong>{extendDays}</strong>
+            </label>
+            <input
+              type="range" min={1} max={90} value={extendDays}
+              onChange={e => setExtendDays(Number(e.target.value))}
+              className="w-full accent-brand"
+            />
+            <div className="mb-5 mt-1 flex justify-between text-xs text-ink/40">
+              <span>1 day</span><span>90 days</span>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleExtendTrial}
+                disabled={extending}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand py-2.5 text-sm font-semibold text-white transition hover:bg-brand/90 disabled:opacity-60"
+              >
+                {extending && <Spinner size="sm" />}
+                {extending ? 'Extending…' : `Add ${extendDays} day${extendDays !== 1 ? 's' : ''}`}
+              </button>
+              <button
+                onClick={() => setShowExtend(false)}
                 className="rounded-lg border border-border px-4 py-2.5 text-sm text-ink/60 transition hover:bg-mist"
               >
                 Cancel

@@ -45,21 +45,25 @@ export function saLogin(userId: string, password: string): Promise<SALoginRespon
 // ── Hotel types ───────────────────────────────────────────────────────────────
 
 export interface Hotel {
-  _id:              string;
-  hotelName:        string;
-  ownerName:        string;
-  phone:            string;
-  email:            string;
-  businessType:     string;
-  city:             string;
-  state:            string;
-  status:           'pending' | 'trial' | 'active' | 'expired' | 'suspended' | 'rejected';
-  adminId:          string;
-  trialStartDate:   string | null;
-  trialEndDate:     string | null;
-  approvedAt:       string | null;
-  rejectionReason:  string;
-  createdAt:        string;
+  _id:                   string;
+  hotelName:             string;
+  ownerName:             string;
+  phone:                 string;
+  email:                 string;
+  businessType:          string;
+  city:                  string;
+  state:                 string;
+  status:                'pending' | 'trial' | 'active' | 'expired' | 'suspended' | 'rejected';
+  adminId:               string;
+  trialStartDate:        string | null;
+  trialEndDate:          string | null;
+  approvedAt:            string | null;
+  rejectionReason:       string;
+  subscriptionType:      'trial' | 'starter' | 'professional' | 'enterprise';
+  subscriptionStartDate: string | null;
+  subscriptionEndDate:   string | null;
+  createdAt:             string;
+  updatedAt:             string;
   features: {
     payment:       boolean;
     reservations:  boolean;
@@ -125,6 +129,65 @@ export function rejectHotel(id: string, reason: string): Promise<RejectResponse>
   return saFetch<RejectResponse>(`/hotels/${id}/reject`, {
     method: 'PUT',
     body:   JSON.stringify({ reason }),
+  });
+}
+
+export interface SimpleHotelAction {
+  message: string;
+  hotel:   Hotel;
+}
+
+export interface DashboardData {
+  hotelStats: {
+    total:     number;
+    pending:   number;
+    trial:     number;
+    active:    number;
+    expired:   number;
+    suspended: number;
+    rejected:  number;
+  };
+  devices:        { total: number; online: number };
+  todayRevenue:   number;
+  monthlyRevenue: number;
+  churnRisk:      number;
+  openTickets:    number;
+  latestRegistrations: {
+    _id: string; hotelName: string; ownerName: string;
+    phone: string; city: string; state: string;
+    status: string; createdAt: string;
+  }[];
+  pendingRenewals: {
+    _id: string; hotelName: string; ownerName: string;
+    phone: string; status: string; subscriptionType: string;
+    trialEndDate: string | null; subscriptionEndDate: string | null;
+  }[];
+  generatedAt: string;
+}
+
+export function getDashboard(): Promise<DashboardData> {
+  return saFetch<DashboardData>('/dashboard');
+}
+
+export function suspendHotel(id: string): Promise<SimpleHotelAction> {
+  return saFetch<SimpleHotelAction>(`/hotels/${id}/suspend`, { method: 'PUT' });
+}
+
+export function activateHotel(id: string): Promise<SimpleHotelAction> {
+  return saFetch<SimpleHotelAction>(`/hotels/${id}/activate`, { method: 'PUT' });
+}
+
+export function extendTrial(id: string, days: number): Promise<SimpleHotelAction> {
+  return saFetch<SimpleHotelAction>(`/hotels/${id}/extend-trial`, {
+    method: 'PUT',
+    body:   JSON.stringify({ days }),
+  });
+}
+
+export function setTrial(id: string, trialDays: number): Promise<SimpleHotelAction> {
+  return saFetch<SimpleHotelAction>(`/hotels/${id}/trial`, {
+    method: 'PUT',
+    body:   JSON.stringify({ trialDays }),
   });
 }
 

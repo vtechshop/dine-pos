@@ -17,6 +17,7 @@ import { SuperAdminRoute }      from './components/SuperAdminRoute';
 import { SuperAdminLayout }     from './components/layout/SuperAdminLayout';
 import { HotelsPage }           from './pages/super-admin/HotelsPage';
 import { HotelDetailPage }      from './pages/super-admin/HotelDetailPage';
+import { SADashboardPage }      from './pages/super-admin/SADashboardPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
@@ -71,7 +72,8 @@ export function App() {
                   {/* Super Admin protected routes */}
                   <Route element={<SuperAdminRoute />}>
                     <Route element={<SuperAdminLayout />}>
-                      <Route path="/super-admin"        element={<Navigate to="/super-admin/hotels" replace />} />
+                      <Route path="/super-admin"            element={<Navigate to="/super-admin/dashboard" replace />} />
+                      <Route path="/super-admin/dashboard"  element={<SADashboardPage />} />
                       <Route path="/super-admin/hotels"     element={<HotelsPage />} />
                       <Route path="/super-admin/hotels/:id" element={<HotelDetailPage />} />
                     </Route>
