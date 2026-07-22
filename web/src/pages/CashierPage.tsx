@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useShortcut } from '../hooks/useShortcut';
 import {
   Clock, TrendingUp, ShoppingCart, Users, Zap, Wallet,
   AlertCircle, RefreshCw, Search, Printer, X, Star,
@@ -355,6 +357,59 @@ export function CashierPage() {
   const avgBill = report && report.totalOrders > 0
     ? report.totalSales / report.totalOrders
     : 0;
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────────
+  const navigate = useNavigate();
+
+  // F2 → Cashier Ops (this page — used from other pages in the app)
+  // F3 → Tables (already registered in DashboardPage when that's active)
+  // Ctrl+F → focus bill search
+  // Ctrl+P → reprint last bill
+  // Ctrl+B → go to Dashboard (billing/table view)
+  // Esc → clear active search
+
+  // F2 shortcut via KeyboardContext
+  useShortcut('F2', useCallback(() => { navigate('/cashier'); }, [navigate]));
+
+  // Esc: clear bill search or customer search if either is active
+  useShortcut('Escape', useCallback(() => {
+    if (searched) {
+      setSearched(false); setSearchResults([]); setSearchTerm(''); setSearchError(null);
+    } else if (custSearched) {
+      setCustSearched(false); setCustResults([]); setCustQuery(''); setCustError(null);
+    }
+  }, [searched, custSearched]));
+
+  // Ctrl combos need a direct keydown listener (KeyboardContext only covers F-keys + Esc)
+  const reprintLastRef = useRef(handleReprintLast);
+  useEffect(() => { reprintLastRef.current = handleReprintLast; }, [handleReprintLast]);
+
+  // Ctrl+F / Ctrl+B / Ctrl+P — registered once, never re-creates
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      switch (e.key.toLowerCase()) {
+        case 'f': {
+          e.preventDefault();
+          const el = document.getElementById('cashier-bill-search');
+          if (el) (el as HTMLInputElement).focus();
+          break;
+        }
+        case 'b': {
+          e.preventDefault();
+          navigate('/dashboard');
+          break;
+        }
+        case 'p': {
+          e.preventDefault();
+          void reprintLastRef.current();
+          break;
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navigate]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
