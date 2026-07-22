@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Clock, TrendingUp, ShoppingCart, Users, Zap, Wallet,
-  AlertCircle, RefreshCw, Search, Printer, X,
+  AlertCircle, RefreshCw, Search, Printer, X, Star,
 } from 'lucide-react';
 import { fetchDailyReport } from '../api/dashboard';
 import { fetchCashierOrders, fetchOrders } from '../api/orders';
 import { fetchReceiptJobs, reprintJob } from '../api/billing';
+import { searchCustomers } from '../api/loyalty';
 import type { DailyReport, OrderListItem, PrintJob } from '../types';
 import type { CashierOrderItem } from '../api/orders';
+import type { CustomerSummary } from '../types/customers';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from '../components/ui/Spinner';
@@ -147,6 +149,13 @@ export function CashierPage() {
   const [searched,      setSearched]      = useState(false);
   const [reprintingId,  setReprintingId]  = useState<string | null>(null);
 
+  // ── State: customer search ───────────────────────────────────────────────────
+  const [custQuery,     setCustQuery]     = useState('');
+  const [custResults,   setCustResults]   = useState<CustomerSummary[]>([]);
+  const [custLoading,   setCustLoading]   = useState(false);
+  const [custError,     setCustError]     = useState<string | null>(null);
+  const [custSearched,  setCustSearched]  = useState(false);
+
   // ── Bill Search ─────────────────────────────────────────────────────────────
   const handleSearch = useCallback(async () => {
     setSearchLoading(true);
@@ -195,6 +204,25 @@ export function CashierPage() {
       setReprintingId(null);
     }
   }, [printJobs]);
+
+  // ── Customer Search ──────────────────────────────────────────────────────────
+  const handleCustSearch = useCallback(async () => {
+    const q = custQuery.trim();
+    if (!q) return;
+    setCustLoading(true);
+    setCustError(null);
+    setCustSearched(true);
+    try {
+      const isPhone = /^\d+$/.test(q);
+      const res = await searchCustomers(isPhone ? { phone: q, limit: 10 } : { name: q, limit: 10 });
+      setCustResults(res.customers);
+    } catch {
+      setCustError('Customer lookup failed — loyalty may not be enabled');
+      setCustResults([]);
+    } finally {
+      setCustLoading(false);
+    }
+  }, [custQuery]);
 
   // ── Load ───────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -450,6 +478,86 @@ export function CashierPage() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* ── Customer Quick Actions ──────────────────────────────────── */}
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-ink">Customer Quick Lookup</h2>
+
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Users size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/35" />
+              <input
+                id="cashier-cust-search"
+                type="text"
+                value={custQuery}
+                onChange={e => setCustQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && void handleCustSearch()}
+                placeholder="Name or mobile number"
+                className="h-8 w-full rounded-lg border border-border bg-canvas pl-8 pr-3 text-xs text-ink placeholder:text-ink/30 outline-none transition focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+              />
+            </div>
+            <button
+              onClick={() => void handleCustSearch()}
+              disabled={custLoading || !custQuery.trim()}
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-xs font-semibold text-white transition hover:bg-brand/90 disabled:opacity-60"
+            >
+              {custLoading ? <Spinner size="sm" /> : <Search size={13} />}
+              Find
+            </button>
+            {custSearched && (
+              <button
+                onClick={() => { setCustSearched(false); setCustResults([]); setCustQuery(''); setCustError(null); }}
+                className="flex h-8 items-center px-2.5 rounded-lg border border-border bg-canvas text-xs text-ink/50 transition hover:bg-mist"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          {custError && (
+            <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              {custError}
+            </div>
+          )}
+
+          {custSearched && !custLoading && (
+            <div className="mt-3">
+              {custResults.length === 0 ? (
+                <div className="flex h-16 items-center justify-center rounded-xl border border-dashed border-border">
+                  <p className="text-sm text-ink/30">No customer found</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {custResults.map(c => (
+                    <div
+                      key={c._id}
+                      className="flex items-center gap-3 rounded-lg border border-border bg-canvas px-3.5 py-2.5"
+                    >
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10">
+                        <Users size={13} className="text-brand" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-ink truncate">{c.name}</p>
+                        <p className="text-[11px] text-ink/40">
+                          {c.phone ?? 'No phone'} · {c.visitCount} visit{c.visitCount !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="flex items-center justify-end gap-1 text-xs font-semibold text-brand">
+                          <Star size={11} strokeWidth={2.5} />
+                          {c.loyaltyBalance.toLocaleString('en-IN')} pts
+                        </div>
+                        <p className="text-[11px] text-ink/40">
+                          {fmtINR(sym, c.lifetimeSpend)} lifetime
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
