@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { Building2, LayoutDashboard, LogOut, ShieldCheck } from 'lucide-react';
+import { Activity, Building2, LayoutDashboard, LogOut, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export function SuperAdminLayout() {
@@ -47,6 +47,19 @@ export function SuperAdminLayout() {
           >
             <Building2 size={16} strokeWidth={1.75} />
             Hotels
+          </NavLink>
+          <NavLink
+            to="/super-admin/live"
+            className={({ isActive }) =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                isActive
+                  ? 'bg-brand/10 text-brand'
+                  : 'text-ink/70 hover:bg-mist hover:text-ink'
+              }`
+            }
+          >
+            <Activity size={16} strokeWidth={1.75} />
+            Live
           </NavLink>
         </nav>
 

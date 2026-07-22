@@ -138,6 +138,15 @@ export interface SimpleHotelAction {
   hotel:   Hotel;
 }
 
+export interface DashboardSystemHealth {
+  mongo:         string;
+  redis:         string;
+  api:           string;
+  memory:        { usedMB: number; totalMB: number; rssMB: number; percentage: number };
+  uptimeSeconds: number;
+  loadAvg:       number;
+}
+
 export interface DashboardData {
   hotelStats: {
     total:     number;
@@ -163,7 +172,25 @@ export interface DashboardData {
     phone: string; status: string; subscriptionType: string;
     trialEndDate: string | null; subscriptionEndDate: string | null;
   }[];
-  generatedAt: string;
+  systemHealth?: DashboardSystemHealth;
+  generatedAt:   string;
+}
+
+// ── System Health ─────────────────────────────────────────────────────────────
+
+export interface HealthData {
+  status:        string;
+  mongo:         string;
+  api:           string;
+  totalHotels:   number;
+  totalOrders:   number;
+  totalDevices:  number;
+  onlineDevices: number;
+  checkedAt:     string;
+}
+
+export function getHealth(): Promise<HealthData> {
+  return saFetch<HealthData>('/health');
 }
 
 export function getDashboard(): Promise<DashboardData> {
