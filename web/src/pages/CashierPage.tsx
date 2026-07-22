@@ -123,6 +123,71 @@ function PendingBillRow({ order, sym, nowMs }: { order: CashierOrderItem; sym: s
   );
 }
 
+// ── Favourite Products ────────────────────────────────────────────────────────
+// Shows the most-ordered items from today's completed orders.
+// User-pinned favourites require backend storage (Coming Soon).
+
+import { fetchOrders as _fetchOrdersForFav } from '../api/orders';
+
+interface RecentItem { name: string; qty: number }
+
+function FavouriteProducts({ sym: _sym }: { sym: string }) {
+  const [items,   setItems]   = useState<RecentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    _fetchOrdersForFav({ limit: 30, status: 'completed' })
+      .then(res => {
+        if (cancelled) return;
+        const tally = new Map<string, number>();
+        for (const o of res.orders) {
+          for (const item of o.items) {
+            tally.set(item.productName, (tally.get(item.productName) ?? 0) + item.quantity);
+          }
+        }
+        const sorted = [...tally.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 12)
+          .map(([name, qty]) => ({ name, qty }));
+        setItems(sorted);
+      })
+      .catch(() => { /* non-fatal */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-ink">Frequently Sold Today</h2>
+        <span className="text-[11px] text-ink/35">Pinned favourites — Coming Soon</span>
+      </div>
+      {loading ? (
+        <div className="flex h-16 items-center justify-center"><Spinner size="sm" /></div>
+      ) : items.length === 0 ? (
+        <div className="flex h-16 items-center justify-center rounded-xl border border-dashed border-border">
+          <p className="text-sm text-ink/30">No completed orders yet today</p>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {items.map(item => (
+            <div
+              key={item.name}
+              className="flex items-center gap-2 rounded-full border border-border bg-canvas px-3 py-1.5 text-xs"
+            >
+              <span className="font-medium text-ink">{item.name}</span>
+              <span className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand">
+                ×{item.qty}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function CashierPage() {
@@ -685,6 +750,9 @@ export function CashierPage() {
             </div>
           )}
         </section>
+
+        {/* ── Favourite Products ──────────────────────────────────────── */}
+        <FavouriteProducts sym={sym} />
 
         {/* ── Coming Soon: Hold Bills · Manager Approval · Cash Drawer ─── */}
         <div className="grid gap-3 sm:grid-cols-3">
