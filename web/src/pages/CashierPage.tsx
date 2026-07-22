@@ -686,6 +686,65 @@ export function CashierPage() {
           )}
         </section>
 
+        {/* ── Coming Soon: Hold Bills · Manager Approval · Cash Drawer ─── */}
+        <div className="grid gap-3 sm:grid-cols-3">
+
+          <div className="rounded-xl border border-dashed border-border bg-canvas p-4">
+            <div className="mb-3 flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink/5">
+                <Clock size={14} className="text-ink/30" />
+              </div>
+              <p className="text-sm font-semibold text-ink">Hold / Park Bills</p>
+            </div>
+            <ul className="mb-3 space-y-1 text-[11px] text-ink/50">
+              <li>· Hold current bill</li>
+              <li>· Resume held bill</li>
+              <li>· Held bill counter</li>
+            </ul>
+            <span className="inline-block rounded-full bg-ink/8 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink/35">
+              Coming Soon
+            </span>
+            <p className="mt-2 text-[10px] text-ink/30">Requires backend session parking</p>
+          </div>
+
+          <div className="rounded-xl border border-dashed border-border bg-canvas p-4">
+            <div className="mb-3 flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink/5">
+                <AlertCircle size={14} className="text-ink/30" />
+              </div>
+              <p className="text-sm font-semibold text-ink">Manager Approval</p>
+            </div>
+            <ul className="mb-3 space-y-1 text-[11px] text-ink/50">
+              <li>· Discount / void / cancel</li>
+              <li>· Price override · refund</li>
+              <li>· PIN-based auth</li>
+            </ul>
+            <span className="inline-block rounded-full bg-ink/8 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink/35">
+              Coming Soon
+            </span>
+            <p className="mt-2 text-[10px] text-ink/30">Requires manager PIN endpoint</p>
+          </div>
+
+          <div className="rounded-xl border border-dashed border-border bg-canvas p-4">
+            <div className="mb-3 flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink/5">
+                <Wallet size={14} className="text-ink/30" />
+              </div>
+              <p className="text-sm font-semibold text-ink">Cash Drawer</p>
+            </div>
+            <ul className="mb-3 space-y-1 text-[11px] text-ink/50">
+              <li>· Open / manual open</li>
+              <li>· Cash In · Cash Out</li>
+              <li>· Reason entry</li>
+            </ul>
+            <span className="inline-block rounded-full bg-ink/8 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink/35">
+              Coming Soon
+            </span>
+            <p className="mt-2 text-[10px] text-ink/30">Requires hardware drawer API</p>
+          </div>
+
+        </div>
+
       </div>
     </div>
   );
