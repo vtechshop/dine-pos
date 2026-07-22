@@ -17,6 +17,14 @@ function daysLeft(endDate: string | null): { label: string; urgent: boolean } {
   return { label: `${diff}d left`, urgent: diff <= 3 };
 }
 
+function getExpiringTrials(renewals: DashboardData['pendingRenewals']): DashboardData['pendingRenewals'] {
+  return renewals.filter(h => {
+    if (h.status !== 'trial' || !h.trialEndDate) return false;
+    const diff = Math.ceil((new Date(h.trialEndDate).getTime() - Date.now()) / 86_400_000);
+    return diff >= 0 && diff <= 7;
+  });
+}
+
 const STATUS_BADGE: Record<string, string> = {
   pending:   'bg-amber-50 text-amber-700 border-amber-200',
   trial:     'bg-blue-50 text-blue-700 border-blue-200',
@@ -63,12 +71,14 @@ export function SADashboardPage() {
 
   const s = data!.hotelStats;
 
+  const expiringTrials = getExpiringTrials(data!.pendingRenewals);
+
   const statCards = [
-    { label: 'Total Hotels', value: s.total,     border: 'border-brand/25',   bg: 'bg-brand/5',   text: 'text-brand'     },
-    { label: 'Pending',      value: s.pending,   border: 'border-amber-200',  bg: 'bg-amber-50',  text: 'text-amber-700' },
-    { label: 'On Trial',     value: s.trial,     border: 'border-blue-200',   bg: 'bg-blue-50',   text: 'text-blue-700'  },
-    { label: 'Active',       value: s.active,    border: 'border-green-200',  bg: 'bg-green-50',  text: 'text-green-700' },
-    { label: 'Suspended',    value: s.suspended, border: 'border-red-200',    bg: 'bg-red-50',    text: 'text-red-700'   },
+    { label: 'Total Hotels', value: s.total,     border: 'border-brand/25',   bg: 'bg-brand/5',   text: 'text-brand',     to: '/super-admin/hotels' },
+    { label: 'Pending',      value: s.pending,   border: 'border-amber-200',  bg: 'bg-amber-50',  text: 'text-amber-700', to: '/super-admin/hotels?status=pending' },
+    { label: 'On Trial',     value: s.trial,     border: 'border-blue-200',   bg: 'bg-blue-50',   text: 'text-blue-700',  to: '/super-admin/hotels?status=trial' },
+    { label: 'Active',       value: s.active,    border: 'border-green-200',  bg: 'bg-green-50',  text: 'text-green-700', to: '/super-admin/hotels?status=active' },
+    { label: 'Suspended',    value: s.suspended, border: 'border-red-200',    bg: 'bg-red-50',    text: 'text-red-700',   to: '/super-admin/hotels?status=suspended' },
   ];
 
   return (
@@ -95,12 +105,28 @@ export function SADashboardPage() {
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {statCards.map(({ label, value, border, bg, text }) => (
-          <div key={label} className={`rounded-xl border ${border} ${bg} p-4`}>
+        {statCards.map(({ label, value, border, bg, text, to }) => (
+          <Link key={label} to={to} className={`rounded-xl border ${border} ${bg} p-4 transition hover:opacity-80`}>
             <p className="text-xs font-medium text-ink/50">{label}</p>
             <p className={`mt-1 text-3xl font-bold tabular-nums ${text}`}>{value}</p>
-          </div>
+          </Link>
         ))}
+      </div>
+
+      {/* Revenue summary */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl border border-border bg-canvas p-4">
+          <p className="text-xs font-medium text-ink/50">Today's Revenue</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-ink">
+            ₹{data!.todayRevenue.toLocaleString('en-IN')}
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-canvas p-4">
+          <p className="text-xs font-medium text-ink/50">Monthly Revenue</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-ink">
+            ₹{data!.monthlyRevenue.toLocaleString('en-IN')}
+          </p>
+        </div>
       </div>
 
       {/* Secondary counts + churn alert */}
@@ -114,6 +140,19 @@ export function SADashboardPage() {
           </span>
         )}
       </div>
+
+      {/* Suspended hotels alert */}
+      {s.suspended > 0 && (
+        <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-red-700">
+            <AlertTriangle size={15} />
+            <strong>{s.suspended}</strong> hotel{s.suspended !== 1 ? 's' : ''} currently suspended
+          </div>
+          <Link to="/super-admin/hotels?status=suspended" className="text-xs font-medium text-red-600 hover:underline">
+            View →
+          </Link>
+        </div>
+      )}
 
       {/* Two-column section */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -200,6 +239,45 @@ export function SADashboardPage() {
           </div>
         </section>
       </div>
+
+      {/* Expiring Trials */}
+      {expiringTrials.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-ink">
+              Expiring Trials{' '}
+              <span className="font-normal text-ink/40">(next 7 days)</span>
+            </h2>
+            <Link to="/super-admin/hotels?status=trial" className="text-xs text-brand hover:underline">
+              View all →
+            </Link>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-amber-200 bg-amber-50">
+            {expiringTrials.map((h, i) => {
+              const { label, urgent } = daysLeft(h.trialEndDate);
+              return (
+                <Link
+                  key={h._id}
+                  to={`/super-admin/hotels/${h._id}`}
+                  className={`flex items-center gap-3 px-4 py-3 transition hover:bg-amber-100 ${
+                    i < expiringTrials.length - 1 ? 'border-b border-amber-200' : ''
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-ink">{h.hotelName}</p>
+                    <p className="truncate text-xs text-ink/50">{h.ownerName} · {h.phone}</p>
+                  </div>
+                  {label && (
+                    <span className={`text-xs font-semibold ${urgent ? 'text-red-600' : 'text-amber-700'}`}>
+                      {label}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Check, X, Copy, Eye, EyeOff, PauseCircle, PlayCircle, CalendarPlus } from 'lucide-react';
+import { ArrowLeft, Check, X, Copy, Eye, EyeOff, PauseCircle, PlayCircle, CalendarPlus, CreditCard, Sliders, Settings, FileText } from 'lucide-react';
 import {
   getHotel, approveHotel, rejectHotel, suspendHotel, activateHotel, extendTrial,
+  updateFeatures, setPlan, setTrial,
   type Hotel, type ApproveResponse,
 } from '../../api/superAdmin';
 import { Spinner } from '../../components/ui/Spinner';
@@ -28,6 +29,21 @@ const FEATURE_LABELS: [keyof Hotel['features'], string][] = [
   ['waste',        'Waste Tracking'],
   ['aggregator',   'Aggregator'],
 ];
+
+type PlanId = 'trial' | 'monthly' | 'quarterly' | 'halfyearly' | 'yearly';
+
+const PLAN_OPTIONS: { id: PlanId; label: string; tier?: 'starter' | 'professional' | 'enterprise'; days?: number }[] = [
+  { id: 'trial',      label: 'Trial' },
+  { id: 'monthly',    label: 'Monthly',     tier: 'starter',      days: 30  },
+  { id: 'quarterly',  label: 'Quarterly',   tier: 'professional', days: 90  },
+  { id: 'halfyearly', label: 'Half-Yearly', tier: 'professional', days: 180 },
+  { id: 'yearly',     label: 'Yearly',      tier: 'enterprise',   days: 365 },
+];
+
+function remainingDays(endDate: string | null): number | null {
+  if (!endDate) return null;
+  return Math.max(0, Math.ceil((new Date(endDate).getTime() - Date.now()) / 86_400_000));
+}
 
 function fmt(d: string | null) {
   if (!d) return '—';
@@ -175,11 +191,24 @@ export function HotelDetailPage() {
   const [extendDays,   setExtendDays]   = useState(7);
   const [manageError,  setManageError]  = useState<string | null>(null);
 
+  // Subscription plan
+  const [selectedPlan,    setSelectedPlan]    = useState<PlanId | null>(null);
+  const [planTrialDays,   setPlanTrialDays]   = useState(14);
+  const [settingPlan,     setSettingPlan]     = useState(false);
+  const [planError,       setPlanError]       = useState<string | null>(null);
+  const [planSuccess,     setPlanSuccess]     = useState<string | null>(null);
+
+  // Feature flags
+  const [draftFeatures,   setDraftFeatures]   = useState<Hotel['features'] | null>(null);
+  const [savingFeatures,  setSavingFeatures]  = useState(false);
+  const [featuresError,   setFeaturesError]   = useState<string | null>(null);
+  const [featuresSuccess, setFeaturesSuccess] = useState<string | null>(null);
+
   useEffect(() => {
     if (!id) return;
     setLoading(true);
     getHotel(id)
-      .then(h => { setHotel(h); setFeatures(h.features); })
+      .then(h => { setHotel(h); setFeatures(h.features); setDraftFeatures(h.features); })
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load hotel'))
       .finally(() => setLoading(false));
   }, [id]);
@@ -259,6 +288,45 @@ export function HotelDetailPage() {
       setShowExtend(false);
     } finally {
       setExtending(false);
+    }
+  }
+
+  async function handleSetPlan() {
+    if (!id || !selectedPlan) return;
+    setSettingPlan(true); setPlanError(null);
+    try {
+      let res;
+      if (selectedPlan === 'trial') {
+        res = await setTrial(id, planTrialDays);
+      } else {
+        const opt = PLAN_OPTIONS.find(p => p.id === selectedPlan)!;
+        res = await setPlan(id, opt.tier!, opt.days!);
+      }
+      setHotel(res.hotel);
+      setDraftFeatures(res.hotel.features);
+      setSelectedPlan(null);
+      setPlanSuccess(res.message);
+      setTimeout(() => setPlanSuccess(null), 3000);
+    } catch (err) {
+      setPlanError(err instanceof Error ? err.message : 'Plan change failed');
+    } finally {
+      setSettingPlan(false);
+    }
+  }
+
+  async function handleSaveFeatures() {
+    if (!id || !draftFeatures) return;
+    setSavingFeatures(true); setFeaturesError(null);
+    try {
+      const result = await updateFeatures(id, draftFeatures);
+      setHotel(prev => prev ? { ...prev, features: result.features } : null);
+      setDraftFeatures(result.features);
+      setFeaturesSuccess('Feature flags updated');
+      setTimeout(() => setFeaturesSuccess(null), 3000);
+    } catch (err) {
+      setFeaturesError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setSavingFeatures(false);
     }
   }
 
@@ -440,6 +508,167 @@ export function HotelDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Subscription Management */}
+      {!isPending && hotel.status !== 'rejected' && (
+        <div className="mt-4 rounded-xl border border-border bg-canvas p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <CreditCard size={15} className="text-ink/40" />
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Subscription</p>
+          </div>
+
+          <div className="mb-4 grid grid-cols-3 gap-3 text-sm">
+            <div>
+              <p className="text-xs text-ink/50">Current Plan</p>
+              <p className="mt-0.5 font-semibold capitalize text-ink">{hotel.subscriptionType || '—'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-ink/50">Expiry Date</p>
+              <p className="mt-0.5 font-semibold text-ink">
+                {fmt(hotel.trialEndDate || hotel.subscriptionEndDate)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-ink/50">Days Remaining</p>
+              <p className="mt-0.5 font-semibold text-ink">
+                {(() => {
+                  const d = remainingDays(hotel.trialEndDate || hotel.subscriptionEndDate);
+                  return d === null ? '—' : `${d}d`;
+                })()}
+              </p>
+            </div>
+          </div>
+
+          <p className="mb-2 text-sm font-medium text-ink/70">Change Plan</p>
+          <div className="flex flex-wrap gap-2">
+            {PLAN_OPTIONS.map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => setSelectedPlan(selectedPlan === opt.id ? null : opt.id)}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                  selectedPlan === opt.id
+                    ? 'border-brand bg-brand/10 text-brand'
+                    : 'border-border bg-canvas text-ink/60 hover:bg-mist'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {selectedPlan === 'trial' && (
+            <div className="mt-3">
+              <label className="mb-1.5 block text-sm font-medium text-ink/70">
+                Trial days: <strong>{planTrialDays}</strong>
+              </label>
+              <input
+                type="range" min={1} max={90} value={planTrialDays}
+                onChange={e => setPlanTrialDays(Number(e.target.value))}
+                className="w-full accent-brand"
+              />
+              <div className="mt-1 flex justify-between text-xs text-ink/40">
+                <span>1 day</span><span>90 days</span>
+              </div>
+            </div>
+          )}
+
+          {selectedPlan && (
+            <button
+              onClick={handleSetPlan}
+              disabled={settingPlan}
+              className="mt-3 flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand/90 disabled:opacity-60"
+            >
+              {settingPlan && <Spinner size="sm" />}
+              {settingPlan ? 'Applying…' : `Apply ${PLAN_OPTIONS.find(p => p.id === selectedPlan)?.label} Plan`}
+            </button>
+          )}
+
+          {planError   && <p className="mt-2 text-xs text-red-600">{planError}</p>}
+          {planSuccess && <p className="mt-2 text-xs text-green-600">{planSuccess}</p>}
+        </div>
+      )}
+
+      {/* Feature Flags */}
+      {draftFeatures && !isPending && hotel.status !== 'rejected' && (
+        <div className="mt-4 rounded-xl border border-border bg-canvas p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <Sliders size={15} className="text-ink/40" />
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Feature Flags</p>
+          </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+            {FEATURE_LABELS.map(([key, label]) => (
+              <div
+                key={key}
+                className="flex cursor-pointer items-center gap-2.5"
+                onClick={() => setDraftFeatures(f => f ? { ...f, [key]: !f[key] } : f)}
+              >
+                <div className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
+                  draftFeatures[key] ? 'bg-brand' : 'bg-ink/20'
+                }`}>
+                  <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                    draftFeatures[key] ? 'translate-x-4' : 'translate-x-0'
+                  }`} />
+                </div>
+                <span className="text-sm text-ink">{label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={handleSaveFeatures}
+              disabled={savingFeatures}
+              className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand/90 disabled:opacity-60"
+            >
+              {savingFeatures && <Spinner size="sm" />}
+              {savingFeatures ? 'Saving…' : 'Save Flags'}
+            </button>
+            {featuresError   && <p className="text-xs text-red-600">{featuresError}</p>}
+            {featuresSuccess && <p className="text-xs text-green-600">{featuresSuccess}</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Hotel Settings (read-only) */}
+      <div className="mt-4 rounded-xl border border-border bg-canvas p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Settings size={15} className="text-ink/40" />
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Hotel Settings</p>
+          </div>
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-600">
+            Edit Coming Soon
+          </span>
+        </div>
+        <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+          {[
+            { label: 'Hotel Name',    value: hotel.hotelName },
+            { label: 'Owner Name',    value: hotel.ownerName },
+            { label: 'Phone',         value: hotel.phone },
+            { label: 'Email',         value: hotel.email || '—' },
+            { label: 'Business Type', value: hotel.businessType },
+            { label: 'City',          value: hotel.city || '—' },
+            { label: 'State',         value: hotel.state || '—' },
+            { label: 'Admin ID',      value: hotel.adminId || '—' },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex justify-between gap-2">
+              <dt className="text-ink/50">{label}</dt>
+              <dd className="text-right font-medium text-ink capitalize">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      {/* Internal Notes */}
+      <div className="mt-4 rounded-xl border border-border bg-canvas p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <FileText size={15} className="text-ink/40" />
+          <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Internal Notes</p>
+        </div>
+        <div className="flex flex-col items-center justify-center py-6 text-center">
+          <p className="text-sm font-medium text-ink/50">Coming Soon</p>
+          <p className="mt-1 text-xs text-ink/30">Internal remarks and notes will appear here once the feature is available.</p>
+        </div>
+      </div>
 
       {/* ── Approve Modal ── */}
       {showApprove && (

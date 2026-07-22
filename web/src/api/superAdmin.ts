@@ -191,5 +191,28 @@ export function setTrial(id: string, trialDays: number): Promise<SimpleHotelActi
   });
 }
 
+export interface UpdateFeaturesResponse {
+  message:  string;
+  features: Hotel['features'];
+}
+
+export function updateFeatures(id: string, features: Partial<Hotel['features']>): Promise<UpdateFeaturesResponse> {
+  return saFetch<UpdateFeaturesResponse>(`/hotels/${id}/features`, {
+    method: 'PUT',
+    body:   JSON.stringify(features),
+  });
+}
+
+export function setPlan(
+  id:           string,
+  plan:         'starter' | 'professional' | 'enterprise',
+  durationDays: number,
+): Promise<SimpleHotelAction> {
+  return saFetch<SimpleHotelAction>(`/hotels/${id}/plan`, {
+    method: 'PUT',
+    body:   JSON.stringify({ plan, durationDays }),
+  });
+}
+
 // Re-export apiFetch for non-SA paths that need the standard client
 export { apiFetch };

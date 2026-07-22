@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Search, RefreshCw, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getHotels, type Hotel } from '../../api/superAdmin';
 import { Spinner } from '../../components/ui/Spinner';
@@ -24,12 +24,19 @@ function trialDaysLeft(endDate: string | null): string {
 }
 
 export function HotelsPage() {
+  const [searchParams] = useSearchParams();
+  const initialStatus  = searchParams.get('status');
+
   const [hotels,  setHotels]  = useState<Hotel[]>([]);
   const [total,   setTotal]   = useState(0);
   const [pages,   setPages]   = useState(1);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
-  const [tab,     setTab]     = useState<StatusTab>('all');
+  const [tab,     setTab]     = useState<StatusTab>(() =>
+    initialStatus && (STATUSES as readonly string[]).includes(initialStatus)
+      ? (initialStatus as StatusTab)
+      : 'all',
+  );
   const [search,  setSearch]  = useState('');
   const [query,   setQuery]   = useState('');
   const [page,    setPage]    = useState(1);
