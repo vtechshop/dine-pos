@@ -28,6 +28,7 @@ import { HotelHealthPage }         from './pages/super-admin/HotelHealthPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
+import { CashierPage } from './pages/CashierPage';
 // Heavy pages — code-split to reduce initial JS parse time
 const OrdersPage      = lazy(() => import('./pages/OrdersPage').then(m => ({ default: m.OrdersPage })));
 const ProductsPage    = lazy(() => import('./pages/ProductsPage').then(m => ({ default: m.ProductsPage })));
@@ -98,6 +99,7 @@ export function App() {
                     <Route path="/dashboard"   element={<DashboardPage />} />
                     <Route path="/tables"      element={<TablesPage />} />
                     <Route path="/kitchen"     element={<KitchenPage />} />
+                    <Route path="/cashier"     element={<CashierPage />} />
                     <Route path="/orders"      element={<AdminOnly><Suspense fallback={<PageFallback />}><OrdersPage /></Suspense></AdminOnly>} />
                     <Route path="/customers"   element={<AdminOnly><Suspense fallback={<PageFallback />}><CustomersPage /></Suspense></AdminOnly>} />
                     <Route path="/products"    element={<AdminOnly><Suspense fallback={<PageFallback />}><ProductsPage /></Suspense></AdminOnly>} />
