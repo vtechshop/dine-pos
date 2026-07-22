@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Clock, TrendingUp, ShoppingCart, Users, Zap, Wallet,
-  AlertCircle, RefreshCw,
+  AlertCircle, RefreshCw, Search, Printer, X,
 } from 'lucide-react';
 import { fetchDailyReport } from '../api/dashboard';
-import { fetchCashierOrders } from '../api/orders';
-import type { DailyReport } from '../types';
+import { fetchCashierOrders, fetchOrders } from '../api/orders';
+import { fetchReceiptJobs, reprintJob } from '../api/billing';
+import type { DailyReport, OrderListItem, PrintJob } from '../types';
 import type { CashierOrderItem } from '../api/orders';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
@@ -126,7 +127,7 @@ export function CashierPage() {
   const { hotelId }     = useAuth();
   const sym             = settings?.currencySymbol ?? '₹';
 
-  // ── State ──────────────────────────────────────────────────────────────────
+  // ── State: dashboard ────────────────────────────────────────────────────────
   const [report,          setReport]         = useState<DailyReport | null>(null);
   const [pendingOrders,   setPendingOrders]  = useState<CashierOrderItem[]>([]);
   const [reportLoading,   setReportLoading]  = useState(true);
@@ -134,6 +135,66 @@ export function CashierPage() {
   const [error,           setError]          = useState<string | null>(null);
   // Captured once per minute to avoid Date.now() calls inside component renders
   const [nowMs,           setNowMs]          = useState(() => Date.now());
+
+  // ── State: bill search ───────────────────────────────────────────────────────
+  const [searchTerm,    setSearchTerm]    = useState('');
+  const [searchDate,    setSearchDate]    = useState(() => new Date().toISOString().split('T')[0]);
+  const [searchStatus,  setSearchStatus]  = useState<'all' | 'served' | 'completed'>('all');
+  const [searchResults, setSearchResults] = useState<OrderListItem[]>([]);
+  const [printJobs,     setPrintJobs]     = useState<PrintJob[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError,   setSearchError]   = useState<string | null>(null);
+  const [searched,      setSearched]      = useState(false);
+  const [reprintingId,  setReprintingId]  = useState<string | null>(null);
+
+  // ── Bill Search ─────────────────────────────────────────────────────────────
+  const handleSearch = useCallback(async () => {
+    setSearchLoading(true);
+    setSearchError(null);
+    setSearched(true);
+
+    const [ordersRes, jobsRes] = await Promise.allSettled([
+      fetchOrders({
+        date:   searchDate,
+        status: searchStatus === 'all' ? undefined : searchStatus,
+        limit:  50,
+      }),
+      fetchReceiptJobs(),
+    ]);
+
+    setSearchLoading(false);
+
+    if (ordersRes.status === 'fulfilled') {
+      const term = searchTerm.toLowerCase().trim();
+      const all  = ordersRes.value.orders;
+      setSearchResults(
+        term
+          ? all.filter(o =>
+              o.orderNumber.toLowerCase().includes(term) ||
+              o.tableNumber.toLowerCase().includes(term) ||
+              (o.customerName ?? '').toLowerCase().includes(term),
+            )
+          : all,
+      );
+    } else {
+      setSearchError('Search failed — try again');
+    }
+
+    if (jobsRes.status === 'fulfilled') setPrintJobs(jobsRes.value);
+  }, [searchDate, searchStatus, searchTerm]);
+
+  const handleReprint = useCallback(async (orderId: string) => {
+    const job = printJobs.find(j => j.orderId === orderId && j.jobType === 'receipt');
+    if (!job) { setSearchError('No receipt print job found for this bill'); return; }
+    setReprintingId(orderId);
+    try {
+      await reprintJob(job._id);
+    } catch {
+      setSearchError('Reprint failed — check printer connection');
+    } finally {
+      setReprintingId(null);
+    }
+  }, [printJobs]);
 
   // ── Load ───────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -271,6 +332,126 @@ export function CashierPage() {
               {pendingOrders.map(o => (
                 <PendingBillRow key={o._id} order={o} sym={sym} nowMs={nowMs} />
               ))}
+            </div>
+          )}
+        </section>
+
+        {/* ── Bill Search ────────────────────────────────────────────── */}
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-ink">Bill Search</h2>
+
+          {/* Controls */}
+          <div className="flex flex-wrap gap-2">
+            <div className="relative min-w-40 flex-1">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/35" />
+              <input
+                id="cashier-bill-search"
+                type="text"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && void handleSearch()}
+                placeholder="Bill No · Table · Customer"
+                className="h-8 w-full rounded-lg border border-border bg-canvas pl-8 pr-3 text-xs text-ink placeholder:text-ink/30 outline-none transition focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+              />
+            </div>
+            <input
+              type="date"
+              value={searchDate}
+              onChange={e => setSearchDate(e.target.value)}
+              className="h-8 rounded-lg border border-border bg-canvas px-2 text-xs text-ink outline-none transition focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+            />
+            <select
+              value={searchStatus}
+              onChange={e => setSearchStatus(e.target.value as 'all' | 'served' | 'completed')}
+              className="h-8 rounded-lg border border-border bg-canvas px-2 text-xs text-ink outline-none transition focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+            >
+              <option value="all">All status</option>
+              <option value="served">Served (pending)</option>
+              <option value="completed">Completed</option>
+            </select>
+            <button
+              onClick={() => void handleSearch()}
+              disabled={searchLoading}
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-xs font-semibold text-white transition hover:bg-brand/90 disabled:opacity-60"
+            >
+              {searchLoading ? <Spinner size="sm" /> : <Search size={13} />}
+              Search
+            </button>
+            {searched && (
+              <button
+                onClick={() => { setSearched(false); setSearchResults([]); setSearchTerm(''); setSearchError(null); }}
+                className="flex h-8 items-center gap-1 rounded-lg border border-border bg-canvas px-2.5 text-xs text-ink/50 transition hover:bg-mist"
+              >
+                <X size={12} />
+                Clear
+              </button>
+            )}
+          </div>
+
+          {/* Error */}
+          {searchError && (
+            <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+              {searchError}
+            </div>
+          )}
+
+          {/* Results */}
+          {searched && !searchLoading && (
+            <div className="mt-3">
+              {searchResults.length === 0 ? (
+                <div className="flex h-20 items-center justify-center rounded-xl border border-dashed border-border">
+                  <p className="text-sm text-ink/30">No bills found</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-[1fr_5rem_5rem_5rem_5rem] items-center gap-3 px-3.5 text-[10px] font-semibold uppercase tracking-wider text-ink/35">
+                    <span>Bill / Table</span>
+                    <span className="text-right">Amount</span>
+                    <span>Method</span>
+                    <span>Time</span>
+                    <span className="text-right">Action</span>
+                  </div>
+                  {searchResults.map(o => {
+                    const hasJob    = printJobs.some(j => j.orderId === o._id && j.jobType === 'receipt');
+                    const isReprint = reprintingId === o._id;
+                    return (
+                      <div
+                        key={o._id}
+                        className="grid grid-cols-[1fr_5rem_5rem_5rem_5rem] items-center gap-3 rounded-lg border border-border bg-canvas px-3.5 py-2.5 text-xs"
+                      >
+                        <div>
+                          <p className="font-semibold text-ink">{o.orderNumber}</p>
+                          <p className="text-ink/40">
+                            {o.isParcel ? 'Parcel' : `Table ${o.tableNumber}`}
+                            {o.customerName ? ` · ${o.customerName}` : ''}
+                          </p>
+                        </div>
+                        <span className="text-right font-semibold tabular-nums text-ink">
+                          {fmtINR(sym, o.grandTotal)}
+                        </span>
+                        <span className="capitalize text-ink/50">{o.paymentMethod ?? '—'}</span>
+                        <span className="text-ink/40">
+                          {new Date(o.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <div className="flex justify-end">
+                          {hasJob ? (
+                            <button
+                              onClick={() => void handleReprint(o._id)}
+                              disabled={isReprint}
+                              className="flex items-center gap-1 rounded-md border border-border bg-mist px-2 py-1 text-[11px] font-medium text-ink/60 transition hover:bg-border disabled:opacity-60"
+                            >
+                              {isReprint ? <Spinner size="sm" /> : <Printer size={11} />}
+                              Reprint
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-ink/25">—</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </section>
