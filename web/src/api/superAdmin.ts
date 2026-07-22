@@ -337,6 +337,49 @@ export function getDeviceLicensing(): Promise<DeviceLicensingData> {
   return saFetch<DeviceLicensingData>('/dashboard/device-licensing');
 }
 
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export interface SANotification {
+  _id:          string;
+  title:        string;
+  message:      string;
+  type:         'info' | 'warning' | 'maintenance' | 'update' | 'success';
+  targetHotels: string[];
+  createdBy:    string;
+  expiresAt:    string | null;
+  isActive:     boolean;
+  createdAt:    string;
+  updatedAt:    string;
+}
+
+export interface CreateNotificationPayload {
+  title:          string;
+  message:        string;
+  type?:          SANotification['type'];
+  targetHotels?:  string[];
+  expiresInDays?: number;
+}
+
+export interface CreateNotificationResponse {
+  message:      string;
+  notification: SANotification;
+}
+
+export function getNotifications(): Promise<SANotification[]> {
+  return saFetch<SANotification[]>('/notifications');
+}
+
+export function createNotification(payload: CreateNotificationPayload): Promise<CreateNotificationResponse> {
+  return saFetch<CreateNotificationResponse>('/notifications', {
+    method: 'POST',
+    body:   JSON.stringify(payload),
+  });
+}
+
+export function deleteNotification(id: string): Promise<{ message: string }> {
+  return saFetch<{ message: string }>(`/notifications/${id}`, { method: 'DELETE' });
+}
+
 // ── Remote Config ─────────────────────────────────────────────────────────────
 
 export interface RemoteConfig {
