@@ -7,7 +7,7 @@ import {
   useMemo,
 } from 'react';
 import type { ReactNode } from 'react';
-import { loginApi, logoutApi, decodeJwtPayload } from '../api/auth';
+import { loginApi, logoutApi, decodeJwtPayload, loginCashierApi } from '../api/auth';
 import { configureAuth } from '../api/client';
 import { saLogin } from '../api/superAdmin';
 
@@ -21,6 +21,7 @@ interface AuthState {
 
 interface AuthContextType extends AuthState {
   login(userId: string, password: string): Promise<void>;
+  loginCashier(hotelId: string, employeeCode: string, pin: string): Promise<void>;
   loginSuperAdmin(userId: string, password: string): Promise<void>;
   logout(): void;
   setHotelName(name: string): void;
@@ -105,6 +106,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const loginCashier = useCallback(async (hotelId: string, employeeCode: string, pin: string) => {
+    const res = await loginCashierApi(hotelId, employeeCode, pin);
+    const decoded = decodeJwtPayload(res.token);
+    const resolvedHotelId = typeof decoded.hotelId === 'string' ? decoded.hotelId : hotelId;
+
+    localStorage.setItem(KEYS.token,   res.token);
+    localStorage.setItem(KEYS.hotelId, resolvedHotelId);
+    localStorage.setItem(KEYS.role,    'cashier');
+
+    setState({
+      token:           res.token,
+      hotelId:         resolvedHotelId,
+      hotelName:       null,
+      role:            'cashier',
+      isAuthenticated: true,
+    });
+  }, []);
+
   const loginSuperAdmin = useCallback(async (userId: string, password: string) => {
     const res = await saLogin(userId, password);
     localStorage.setItem(KEYS.token, res.token);
@@ -135,8 +154,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ ...state, login, loginSuperAdmin, logout, setHotelName }),
-    [state, login, loginSuperAdmin, logout, setHotelName],
+    () => ({ ...state, login, loginCashier, loginSuperAdmin, logout, setHotelName }),
+    [state, login, loginCashier, loginSuperAdmin, logout, setHotelName],
   );
 
   return (

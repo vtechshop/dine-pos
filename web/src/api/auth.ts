@@ -24,6 +24,22 @@ export async function loginApi(userId: string, password: string): Promise<LoginR
   });
 }
 
+export interface CashierLoginResponse {
+  token:   string;
+  cashier: { _id: string; name: string; employeeCode: string; mobile?: string };
+}
+
+export function loginCashierApi(
+  hotelId:      string,
+  employeeCode: string,
+  pin:          string,
+): Promise<CashierLoginResponse> {
+  return apiFetch<CashierLoginResponse>('/auth/cashier', {
+    method: 'POST',
+    body:   JSON.stringify({ hotelId, employeeCode, pin }),
+  });
+}
+
 // H-02: revoke the refresh token on the server so it cannot generate new access tokens
 export async function logoutApi(refreshToken: string): Promise<void> {
   await apiFetch('/auth/logout', {
