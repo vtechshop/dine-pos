@@ -337,5 +337,52 @@ export function getDeviceLicensing(): Promise<DeviceLicensingData> {
   return saFetch<DeviceLicensingData>('/dashboard/device-licensing');
 }
 
+// ── Remote Config ─────────────────────────────────────────────────────────────
+
+export interface RemoteConfig {
+  _id:                  string;
+  maintenanceMode:      boolean;
+  maintenanceMessage:   string;
+  minimumAppVersion:    string;
+  minimumAppVersionIos: string;
+  forceUpdate:          boolean;
+  forceUpdateMessage:   string;
+  trialDays:            number;
+  paymentEnabled:       boolean;
+  broadcastMessage:     string;
+  broadcastMessageType: 'info' | 'warning' | 'success';
+  createdAt:            string;
+  updatedAt:            string;
+}
+
+export interface RemoteConfigPatch {
+  maintenanceMode?:      boolean;
+  maintenanceMessage?:   string;
+  minimumAppVersion?:    string;
+  minimumAppVersionIos?: string;
+  forceUpdate?:          boolean;
+  forceUpdateMessage?:   string;
+  trialDays?:            number;
+  paymentEnabled?:       boolean;
+  broadcastMessage?:     string;
+  broadcastMessageType?: 'info' | 'warning' | 'success';
+}
+
+export interface UpdateRemoteConfigResponse {
+  message: string;
+  config:  RemoteConfig;
+}
+
+export function getRemoteConfig(): Promise<RemoteConfig> {
+  return saFetch<RemoteConfig>('/remote-config');
+}
+
+export function updateRemoteConfig(patch: RemoteConfigPatch): Promise<UpdateRemoteConfigResponse> {
+  return saFetch<UpdateRemoteConfigResponse>('/remote-config', {
+    method: 'PUT',
+    body:   JSON.stringify(patch),
+  });
+}
+
 // Re-export apiFetch for non-SA paths that need the standard client
 export { apiFetch };
