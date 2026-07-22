@@ -57,6 +57,9 @@ async function setCachedStatus(hotelId: string, entry: StatusEntry): Promise<voi
       return;
     } catch { /* Redis error — fall through to in-memory */ }
   }
+  // Prune stale entries to prevent unbounded Map growth
+  const now2 = Date.now();
+  for (const [k, v] of _localCache) { if (v.expiresAt <= now2) _localCache.delete(k); }
   _localCache.set(hotelId, entry);
 }
 

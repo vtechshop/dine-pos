@@ -39,6 +39,7 @@ const staffPinLimiter = makeRateLimiter({
     if (hotelId) return `pin:${hotelId}`;
     return req.ip || 'unknown';
   },
+  validate: { keyGeneratorIpFallback: false },
   message: { message: 'Too many PIN attempts. Please wait a moment and try again.' },
 });
 

@@ -79,7 +79,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
 
   // Refresh on relevant socket events for this session
   useEffect(() => {
-    if (!socket || !bill) return;
+    if (!socket) return;
 
     const handler = (data: unknown) => {
       const sid = (data && typeof data === 'object' && 'sessionId' in data)
@@ -91,7 +91,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
 
     BILLING_EVENTS.forEach(ev => socket.on(ev, handler));
     return () => { BILLING_EVENTS.forEach(ev => socket.off(ev, handler)); };
-  }, [socket, bill, sessionId, load]);
+  }, [socket, sessionId, load]);
 
   // Reset cash paid amount whenever payment method changes
   useEffect(() => { setPaidAmount(0); }, [paymentMethod]);

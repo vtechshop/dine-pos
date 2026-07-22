@@ -44,10 +44,13 @@ export function ReceiptView({ guest, sessionId, tableLabel, orders, currencySymb
 
   useEffect(() => {
     setPrinterStatus('checking');
+    let cancelled = false;
     const find = async () => {
       try {
         await new Promise(r => setTimeout(r, 800));
+        if (cancelled) return;
         const jobs = await fetchReceiptJobs();
+        if (cancelled) return;
         const match = guest
           ? jobs.find(j => j.guestId === guest._id)
           : jobs.find(j => j.sessionId === sessionId);
@@ -58,10 +61,12 @@ export function ReceiptView({ guest, sessionId, tableLabel, orders, currencySymb
           setPrinterStatus('not_found');
         }
       } catch {
+        if (cancelled) return;
         setPrinterStatus('not_found');
       }
     };
     void find();
+    return () => { cancelled = true; };
   }, [guest, sessionId, retryCount]);
 
   async function handlePrint() {

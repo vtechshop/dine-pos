@@ -309,6 +309,7 @@ router.put('/hotels/:id/premium', superAdminAuth, async (req: Request, res: Resp
     }
     const hotel = await Hotel.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    await invalidateStatusCache(req.params.id);
     return res.json({ message: `${hotel.hotelName} plan updated`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });

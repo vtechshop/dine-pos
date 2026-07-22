@@ -136,7 +136,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
     // Loyalty discounts applied at Guest level (session billing) are not reflected in
     // Order.grandTotal. Subtract them so totalSales is net actual revenue.
     const [loyaltyAgg] = await Guest.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: 'billed', loyaltyDiscountAmount: { $gt: 0 }, updatedAt: { $gte: startOfDay, $lte: endOfDay } } },
+      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: 'billed', loyaltyDiscountAmount: { $gt: 0 }, billedAt: { $gte: startOfDay, $lte: endOfDay } } },
       { $group: { _id: null, total: { $sum: '$loyaltyDiscountAmount' } } },
     ]);
     const sessionLoyaltyDiscount = loyaltyAgg?.total ?? 0;
@@ -214,7 +214,7 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
     ]);
 
     const [rangeLoyaltyAgg] = await Guest.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: 'billed', loyaltyDiscountAmount: { $gt: 0 }, updatedAt: { $gte: start, $lte: end } } },
+      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: 'billed', loyaltyDiscountAmount: { $gt: 0 }, billedAt: { $gte: start, $lte: end } } },
       { $group: { _id: null, total: { $sum: '$loyaltyDiscountAmount' } } },
     ]);
     const rangeSessionLoyaltyDiscount = rangeLoyaltyAgg?.total ?? 0;
@@ -618,6 +618,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     if (stockItems.length > 0) {
       const updatedProducts = await Product.find({
         _id: { $in: stockItems.map(i => i.product) },
+        hotelId: req.hotelId,
       }).select('_id stock');
       stockUpdates = updatedProducts.map(p => ({
         productId: (p._id as mongoose.Types.ObjectId).toString(),
@@ -780,8 +781,8 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
 // PUT update order — field whitelist prevents mass-assignment and MongoDB operator injection
 // H-03: 'status' removed; status transitions must go through PATCH /:id/status
 const ORDER_UPDATE_ALLOWED = new Set([
-  'paymentStatus', 'paymentMethod', 'notes', 'discount',
-  'tableNumber', 'isParcel', 'customerName', 'totalAmount', 'taxAmount',
+  'paymentStatus', 'paymentMethod', 'notes', 'discountAmount',
+  'tableNumber', 'isParcel', 'customerName',
 ]);
 
 router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {

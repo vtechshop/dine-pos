@@ -185,16 +185,17 @@ router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response
           taxMap[rt].samt  += half;
         }
 
-        // HSN: group by product hsnCode (SAC 9963 default)
+        // HSN: group by product hsnCode + tax rate (SAC 9963 default)
         const product  = item.product as any;
         const hsnCode  = ((product?.hsnCode || '') as string).trim() || '9963';
         const hsnDesc  = hsnCode === '9963' ? 'Restaurant Services' : (product?.name || 'Food & Beverages');
-        if (!hsnMap[hsnCode]) hsnMap[hsnCode] = { desc: hsnDesc, qty: 0, val: 0, txval: 0, camt: 0, samt: 0, rt };
-        hsnMap[hsnCode].qty   += item.quantity;
-        hsnMap[hsnCode].txval += taxable;
-        hsnMap[hsnCode].val   += total;
-        hsnMap[hsnCode].camt  += half;
-        hsnMap[hsnCode].samt  += half;
+        const hsnKey   = `${hsnCode}:${rt}`;
+        if (!hsnMap[hsnKey]) hsnMap[hsnKey] = { desc: hsnDesc, qty: 0, val: 0, txval: 0, camt: 0, samt: 0, rt };
+        hsnMap[hsnKey].qty   += item.quantity;
+        hsnMap[hsnKey].txval += taxable;
+        hsnMap[hsnKey].val   += total;
+        hsnMap[hsnKey].camt  += half;
+        hsnMap[hsnKey].samt  += half;
       }
     }
 
@@ -210,9 +211,9 @@ router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response
       typ:     'OE',
     }));
 
-    const hsnB2c = Object.entries(hsnMap).map(([hsn_sc, v], idx) => ({
+    const hsnB2c = Object.entries(hsnMap).map(([hsnKey, v], idx) => ({
       num:    idx + 1,
-      hsn_sc,
+      hsn_sc: hsnKey.split(':')[0],
       desc:   v.desc,
       uqc:    'OTH',
       qty:    v.qty,

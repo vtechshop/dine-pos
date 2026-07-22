@@ -433,8 +433,17 @@ io.on('connection', (socket) => {
     socket.join(room);
   });
 
+  // Per-connection message counter — prevents a single socket from flooding the DB
+  let _msgCount = 0;
+  let _msgWindowEnd = 0;
+  const MSG_LIMIT = 20;
+  const MSG_WINDOW_MS = 60_000;
+
   // Customer sends message from the table-side PWA
   socket.on('customer_message', async (data: { hotelId: string; tableNumber: string; message: string }) => {
+    const nowMs = Date.now();
+    if (nowMs > _msgWindowEnd) { _msgCount = 0; _msgWindowEnd = nowMs + MSG_WINDOW_MS; }
+    if (++_msgCount > MSG_LIMIT) return;
     try {
       if (!data?.hotelId || !data?.tableNumber || !data?.message) return;
       // C-01: prevent authenticated sockets from injecting into a foreign hotel

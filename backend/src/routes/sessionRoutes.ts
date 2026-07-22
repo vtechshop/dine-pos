@@ -367,6 +367,15 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
       // Capture active guests before bulk-bill so we can update loyalty after
       const activeBeforeBill = guests.filter((g) => g.status === 'active');
 
+      if (paymentMethod === 'split' && splitDetails) {
+        const totalActiveAmount = activeBeforeBill.reduce((sum, g) => sum + g.totalAmount, 0);
+        const splitSum = (splitDetails.cash ?? 0) + (splitDetails.upi ?? 0) + (splitDetails.card ?? 0);
+        if (Math.abs(splitSum - totalActiveAmount) > 0.01) {
+          res.status(400).json({ message: `Split amounts (₹${splitSum.toFixed(2)}) must equal table total (₹${totalActiveAmount.toFixed(2)})` });
+          return;
+        }
+      }
+
       const now = new Date();
       await Guest.updateMany(
         { sessionId: session._id, status: 'active' },
