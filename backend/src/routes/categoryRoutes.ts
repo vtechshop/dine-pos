@@ -49,9 +49,16 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
 // PUT update category — admin only
 router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
+    const { name, color, icon, sortOrder, isActive } = req.body;
+    const update: Record<string, unknown> = {};
+    if (name      !== undefined) update.name      = name;
+    if (color     !== undefined) update.color     = color;
+    if (icon      !== undefined) update.icon      = icon;
+    if (sortOrder !== undefined) update.sortOrder = sortOrder;
+    if (isActive  !== undefined) update.isActive  = isActive;
     const category = await Category.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
-      req.body,
+      update,
       { new: true, runValidators: true }
     );
     if (!category) return res.status(404).json({ message: 'Category not found' });

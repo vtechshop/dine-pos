@@ -11,6 +11,7 @@ import { isValidDateParam } from '../utils/dateParam';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('expenses'));
 
 // GET expenses with optional date range
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -105,9 +106,16 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 // PUT update expense
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
+    const { description, amount, category, date, notes } = req.body;
+    const update: Record<string, unknown> = {};
+    if (description !== undefined) update.description = description;
+    if (amount      !== undefined) update.amount      = amount;
+    if (category    !== undefined) update.category    = category;
+    if (date        !== undefined) update.date        = date;
+    if (notes       !== undefined) update.notes       = notes;
     const expense = await Expense.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
-      req.body,
+      update,
       { new: true, runValidators: true }
     );
     if (!expense) return res.status(404).json({ message: 'Expense not found' });

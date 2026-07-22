@@ -35,9 +35,16 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
 // PUT update table — admin only
 router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
+    const { name, number, capacity, shape, floor } = req.body;
+    const update: Record<string, unknown> = {};
+    if (name     !== undefined) update.name     = name;
+    if (number   !== undefined) update.number   = number;
+    if (capacity !== undefined) update.capacity = capacity;
+    if (shape    !== undefined) update.shape    = shape;
+    if (floor    !== undefined) update.floor    = floor;
     const table = await Table.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
-      req.body,
+      update,
       { new: true, runValidators: true }
     );
     if (!table) return res.status(404).json({ message: 'Table not found' });

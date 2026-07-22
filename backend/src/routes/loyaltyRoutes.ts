@@ -33,6 +33,7 @@ import { getLoyaltyConfig, adjustPoints } from '../utils/loyaltyUtils';
 const router = Router();
 
 router.use(authMiddleware);
+router.use(requireFeature('loyaltyProgram'));
 
 // ── Helper: resolve CustomerProfile from CUST-XXX string or ObjectId ──────────
 async function resolveCustomer(id: string, hotelId: string) {

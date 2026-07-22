@@ -86,6 +86,11 @@ if (!process.env.MONGODB_URI) {
   process.exit(1);
 }
 
+if (!process.env.SUPER_ADMIN_JWT_SECRET) {
+  console.error('❌ FATAL: SUPER_ADMIN_JWT_SECRET is not set. Add a separate secret for super admin JWTs to your .env file.');
+  process.exit(1);
+}
+
 if (!process.env.NODE_ENV) {
   console.warn('⚠ NODE_ENV is not set. Running in development mode.');
 }

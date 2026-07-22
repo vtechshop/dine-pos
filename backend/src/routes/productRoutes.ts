@@ -72,9 +72,14 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
 // PUT update product — admin only
 router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
+    const ALLOWED = ['name', 'description', 'price', 'taxPercent', 'category', 'isAvailable', 'isVeg', 'shortCode', 'image', 'stock'] as const;
+    const update: Record<string, unknown> = {};
+    for (const key of ALLOWED) {
+      if (req.body[key] !== undefined) update[key] = req.body[key];
+    }
     const product = await Product.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
-      req.body,
+      update,
       { new: true, runValidators: true }
     ).populate('category', 'name color');
     if (!product) return res.status(404).json({ message: 'Product not found' });

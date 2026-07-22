@@ -19,6 +19,7 @@ import { bootstrapNewHotel } from '../services/bootstrapHotel';
 import { sendError } from '../utils/sendError';
 import { getPriceForPlan, getDeviceLimitForPlan } from '../utils/planLimits';
 import { logAuditRaw } from '../utils/audit';
+import { invalidateStatusCache } from '../middleware/auth';
 
 
 const router = Router();
@@ -38,25 +39,16 @@ const safeEqual = (a: string, b: string): boolean => {
   }
 };
 
-const SUPER_ADMIN_JWT_SECRET = process.env.SUPER_ADMIN_JWT_SECRET || process.env.JWT_SECRET!;
+const SUPER_ADMIN_JWT_SECRET = process.env.SUPER_ADMIN_JWT_SECRET!;
 
 const superAdminAuth = (req: Request, res: Response, next: Function) => {
-  // Primary: verify short-lived JWT issued by /superadmin/login
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     try {
       const payload = jwt.verify(authHeader.slice(7), SUPER_ADMIN_JWT_SECRET) as any;
       if (payload?.role === 'superadmin') return next();
-    } catch { /* fall through to credential check */ }
+    } catch { /* invalid or expired token */ }
   }
-
-  // Legacy fallback: raw credential headers (kept for backward-compat during rollout)
-  const id   = (req.headers['x-super-admin-id']   as string) || '';
-  const pass = (req.headers['x-super-admin-pass'] as string) || '';
-  const expectedId   = process.env.SUPER_ADMIN_ID!;
-  const expectedPass = process.env.SUPER_ADMIN_PASS!;
-  if (id && pass && safeEqual(id, expectedId) && safeEqual(pass, expectedPass)) return next();
-
   return res.status(401).json({ message: 'Unauthorized' });
 };
 
@@ -171,6 +163,7 @@ router.put('/hotels/:id/approve', superAdminAuth, async (req: Request, res: Resp
       { new: true }
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    await invalidateStatusCache(req.params.id);
 
     const { kitchenPin } = await bootstrapNewHotel(hotel._id as any, {
       hotelName: hotel.hotelName,
@@ -224,6 +217,7 @@ router.put('/hotels/:id/reject', superAdminAuth, async (req: Request, res: Respo
       { new: true }
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    await invalidateStatusCache(req.params.id);
     logAuditRaw({ hotelId: req.params.id, action: 'hotel.rejected', targetType: 'hotel', targetId: req.params.id, metadata: { reason }, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} rejected`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
@@ -235,6 +229,7 @@ router.put('/hotels/:id/suspend', superAdminAuth, async (req: Request, res: Resp
       req.params.id, { status: 'suspended' }, { new: true }
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    await invalidateStatusCache(req.params.id);
     // Revoke all active sessions so the device is locked out immediately
     await Promise.all([
       RefreshToken.updateMany({ hotelId: req.params.id, revokedAt: null }, { revokedAt: new Date() }),
@@ -251,6 +246,7 @@ router.put('/hotels/:id/activate', superAdminAuth, async (req: Request, res: Res
       req.params.id, { status: 'active' }, { new: true }
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    await invalidateStatusCache(req.params.id);
     return res.json({ message: `${hotel.hotelName} activated`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -261,6 +257,7 @@ router.put('/hotels/:id/expire', superAdminAuth, async (req: Request, res: Respo
       req.params.id, { status: 'expired' }, { new: true }
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    await invalidateStatusCache(req.params.id);
     return res.json({ message: `${hotel.hotelName} marked as expired`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -290,6 +287,7 @@ router.put('/hotels/:id/credentials', superAdminAuth, async (req: Request, res: 
       { new: true }
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    await invalidateStatusCache(req.params.id);
     return res.json({ message: `${hotel.hotelName} approved and credentials set`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -339,6 +337,7 @@ router.put('/hotels/:id/trial', superAdminAuth, async (req: Request, res: Respon
       { new: true }
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    await invalidateStatusCache(req.params.id);
     return res.json({
       message: `${hotel.hotelName} trial started for ${days} days (until ${trialEndDate.toLocaleDateString('en-IN')})`,
       hotel,
@@ -372,6 +371,7 @@ router.put('/hotels/:id/extend-trial', superAdminAuth, async (req: Request, res:
       { new: true }
     );
     if (!updated) return res.status(404).json({ message: 'Hotel not found' });
+    await invalidateStatusCache(req.params.id);
     return res.json({
       message: `Trial extended by ${addDays} days (until ${newEnd.toLocaleDateString('en-IN')})`,
       hotel: updated,
@@ -406,6 +406,7 @@ router.put('/hotels/:id/plan', superAdminAuth, async (req: Request, res: Respons
       { new: true }
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    await invalidateStatusCache(req.params.id);
     return res.json({
       message: `${hotel.hotelName} converted to ${plan} plan (${days} days, until ${subscriptionEndDate.toLocaleDateString('en-IN')})`,
       hotel,
@@ -427,6 +428,7 @@ router.put('/hotels/:id/features', superAdminAuth, async (req: Request, res: Res
 
     const hotel = await Hotel.findByIdAndUpdate(req.params.id, { $set: update }, { new: true }).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    await invalidateStatusCache(req.params.id);
     return res.json({ message: 'Feature flags updated', features: hotel.features });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });

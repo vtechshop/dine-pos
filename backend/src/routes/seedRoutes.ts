@@ -2,12 +2,12 @@ import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import Category from '../models/Category';
 import Product from '../models/Product';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 // POST /api/seed — seeds demo categories + products for the logged-in hotel
-router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/', authMiddleware, requireAdmin, async (req: AuthRequest, res: Response) => {
   const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
   try {
     // Drop the global unique index on name if it exists (leftover from old schema)
@@ -73,7 +73,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 });
 
 // DELETE — wipe only this hotel's categories + products (requires auth)
-router.delete('/', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/', authMiddleware, requireAdmin, async (req: AuthRequest, res: Response) => {
   const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
   try {
     await Promise.all([

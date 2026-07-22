@@ -1,12 +1,14 @@
 import { Router, Response } from 'express';
 import Ingredient from '../models/Ingredient';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('ingredients'));
 
 // GET all ingredients for this hotel
 router.get('/', async (req: AuthRequest, res: Response) => {
