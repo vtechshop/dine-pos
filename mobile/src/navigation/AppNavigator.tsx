@@ -47,6 +47,8 @@ import CashierLoginScreen from '../screens/CashierLoginScreen';
 import CashierDashboardScreen from '../screens/CashierDashboardScreen';
 import CashierManagementScreen from '../screens/CashierManagementScreen';
 import StaffRoleScreen from '../screens/StaffRoleScreen';
+import HotelRegisterScreen from '../screens/HotelRegisterScreen';
+import HotelRegisterSuccessScreen from '../screens/HotelRegisterSuccessScreen';
 import CategoriesScreen from '../screens/CategoriesScreen';
 import TableLayoutScreen from '../screens/TableLayoutScreen';
 import ReservationScreen from '../screens/ReservationScreen';
@@ -240,6 +242,8 @@ const AppNavigator = () => {
             <Stack.Screen name="WaiterDisplay"        component={(p: any) => <ErrorBoundary><WaiterDisplayScreen {...p} /></ErrorBoundary>}        options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="CashierLogin"         component={CashierLoginScreen}         options={{ contentStyle: safeTop }} />
             <Stack.Screen name="CashierDashboard"     component={(p: any) => <ErrorBoundary><CashierDashboardScreen {...p} /></ErrorBoundary>}     options={{ contentStyle: safeTop, gestureEnabled: false }} />
+            <Stack.Screen name="HotelRegister"        component={HotelRegisterScreen}        options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="HotelRegisterSuccess" component={HotelRegisterSuccessScreen} options={{ contentStyle: safeTop, gestureEnabled: false }} />
           </>
         ) : (
           <>

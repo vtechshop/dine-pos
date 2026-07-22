@@ -281,7 +281,7 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
           </TouchableOpacity>
         </Animated.View>
 
-        <TouchableOpacity style={styles.registerRow} onPress={() => navigation.navigate('BusinessSetup', { resubmit: false })}>
+        <TouchableOpacity style={styles.registerRow} onPress={() => navigation.navigate('HotelRegister')}>
           <Text style={styles.registerText}>New hotel? </Text>
           <Text style={[styles.registerText, { color: Colors.primary, fontWeight: '800' }]}>Register here →</Text>
         </TouchableOpacity>

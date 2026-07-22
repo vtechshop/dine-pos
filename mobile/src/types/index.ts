@@ -452,6 +452,8 @@ export type RootStackParamList = {
   StaffRole: undefined;
   TrustedDevices: undefined;
   SubscriptionExpired: { hotelName: string; expiredOn: string; subscriptionType: string };
+  HotelRegister: undefined;
+  HotelRegisterSuccess: undefined;
 };
 
 export type TabParamList = {
