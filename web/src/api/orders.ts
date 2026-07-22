@@ -49,3 +49,25 @@ export async function updateOrderStatus(
 export async function fetchOrderCustomers(): Promise<{ customers: OrderCustomer[]; total: number }> {
   return apiFetch('/orders/customers');
 }
+
+export interface CashierOrderItem {
+  _id: string;
+  orderNumber: string;
+  tableNumber: string;
+  customerName?: string;
+  grandTotal: number;
+  subtotal: number;
+  taxTotal: number;
+  discountAmount?: number;
+  status: string;
+  orderSource: string;
+  isParcel: boolean;
+  paymentMethod?: string | null;
+  items: { productName: string; quantity: number; price: number; total: number }[];
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+export async function fetchCashierOrders(): Promise<CashierOrderItem[]> {
+  return apiFetch<CashierOrderItem[]>('/orders/cashier');
+}

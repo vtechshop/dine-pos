@@ -10,6 +10,7 @@ import {
   Settings,
   CalendarDays,
   ChefHat,
+  CreditCard,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -44,15 +45,20 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/settings',     icon: Settings,        label: 'Settings' },
       { to: '/reservations', icon: CalendarDays,    label: 'Reservations' },
       { to: '/kitchen',      icon: ChefHat,         label: 'Kitchen' },
+      // Cashier-only operational hub — hidden from admin and other staff
+      { to: '/cashier',      icon: CreditCard,      label: 'Cashier Ops', hint: 'F2' },
     ],
   },
 ];
 
-// Routes visible only to the admin role; staff roles see Dashboard, Tables, and Kitchen
+// Routes visible only to the admin role
 const ADMIN_ONLY_ROUTES = new Set([
   '/orders', '/customers', '/products', '/inventory',
   '/reports', '/settings', '/reservations',
 ]);
+
+// Routes visible only to the cashier role
+const CASHIER_ONLY_ROUTES = new Set(['/cashier']);
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -93,8 +99,9 @@ function NavItemRow({ item }: { item: NavItem }) {
 }
 
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
-  const { role } = useAuth();
-  const isAdmin = role === 'admin';
+  const { role }  = useAuth();
+  const isAdmin   = role === 'admin';
+  const isCashier = role === 'cashier';
 
   return (
     <>
@@ -127,9 +134,11 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         {/* Nav — onClick closes sidebar on mobile after navigating */}
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4" onClick={onClose}>
           {NAV_GROUPS.map((group, gi) => {
-            const visibleItems = isAdmin
-              ? group.items
-              : group.items.filter(item => !ADMIN_ONLY_ROUTES.has(item.to));
+            const visibleItems = (() => {
+              if (isAdmin)   return group.items.filter(i => !CASHIER_ONLY_ROUTES.has(i.to));
+              if (isCashier) return group.items.filter(i => !ADMIN_ONLY_ROUTES.has(i.to));
+              return group.items.filter(i => !ADMIN_ONLY_ROUTES.has(i.to) && !CASHIER_ONLY_ROUTES.has(i.to));
+            })();
             if (visibleItems.length === 0) return null;
             return (
               <div key={gi}>
