@@ -22,6 +22,7 @@ import { LiveMonitoringPage }   from './pages/super-admin/LiveMonitoringPage';
 import { SystemHealthPage }         from './pages/super-admin/SystemHealthPage';
 import { VersionManagementPage }    from './pages/super-admin/VersionManagementPage';
 import { SANotificationsPage }      from './pages/super-admin/SANotificationsPage';
+import { BroadcastCenterPage }      from './pages/super-admin/BroadcastCenterPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
@@ -84,6 +85,7 @@ export function App() {
                       <Route path="/super-admin/health"     element={<SystemHealthPage />} />
                       <Route path="/super-admin/versions"       element={<VersionManagementPage />} />
                       <Route path="/super-admin/notifications" element={<SANotificationsPage />} />
+                      <Route path="/super-admin/broadcast"    element={<BroadcastCenterPage />} />
                     </Route>
                   </Route>
 
