@@ -37,6 +37,10 @@ const KEYS = {
   role:         'pos_role',
 } as const;
 
+// Survives logout so cashiers on the same device don't need to enter the hotel's
+// MongoDB ObjectId manually — it's persisted the first time an admin logs in.
+const DEVICE_HOTEL_KEY = 'pos_device_hotel_id';
+
 function readStorage(): AuthState {
   const token = localStorage.getItem(KEYS.token);
   return {
@@ -93,7 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (res.refreshToken) {
       localStorage.setItem(KEYS.refreshToken, res.refreshToken);
     }
-    localStorage.setItem(KEYS.hotelId, hotelId);
+    localStorage.setItem(KEYS.hotelId,   hotelId);
+    localStorage.setItem(DEVICE_HOTEL_KEY, hotelId); // persists for cashier login
     if (res.hotelName) localStorage.setItem(KEYS.hotelName, res.hotelName);
     if (role) localStorage.setItem(KEYS.role, role);
 
@@ -111,9 +116,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const decoded = decodeJwtPayload(res.token);
     const resolvedHotelId = typeof decoded.hotelId === 'string' ? decoded.hotelId : hotelId;
 
-    localStorage.setItem(KEYS.token,   res.token);
-    localStorage.setItem(KEYS.hotelId, resolvedHotelId);
-    localStorage.setItem(KEYS.role,    'cashier');
+    localStorage.setItem(KEYS.token,     res.token);
+    localStorage.setItem(KEYS.hotelId,   resolvedHotelId);
+    localStorage.setItem(KEYS.role,      'cashier');
+    localStorage.setItem(DEVICE_HOTEL_KEY, resolvedHotelId);
 
     setState({
       token:           res.token,

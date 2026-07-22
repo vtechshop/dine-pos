@@ -23,8 +23,8 @@ export function LoginPage() {
   const [password, setPassword]   = useState('');
   const [showPwd, setShowPwd]     = useState(false);
 
-  // Cashier fields
-  const [hotelId, setHotelId]           = useState('');
+  // Cashier fields — Hotel ID pre-fills from the device-scoped key written on admin login
+  const [hotelId, setHotelId]           = useState(() => localStorage.getItem('pos_device_hotel_id') ?? '');
   const [employeeCode, setEmployeeCode] = useState('');
   const [pin, setPin]                   = useState('');
   const [showPin, setShowPin]           = useState(false);
@@ -142,7 +142,7 @@ export function LoginPage() {
                 {/* Hotel ID */}
                 <div>
                   <label htmlFor="cashierHotelId" className="block text-sm font-medium text-ink/70">
-                    Hotel ID
+                    Hotel System ID
                   </label>
                   <input
                     id="cashierHotelId"
@@ -150,10 +150,15 @@ export function LoginPage() {
                     autoComplete="off"
                     required
                     value={hotelId}
-                    onChange={e => setHotelId(e.target.value)}
-                    className="mt-1.5 block w-full rounded-lg border border-border px-3.5 py-2.5 text-sm text-ink placeholder-ink/40 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
-                    placeholder="Your hotel's ID"
+                    onChange={e => setHotelId(e.target.value.trim())}
+                    className="mt-1.5 block w-full rounded-lg border border-border px-3.5 py-2.5 font-mono text-sm text-ink placeholder-ink/40 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
+                    placeholder="Provided by your hotel admin"
                   />
+                  <p className="mt-1 text-[11px] text-ink/40">
+                    {hotelId
+                      ? 'Auto-filled from this device'
+                      : 'Ask your hotel admin for this ID'}
+                  </p>
                 </div>
 
                 {/* Employee Code */}
