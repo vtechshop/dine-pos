@@ -23,6 +23,7 @@ import { SystemHealthPage }         from './pages/super-admin/SystemHealthPage';
 import { VersionManagementPage }    from './pages/super-admin/VersionManagementPage';
 import { SANotificationsPage }      from './pages/super-admin/SANotificationsPage';
 import { BroadcastCenterPage }      from './pages/super-admin/BroadcastCenterPage';
+import { HotelAnalyticsPage }      from './pages/super-admin/HotelAnalyticsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
@@ -86,6 +87,7 @@ export function App() {
                       <Route path="/super-admin/versions"       element={<VersionManagementPage />} />
                       <Route path="/super-admin/notifications" element={<SANotificationsPage />} />
                       <Route path="/super-admin/broadcast"    element={<BroadcastCenterPage />} />
+                      <Route path="/super-admin/analytics"   element={<HotelAnalyticsPage />} />
                     </Route>
                   </Route>
 

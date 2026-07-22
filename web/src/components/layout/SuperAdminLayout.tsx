@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { Activity, Building2, Heart, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Tag } from 'lucide-react';
+import { Activity, BarChart2, Building2, Heart, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Tag } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { SANotificationsProvider } from '../../context/SANotificationsContext';
 import { SANotificationBell } from './SANotificationBell';
@@ -91,6 +91,19 @@ export function SuperAdminLayout() {
               Versions
             </NavLink>
 
+            <NavLink
+              to="/super-admin/analytics"
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-brand/10 text-brand'
+                    : 'text-ink/70 hover:bg-mist hover:text-ink'
+                }`
+              }
+            >
+              <BarChart2 size={16} strokeWidth={1.75} />
+              Analytics
+            </NavLink>
             <NavLink
               to="/super-admin/broadcast"
               className={({ isActive }) =>
