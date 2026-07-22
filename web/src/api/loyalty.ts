@@ -40,6 +40,21 @@ export async function fetchCustomerTransactions(
   return apiFetch(`/loyalty/customers/${customerId}/transactions${q ? `?${q}` : ''}`);
 }
 
+// Backend endpoint required: POST /loyalty/customers
+// Body: { name, phone, email?, birthday? }
+// Returns: { customer: CustomerProfile }
+export async function createCustomer(body: {
+  name: string;
+  phone: string;
+  email?: string;
+  birthday?: string;
+}): Promise<{ customer: CustomerProfile }> {
+  return apiFetch('/loyalty/customers', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function adjustPoints(
   customerId: string,
   body: { points: number; remarks: string },
