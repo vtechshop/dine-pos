@@ -215,5 +215,100 @@ export function setPlan(
   });
 }
 
+// ── Subscription Revenue ──────────────────────────────────────────────────────
+
+export interface SubscriptionRevenueData {
+  mrr:                    number;
+  arr:                    number;
+  expectedRenewalRevenue: number;
+  renewingCount:          number;
+  breakdown: { plan: string; count: number; monthlyPrice: number; contribution: number }[];
+  recentSubscriptions:    unknown[];
+}
+
+export function getSubscriptionRevenue(): Promise<SubscriptionRevenueData> {
+  return saFetch<SubscriptionRevenueData>('/dashboard/subscription-revenue');
+}
+
+// ── Hotel Growth ──────────────────────────────────────────────────────────────
+
+export interface HotelGrowthPoint {
+  _id:      { year: number; month: number; day?: number };
+  total:    number;
+  approved: number;
+  trial:    number;
+  active:   number;
+}
+
+export interface HotelGrowthData {
+  period:        '7d' | '30d' | '12m';
+  data:          HotelGrowthPoint[];
+  totalInPeriod: number;
+}
+
+export function getHotelGrowth(period: '7d' | '30d' | '12m'): Promise<HotelGrowthData> {
+  return saFetch<HotelGrowthData>(`/dashboard/hotel-growth?period=${period}`);
+}
+
+// ── Top Hotels ────────────────────────────────────────────────────────────────
+
+export interface TopHotel {
+  hotelId:     string;
+  hotelName:   string;
+  city:        string;
+  plan:        string;
+  value?:      number;
+  lastSeen?:   string;
+  deviceCount?: number;
+}
+
+export interface TopHotelsData {
+  by:     'revenue' | 'orders' | 'activity';
+  period: 'today' | 'week' | 'month';
+  hotels: TopHotel[];
+}
+
+export function getTopHotels(
+  by:     'revenue' | 'orders' | 'activity',
+  period: 'today' | 'week' | 'month',
+): Promise<TopHotelsData> {
+  return saFetch<TopHotelsData>(`/dashboard/top-hotels?by=${by}&period=${period}&limit=10`);
+}
+
+// ── Failed Payments ───────────────────────────────────────────────────────────
+
+export interface FailedPaymentsData {
+  pending: number;
+  failed:  number;
+  overdue: number;
+  total:   number;
+  recent:  { _id: string; status: string; updatedAt: string }[];
+}
+
+export function getFailedPayments(): Promise<FailedPaymentsData> {
+  return saFetch<FailedPaymentsData>('/dashboard/failed-payments');
+}
+
+// ── Device Licensing ──────────────────────────────────────────────────────────
+
+export interface DeviceLicensingByPlan {
+  plan:            string;
+  allowedPerHotel: number;
+  hotelCount:      number;
+  totalAllowed:    number;
+  activeDevices:   number;
+}
+
+export interface DeviceLicensingData {
+  total:   number;
+  active:  number;
+  blocked: number;
+  byPlan:  DeviceLicensingByPlan[];
+}
+
+export function getDeviceLicensing(): Promise<DeviceLicensingData> {
+  return saFetch<DeviceLicensingData>('/dashboard/device-licensing');
+}
+
 // Re-export apiFetch for non-SA paths that need the standard client
 export { apiFetch };
