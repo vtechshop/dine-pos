@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Clock, TrendingUp, ShoppingCart, Users, Zap, Wallet,
   AlertCircle, RefreshCw, Search, Printer, X, Star,
+  Wifi, WifiOff,
 } from 'lucide-react';
-import { fetchDailyReport } from '../api/dashboard';
+import { fetchDailyReport, fetchPrinterDevices } from '../api/dashboard';
 import { fetchCashierOrders, fetchOrders } from '../api/orders';
 import { fetchReceiptJobs, reprintJob } from '../api/billing';
 import { searchCustomers } from '../api/loyalty';
-import type { DailyReport, OrderListItem, PrintJob } from '../types';
+import type { DailyReport, OrderListItem, PrintJob, PrinterDeviceStatus } from '../types';
 import type { CashierOrderItem } from '../api/orders';
 import type { CustomerSummary } from '../types/customers';
 import { useSettings } from '../context/SettingsContext';
@@ -156,6 +157,12 @@ export function CashierPage() {
   const [custError,     setCustError]     = useState<string | null>(null);
   const [custSearched,  setCustSearched]  = useState(false);
 
+  // ── State: printer operations ────────────────────────────────────────────────
+  const [printers,      setPrinters]      = useState<PrinterDeviceStatus[]>([]);
+  const [printerLoading,setPrinterLoading]= useState(true);
+  const [lastReceipt,   setLastReceipt]   = useState<PrintJob | null>(null);
+  const [reprintLast,   setReprintLast]   = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
+
   // ── Bill Search ─────────────────────────────────────────────────────────────
   const handleSearch = useCallback(async () => {
     setSearchLoading(true);
@@ -205,6 +212,20 @@ export function CashierPage() {
     }
   }, [printJobs]);
 
+  // ── Reprint Last Bill ────────────────────────────────────────────────────────
+  const handleReprintLast = useCallback(async () => {
+    if (!lastReceipt) return;
+    setReprintLast('loading');
+    try {
+      await reprintJob(lastReceipt._id);
+      setReprintLast('ok');
+      setTimeout(() => setReprintLast('idle'), 3_000);
+    } catch {
+      setReprintLast('err');
+      setTimeout(() => setReprintLast('idle'), 4_000);
+    }
+  }, [lastReceipt]);
+
   // ── Customer Search ──────────────────────────────────────────────────────────
   const handleCustSearch = useCallback(async () => {
     const q = custQuery.trim();
@@ -229,21 +250,28 @@ export function CashierPage() {
     let cancelled = false;
     setError(null);
 
-    const [rpt, pen] = await Promise.allSettled([
+    const [rpt, pen, dev, jobs] = await Promise.allSettled([
       fetchDailyReport(),
       fetchCashierOrders(),
+      fetchPrinterDevices(),
+      fetchReceiptJobs(),
     ]);
 
     if (cancelled) return;
 
     setReportLoading(false);
     setPendingLoading(false);
+    setPrinterLoading(false);
 
-    if (rpt.status === 'fulfilled') setReport(rpt.value);
-    else setError('Could not load daily stats');
+    if (rpt.status === 'fulfilled')  setReport(rpt.value);
+    else                              setError('Could not load daily stats');
 
-    if (pen.status === 'fulfilled') setPendingOrders(pen.value);
-    // pending orders failure is non-fatal — show empty state
+    if (pen.status === 'fulfilled')  setPendingOrders(pen.value);
+    if (dev.status === 'fulfilled')  setPrinters(dev.value);
+    if (jobs.status === 'fulfilled') {
+      const last = jobs.value.find(j => j.jobType === 'receipt') ?? null;
+      setLastReceipt(last);
+    }
 
     return () => { cancelled = true; };
   }, []);
@@ -480,6 +508,100 @@ export function CashierPage() {
                   })}
                 </div>
               )}
+            </div>
+          )}
+        </section>
+
+        {/* ── Printer Operations ─────────────────────────────────────── */}
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-ink">Printer Operations</h2>
+            <button
+              onClick={() => { setPrinterLoading(true); void load(); }}
+              className="text-xs text-brand hover:underline"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {printerLoading ? (
+            <div className="flex h-20 items-center justify-center"><Spinner size="sm" /></div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {/* Printer status cards */}
+              {printers.length === 0 ? (
+                <div className="col-span-2 flex h-16 items-center justify-center rounded-xl border border-dashed border-border">
+                  <p className="text-sm text-ink/30">No printers registered</p>
+                </div>
+              ) : (
+                printers.map(p => {
+                  const ageMs = p.lastHeartbeat ? nowMs - new Date(p.lastHeartbeat).getTime() : Infinity;
+                  const online = p.online && ageMs < 3 * 60_000;
+                  return (
+                    <div
+                      key={p._id}
+                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
+                        online ? 'border-emerald-200 bg-emerald-50' : 'border-red-100 bg-red-50'
+                      }`}
+                    >
+                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                        online ? 'bg-emerald-100' : 'bg-red-100'
+                      }`}>
+                        <Printer size={16} className={online ? 'text-emerald-600' : 'text-red-400'} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold capitalize text-ink">
+                          {p.printerName ?? p.printerRole} printer
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {online
+                            ? <><Wifi size={11} className="text-emerald-500" /><span className="text-[11px] text-emerald-600">Online</span></>
+                            : <><WifiOff size={11} className="text-red-400" /><span className="text-[11px] text-red-500">Offline</span></>
+                          }
+                        </div>
+                      </div>
+                      <span className="text-[10px] capitalize text-ink/40">{p.printerRole}</span>
+                    </div>
+                  );
+                })
+              )}
+
+              {/* Reprint Last Bill */}
+              <div className="flex items-center justify-between rounded-xl border border-border bg-canvas px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink">Reprint Last Bill</p>
+                  <p className="text-[11px] text-ink/40">
+                    {lastReceipt
+                      ? `Job ${lastReceipt._id.slice(-6)} · ${lastReceipt.status}`
+                      : 'No receipt jobs found'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => void handleReprintLast()}
+                  disabled={!lastReceipt || reprintLast === 'loading'}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    reprintLast === 'ok'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : reprintLast === 'err'
+                      ? 'bg-red-100 text-red-600'
+                      : 'bg-brand text-white hover:bg-brand/90 disabled:opacity-50'
+                  }`}
+                >
+                  {reprintLast === 'loading' ? <Spinner size="sm" /> : <Printer size={12} />}
+                  {reprintLast === 'ok' ? 'Sent!' : reprintLast === 'err' ? 'Failed' : 'Reprint'}
+                </button>
+              </div>
+
+              {/* Test Print — Coming Soon */}
+              <div className="flex items-center justify-between rounded-xl border border-dashed border-border bg-canvas px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink/60">Test Print</p>
+                  <p className="text-[11px] text-ink/35">Print a test page to verify printer</p>
+                </div>
+                <span className="rounded-full bg-ink/8 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink/35">
+                  Coming Soon
+                </span>
+              </div>
             </div>
           )}
         </section>
