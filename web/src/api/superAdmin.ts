@@ -17,10 +17,11 @@ async function saFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
 
   if (!res.ok) {
-    if (res.status === 401) {
+    if (res.status === 401 && token) {
       localStorage.removeItem('pos_token');
       localStorage.removeItem('pos_role');
       window.location.replace('/super-admin/login');
+      throw new Error('Session expired');
     }
     const body = (await res.json().catch(() => ({}))) as { message?: string };
     throw new Error(body.message ?? `HTTP ${res.status}`);
