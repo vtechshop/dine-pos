@@ -1556,18 +1556,21 @@ export interface OnlineDeliveryOrder {
   platformOrderId: string;
   status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
   customerName: string;
+  customerPhone?: string;
   deliveryAddress: string;
   deliveryFee: number;
   platformCommission: number;
   grandTotal: number;
   subtotal: number;
   taxTotal: number;
+  discountAmount?: number;
   items: { productName: string; quantity: number; price: number }[];
   notes: string;
   acceptedAt: string | null;
   rejectedAt: string | null;
   rejectionReason: string;
   deliveryPartnerName: string;
+  estimatedPickupTime?: string | null;
   createdAt: string;
 }
 
