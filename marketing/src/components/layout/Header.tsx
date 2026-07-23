@@ -6,10 +6,10 @@ const POS_LOGIN_URL = 'https://app.dinepos.com/login';
 
 const NAV_LINKS = [
   { to: '/',          label: 'Home' },
-  { to: '/features',  label: 'Features' },
+  { to: '/features',  label: 'Solutions' },
   { to: '/pricing',   label: 'Pricing' },
   { to: '/about',     label: 'About' },
-  { to: '/faq',       label: 'FAQ' },
+  { to: '/faq',       label: 'Resources' },
   { to: '/blog',      label: 'Blog' },
   { to: '/contact',   label: 'Contact' },
 ];

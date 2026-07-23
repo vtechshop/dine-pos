@@ -1,48 +1,42 @@
-import { Clock, Tag } from 'lucide-react';
+import { Tag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-const PLACEHOLDER_POSTS = [
+const UPCOMING_POSTS = [
   {
     title:   'How to reduce billing errors in your restaurant',
     excerpt: 'Manual billing causes 1 in 5 disputes at Indian restaurants. Here is how a digital POS eliminates them entirely.',
     tag:     'Tips & Tricks',
-    date:    'Coming soon',
-    slug:    '#',
+    slug:    '#newsletter',
   },
   {
     title:   'GST on restaurant bills — what every owner needs to know',
     excerpt: 'CGST, SGST, dine-in vs takeaway — we break down exactly how GST applies to restaurant billing in India.',
     tag:     'Compliance',
-    date:    'Coming soon',
-    slug:    '#',
+    slug:    '#newsletter',
   },
   {
     title:   'Kitchen printing 101: types, setup, and troubleshooting',
     excerpt: 'USB, Bluetooth, or LAN? 58mm or 80mm? Everything you need to know before buying a thermal printer.',
     tag:     'Hardware',
-    date:    'Coming soon',
-    slug:    '#',
+    slug:    '#newsletter',
   },
   {
     title:   'Why your restaurant needs a loyalty program (and how to start one)',
     excerpt: 'Repeat customers spend 67% more than new ones. Here is how a simple points system can transform your revenue.',
     tag:     'Growth',
-    date:    'Coming soon',
-    slug:    '#',
+    slug:    '#newsletter',
   },
   {
     title:   'How to train your staff on a new POS in one shift',
     excerpt: 'A structured 30-minute training plan that gets new waiters and cashiers confident on day one.',
     tag:     'Operations',
-    date:    'Coming soon',
-    slug:    '#',
+    slug:    '#newsletter',
   },
   {
     title:   'Table management best practices for busy restaurants',
     excerpt: 'From table assignment to bill splitting — the habits that keep your floor moving during a rush.',
     tag:     'Operations',
-    date:    'Coming soon',
-    slug:    '#',
+    slug:    '#newsletter',
   },
 ];
 
@@ -65,26 +59,22 @@ export function BlogPage() {
         </p>
       </section>
 
-      {/* Coming soon banner */}
-      <section className="border-b border-orange-100 bg-orange-50 px-5 py-4 text-center">
-        <p className="text-sm text-[#E8380D] font-medium">
-          ✦ We're working on our first articles. Subscribe below to get notified when they publish.
-        </p>
-      </section>
-
-      {/* Post grid */}
+      {/* Article previews */}
       <section className="mx-auto max-w-6xl px-5 py-14">
+        <div className="mb-8 flex items-center justify-between">
+          <p className="text-sm text-gray-500">Upcoming articles — subscribe below to get them first.</p>
+        </div>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {PLACEHOLDER_POSTS.map(({ title, excerpt, tag, date, slug }) => (
+          {UPCOMING_POSTS.map(({ title, excerpt, tag, slug }) => (
             <article
               key={title}
               className="flex flex-col rounded-2xl border border-gray-100 bg-white shadow-sm transition-shadow hover:shadow-md"
             >
-              {/* Thumbnail placeholder */}
+              {/* Thumbnail */}
               <div className="h-40 rounded-t-2xl bg-gradient-to-br from-[#FFF6EE] to-[#EBD8C8]" />
 
               <div className="flex flex-1 flex-col p-5">
-                <div className="mb-3 flex items-center gap-3">
+                <div className="mb-3">
                   <span
                     className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                       TAG_COLORS[tag] ?? 'bg-gray-100 text-gray-500'
@@ -92,19 +82,14 @@ export function BlogPage() {
                   >
                     <Tag size={10} />{tag}
                   </span>
-                  <span className="flex items-center gap-1 text-[11px] text-gray-400">
-                    <Clock size={10} />{date}
-                  </span>
                 </div>
                 <h2 className="mb-2 font-bold text-gray-900 leading-snug">{title}</h2>
                 <p className="flex-1 text-sm leading-relaxed text-gray-500">{excerpt}</p>
                 <a
                   href={slug}
-                  className="mt-4 inline-flex items-center text-sm font-semibold text-[#E8380D] opacity-50"
-                  aria-disabled
-                  onClick={e => e.preventDefault()}
+                  className="mt-4 inline-flex items-center text-sm font-semibold text-[#E8380D] hover:underline"
                 >
-                  Coming soon →
+                  Subscribe to read →
                 </a>
               </div>
             </article>
@@ -113,7 +98,7 @@ export function BlogPage() {
       </section>
 
       {/* Newsletter signup */}
-      <section className="border-t border-gray-100 bg-[#FFF6EE] px-5 py-16 text-center">
+      <section id="newsletter" className="border-t border-gray-100 bg-[#FFF6EE] px-5 py-16 text-center">
         <h2 className="mb-3 text-2xl font-bold text-gray-900">Get notified when we publish</h2>
         <p className="mb-6 text-gray-500 text-sm">No spam. One email per article, unsubscribe any time.</p>
         <form
