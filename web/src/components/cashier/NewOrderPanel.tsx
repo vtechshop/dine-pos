@@ -11,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import { fetchProducts, fetchCategories } from '../../api/products';
 import { fetchTables } from '../../api/tables';
 import { createOrder, completeOrder } from '../../api/orders';
+import { enqueueOrder } from '../../utils/offlineQueue';
 import { fetchProductSalesReport } from '../../api/reports';
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
 import { useCashierPermissions } from '../../hooks/useCashierPermissions';
@@ -549,6 +550,7 @@ export function NewOrderPanel() {
     setSubmitting(true);
     setSubmitError(null);
 
+    let pendingPayload: Parameters<typeof createOrder>[0] | undefined;
     try {
       const items = cart.map(i => ({
         product: i.productId,
@@ -615,6 +617,7 @@ export function NewOrderPanel() {
         };
       }
 
+      pendingPayload = payload;
       const created = await createOrder(payload);
 
       if (orderType !== 'dine-in') {
@@ -635,6 +638,7 @@ export function NewOrderPanel() {
       }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to place order');
+      if (hotelId && pendingPayload) enqueueOrder(hotelId, pendingPayload);
     } finally {
       setSubmitting(false);
     }
