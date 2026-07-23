@@ -195,8 +195,7 @@ router.put('/hotels/:id/approve', superAdminAuth, async (req: Request, res: Resp
     return res.json({
       message: `${hotel.hotelName} approved — ${days}-day trial started`,
       hotel,
-      credentials,
-      emailPayload,
+      adminId,
       whatsappPayload,
     });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
