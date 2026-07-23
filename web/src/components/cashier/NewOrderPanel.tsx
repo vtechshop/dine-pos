@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Search, ShoppingCart, X, Plus, Minus, Trash2,
   UtensilsCrossed, ShoppingBag, Truck, ChevronRight,
-  AlertCircle, Check, Loader2, Star,
+  AlertCircle, Check, Loader2, Star, ScanBarcode,
 } from 'lucide-react';
 import { useCashier, calcCartTotals, type CartItem, type HeldBill } from '../../context/CashierContext';
 import { ModifierDialog } from './ModifierDialog';
@@ -12,6 +12,7 @@ import { fetchProducts, fetchCategories } from '../../api/products';
 import { fetchTables } from '../../api/tables';
 import { createOrder, completeOrder } from '../../api/orders';
 import { fetchProductSalesReport } from '../../api/reports';
+import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
 import type { Product, Category, Table } from '../../types';
 import type { ProductSalesRow } from '../../types/reports';
 
@@ -368,6 +369,20 @@ export function NewOrderPanel() {
 
   // ── Modifier dialog ────────────────────────────────────────────────────────
   const [modifierProduct, setModifierProduct] = useState<Product | null>(null);
+
+  // ── Barcode scanner ────────────────────────────────────────────────────────
+  const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
+
+  useBarcodeScanner({
+    products,
+    enabled: products.length > 0 && !modifierProduct && !unknownBarcode,
+    onProductFound: (product) => {
+      handleAddProduct(product);
+    },
+    onUnknownCode: (code) => {
+      setUnknownBarcode(code);
+    },
+  });
 
   // ── Apply orderPrefill on mount / change (table → new-order flow) ──────────
   useEffect(() => {
@@ -1063,6 +1078,54 @@ export function NewOrderPanel() {
           onConfirm={handleModifierConfirm}
           onClose={() => setModifierProduct(null)}
         />
+      )}
+
+      {/* Unknown barcode dialog */}
+      {unknownBarcode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-canvas p-5 shadow-2xl">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <ScanBarcode size={18} className="text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-ink">Unknown Barcode</p>
+                <p className="text-xs text-ink/55">No product matched this code</p>
+              </div>
+            </div>
+
+            <div className="mb-4 rounded-lg border border-border bg-mist px-3 py-2 text-center">
+              <span className="font-mono text-sm font-bold tracking-wider text-ink">
+                {unknownBarcode}
+              </span>
+            </div>
+
+            <p className="mb-4 text-xs text-ink/55">
+              No product has the short code <span className="font-semibold text-ink">{unknownBarcode}</span>.
+              You can search manually or add the product via Menu Management.
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch(unknownBarcode);
+                  setUnknownBarcode(null);
+                }}
+                className="flex-1 rounded-xl border border-brand/30 bg-brand/5 py-2 text-sm font-semibold text-brand transition hover:bg-brand/10"
+              >
+                Search manually
+              </button>
+              <button
+                type="button"
+                onClick={() => setUnknownBarcode(null)}
+                className="flex-1 rounded-xl border border-border bg-mist py-2 text-sm font-semibold text-ink/70 transition hover:bg-canvas"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
