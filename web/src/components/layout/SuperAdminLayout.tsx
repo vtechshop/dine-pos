@@ -2,15 +2,18 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
   Activity, BarChart2, Building2, Heart, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Tag,
   Truck, Hotel, Monitor, ShoppingBag, ReceiptText, Globe2, Settings2, ClipboardList, FileBarChart,
+  Users, PhoneCall, CalendarCheck, Kanban,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { SANotificationsProvider } from '../../context/SANotificationsContext';
 import { SANotificationBell } from './SANotificationBell';
+import { LeadNotificationProvider } from '../../context/LeadNotificationContext';
 
 export function SuperAdminLayout() {
   const { logout } = useAuth();
 
   return (
+    <LeadNotificationProvider>
     <SANotificationsProvider>
       <div className="flex h-screen bg-mist">
         {/* Sidebar */}
@@ -124,6 +127,36 @@ export function SuperAdminLayout() {
             {/* Notification bell — dropdown preview + badge */}
             <SANotificationBell />
 
+            {/* ── Sales CRM ──────────────────────────────────────────── */}
+            <div className="pt-3">
+              <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-ink/30">
+                Sales CRM
+              </p>
+              {[
+                { to: '/super-admin/leads/dashboard', label: 'Dashboard',      icon: <LayoutDashboard size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/leads',           label: 'All Leads',      icon: <Users           size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/leads/demos',     label: 'Demo Requests',  icon: <CalendarCheck   size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/leads/followups', label: 'Follow Ups',     icon: <PhoneCall       size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/leads/pipeline',  label: 'Pipeline',       icon: <Kanban          size={16} strokeWidth={1.75} /> },
+              ].map(({ to, label, icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/super-admin/leads'}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      isActive
+                        ? 'bg-brand/10 text-brand'
+                        : 'text-ink/70 hover:bg-mist hover:text-ink'
+                    }`
+                  }
+                >
+                  {icon}
+                  {label}
+                </NavLink>
+              ))}
+            </div>
+
             {/* ── Delivery ───────────────────────────────────────────── */}
             <div className="pt-3">
               <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-ink/30">
@@ -177,5 +210,6 @@ export function SuperAdminLayout() {
         </main>
       </div>
     </SANotificationsProvider>
+    </LeadNotificationProvider>
   );
 }

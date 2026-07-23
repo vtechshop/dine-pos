@@ -46,6 +46,17 @@ export const setupNotifications = async (): Promise<boolean> => {
   } catch {}
 
   try {
+    await Notifications.setNotificationChannelAsync('lead_alerts', {
+      name: 'Lead & Demo Alerts',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 100, 250],
+      lightColor: '#3B82F6',
+      enableVibrate: true,
+      sound: 'order_alert.wav',
+    });
+  } catch {}
+
+  try {
     const { status } = await Notifications.requestPermissionsAsync();
     return status === 'granted';
   } catch {
@@ -132,6 +143,30 @@ export const notifyOrderReady = async (tableNumber: string, orderNumber: string)
         data: { type: 'order_ready' },
       },
       trigger: orderTrigger(),
+    });
+  } catch {}
+};
+
+// ── Super Admin Lead Alerts ───────────────────────────────────────────────────
+
+const leadTrigger = (): Notifications.ChannelAwareTriggerInput => ({
+  channelId: 'lead_alerts',
+});
+
+export const notifyNewLead = async (
+  companyName: string,
+  phone: string,
+  isDemo = true,
+): Promise<void> => {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: isDemo ? 'New Demo Request' : 'New Lead',
+        body: `${companyName} — ${phone}`,
+        sound: 'order_alert.wav',
+        data: { type: 'new_lead' },
+      },
+      trigger: leadTrigger(),
     });
   } catch {}
 };

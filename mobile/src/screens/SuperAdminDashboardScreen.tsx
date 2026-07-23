@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, StyleSheet,
   TextInput, ActivityIndicator, StatusBar, Modal, ScrollView,
-  Animated, RefreshControl,
+  Animated, RefreshControl, Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -15,9 +15,10 @@ import {
   deleteBroadcastNotification, getAllDevices, getSystemHealth, getRemoteConfigAdmin, updateRemoteConfig,
   startHotelTrial, expireHotel, updateHotelFeatures, extendTrialDays, convertToPaidPlan,
   getSADashboard, getSASubscriptionRevenue, getSAHotelGrowth, getSAFailedPayments,
-  getSADeviceLicensing, getSATopHotels,
+  getSADeviceLicensing, getSATopHotels, registerSAPushToken,
   SADashboard, SASubscriptionRevenue, SAHotelGrowth, SAFailedPayments, SADeviceLicensing, SATopHotels,
 } from '../services/api';
+import * as Notifications from 'expo-notifications';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -229,6 +230,18 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     topHotels?: Record<string, CacheEntry<SATopHotels>>;
   }>({});
 
+  const registerSAPushTokenOnMount = async () => {
+    try {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') return;
+      const tokenData = await Notifications.getExpoPushTokenAsync();
+      const platform: 'ios' | 'android' = Platform.OS === 'ios' ? 'ios' : 'android';
+      await registerSAPushToken(tokenData.data, platform);
+    } catch {
+      // Non-fatal — SA can still use the app without push notifications
+    }
+  };
+
   const loadData = useCallback(async () => {
     try {
       const [statsData, hotelsResult, ticketsData, notifsData, devicesData, healthData] = await Promise.all([
@@ -382,7 +395,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Load all overview widgets on mount
+  // Load all overview widgets + register SA push token on mount
   useEffect(() => {
     loadDash();
     loadRevenue();
@@ -390,6 +403,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     loadFailed();
     loadLicensing();
     loadTopHotels('revenue', 'today');
+    registerSAPushTokenOnMount();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleApprove = (hotel: Hotel) => {

@@ -36,6 +36,12 @@ import { AggregatorWebhooksPage }  from './pages/super-admin/AggregatorWebhooksP
 import { AggregatorSettingsPage }  from './pages/super-admin/AggregatorSettingsPage';
 import { AggregatorAuditPage }     from './pages/super-admin/AggregatorAuditPage';
 import { AggregatorReportsPage }   from './pages/super-admin/AggregatorReportsPage';
+import { LeadsDashboardPage }      from './pages/super-admin/LeadsDashboardPage';
+import { LeadsPage }               from './pages/super-admin/LeadsPage';
+import { DemoRequestsPage }        from './pages/super-admin/DemoRequestsPage';
+import { FollowUpsPage }           from './pages/super-admin/FollowUpsPage';
+import { LeadDetailPage }          from './pages/super-admin/LeadDetailPage';
+import { LeadPipelinePage }        from './pages/super-admin/LeadPipelinePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
@@ -109,6 +115,13 @@ export function App() {
                       <Route path="/super-admin/broadcast"    element={<BroadcastCenterPage />} />
                       <Route path="/super-admin/analytics"          element={<HotelAnalyticsPage />} />
                       <Route path="/super-admin/hotels/:id/health" element={<HotelHealthPage />} />
+                      {/* Lead CRM — M1-M14 */}
+                      <Route path="/super-admin/leads/dashboard" element={<LeadsDashboardPage />} />
+                      <Route path="/super-admin/leads"           element={<LeadsPage />} />
+                      <Route path="/super-admin/leads/demos"     element={<DemoRequestsPage />} />
+                      <Route path="/super-admin/leads/followups" element={<FollowUpsPage />} />
+                      <Route path="/super-admin/leads/pipeline"  element={<LeadPipelinePage />} />
+                      <Route path="/super-admin/leads/:id"       element={<LeadDetailPage />} />
                       {/* Aggregator — M1-M15 */}
                       <Route path="/super-admin/aggregator"             element={<AggregatorDashboardPage />} />
                       <Route path="/super-admin/aggregator/hotels"      element={<AggregatorHotelsPage />} />

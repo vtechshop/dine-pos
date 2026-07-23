@@ -13,6 +13,8 @@ import Subscription from '../models/Subscription';
 import RefreshToken from '../models/RefreshToken';
 import Notification from '../models/Notification';
 import RemoteConfig from '../models/RemoteConfig';
+import Lead from '../models/Lead';
+import SADevice from '../models/SADevice';
 import { redisHealthCheck } from '../config/redis';
 import { generateAdminId, generatePassword } from '../utils/credentialGenerator';
 import { bootstrapNewHotel } from '../services/bootstrapHotel';
@@ -20,6 +22,7 @@ import { sendError } from '../utils/sendError';
 import { getPriceForPlan, getDeviceLimitForPlan } from '../utils/planLimits';
 import { logAuditRaw } from '../utils/audit';
 import { invalidateStatusCache } from '../middleware/auth';
+import { Expo } from 'expo-server-sdk';
 
 
 const router = Router();
@@ -1093,6 +1096,146 @@ router.get('/dashboard/top-hotels', superAdminAuth, async (req: Request, res: Re
 
     return res.json({ by, period, hotels: results });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// ── Lead CRM ──────────────────────────────────────────────────────────────────
+
+// GET /superadmin/leads/stats — M8 dashboard widgets
+router.get('/leads/stats', superAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const now   = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const week  = new Date(today); week.setDate(today.getDate() - 7);
+    const month = new Date(today); month.setMonth(today.getMonth() - 1);
+
+    const [todayCount, weekCount, monthCount, pendingCount, wonCount, lostCount, totalCount] = await Promise.all([
+      Lead.countDocuments({ createdAt: { $gte: today } }),
+      Lead.countDocuments({ createdAt: { $gte: week  } }),
+      Lead.countDocuments({ createdAt: { $gte: month } }),
+      Lead.countDocuments({ status: { $in: ['contacted', 'demo_scheduled'] } }),
+      Lead.countDocuments({ status: 'won' }),
+      Lead.countDocuments({ status: 'lost' }),
+      Lead.countDocuments({}),
+    ]);
+
+    const conversionRate = totalCount > 0 ? Math.round((wonCount / totalCount) * 100) : 0;
+    return res.json({ todayCount, weekCount, monthCount, pendingCount, wonCount, lostCount, totalCount, conversionRate });
+  } catch (err) { return sendError(res, 500, 'Server error', err); }
+});
+
+// GET /superadmin/leads — paginated + filtered list
+router.get('/leads', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const page   = Math.max(1, parseInt(req.query.page  as string) || 1);
+    const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+    const filter: Record<string, unknown> = {};
+
+    if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
+    if (req.query.priority && req.query.priority !== 'all') filter.priority = req.query.priority;
+    if (req.query.source && req.query.source !== 'all') filter.source = req.query.source;
+    if (req.query.assignedTo) filter.assignedTo = req.query.assignedTo;
+    if (req.query.search) {
+      const s = String(req.query.search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.$or = [
+        { companyName: { $regex: s, $options: 'i' } },
+        { ownerName:   { $regex: s, $options: 'i' } },
+        { phone:       { $regex: s, $options: 'i' } },
+        { email:       { $regex: s, $options: 'i' } },
+        { city:        { $regex: s, $options: 'i' } },
+      ];
+    }
+
+    const [leads, total] = await Promise.all([
+      Lead.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      Lead.countDocuments(filter),
+    ]);
+
+    return res.json({ leads, total, page, limit, pages: Math.ceil(total / limit) });
+  } catch (err) { return sendError(res, 500, 'Server error', err); }
+});
+
+// GET /superadmin/leads/:id — single lead with timeline
+router.get('/leads/:id', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid lead ID' });
+    const lead = await Lead.findById(req.params.id).lean();
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+    return res.json({ lead });
+  } catch (err) { return sendError(res, 500, 'Server error', err); }
+});
+
+// PATCH /superadmin/leads/:id — update status / priority / assignee / notes
+router.patch('/leads/:id', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid lead ID' });
+    const allowed = ['status', 'priority', 'assignedTo', 'notes', 'city', 'state', 'restaurantType', 'businessType'];
+    const update: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) update[key] = req.body[key];
+    }
+    if (!Object.keys(update).length) return res.status(400).json({ message: 'No valid fields to update' });
+
+    // Add timeline event for status change
+    const timelineEntry = req.body.status
+      ? { event: `Status changed to ${req.body.status}`, actor: 'superadmin', createdAt: new Date() }
+      : req.body.assignedTo
+        ? { event: `Assigned to ${req.body.assignedTo}`, actor: 'superadmin', createdAt: new Date() }
+        : null;
+
+    const lead = await Lead.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: update,
+        ...(timelineEntry ? { $push: { timeline: timelineEntry } } : {}),
+      },
+      { new: true },
+    ).lean();
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+    return res.json({ lead });
+  } catch (err) { return sendError(res, 500, 'Server error', err); }
+});
+
+// POST /superadmin/leads/:id/timeline — add manual timeline entry
+router.post('/leads/:id/timeline', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid lead ID' });
+    const { event, note } = req.body;
+    if (!event?.trim()) return res.status(400).json({ message: 'Event is required' });
+
+    const lead = await Lead.findByIdAndUpdate(
+      req.params.id,
+      { $push: { timeline: { event: String(event).trim().slice(0, 200), note: note ? String(note).trim().slice(0, 1000) : undefined, actor: 'superadmin', createdAt: new Date() } } },
+      { new: true },
+    ).lean();
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+    return res.json({ lead });
+  } catch (err) { return sendError(res, 500, 'Server error', err); }
+});
+
+// DELETE /superadmin/leads/:id
+router.delete('/leads/:id', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid lead ID' });
+    const lead = await Lead.findByIdAndDelete(req.params.id);
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+    return res.json({ message: 'Lead deleted' });
+  } catch (err) { return sendError(res, 500, 'Server error', err); }
+});
+
+// POST /superadmin/push-token — register SA Expo push token for mobile notifications
+router.post('/push-token', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { pushToken, platform } = req.body;
+    if (!pushToken || !Expo.isExpoPushToken(String(pushToken))) {
+      return res.status(400).json({ message: 'Valid Expo push token is required' });
+    }
+    await SADevice.findOneAndUpdate(
+      { pushToken: String(pushToken) },
+      { pushToken: String(pushToken), platform: platform === 'ios' ? 'ios' : 'android' },
+      { upsert: true, new: true },
+    );
+    return res.json({ message: 'Push token registered' });
+  } catch (err) { return sendError(res, 500, 'Server error', err); }
 });
 
 export default router;

@@ -373,6 +373,18 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token as string | undefined;
   if (!token) return next(); // no token = customer QR menu connection (allowed)
+
+  // Try Super Admin JWT first
+  try {
+    const saPayload = jwt.verify(token, process.env.SUPER_ADMIN_JWT_SECRET!) as { role?: string };
+    if (saPayload?.role === 'superadmin') {
+      socket.data.role = 'superadmin';
+      socket.data.authenticated = true;
+      return next();
+    }
+  } catch { /* not a SA token — try hotel JWT below */ }
+
+  // Hotel JWT
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { hotelId: string };
     socket.data.hotelId = decoded.hotelId;
@@ -380,8 +392,6 @@ io.use((socket, next) => {
     next();
   } catch {
     // H-05: token was provided but is expired or invalid — reject the connection.
-    // The web client's 401 interceptor will obtain a fresh token and then the
-    // SocketContext effect (which depends on `token`) will reconnect automatically.
     return next(new Error('Socket authentication failed: token expired or invalid'));
   }
 });
@@ -390,8 +400,11 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
   logger.info('[SOCKET] Connected', { socketId: socket.id, authenticated: !!socket.data.authenticated, hotelId: socket.data.hotelId || 'none' });
 
-  // Auto-join authenticated admin sockets to their hotel rooms immediately
-  if (socket.data.authenticated && socket.data.hotelId) {
+  // Auto-join authenticated sockets to their rooms immediately
+  if (socket.data.authenticated && socket.data.role === 'superadmin') {
+    socket.join('superadmin');
+    logger.info('[SOCKET] SA auto-joined superadmin room', { socketId: socket.id });
+  } else if (socket.data.authenticated && socket.data.hotelId) {
     socket.join(`hotel_${socket.data.hotelId}`);
     socket.join(`admin_${socket.data.hotelId}`);
     logger.info('[SOCKET] Auto-joined', { socketId: socket.id, room: `hotel_${socket.data.hotelId}` });

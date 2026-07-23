@@ -1,8 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { makeRateLimiter } from '../utils/rateLimiter';
 import Inquiry from '../models/Inquiry';
+import Lead from '../models/Lead';
 import { sendError } from '../utils/sendError';
 import { validateEmail } from '../utils/validation';
+import { createFromInquiry } from '../services/leadService';
+import { io } from '../server';
+import { logger } from '../utils/logger';
 
 // 10 submissions per hour per IP — prevents marketing form spam
 const rl = makeRateLimiter({
@@ -24,6 +28,13 @@ router.post('/contact', rl, async (req: Request, res: Response) => {
   }
   if (!message?.trim()) return res.status(400).json({ message: 'Message is required' });
 
+  // M13: duplicate detection — same email submitted contact within 24h
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const dupe = await Lead.findOne({ email: String(email).trim().toLowerCase(), source: 'website_contact', createdAt: { $gte: since } });
+  if (dupe) {
+    return res.status(200).json({ message: 'Thank you! We already have your enquiry and will be in touch soon.', id: dupe._id });
+  }
+
   try {
     const inquiry = await Inquiry.create({
       type:       'contact',
@@ -33,6 +44,12 @@ router.post('/contact', rl, async (req: Request, res: Response) => {
       restaurant: String(restaurant || '').trim().slice(0, 200),
       message:    String(message).trim().slice(0, 2000),
     });
+
+    // Async lead creation — does not block the response
+    createFromInquiry(inquiry, io).catch(err =>
+      logger.error('inquiryRoutes createFromInquiry error', { err: String(err) }),
+    );
+
     return res.status(201).json({
       message: 'Thank you! We will get back to you within one business day.',
       id: inquiry._id,
@@ -52,6 +69,13 @@ router.post('/demo', rl, async (req: Request, res: Response) => {
   }
   if (!phone?.trim()) return res.status(400).json({ message: 'Phone number is required' });
 
+  // M13: duplicate detection — same phone submitted demo within 48h
+  const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const dupe = await Lead.findOne({ phone: String(phone).trim(), source: 'website_demo', createdAt: { $gte: since } });
+  if (dupe) {
+    return res.status(200).json({ message: 'Demo booked! We will confirm your slot via WhatsApp or email shortly.', id: dupe._id });
+  }
+
   try {
     const inquiry = await Inquiry.create({
       type:          'demo',
@@ -64,6 +88,12 @@ router.post('/demo', rl, async (req: Request, res: Response) => {
       preferredTime: String(preferredTime || '').trim(),
       notes:         String(notes || '').trim().slice(0, 1000),
     });
+
+    // Async lead creation — does not block the response
+    createFromInquiry(inquiry, io).catch(err =>
+      logger.error('inquiryRoutes createFromInquiry error', { err: String(err) }),
+    );
+
     return res.status(201).json({
       message: 'Demo booked! We will confirm your slot via WhatsApp or email shortly.',
       id: inquiry._id,

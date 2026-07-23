@@ -1656,3 +1656,14 @@ export const flushCustomerOrderQueue = async (): Promise<void> => {
   }
   await AsyncStorage.setItem(CUSTOMER_ORDER_QUEUE_KEY, JSON.stringify(remaining));
 };
+
+// ── SA Push Token Registration ────────────────────────────────────────────────
+
+export const registerSAPushToken = (
+  pushToken: string,
+  platform: 'ios' | 'android' = 'android',
+): Promise<{ message: string }> =>
+  superAdminFetch('/superadmin/push-token', {
+    method: 'POST',
+    body: JSON.stringify({ pushToken, platform }),
+  });
