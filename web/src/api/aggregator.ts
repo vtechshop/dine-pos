@@ -31,7 +31,12 @@ export interface OnlineOrder {
   customerPhone: string;
   deliveryAddress: string;
   grandTotal: number;
+  subtotal?: number;
+  taxTotal?: number;
+  discountAmount?: number;
+  platformCommission?: number;
   deliveryFee: number;
+  deliveryPartnerName?: string;
   items: { productName: string; quantity: number; price: number; total: number }[];
   notes: string;
   acceptedAt: string | null;
