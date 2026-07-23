@@ -10,7 +10,9 @@ import type { ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { Lead } from '../api/saLeads';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:5000';
+// H-5: Never fall back to localhost — if VITE_SOCKET_URL is unset use VITE_API_URL
+// (the API base is already required for all other SA calls, so it's always present).
+const SOCKET_URL: string = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL;
 const FEED_MAX = 50;
 
 export interface ActivityFeedItem {
@@ -36,6 +38,15 @@ const Ctx = createContext<LeadNotifCtx>({
 
 export function useLeadNotifications() {
   return useContext(Ctx);
+}
+
+// H-4: requestPermission() MUST be called from a user gesture (click/keypress).
+// Calling it from a socket callback causes Chrome 80+ and Firefox 72+ to auto-deny.
+// Export this function; the UI calls it from a button onClick handler.
+export async function requestLeadNotificationPermission(): Promise<NotificationPermission> {
+  if (!('Notification' in window)) return 'denied';
+  if (Notification.permission === 'granted') return 'granted';
+  return Notification.requestPermission();
 }
 
 export function LeadNotificationProvider({ children }: { children: ReactNode }) {
@@ -72,20 +83,13 @@ export function LeadNotificationProvider({ children }: { children: ReactNode }) 
       setActivityFeed(prev => [item, ...prev].slice(0, FEED_MAX));
       setUnreadCount(prev => prev + 1);
 
-      // M4: Browser Notification (Web Notifications API)
+      // H-4: Only fire if permission already granted — never call requestPermission()
+      // from here. Permission must be requested via a user gesture (see
+      // requestLeadNotificationPermission exported above).
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('New Demo Request', {
+        new Notification('New Lead', {
           body: `${lead.companyName} — ${lead.phone}`,
           icon: '/favicon.ico',
-        });
-      } else if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().then(perm => {
-          if (perm === 'granted') {
-            new Notification('New Demo Request', {
-              body: `${lead.companyName} — ${lead.phone}`,
-              icon: '/favicon.ico',
-            });
-          }
         });
       }
     });

@@ -4,13 +4,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Users, TrendingUp, Calendar, CheckCircle, XCircle, Clock, Zap, Activity,
+  Users, TrendingUp, Calendar, CheckCircle, XCircle, Clock, Zap, Activity, Bell,
 } from 'lucide-react';
 import {
   SAPageHeader, SAStat, SASpin, SAError, SABadge, fmtAgo,
 } from '../../components/ui/SAShared';
 import { getLeadStats, type LeadStats } from '../../api/saLeads';
-import { useLeadNotifications } from '../../context/LeadNotificationContext';
+import { useLeadNotifications, requestLeadNotificationPermission } from '../../context/LeadNotificationContext';
 
 function SocketDot({ connected }: { connected: boolean }) {
   return (
@@ -22,8 +22,16 @@ export function LeadsDashboardPage() {
   const [stats,   setStats]   = useState<LeadStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission>(
+    'Notification' in window ? Notification.permission : 'denied',
+  );
 
   const { connected, activityFeed, unreadCount, clearUnread } = useLeadNotifications();
+
+  const enableNotifications = useCallback(async () => {
+    const perm = await requestLeadNotificationPermission();
+    setNotifPerm(perm);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -48,10 +56,21 @@ export function LeadsDashboardPage() {
         onRefresh={() => void load()}
         refreshing={loading}
         action={
-          <span className="flex items-center gap-1.5 text-xs text-ink/50">
-            <SocketDot connected={connected} />
-            {connected ? 'Live' : 'Connecting…'}
-          </span>
+          <div className="flex items-center gap-3">
+            {notifPerm === 'default' && (
+              <button
+                onClick={enableNotifications}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-mist transition"
+              >
+                <Bell size={12} />
+                Enable Notifications
+              </button>
+            )}
+            <span className="flex items-center gap-1.5 text-xs text-ink/50">
+              <SocketDot connected={connected} />
+              {connected ? 'Live' : 'Connecting…'}
+            </span>
+          </div>
         }
       />
 
