@@ -68,5 +68,9 @@ LeadSchema.index({ status: 1, createdAt: -1 });
 LeadSchema.index({ email: 1 });
 LeadSchema.index({ phone: 1 });
 LeadSchema.index({ assignedTo: 1 });
+// M-14: indexes for general sort and duplicate-detection queries in inquiryRoutes
+LeadSchema.index({ createdAt: -1 });
+LeadSchema.index({ email: 1, source: 1, createdAt: -1 });
+LeadSchema.index({ phone: 1, source: 1, createdAt: -1 });
 
 export default model<ILead>('Lead', LeadSchema);

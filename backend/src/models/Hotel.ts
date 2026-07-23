@@ -218,5 +218,7 @@ HotelSchema.index({ status: 1, subscriptionEndDate: 1 }); // pending renewals qu
 HotelSchema.index({ createdAt: -1 });               // latest registrations
 // H-8: text index for SA hotel search — replaces per-field regex full scans
 HotelSchema.index({ hotelName: 'text', ownerName: 'text', phone: 'text', fssaiNumber: 'text' }, { name: 'hotel_search_text' });
+// M-13: sparse index on resetRequested — SA dashboard polls this field every 30s
+HotelSchema.index({ resetRequested: 1 }, { sparse: true });
 
 export default mongoose.model<IHotel>('Hotel', HotelSchema);
