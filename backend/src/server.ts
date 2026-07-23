@@ -140,8 +140,12 @@ app.use(
         fontSrc:                ["'self'", 'https://fonts.gstatic.com'],
         // res.cloudinary.com: product images uploaded via Cloudinary
         imgSrc:                 ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com'],
-        // wss: covers Socket.IO WebSocket upgrade; ws: needed for non-TLS dev
-        connectSrc:             ["'self'", 'wss:', 'ws:'],
+        // L-8: restrict WebSocket CSP to the configured origin in production.
+        // Set SOCKET_ORIGIN=wss://api.dinepos.com in the production environment.
+        // Omit it in dev to retain the permissive ws:/wss: fallback.
+        connectSrc: process.env.SOCKET_ORIGIN
+          ? ["'self'", process.env.SOCKET_ORIGIN]
+          : ["'self'", 'wss:', 'ws:'],
         objectSrc:              ["'none'"],
         frameAncestors:         ["'none'"],
         upgradeInsecureRequests: [],
