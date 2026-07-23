@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { timingSafeEqual } from 'crypto';
+import { timingSafeEqual, createHmac } from 'crypto';
 import { authMiddleware, requireAdmin, requireCashierOrAdmin, type AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import AggregatorIntegration from '../models/AggregatorIntegration';
@@ -28,6 +28,21 @@ if (!WEBHOOK_SECRET || WEBHOOK_SECRET === 'agg-secret-changeme') {
 const safeEqualSecret = (a: string, b: string): boolean => {
   try {
     return a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  } catch { return false; }
+};
+
+// H-10: HMAC-SHA256 verification for legacy webhook endpoints.
+// Caller must send header: x-webhook-hmac: sha256=<hex-digest-of-body>
+// Verification is timing-safe (timingSafeEqual prevents timing oracle).
+const verifyLegacyHmac = (rawBody: string, header: string | undefined): boolean => {
+  if (!WEBHOOK_SECRET || !header) return false;
+  const prefix = 'sha256=';
+  if (!header.startsWith(prefix)) return false;
+  const expected = createHmac('sha256', WEBHOOK_SECRET).update(rawBody, 'utf8').digest('hex');
+  const received = header.slice(prefix.length);
+  try {
+    if (expected.length !== received.length) return false;
+    return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(received, 'hex'));
   } catch { return false; }
 };
 
@@ -281,9 +296,10 @@ async function processAggregatorWebhook(
 
 // POST /api/aggregator/order — generic webhook (old path)
 router.post('/order', async (req: Request, res: Response) => {
-  const incomingSecret = req.headers['x-webhook-secret'] as string | undefined;
-  if (!WEBHOOK_SECRET || !incomingSecret || !safeEqualSecret(incomingSecret, WEBHOOK_SECRET)) {
-    return res.status(401).json({ message: 'Unauthorized: invalid webhook secret' });
+  const rawBody = typeof (req as any).rawBody === 'string' ? (req as any).rawBody : JSON.stringify(req.body);
+  const hmacHeader = req.headers['x-webhook-hmac'] as string | undefined;
+  if (!verifyLegacyHmac(rawBody, hmacHeader)) {
+    return res.status(401).json({ message: 'Unauthorized: invalid webhook signature' });
   }
 
   try {
@@ -301,9 +317,10 @@ router.post('/order', async (req: Request, res: Response) => {
 
 // POST /api/aggregator/swiggy — old Swiggy path
 router.post('/swiggy', async (req: Request, res: Response) => {
-  const incomingSecret = req.headers['x-webhook-secret'] as string | undefined;
-  if (!WEBHOOK_SECRET || !incomingSecret || !safeEqualSecret(incomingSecret, WEBHOOK_SECRET)) {
-    return res.status(401).json({ message: 'Unauthorized' });
+  const rawBody = typeof (req as any).rawBody === 'string' ? (req as any).rawBody : JSON.stringify(req.body);
+  const hmacHeader = req.headers['x-webhook-hmac'] as string | undefined;
+  if (!verifyLegacyHmac(rawBody, hmacHeader)) {
+    return res.status(401).json({ message: 'Unauthorized: invalid webhook signature' });
   }
   try {
     const { hotelId, items = [], total = 0, customerName = '', address = '', notes = '' } = req.body;
@@ -317,9 +334,10 @@ router.post('/swiggy', async (req: Request, res: Response) => {
 
 // POST /api/aggregator/zomato — old Zomato path
 router.post('/zomato', async (req: Request, res: Response) => {
-  const incomingSecret = req.headers['x-webhook-secret'] as string | undefined;
-  if (!WEBHOOK_SECRET || !incomingSecret || !safeEqualSecret(incomingSecret, WEBHOOK_SECRET)) {
-    return res.status(401).json({ message: 'Unauthorized' });
+  const rawBody = typeof (req as any).rawBody === 'string' ? (req as any).rawBody : JSON.stringify(req.body);
+  const hmacHeader = req.headers['x-webhook-hmac'] as string | undefined;
+  if (!verifyLegacyHmac(rawBody, hmacHeader)) {
+    return res.status(401).json({ message: 'Unauthorized: invalid webhook signature' });
   }
   try {
     const { hotelId, items = [], total = 0, customerName = '', address = '', notes = '' } = req.body;
