@@ -909,7 +909,7 @@ export function NewOrderPanel() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="flex-1 min-h-0 grid grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
             {visibleProducts.map(p => (
               <ProductCard
                 key={p._id}
