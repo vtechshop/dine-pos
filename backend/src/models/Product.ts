@@ -15,6 +15,19 @@ export interface IProduct extends Document {
   stock: number;
   isDeleted: boolean;
   recipe: { ingredient: mongoose.Types.ObjectId; quantity: number }[];
+  // ── Channel-specific pricing ──────────────────────────────────────────────
+  channelPrices: {
+    swiggy?:  number | null;
+    zomato?:  number | null;
+    qr?:      number | null;
+    kiosk?:   number | null;
+    website?: number | null;
+  };
+  // ── Platform item IDs after menu sync ─────────────────────────────────────
+  platformIds: {
+    swiggy?: string;
+    zomato?: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -81,6 +94,19 @@ const ProductSchema: Schema = new Schema(
       ingredient: { type: Schema.Types.ObjectId, ref: 'Ingredient' },
       quantity: { type: Number, required: true, min: 0 },
     }],
+    // ── Channel-specific pricing — undefined means use base price ────────────
+    channelPrices: {
+      swiggy:  { type: Number, default: null },
+      zomato:  { type: Number, default: null },
+      qr:      { type: Number, default: null },
+      kiosk:   { type: Number, default: null },
+      website: { type: Number, default: null },
+    },
+    // ── Platform item IDs after menu sync ─────────────────────────────────────
+    platformIds: {
+      swiggy: { type: String, default: '' },
+      zomato: { type: String, default: '' },
+    },
   },
   { timestamps: true }
 );

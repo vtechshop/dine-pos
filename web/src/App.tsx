@@ -33,13 +33,16 @@ import { KitchenPage } from './pages/KitchenPage';
 import { CashierPage } from './pages/CashierPage';
 import { CustomerDisplayPage } from './pages/CustomerDisplayPage';
 // Heavy pages — code-split to reduce initial JS parse time
-const OrdersPage      = lazy(() => import('./pages/OrdersPage').then(m => ({ default: m.OrdersPage })));
-const ProductsPage    = lazy(() => import('./pages/ProductsPage').then(m => ({ default: m.ProductsPage })));
-const InventoryPage   = lazy(() => import('./pages/InventoryPage').then(m => ({ default: m.InventoryPage })));
-const CustomersPage   = lazy(() => import('./pages/CustomersPage').then(m => ({ default: m.CustomersPage })));
-const ReportsPage     = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
-const SettingsPage    = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const OrdersPage       = lazy(() => import('./pages/OrdersPage').then(m => ({ default: m.OrdersPage })));
+const ProductsPage     = lazy(() => import('./pages/ProductsPage').then(m => ({ default: m.ProductsPage })));
+const InventoryPage    = lazy(() => import('./pages/InventoryPage').then(m => ({ default: m.InventoryPage })));
+const CustomersPage    = lazy(() => import('./pages/CustomersPage').then(m => ({ default: m.CustomersPage })));
+const ReportsPage      = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
+const SettingsPage     = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const ReservationsPage = lazy(() => import('./pages/ReservationsPage').then(m => ({ default: m.ReservationsPage })));
+const OnlineOrdersPage = lazy(() => import('./pages/OnlineOrdersPage').then(m => ({ default: m.OnlineOrdersPage })));
+const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })));
+const MenuSyncPage     = lazy(() => import('./pages/MenuSyncPage').then(m => ({ default: m.MenuSyncPage })));
 
 function PageFallback() {
   return (
@@ -112,7 +115,10 @@ export function App() {
                     <Route path="/inventory"   element={<AdminOnly><Suspense fallback={<PageFallback />}><InventoryPage /></Suspense></AdminOnly>} />
                     <Route path="/reports"     element={<AdminOnly><Suspense fallback={<PageFallback />}><ReportsPage /></Suspense></AdminOnly>} />
                     <Route path="/settings"    element={<AdminOnly><Suspense fallback={<PageFallback />}><SettingsPage /></Suspense></AdminOnly>} />
-                    <Route path="/reservations" element={<AdminOnly><Suspense fallback={<PageFallback />}><ReservationsPage /></Suspense></AdminOnly>} />
+                    <Route path="/reservations"   element={<AdminOnly><Suspense fallback={<PageFallback />}><ReservationsPage /></Suspense></AdminOnly>} />
+                    <Route path="/online-orders" element={<AdminOnly><Suspense fallback={<PageFallback />}><OnlineOrdersPage /></Suspense></AdminOnly>} />
+                    <Route path="/integrations"  element={<AdminOnly><Suspense fallback={<PageFallback />}><IntegrationsPage /></Suspense></AdminOnly>} />
+                    <Route path="/menu-sync"     element={<AdminOnly><Suspense fallback={<PageFallback />}><MenuSyncPage /></Suspense></AdminOnly>} />
 
                     <Route path="/waiter"  element={<Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />

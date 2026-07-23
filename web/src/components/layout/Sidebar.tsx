@@ -11,6 +11,9 @@ import {
   CalendarDays,
   ChefHat,
   CreditCard,
+  Truck,
+  Link2,
+  RefreshCw,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -49,12 +52,21 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/cashier',      icon: CreditCard,      label: 'Cashier Ops', hint: 'F2' },
     ],
   },
+  {
+    heading: 'Delivery',
+    items: [
+      { to: '/online-orders', icon: Truck,     label: 'Online Orders' },
+      { to: '/integrations',  icon: Link2,     label: 'Integrations' },
+      { to: '/menu-sync',     icon: RefreshCw, label: 'Menu Sync' },
+    ],
+  },
 ];
 
 // Routes visible only to the admin role
 const ADMIN_ONLY_ROUTES = new Set([
   '/orders', '/customers', '/products', '/inventory',
   '/reports', '/settings', '/reservations',
+  '/online-orders', '/integrations', '/menu-sync',
 ]);
 
 // Routes visible only to the cashier role

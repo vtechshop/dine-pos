@@ -4,7 +4,7 @@ import {
   Plus, CreditCard, PauseCircle, BarChart2,
   Wallet, Search, Users, Printer, Bell, LogOut,
   TrendingUp, ShoppingBag, AlertCircle, RefreshCw,
-  Home, LayoutGrid, Flame, UserCircle, X, Monitor, Shield,
+  Home, LayoutGrid, Flame, UserCircle, X, Monitor, Shield, Truck,
 } from 'lucide-react';
 import { useShortcut } from '../hooks/useShortcut';
 import { useCashier, calcCartTotals, type CashierTab } from '../context/CashierContext';
@@ -30,6 +30,7 @@ import { CashierTablePanel }      from '../components/cashier/CashierTablePanel'
 import { KitchenStatusPanel }     from '../components/cashier/KitchenStatusPanel';
 import { CashierProfilePanel }    from '../components/cashier/CashierProfilePanel';
 import { PermissionsPanel }       from '../components/cashier/PermissionsPanel';
+import { OnlineOrdersPanel }      from '../components/cashier/OnlineOrdersPanel';
 import type { DailyReport, PrinterDeviceStatus } from '../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -69,8 +70,9 @@ const TABS: TabDef[] = [
   { key: 'pending',    icon: <CreditCard size={15} />,    label: 'Pending',     shortcut: 'F6' },
   { key: 'hold',       icon: <PauseCircle size={15} />,   label: 'Hold',        shortcut: '' },
   { key: 'tables',     icon: <LayoutGrid size={15} />,    label: 'Tables',      shortcut: 'Ctrl+T' },
-  { key: 'kitchen',    icon: <Flame size={15} />,         label: 'Kitchen',     shortcut: 'Ctrl+K' },
-  { key: 'search',     icon: <Search size={15} />,        label: 'Bill Search', shortcut: 'Ctrl+F' },
+  { key: 'kitchen',       icon: <Flame size={15} />,  label: 'Kitchen',       shortcut: 'Ctrl+K' },
+  { key: 'online-orders', icon: <Truck size={15} />,  label: 'Online Orders', shortcut: 'Ctrl+O' },
+  { key: 'search',        icon: <Search size={15} />, label: 'Bill Search',   shortcut: 'Ctrl+F' },
   { key: 'customers',  icon: <Users size={15} />,         label: 'Customers',   shortcut: 'F4' },
   { key: 'shift',      icon: <BarChart2 size={15} />,     label: 'Shift',       shortcut: '' },
   { key: 'drawer',     icon: <Wallet size={15} />,        label: 'Drawer',      shortcut: 'Ctrl+D' },
@@ -485,8 +487,9 @@ export function CashierPage() {
         {activeTab === 'pending'    && <PendingBillsPanel />}
         {activeTab === 'hold'       && <HoldBillPanel />}
         {activeTab === 'tables'     && <CashierTablePanel />}
-        {activeTab === 'kitchen'    && <KitchenStatusPanel />}
-        {activeTab === 'shift'      && <ShiftPanel />}
+        {activeTab === 'kitchen'       && <KitchenStatusPanel />}
+        {activeTab === 'online-orders' && <OnlineOrdersPanel />}
+        {activeTab === 'shift'         && <ShiftPanel />}
         {activeTab === 'drawer'     && <CashDrawerPanel />}
         {activeTab === 'search'     && <BillSearchPanel />}
         {activeTab === 'customers'  && <CustomerPanel />}

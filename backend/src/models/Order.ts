@@ -45,6 +45,16 @@ export interface IOrder extends Document {
   // ── Loyalty (Architecture v1.1) ─────────────────────────────────────────
   redeemedPoints: number;    // loyalty points redeemed against this order
   loyaltyDiscount: number;   // INR value of the loyalty discount applied
+  // ── Delivery / aggregator fields ─────────────────────────────────────────
+  platformOrderId:     string;   // Swiggy/Zomato order ref
+  deliveryAddress:     string;
+  deliveryFee:         number;
+  platformCommission:  number;
+  estimatedPickupTime: Date | null;
+  acceptedAt:          Date | null;
+  rejectedAt:          Date | null;
+  rejectionReason:     string;
+  deliveryPartnerName: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -165,6 +175,17 @@ const OrderSchema: Schema = new Schema(
     // ── Loyalty (Architecture v1.1) ───────────────────────────────────────
     redeemedPoints:  { type: Number, default: 0, min: 0 },
     loyaltyDiscount: { type: Number, default: 0, min: 0 },
+
+    // ── Delivery / aggregator fields ──────────────────────────────────────
+    platformOrderId:     { type: String, default: '' },
+    deliveryAddress:     { type: String, default: '', maxlength: 500 },
+    deliveryFee:         { type: Number, default: 0 },
+    platformCommission:  { type: Number, default: 0 },
+    estimatedPickupTime: { type: Date,   default: null },
+    acceptedAt:          { type: Date,   default: null },
+    rejectedAt:          { type: Date,   default: null },
+    rejectionReason:     { type: String, default: '' },
+    deliveryPartnerName: { type: String, default: '' },
   },
   { timestamps: true }
 );
@@ -188,5 +209,7 @@ OrderSchema.index({ guestId: 1 }, { sparse: true });
 OrderSchema.index({ sessionId: 1, guestId: 1 }, { sparse: true });
 // Legacy table bill: menuRoutes filters by hotelId + tableNumber + createdAt (today's orders)
 OrderSchema.index({ hotelId: 1, tableNumber: 1, createdAt: -1 });
+// ── Aggregator / delivery index ───────────────────────────────────────────
+OrderSchema.index({ platformOrderId: 1 }, { sparse: true });
 
 export default mongoose.model<IOrder>('Order', OrderSchema);

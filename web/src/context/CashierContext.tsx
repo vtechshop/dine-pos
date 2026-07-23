@@ -13,6 +13,7 @@ export type CashierTab =
   | 'hold'
   | 'tables'
   | 'kitchen'
+  | 'online-orders'
   | 'shift'
   | 'drawer'
   | 'search'
