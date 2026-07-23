@@ -21,6 +21,7 @@ import { bootstrapNewHotel } from '../services/bootstrapHotel';
 import { sendError } from '../utils/sendError';
 import { getPriceForPlan, getDeviceLimitForPlan } from '../utils/planLimits';
 import { logAuditRaw } from '../utils/audit';
+import { logger } from '../utils/logger';
 import { invalidateStatusCache } from '../middleware/auth';
 import { Expo } from 'expo-server-sdk';
 
@@ -228,7 +229,9 @@ router.put('/hotels/:id/suspend', superAdminAuth, async (req: Request, res: Resp
     await Promise.all([
       RefreshToken.updateMany({ hotelId: req.params.id, revokedAt: null }, { revokedAt: new Date() }),
       Device.updateMany({ hotelId: req.params.id }, { isActive: false, isOnline: false }),
-    ]).catch(() => {});
+    ]).catch(err =>
+      logger.error('suspend: failed to revoke tokens/devices', { hotelId: req.params.id, err: String(err) }),
+    );
     logAuditRaw({ hotelId: req.params.id, action: 'hotel.suspended', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} suspended`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
