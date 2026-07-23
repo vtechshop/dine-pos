@@ -17,31 +17,34 @@ import { RegisterSuccessPage }  from './pages/RegisterSuccessPage';
 import { SuperAdminLoginPage }  from './pages/super-admin/SuperAdminLoginPage';
 import { SuperAdminRoute }      from './components/SuperAdminRoute';
 import { SuperAdminLayout }     from './components/layout/SuperAdminLayout';
-import { HotelsPage }           from './pages/super-admin/HotelsPage';
-import { HotelDetailPage }      from './pages/super-admin/HotelDetailPage';
-import { SADashboardPage }      from './pages/super-admin/SADashboardPage';
-import { LiveMonitoringPage }   from './pages/super-admin/LiveMonitoringPage';
-import { SystemHealthPage }         from './pages/super-admin/SystemHealthPage';
-import { VersionManagementPage }    from './pages/super-admin/VersionManagementPage';
-import { SANotificationsPage }      from './pages/super-admin/SANotificationsPage';
-import { BroadcastCenterPage }      from './pages/super-admin/BroadcastCenterPage';
-import { HotelAnalyticsPage }      from './pages/super-admin/HotelAnalyticsPage';
-import { HotelHealthPage }         from './pages/super-admin/HotelHealthPage';
-import { AggregatorDashboardPage } from './pages/super-admin/AggregatorDashboardPage';
-import { AggregatorHotelsPage }    from './pages/super-admin/AggregatorHotelsPage';
-import { AggregatorMonitorPage }   from './pages/super-admin/AggregatorMonitorPage';
-import { AggregatorOrdersPage }    from './pages/super-admin/AggregatorOrdersPage';
-import { AggregatorSettlementPage }from './pages/super-admin/AggregatorSettlementPage';
-import { AggregatorWebhooksPage }  from './pages/super-admin/AggregatorWebhooksPage';
-import { AggregatorSettingsPage }  from './pages/super-admin/AggregatorSettingsPage';
-import { AggregatorAuditPage }     from './pages/super-admin/AggregatorAuditPage';
-import { AggregatorReportsPage }   from './pages/super-admin/AggregatorReportsPage';
-import { LeadsDashboardPage }      from './pages/super-admin/LeadsDashboardPage';
-import { LeadsPage }               from './pages/super-admin/LeadsPage';
-import { DemoRequestsPage }        from './pages/super-admin/DemoRequestsPage';
-import { FollowUpsPage }           from './pages/super-admin/FollowUpsPage';
-import { LeadDetailPage }          from './pages/super-admin/LeadDetailPage';
-import { LeadPipelinePage }        from './pages/super-admin/LeadPipelinePage';
+// SA pages — lazy-loaded so they are excluded from the critical-path bundle.
+// Hotel staff never navigate to /super-admin, so these modules are dead weight
+// on the initial parse unless explicitly routed to.
+const HotelsPage            = lazy(() => import('./pages/super-admin/HotelsPage').then(m => ({ default: m.HotelsPage })));
+const HotelDetailPage       = lazy(() => import('./pages/super-admin/HotelDetailPage').then(m => ({ default: m.HotelDetailPage })));
+const SADashboardPage       = lazy(() => import('./pages/super-admin/SADashboardPage').then(m => ({ default: m.SADashboardPage })));
+const LiveMonitoringPage    = lazy(() => import('./pages/super-admin/LiveMonitoringPage').then(m => ({ default: m.LiveMonitoringPage })));
+const SystemHealthPage      = lazy(() => import('./pages/super-admin/SystemHealthPage').then(m => ({ default: m.SystemHealthPage })));
+const VersionManagementPage = lazy(() => import('./pages/super-admin/VersionManagementPage').then(m => ({ default: m.VersionManagementPage })));
+const SANotificationsPage   = lazy(() => import('./pages/super-admin/SANotificationsPage').then(m => ({ default: m.SANotificationsPage })));
+const BroadcastCenterPage   = lazy(() => import('./pages/super-admin/BroadcastCenterPage').then(m => ({ default: m.BroadcastCenterPage })));
+const HotelAnalyticsPage    = lazy(() => import('./pages/super-admin/HotelAnalyticsPage').then(m => ({ default: m.HotelAnalyticsPage })));
+const HotelHealthPage       = lazy(() => import('./pages/super-admin/HotelHealthPage').then(m => ({ default: m.HotelHealthPage })));
+const AggregatorDashboardPage  = lazy(() => import('./pages/super-admin/AggregatorDashboardPage').then(m => ({ default: m.AggregatorDashboardPage })));
+const AggregatorHotelsPage     = lazy(() => import('./pages/super-admin/AggregatorHotelsPage').then(m => ({ default: m.AggregatorHotelsPage })));
+const AggregatorMonitorPage    = lazy(() => import('./pages/super-admin/AggregatorMonitorPage').then(m => ({ default: m.AggregatorMonitorPage })));
+const AggregatorOrdersPage     = lazy(() => import('./pages/super-admin/AggregatorOrdersPage').then(m => ({ default: m.AggregatorOrdersPage })));
+const AggregatorSettlementPage = lazy(() => import('./pages/super-admin/AggregatorSettlementPage').then(m => ({ default: m.AggregatorSettlementPage })));
+const AggregatorWebhooksPage   = lazy(() => import('./pages/super-admin/AggregatorWebhooksPage').then(m => ({ default: m.AggregatorWebhooksPage })));
+const AggregatorSettingsPage   = lazy(() => import('./pages/super-admin/AggregatorSettingsPage').then(m => ({ default: m.AggregatorSettingsPage })));
+const AggregatorAuditPage      = lazy(() => import('./pages/super-admin/AggregatorAuditPage').then(m => ({ default: m.AggregatorAuditPage })));
+const AggregatorReportsPage    = lazy(() => import('./pages/super-admin/AggregatorReportsPage').then(m => ({ default: m.AggregatorReportsPage })));
+const LeadsDashboardPage    = lazy(() => import('./pages/super-admin/LeadsDashboardPage').then(m => ({ default: m.LeadsDashboardPage })));
+const LeadsPage             = lazy(() => import('./pages/super-admin/LeadsPage').then(m => ({ default: m.LeadsPage })));
+const DemoRequestsPage      = lazy(() => import('./pages/super-admin/DemoRequestsPage').then(m => ({ default: m.DemoRequestsPage })));
+const FollowUpsPage         = lazy(() => import('./pages/super-admin/FollowUpsPage').then(m => ({ default: m.FollowUpsPage })));
+const LeadDetailPage        = lazy(() => import('./pages/super-admin/LeadDetailPage').then(m => ({ default: m.LeadDetailPage })));
+const LeadPipelinePage      = lazy(() => import('./pages/super-admin/LeadPipelinePage').then(m => ({ default: m.LeadPipelinePage })));
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
@@ -103,7 +106,7 @@ export function App() {
 
                   {/* Super Admin protected routes */}
                   <Route element={<SuperAdminRoute />}>
-                    <Route element={<SuperAdminLayout />}>
+                    <Route element={<Suspense fallback={<PageFallback />}><SuperAdminLayout /></Suspense>}>
                       <Route path="/super-admin"            element={<Navigate to="/super-admin/dashboard" replace />} />
                       <Route path="/super-admin/dashboard"  element={<SADashboardPage />} />
                       <Route path="/super-admin/hotels"     element={<HotelsPage />} />
