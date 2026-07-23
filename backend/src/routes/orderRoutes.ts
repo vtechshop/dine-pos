@@ -53,13 +53,18 @@ function recalcOrderTotals(
 }
 
 // Deduct (-1) or restore (+1) raw-material stock based on each product's recipe (BOM)
-const applyIngredientStockChange = async (orderItems: { product?: any; quantity: number }[], hotelId: string, sign: 1 | -1) => {
+const applyIngredientStockChange = async (
+  orderItems: { product?: any; quantity: number }[],
+  hotelId: string,
+  sign: 1 | -1,
+  session?: mongoose.ClientSession,
+) => {
   const productIds = orderItems.filter(i => i.product).map(i => i.product);
   if (productIds.length === 0) return;
 
   const productsWithRecipe = await Product.find({
     _id: { $in: productIds }, hotelId, 'recipe.0': { $exists: true },
-  }).select('recipe');
+  }).select('recipe').session(session ?? null);
   if (productsWithRecipe.length === 0) return;
 
   const deltas = new Map<string, number>();
@@ -82,7 +87,7 @@ const applyIngredientStockChange = async (orderItems: { product?: any; quantity:
         : { $inc: { currentStock: qty } },
     },
   }));
-  await Ingredient.bulkWrite(bulkOps as any);
+  await Ingredient.bulkWrite(bulkOps as any, { session });
 };
 
 // Helper: Generate order number like ORD-20260310-001 (per hotel)
@@ -571,7 +576,34 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       loyaltyDiscount: recalc.loyaltyDiscount,
       grandTotal:      recalc.grandTotal,
     });
-    await order.save();
+    // ── Atomic transaction: persist order + deduct stock atomically ──────────
+    // order.save() and both stock-deduction writes must succeed or fail together.
+    // KOT print, guest total, stock-response read, and socket emit run AFTER
+    // the transaction commits so they never see a rolled-back order.
+    const stockItems = order.items.filter(i => i.product);
+    const stockBulkOps = stockItems.map(item => ({
+      updateOne: {
+        filter: { _id: item.product, hotelId: req.hotelId, stock: { $gt: 0 } },
+        update: [
+          { $set: { stock: { $max: [{ $subtract: ['$stock', item.quantity] }, 0] } } },
+          { $set: { isAvailable: { $gt: ['$stock', 0] } } },
+        ],
+      },
+    }));
+
+    const txSession = await mongoose.startSession();
+    try {
+      await txSession.withTransaction(async () => {
+        await order.save({ session: txSession });
+        if (stockItems.length > 0) {
+          await Product.bulkWrite(stockBulkOps as any, { session: txSession });
+        }
+        await applyIngredientStockChange(order.items, req.hotelId!, -1, txSession);
+      });
+    } finally {
+      await txSession.endSession();
+    }
+
     logger.info('Order saved', { orderId: String(order._id), orderNumber: order.orderNumber, hotelId: req.hotelId });
 
     // ── Phase 7: Fire-and-forget KOT print ───────────────────────────────────
@@ -592,24 +624,6 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     if (linkedGuestId) {
       await Guest.findByIdAndUpdate(linkedGuestId, { $inc: { totalAmount: order.grandTotal } });
     }
-
-    // ── Stock deduction ──────────────────────────────────────────────────────
-    const stockItems = order.items.filter(i => i.product);
-    if (stockItems.length > 0) {
-      const bulkOps = stockItems.map(item => ({
-        updateOne: {
-          filter: { _id: item.product, hotelId: req.hotelId, stock: { $gt: 0 } },
-          update: [
-            { $set: { stock: { $max: [{ $subtract: ['$stock', item.quantity] }, 0] } } },
-            { $set: { isAvailable: { $gt: ['$stock', 0] } } },
-          ],
-        },
-      }));
-      await Product.bulkWrite(bulkOps as any);
-    }
-
-    // Deduct raw-material (ingredient) stock based on product recipes
-    await applyIngredientStockChange(order.items, req.hotelId!, -1);
 
     // ── Return stock updates to client ───────────────────────────────────────
     // Client applies these immediately so local cache reflects server truth
