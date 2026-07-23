@@ -75,6 +75,7 @@ router.put('/read-all', async (req: AuthRequest, res: Response) => {
 
     const active = await Notification.find({ isActive: true })
       .select('_id')
+      .limit(500)
       .lean();
 
     if (active.length === 0) return res.json({ ok: true });
