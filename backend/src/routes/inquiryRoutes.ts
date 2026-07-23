@@ -5,7 +5,7 @@ import Lead from '../models/Lead';
 import { sendError } from '../utils/sendError';
 import { validateEmail } from '../utils/validation';
 import { createFromInquiry } from '../services/leadService';
-import { io } from '../server';
+import { getIo } from '../utils/ioRegistry';
 import { logger } from '../utils/logger';
 
 // 10 submissions per hour per IP — prevents marketing form spam
@@ -46,7 +46,7 @@ router.post('/contact', rl, async (req: Request, res: Response) => {
     });
 
     // Async lead creation — does not block the response
-    createFromInquiry(inquiry, io).catch(err =>
+    createFromInquiry(inquiry, getIo()).catch(err =>
       logger.error('inquiryRoutes createFromInquiry error', { err: String(err) }),
     );
 
@@ -90,7 +90,7 @@ router.post('/demo', rl, async (req: Request, res: Response) => {
     });
 
     // Async lead creation — does not block the response
-    createFromInquiry(inquiry, io).catch(err =>
+    createFromInquiry(inquiry, getIo()).catch(err =>
       logger.error('inquiryRoutes createFromInquiry error', { err: String(err) }),
     );
 

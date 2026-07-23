@@ -7,7 +7,7 @@ import { logger } from '../utils/logger';
 
 export async function createFromInquiry(
   inquiry: IInquiry,
-  io: Server,
+  io: Server | null,
 ): Promise<ILead> {
   const source: LeadSource = inquiry.type === 'demo' ? 'website_demo' : 'website_contact';
 
@@ -31,7 +31,7 @@ export async function createFromInquiry(
 
   // Socket — notify all SA clients in superadmin room
   try {
-    io.to('superadmin').emit('new_lead', {
+    io?.to('superadmin').emit('new_lead', {
       _id:         lead._id,
       ownerName:   lead.ownerName,
       companyName: lead.companyName,

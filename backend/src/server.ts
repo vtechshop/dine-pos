@@ -11,6 +11,7 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { makeRateLimiter } from './utils/rateLimiter';
+import { setIo } from './utils/ioRegistry';
 import connectDB from './config/database';
 import { connectRedis, getRedisClient, closeRedis, redisHealthCheck } from './config/redis';
 import { logger } from './utils/logger';
@@ -189,6 +190,7 @@ const io = new Server(httpServer, {
   },
   maxHttpBufferSize: 1e4, // 10KB max message size
 });
+setIo(io); // L-2: break circular inquiryRoutes ↔ server dependency
 
 app.use(compression()); // gzip responses — reduces JSON payload by ~85%
 app.use(express.json({ limit: '1mb' }));
