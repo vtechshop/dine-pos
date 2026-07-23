@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   RefreshCw, CreditCard, Printer, Trash2, AlertCircle,
-  ShoppingBag, UtensilsCrossed, Truck, Clock,
+  ShoppingBag, UtensilsCrossed, Truck, Clock, GitBranch,
 } from 'lucide-react';
 import { fetchCashierOrders, cancelOrder, updateOrderPayment, completeOrder } from '../../api/orders';
 import { reprintJob, fetchReceiptJobs } from '../../api/billing';
 import { PaymentModal } from './PaymentModal';
+import { OrderTimelineModal } from './OrderTimelineModal';
 import type { PaymentResult } from './PaymentModal';
 import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
@@ -55,6 +56,7 @@ function OrderRow({
   const [expanded, setExpanded] = useState(false);
   const [showPay, setShowPay] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
   const [reprinting, setReprinting] = useState(false);
   const paymentCompletedRef = useRef(false);
 
@@ -111,6 +113,14 @@ function OrderRow({
           <div className="flex flex-col items-end gap-2 shrink-0">
             <p className="text-sm font-bold text-ink">{fmtINR(sym, order.grandTotal)}</p>
             <div className="flex gap-1.5">
+              <button
+                type="button"
+                title="Order Timeline"
+                onClick={() => setShowTimeline(true)}
+                className="rounded-lg border border-border p-1.5 text-ink/40 hover:bg-mist"
+              >
+                <GitBranch size={13} />
+              </button>
               {receiptJob && (
                 <button
                   type="button"
@@ -178,6 +188,13 @@ function OrderRow({
           cashierId={cashierId}
           onConfirm={handleCancel}
           onClose={() => setShowCancel(false)}
+        />
+      )}
+
+      {showTimeline && (
+        <OrderTimelineModal
+          order={order}
+          onClose={() => setShowTimeline(false)}
         />
       )}
     </>
