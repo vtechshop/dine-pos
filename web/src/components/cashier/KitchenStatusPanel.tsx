@@ -4,6 +4,7 @@ import {
   UtensilsCrossed, ChevronRight,
 } from 'lucide-react';
 import { fetchKitchenOrders } from '../../api/orders';
+import { ApiError } from '../../api/client';
 import { Spinner } from '../ui/Spinner';
 import type { KDSOrder } from '../../types';
 
@@ -133,20 +134,29 @@ function KitchenCard({ order, nowMs }: { order: KDSOrder; nowMs: number }) {
 type FilterTab = 'all' | KDSOrder['status'];
 
 export function KitchenStatusPanel() {
-  const [orders, setOrders]   = useState<KDSOrder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
-  const [nowMs, setNowMs]     = useState(() => Date.now());
-  const [filter, setFilter]   = useState<FilterTab>('all');
+  const [orders, setOrders]         = useState<KDSOrder[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState<string | null>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [nowMs, setNowMs]           = useState(() => Date.now());
+  const [filter, setFilter]         = useState<FilterTab>('all');
 
   const load = useCallback(async () => {
     let cancelled = false;
     setLoading(true);
     try {
       const data = await fetchKitchenOrders();
-      if (!cancelled) { setOrders(data); setError(null); }
-    } catch {
-      if (!cancelled) setError('Failed to load kitchen orders');
+      if (!cancelled) { setOrders(data); setError(null); setAccessDenied(false); }
+    } catch (e) {
+      if (!cancelled) {
+        if (e instanceof ApiError && (e.status === 403 || e.status === 401)) {
+          setAccessDenied(true);
+          setError(null);
+          setOrders([]);
+        } else {
+          setError('Failed to load kitchen orders');
+        }
+      }
     } finally {
       if (!cancelled) { setLoading(false); setNowMs(Date.now()); }
     }
@@ -165,7 +175,7 @@ export function KitchenStatusPanel() {
   const readyCount     = orders.filter(o => o.status === 'ready').length;
   const delayedCount   = orders.filter(o => {
     if (o.status === 'ready') return false;
-    return (Date.now() - new Date(o.createdAt).getTime()) / 60_000 >= 20;
+    return (nowMs - new Date(o.createdAt).getTime()) / 60_000 >= 20;
   }).length;
 
   const filtered = filter === 'all'
@@ -223,8 +233,22 @@ export function KitchenStatusPanel() {
         />
       </div>
 
+      {/* Access-denied graceful fallback — never show "Access Denied" */}
+      {accessDenied && (
+        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <UtensilsCrossed size={16} className="shrink-0 text-amber-500" />
+          <div>
+            <p className="text-xs font-semibold text-amber-800">Kitchen view not available</p>
+            <p className="text-[11px] text-amber-700/80 mt-0.5">
+              Your role does not have kitchen access. Contact your manager to enable it.
+              The summary above reflects live data when accessible.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Error */}
-      {error && (
+      {error && !accessDenied && (
         <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
           <AlertCircle size={13} className="text-red-500" />
           <p className="text-xs text-red-600">{error}</p>
