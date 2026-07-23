@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useReducer, useCallback, useMemo } from 'react';
+import { createContext, useContext, useEffect, useReducer, useCallback, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { LiveOrder, LiveOrderItem } from '../types';
 import { useSocket } from './SocketContext';
@@ -91,6 +91,10 @@ function parseOrderEvent(data: unknown): LiveOrder | null {
 export function LiveOrdersProvider({ children }: { children: ReactNode }) {
   const { socket, reconnectCount } = useSocket();
   const [state, dispatch] = useReducer(reducer, { orders: [], unreadCount: 0 });
+  // M-7: Track all in-flight fade timers so they can be cleared on unmount.
+  // The previous code returned clearTimeout from inside the socket event handler —
+  // that return value is ignored by Socket.IO, so timers leaked on unmount.
+  const fadeTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   useEffect(() => {
     if (!socket) return;
@@ -102,12 +106,19 @@ export function LiveOrdersProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'ADD', order });
 
       // Highlight fades after 6 seconds
-      const t = setTimeout(() => dispatch({ type: 'MARK_OLD', id: order.id }), 6_000);
-      return () => clearTimeout(t);
+      const t = setTimeout(() => {
+        dispatch({ type: 'MARK_OLD', id: order.id });
+        fadeTimers.current.delete(t);
+      }, 6_000);
+      fadeTimers.current.add(t);
     };
 
     socket.on('new_order', handler);
-    return () => { socket.off('new_order', handler); };
+    return () => {
+      socket.off('new_order', handler);
+      fadeTimers.current.forEach(t => clearTimeout(t));
+      fadeTimers.current.clear();
+    };
   }, [socket]);
 
   // F-04: on socket reconnect, back-fill orders that arrived during the gap.
