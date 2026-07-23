@@ -5,6 +5,7 @@ import {
   AlertCircle, Check, Loader2, Star,
 } from 'lucide-react';
 import { useCashier, calcCartTotals, type CartItem, type HeldBill } from '../../context/CashierContext';
+import { ModifierDialog } from './ModifierDialog';
 import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
 import { fetchProducts, fetchCategories } from '../../api/products';
@@ -365,6 +366,9 @@ export function NewOrderPanel() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successOrder, setSuccessOrder] = useState<string | null>(null);
 
+  // ── Modifier dialog ────────────────────────────────────────────────────────
+  const [modifierProduct, setModifierProduct] = useState<Product | null>(null);
+
   // ── Apply orderPrefill on mount / change (table → new-order flow) ──────────
   useEffect(() => {
     if (!orderPrefill) return;
@@ -456,17 +460,23 @@ export function NewOrderPanel() {
   const discountAmt = parseFloat(discount) || 0;
   const { subtotal, taxTotal, grandTotal } = calcCartTotals(cart, discountAmt);
 
-  // ── Add to cart ────────────────────────────────────────────────────────────
+  // ── Add to cart (via modifier dialog) ─────────────────────────────────────
   function handleAddProduct(p: Product) {
+    setModifierProduct(p);
+  }
+
+  function handleModifierConfirm(result: { quantity: number; notes: string }) {
+    if (!modifierProduct) return;
     addToCart({
-      productId: p._id,
-      productName: p.name,
-      price: p.price,
-      quantity: 1,
-      taxPercent: p.taxPercent ?? 0,
-      notes: '',
+      productId: modifierProduct._id,
+      productName: modifierProduct.name,
+      price: modifierProduct.price,
+      quantity: result.quantity,
+      taxPercent: modifierProduct.taxPercent ?? 0,
+      notes: result.notes,
     });
-    addToRecent(p._id);
+    addToRecent(modifierProduct._id);
+    setModifierProduct(null);
   }
 
   // ── Hold bill ──────────────────────────────────────────────────────────────
@@ -1044,6 +1054,16 @@ export function NewOrderPanel() {
           </button>
         )}
       </div>
+
+      {/* Modifier dialog — opens on product click */}
+      {modifierProduct && (
+        <ModifierDialog
+          product={modifierProduct}
+          sym={sym}
+          onConfirm={handleModifierConfirm}
+          onClose={() => setModifierProduct(null)}
+        />
+      )}
     </div>
   );
 }
