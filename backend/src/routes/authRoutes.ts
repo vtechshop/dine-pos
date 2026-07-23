@@ -146,9 +146,9 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'Invalid User ID or Password' });
     }
 
-    const [token, refreshToken] = await Promise.all([
+    const [token, { token: refreshToken }] = await Promise.all([
       Promise.resolve(generateToken(hotel._id.toString(), hotel.hotelName)),
-      generateRefreshToken(hotel._id.toString()),
+      generateRefreshToken(hotel._id.toString()), // new login → new familyId generated inside
     ]);
 
     // Compute trial info for the mobile app
@@ -180,16 +180,31 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
   }
 
   try {
+    const tokenHash = hashRefreshToken(refreshToken);
+
     // H-05: atomic revocation — findOneAndUpdate prevents two concurrent requests
-    // from both passing the revokedAt:null check and each issuing a new token pair
+    // from both passing the revokedAt:null check and each issuing a new token pair.
+    // Attempt to atomically revoke the token if it is still valid.
     const record = await RefreshToken.findOneAndUpdate(
-      { token: hashRefreshToken(refreshToken), revokedAt: null },
+      { token: tokenHash, revokedAt: null },
       { revokedAt: new Date() },
-      { new: false }
+      { new: false },
     );
+
     if (!record) {
+      // Token not found OR already revoked — check if it belongs to a known family.
+      // If it does, this is a replay of a previously rotated token: potential theft.
+      // H-9: Revoke the entire family so both the attacker and the victim must re-login.
+      const stolen = await RefreshToken.findOne({ token: tokenHash });
+      if (stolen?.familyId) {
+        await RefreshToken.updateMany(
+          { familyId: stolen.familyId, revokedAt: null },
+          { revokedAt: new Date() },
+        );
+      }
       return res.status(401).json({ message: 'Invalid or revoked refresh token' });
     }
+
     if (record.expiresAt < new Date()) {
       return res.status(401).json({ message: 'Refresh token expired. Please login again.' });
     }
@@ -199,10 +214,10 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Account not active' });
     }
 
-    // Token already revoked above; issue new pair
-    const [newToken, newRefreshToken] = await Promise.all([
+    // H-9: Rotate within the same family so the family can be revoked atomically.
+    const [newToken, { token: newRefreshToken }] = await Promise.all([
       Promise.resolve(generateToken(record.hotelId.toString(), (hotel as any).hotelName)),
-      generateRefreshToken(record.hotelId.toString()),
+      generateRefreshToken(record.hotelId.toString(), record.familyId),
     ]);
 
     return res.json({ token: newToken, refreshToken: newRefreshToken });

@@ -276,9 +276,12 @@ export const generateCashierToken = (hotelId: string, cashierId: string, cashier
 export const hashRefreshToken = (token: string): string =>
   crypto.createHash('sha256').update(token).digest('hex');
 
-export const generateRefreshToken = async (hotelId: string): Promise<string> => {
+// familyId groups all tokens from one login session for H-9 family invalidation.
+// Pass an existing familyId during rotation; omit (or pass undefined) on new login.
+export const generateRefreshToken = async (hotelId: string, familyId?: string): Promise<{ token: string; familyId: string }> => {
   const token = crypto.randomUUID();
+  const family = familyId ?? crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  await RefreshToken.create({ token: hashRefreshToken(token), hotelId, expiresAt });
-  return token;
+  await RefreshToken.create({ token: hashRefreshToken(token), hotelId, familyId: family, expiresAt });
+  return { token, familyId: family };
 };
