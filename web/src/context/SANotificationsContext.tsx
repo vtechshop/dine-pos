@@ -88,7 +88,12 @@ export function SANotificationsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 30_000);
+    // M-6: Skip polls while the tab is in the background to avoid unnecessary
+    // API calls. getDashboard() is called on every tick and costs a full DB round-trip;
+    // skipping it for hidden tabs reduces backend load when SA has multiple tabs open.
+    const id = setInterval(() => {
+      if (document.visibilityState !== 'hidden') void refresh();
+    }, 30_000);
     return () => clearInterval(id);
   }, [refresh]);
 
