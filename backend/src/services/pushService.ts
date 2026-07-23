@@ -25,12 +25,30 @@ export async function sendLeadPushToSuperAdmins(
     if (!messages.length) return;
 
     const chunks = expo.chunkPushNotifications(messages);
+    const staleTokens: string[] = [];
+
     for (const chunk of chunks) {
       try {
-        await expo.sendPushNotificationsAsync(chunk);
+        const tickets = await expo.sendPushNotificationsAsync(chunk);
+        tickets.forEach((ticket, i) => {
+          if (
+            ticket.status === 'error' &&
+            (ticket.details as { error?: string } | undefined)?.error === 'DeviceNotRegistered'
+          ) {
+            const token = (chunk[i] as ExpoPushMessage & { to: string }).to;
+            staleTokens.push(token);
+          }
+        });
       } catch (err) {
         logger.error('Expo push chunk error', { err: String(err) });
       }
+    }
+
+    if (staleTokens.length) {
+      await SADevice.deleteMany({ pushToken: { $in: staleTokens } }).catch(err =>
+        logger.error('pushService: failed to remove stale tokens', { count: staleTokens.length, err: String(err) }),
+      );
+      logger.info('pushService: removed stale Expo tokens', { count: staleTokens.length });
     }
   } catch (err) {
     logger.error('sendLeadPushToSuperAdmins error', { err: String(err) });
