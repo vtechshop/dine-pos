@@ -55,8 +55,6 @@ const superAdminAuth = (req: Request, res: Response, next: Function) => {
   return res.status(401).json({ message: 'Unauthorized' });
 };
 
-const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 router.post('/login', adminLoginLimiter, (req: Request, res: Response) => {
@@ -81,15 +79,8 @@ router.get('/hotels', superAdminAuth, async (req: Request, res: Response) => {
 
     const filter: any = {};
     if (status && status !== 'all') filter.status = status;
-    if (search) {
-      const s = escapeRegex(String(search));
-      filter.$or = [
-        { hotelName:   { $regex: s, $options: 'i' } },
-        { ownerName:   { $regex: s, $options: 'i' } },
-        { phone:       { $regex: s, $options: 'i' } },
-        { fssaiNumber: { $regex: s, $options: 'i' } },
-      ];
-    }
+    // H-8: use $text index instead of per-field regex — eliminates full collection scan
+    if (search) filter.$text = { $search: String(search) };
 
     const [hotels, total] = await Promise.all([
       Hotel.find(filter)

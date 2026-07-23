@@ -216,5 +216,7 @@ HotelSchema.index({ adminId: 1 }, { unique: true, sparse: true }); // credential
 HotelSchema.index({ status: 1, trialEndDate: 1 });  // churn risk query
 HotelSchema.index({ status: 1, subscriptionEndDate: 1 }); // pending renewals query
 HotelSchema.index({ createdAt: -1 });               // latest registrations
+// H-8: text index for SA hotel search — replaces per-field regex full scans
+HotelSchema.index({ hotelName: 'text', ownerName: 'text', phone: 'text', fssaiNumber: 'text' }, { name: 'hotel_search_text' });
 
 export default mongoose.model<IHotel>('Hotel', HotelSchema);
