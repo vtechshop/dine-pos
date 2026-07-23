@@ -3,12 +3,13 @@ import {
   Check, X, Loader2, CreditCard, Banknote, Smartphone,
   Star, ChevronDown, ChevronUp, AlertCircle, Search,
 } from 'lucide-react';
-import { fetchLoyaltyConfig, searchCustomers } from '../../api/loyalty';
+import { fetchLoyaltyConfig, searchCustomers, fetchCustomer } from '../../api/loyalty';
 import { useAuth } from '../../context/AuthContext';
 import { Spinner } from '../ui/Spinner';
 import { logAuditEntry } from '../../utils/auditLog';
 import { getCashierName, getCashierId } from '../../utils/cashierIdentity';
-import type { LoyaltyConfig, CustomerSummary } from '../../types/customers';
+import { getTier, isBirthdayToday, nextTierInfo } from '../../utils/loyaltyUtils';
+import type { LoyaltyConfig, CustomerSummary, CustomerProfile } from '../../types/customers';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -112,17 +113,35 @@ function LoyaltySection({
   searching: boolean; setSearching: (v: boolean) => void;
 }) {
   const [notFound, setNotFound] = useState(false);
+  const [profile, setProfile] = useState<CustomerProfile | null>(null);
 
   async function doSearch() {
     if (!phone.trim()) return;
     setSearching(true);
     setNotFound(false);
+    setProfile(null);
     try {
       const res = await searchCustomers({ phone: phone.trim(), limit: 1 });
-      if (res.customers.length > 0) { setCustomer(res.customers[0]); setNotFound(false); }
-      else { setCustomer(null); setNotFound(true); }
+      if (res.customers.length > 0) {
+        const found = res.customers[0];
+        setCustomer(found);
+        setNotFound(false);
+        // Fetch full profile for birthday + visitCount
+        fetchCustomer(found._id)
+          .then(r => setProfile(r.customer))
+          .catch(() => {});
+      } else {
+        setCustomer(null);
+        setNotFound(true);
+      }
     } catch { setCustomer(null); }
     finally { setSearching(false); }
+  }
+
+  function handleClear() {
+    setCustomer(null);
+    setPoints('');
+    setProfile(null);
   }
 
   const maxPts = customer
@@ -133,6 +152,10 @@ function LoyaltySection({
     : 0;
 
   const discount = (Math.min(parseInt(points) || 0, maxPts) * config.pointValueInPaisa) / 100;
+
+  const tierCfg     = customer ? getTier(customer.lifetimeSpend) : null;
+  const isBirthday  = profile ? isBirthdayToday(profile.birthday) : false;
+  const nextTier    = customer ? nextTierInfo(customer.lifetimeSpend) : null;
 
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-3 space-y-2">
@@ -162,20 +185,61 @@ function LoyaltySection({
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand">
-                {customer.name.charAt(0).toUpperCase()}
+          {/* Customer header */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                tierCfg ? `${tierCfg.bg} ${tierCfg.text}` : 'bg-brand/10 text-brand'
+              }`}>
+                {tierCfg?.icon ?? customer.name.charAt(0).toUpperCase()}
               </div>
-              <div>
-                <p className="text-xs font-semibold text-ink">{customer.name}</p>
-                <p className="text-[10px] text-ink/50">{customer.loyaltyBalance} {config.rewardName} available</p>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="text-xs font-semibold text-ink truncate">{customer.name}</p>
+                  {isBirthday && (
+                    <span className="rounded-full bg-pink-100 px-1.5 py-0.5 text-[9px] font-bold text-pink-600">
+                      🎂 Birthday!
+                    </span>
+                  )}
+                  {tierCfg && (
+                    <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${tierCfg.border} ${tierCfg.text}`}>
+                      {tierCfg.tier}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <p className="text-[10px] text-ink/50">{customer.loyaltyBalance} {config.rewardName}</p>
+                  {customer.visitCount > 0 && (
+                    <p className="text-[10px] text-ink/40">{customer.visitCount} visits</p>
+                  )}
+                  {customer.lifetimeSpend > 0 && (
+                    <p className="text-[10px] text-ink/40">{fmtINR(sym, customer.lifetimeSpend)} spend</p>
+                  )}
+                </div>
               </div>
             </div>
-            <button type="button" onClick={() => { setCustomer(null); setPoints(''); }}
-              className="text-ink/30 hover:text-ink/60"><X size={13} /></button>
+            <button type="button" onClick={handleClear}
+              className="text-ink/30 hover:text-ink/60 shrink-0"><X size={13} /></button>
           </div>
 
+          {/* Birthday offer note */}
+          {isBirthday && (
+            <div className="rounded-lg border border-pink-200 bg-pink-50 px-3 py-2">
+              <p className="text-[11px] font-semibold text-pink-700">🎂 Birthday offer available!</p>
+              <p className="text-[10px] text-pink-600/80 mt-0.5">
+                Discount % requires backend: GET /loyalty/config → birthdayDiscountPercent
+              </p>
+            </div>
+          )}
+
+          {/* Next tier progress */}
+          {nextTier && (
+            <p className="text-[10px] text-ink/45">
+              {fmtINR(sym, nextTier.remaining)} more to reach {nextTier.nextTier}
+            </p>
+          )}
+
+          {/* Points redemption */}
           {maxPts >= config.minimumRedeemPoints ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2">
