@@ -303,6 +303,11 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       res.status(400).json({ message: 'items is required' });
       return;
     }
+    // M-10: cap item count to prevent payload abuse on the public QR endpoint
+    if (clientItems.length > 50) {
+      res.status(400).json({ message: 'Order cannot contain more than 50 items' });
+      return;
+    }
 
     // ── Hotel + feature validation ────────────────────────────────────────────
     const features = await validateHotelForQR(res, hotelId, true);
