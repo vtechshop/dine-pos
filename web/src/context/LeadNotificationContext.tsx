@@ -58,7 +58,7 @@ export function LeadNotificationProvider({ children }: { children: ReactNode }) 
   const clearUnread = useCallback(() => setUnreadCount(0), []);
 
   useEffect(() => {
-    const saToken = localStorage.getItem('sa_token');
+    const saToken = localStorage.getItem('pos_token');
     if (!saToken) return;
 
     const socket = io(SOCKET_URL, {

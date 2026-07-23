@@ -1,7 +1,7 @@
 const SA_BASE = `${import.meta.env.VITE_API_URL ?? ''}/superadmin`;
 
 function saToken(): string {
-  return localStorage.getItem('sa_token') ?? '';
+  return localStorage.getItem('pos_token') ?? '';
 }
 
 async function saFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
