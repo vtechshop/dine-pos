@@ -28,14 +28,14 @@ router.post('/contact', rl, async (req: Request, res: Response) => {
   }
   if (!message?.trim()) return res.status(400).json({ message: 'Message is required' });
 
-  // M13: duplicate detection — same email submitted contact within 24h
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const dupe = await Lead.findOne({ email: String(email).trim().toLowerCase(), source: 'website_contact', createdAt: { $gte: since } });
-  if (dupe) {
-    return res.status(200).json({ message: 'Thank you! We already have your enquiry and will be in touch soon.', id: dupe._id });
-  }
-
   try {
+    // M13: duplicate detection — same email submitted contact within 24h
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const dupe = await Lead.findOne({ email: String(email).trim().toLowerCase(), source: 'website_contact', createdAt: { $gte: since } });
+    if (dupe) {
+      return res.status(200).json({ message: 'Thank you! We already have your enquiry and will be in touch soon.', id: dupe._id });
+    }
+
     const inquiry = await Inquiry.create({
       type:       'contact',
       name:       String(name).trim().slice(0, 100),
@@ -69,14 +69,14 @@ router.post('/demo', rl, async (req: Request, res: Response) => {
   }
   if (!phone?.trim()) return res.status(400).json({ message: 'Phone number is required' });
 
-  // M13: duplicate detection — same phone submitted demo within 48h
-  const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
-  const dupe = await Lead.findOne({ phone: String(phone).trim(), source: 'website_demo', createdAt: { $gte: since } });
-  if (dupe) {
-    return res.status(200).json({ message: 'Demo booked! We will confirm your slot via WhatsApp or email shortly.', id: dupe._id });
-  }
-
   try {
+    // M13: duplicate detection — same phone submitted demo within 48h
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const dupe = await Lead.findOne({ phone: String(phone).trim(), source: 'website_demo', createdAt: { $gte: since } });
+    if (dupe) {
+      return res.status(200).json({ message: 'Demo booked! We will confirm your slot via WhatsApp or email shortly.', id: dupe._id });
+    }
+
     const inquiry = await Inquiry.create({
       type:          'demo',
       name:          String(name).trim().slice(0, 100),
