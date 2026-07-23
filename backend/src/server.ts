@@ -243,7 +243,9 @@ app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/uploads', uploadRoutes);
-app.use('/api/seed', seedRoutes);
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/seed', seedRoutes);
+}
 app.use('/api/public/qr', qrRoutes); // mount before /api/public so paths are matched first
 app.use('/api/public', menuRoutes);
 app.use('/api/chat', chatRoutes);
