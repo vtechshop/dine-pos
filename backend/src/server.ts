@@ -86,8 +86,20 @@ if (!process.env.MONGODB_URI) {
   process.exit(1);
 }
 
-if (!process.env.SUPER_ADMIN_JWT_SECRET) {
-  console.error('❌ FATAL: SUPER_ADMIN_JWT_SECRET is not set. Add a separate secret for super admin JWTs to your .env file.');
+const SUPER_ADMIN_JWT_SECRET = process.env.SUPER_ADMIN_JWT_SECRET;
+const SA_JWT_KNOWN_BAD = [
+  'secret', 'superadmin', 'superadminsecret', 'admin', 'changeme',
+  'hotelbillingpos_super_admin_secret', 'sa_secret',
+];
+if (
+  !SUPER_ADMIN_JWT_SECRET ||
+  SUPER_ADMIN_JWT_SECRET.length < 32 ||
+  SA_JWT_KNOWN_BAD.includes(SUPER_ADMIN_JWT_SECRET.toLowerCase())
+) {
+  console.error(
+    '❌ FATAL: SUPER_ADMIN_JWT_SECRET is not set, is shorter than 32 characters, or is using a known-insecure value. ' +
+    'Generate a strong secret (e.g. openssl rand -hex 32) and set it in your .env file.',
+  );
   process.exit(1);
 }
 
