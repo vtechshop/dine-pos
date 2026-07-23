@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Search, ShoppingCart, X, Plus, Minus, Trash2,
   UtensilsCrossed, ShoppingBag, Truck, ChevronRight,
-  AlertCircle, Check, Loader2,
+  AlertCircle, Check, Loader2, Star,
 } from 'lucide-react';
 import { useCashier, calcCartTotals, type CartItem, type HeldBill } from '../../context/CashierContext';
 import { useSettings } from '../../context/SettingsContext';
@@ -10,7 +10,9 @@ import { useAuth } from '../../context/AuthContext';
 import { fetchProducts, fetchCategories } from '../../api/products';
 import { fetchTables } from '../../api/tables';
 import { createOrder, completeOrder } from '../../api/orders';
+import { fetchProductSalesReport } from '../../api/reports';
 import type { Product, Category, Table } from '../../types';
+import type { ProductSalesRow } from '../../types/reports';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -44,33 +46,51 @@ function TypeTab({ active, icon, label, onClick }: { active: boolean; icon: Reac
 
 // ── Product card ──────────────────────────────────────────────────────────────
 
-function ProductCard({ product, onAdd, sym }: { product: Product; onAdd: (p: Product) => void; sym: string }) {
+function ProductCard({
+  product, onAdd, onToggleFav, isFav, sym,
+}: {
+  product: Product;
+  onAdd: (p: Product) => void;
+  onToggleFav: (id: string) => void;
+  isFav: boolean;
+  sym: string;
+}) {
   const isVeg = product.isVeg !== false;
   return (
-    <button
-      type="button"
-      onClick={() => onAdd(product)}
-      disabled={!product.isAvailable}
-      className={`flex flex-col rounded-xl border p-3 text-left transition ${
-        product.isAvailable
-          ? 'border-border bg-canvas hover:border-brand/30 hover:shadow-sm active:scale-[0.98]'
-          : 'border-border/50 bg-mist/60 opacity-60 cursor-not-allowed'
-      }`}
-    >
-      <div className="mb-1.5 flex items-center justify-between gap-1">
-        <span className={`h-3 w-3 shrink-0 rounded-sm border ${isVeg ? 'border-emerald-500' : 'border-red-500'}`}>
-          <span className={`block h-1.5 w-1.5 m-[2px] rounded-full ${isVeg ? 'bg-emerald-500' : 'bg-red-500'}`} />
-        </span>
-        <span className="text-xs font-bold text-ink">{fmtINR(sym, product.price)}</span>
-      </div>
-      <p className="text-xs font-medium leading-tight text-ink line-clamp-2">{product.name}</p>
-      {product.stock !== undefined && product.stock >= 0 && product.stock <= 5 && (
-        <p className="mt-1 text-[10px] text-amber-500">Only {product.stock} left</p>
-      )}
-      {!product.isAvailable && (
-        <p className="mt-1 text-[10px] text-ink/40">Unavailable</p>
-      )}
-    </button>
+    <div className={`group relative rounded-xl border transition ${
+      product.isAvailable
+        ? 'border-border bg-canvas hover:border-brand/30 hover:shadow-sm'
+        : 'border-border/50 bg-mist/60 opacity-60'
+    }`}>
+      <button
+        type="button"
+        onClick={() => onAdd(product)}
+        disabled={!product.isAvailable}
+        className="flex w-full flex-col p-3 text-left active:scale-[0.98]"
+      >
+        <div className="mb-1.5 flex items-center justify-between gap-1 pr-4">
+          <span className={`h-3 w-3 shrink-0 rounded-sm border ${isVeg ? 'border-emerald-500' : 'border-red-500'}`}>
+            <span className={`block h-1.5 w-1.5 m-[2px] rounded-full ${isVeg ? 'bg-emerald-500' : 'bg-red-500'}`} />
+          </span>
+          <span className="text-xs font-bold text-ink">{fmtINR(sym, product.price)}</span>
+        </div>
+        <p className="text-xs font-medium leading-tight text-ink line-clamp-2">{product.name}</p>
+        {product.stock !== undefined && product.stock >= 0 && product.stock <= 5 && (
+          <p className="mt-1 text-[10px] text-amber-500">Only {product.stock} left</p>
+        )}
+        {!product.isAvailable && (
+          <p className="mt-1 text-[10px] text-ink/40">Unavailable</p>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={() => onToggleFav(product._id)}
+        className="absolute right-2 top-2 rounded-full p-0.5 text-ink/20 transition hover:text-amber-400"
+        aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+      >
+        <Star size={11} className={isFav ? 'fill-amber-400 text-amber-400' : ''} />
+      </button>
+    </div>
   );
 }
 
@@ -123,7 +143,6 @@ function CartRow({ item, onQty, onRemove, onNotes, sym }: {
         </div>
       </div>
 
-      {/* Notes inline */}
       {editNotes ? (
         <div className="mt-1.5 flex gap-1.5">
           <input
@@ -158,13 +177,8 @@ function CartRow({ item, onQty, onRemove, onNotes, sym }: {
 // ── Payment sub-panel ─────────────────────────────────────────────────────────
 
 function PaymentPanel({
-  grandTotal,
-  sym,
-  method,
-  setMethod,
-  splitCash, setSplitCash,
-  splitUpi, setSplitUpi,
-  splitCard, setSplitCard,
+  grandTotal, sym, method, setMethod,
+  splitCash, setSplitCash, splitUpi, setSplitUpi, splitCard, setSplitCard,
   cashGiven, setCashGiven,
 }: {
   grandTotal: number; sym: string;
@@ -183,15 +197,12 @@ function PaymentPanel({
 
   const cashGivenNum = parseFloat(cashGiven) || 0;
   const change = cashGivenNum - grandTotal;
-
   const PRESETS = [100, 200, 500, 1000, 2000];
-
   const splitTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) + (parseFloat(splitCard) || 0);
   const splitDiff = splitTotal - grandTotal;
 
   return (
     <div className="space-y-3">
-      {/* Method selector */}
       <div className="flex gap-1 rounded-lg border border-border p-1">
         {METHODS.map(m => (
           <button
@@ -207,7 +218,6 @@ function PaymentPanel({
         ))}
       </div>
 
-      {/* Cash */}
       {method === 'cash' && (
         <div className="space-y-2">
           <div className="flex flex-wrap gap-1.5">
@@ -249,7 +259,6 @@ function PaymentPanel({
         </div>
       )}
 
-      {/* UPI / Card */}
       {(method === 'upi' || method === 'card') && (
         <div className="rounded-lg border border-border bg-mist px-3 py-3 text-center">
           <p className="text-xs text-ink/60">
@@ -259,7 +268,6 @@ function PaymentPanel({
         </div>
       )}
 
-      {/* Split */}
       {method === 'split' && (
         <div className="space-y-2">
           {(['cash', 'upi', 'card'] as const).map(k => (
@@ -298,14 +306,21 @@ function PaymentPanel({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+const FAVS_CAT = '__favs__';
+
 export function NewOrderPanel() {
   const {
     cart, addToCart, removeFromCart, updateQty, updateItemNotes,
     clearCart, holdBill, shift, setActiveTab,
+    orderPrefill, setOrderPrefill,
   } = useCashier();
   const { settings } = useSettings();
-  useAuth(); // auth token used via apiFetch interceptor
+  const { hotelId } = useAuth();
   const sym = settings?.currencySymbol ?? '₹';
+
+  // Hotel-scoped localStorage keys
+  const favsKey   = hotelId ? `pos_favs_${hotelId}`   : '';
+  const recentKey = hotelId ? `pos_recent_${hotelId}` : '';
 
   // ── Order meta ─────────────────────────────────────────────────────────────
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
@@ -321,6 +336,23 @@ export function NewOrderPanel() {
   const [activeCat, setActiveCat]   = useState<string>('');
   const [search, setSearch]         = useState('');
 
+  // ── Favorites (hotel-scoped localStorage) ──────────────────────────────────
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    if (!favsKey) return [];
+    try { return JSON.parse(localStorage.getItem(favsKey) ?? '[]') as string[]; }
+    catch { return []; }
+  });
+
+  // ── Recent products (hotel-scoped localStorage) ────────────────────────────
+  const [recentIds, setRecentIds] = useState<string[]>(() => {
+    if (!recentKey) return [];
+    try { return JSON.parse(localStorage.getItem(recentKey) ?? '[]') as string[]; }
+    catch { return []; }
+  });
+
+  // ── Top today (from product sales report) ─────────────────────────────────
+  const [topToday, setTopToday] = useState<ProductSalesRow[]>([]);
+
   // ── Payment state ──────────────────────────────────────────────────────────
   const [showPayment, setShowPayment] = useState(false);
   const [discount, setDiscount]       = useState('');
@@ -333,19 +365,45 @@ export function NewOrderPanel() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successOrder, setSuccessOrder] = useState<string | null>(null);
 
-  // ── Load products + categories ─────────────────────────────────────────────
+  // ── Apply orderPrefill on mount / change (table → new-order flow) ──────────
+  useEffect(() => {
+    if (!orderPrefill) return;
+    setOrderType(orderPrefill.orderType);
+    if (
+      orderPrefill.orderType === 'dine-in' &&
+      (orderPrefill.tableId ?? orderPrefill.tableNumber)
+    ) {
+      setDineIn(d => ({
+        ...d,
+        tableId: orderPrefill.tableId ?? d.tableId,
+        tableNumber: orderPrefill.tableNumber ?? d.tableNumber,
+      }));
+    }
+    setOrderPrefill(null);
+  }, [orderPrefill, setOrderPrefill]);
+
+  // ── Load products + categories + top today ─────────────────────────────────
   const loadProducts = useCallback(async () => {
     let cancelled = false;
     setProdLoading(true);
-    const [catRes, prodRes, tableRes] = await Promise.allSettled([
+    const today = new Date().toISOString().split('T')[0];
+    const [catRes, prodRes, tableRes, topRes] = await Promise.allSettled([
       fetchCategories(),
       fetchProducts({ available: true } as Parameters<typeof fetchProducts>[0]),
       fetchTables(),
+      fetchProductSalesReport(today),
     ]);
     if (!cancelled) {
       if (catRes.status === 'fulfilled') setCategories(catRes.value);
       if (prodRes.status === 'fulfilled') setProducts(prodRes.value);
       if (tableRes.status === 'fulfilled') setTables(tableRes.value.filter((t: Table) => t.status === 'available'));
+      if (topRes.status === 'fulfilled') {
+        setTopToday(
+          [...topRes.value.products]
+            .sort((a, b) => b.totalQuantity - a.totalQuantity)
+            .slice(0, 5),
+        );
+      }
       setProdLoading(false);
     }
     return () => { cancelled = true; };
@@ -355,13 +413,44 @@ export function NewOrderPanel() {
     void loadProducts();
   }, [loadProducts]);
 
+  // ── Favorite toggle ────────────────────────────────────────────────────────
+  function toggleFav(productId: string) {
+    setFavorites(prev => {
+      const next = prev.includes(productId)
+        ? prev.filter(id => id !== productId)
+        : [productId, ...prev];
+      if (favsKey) localStorage.setItem(favsKey, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  // ── Recent product tracking ────────────────────────────────────────────────
+  function addToRecent(productId: string) {
+    setRecentIds(prev => {
+      const next = [productId, ...prev.filter(id => id !== productId)].slice(0, 8);
+      if (recentKey) localStorage.setItem(recentKey, JSON.stringify(next));
+      return next;
+    });
+  }
+
   // ── Filtered product list ──────────────────────────────────────────────────
   const visibleProducts = products.filter(p => {
+    if (activeCat === FAVS_CAT) return favorites.includes(p._id);
     const inCat = !activeCat || String(p.category) === activeCat;
-    const inSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) ||
+    const inSearch = !search ||
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
       (p.shortCode ?? '').toLowerCase().includes(search.toLowerCase());
     return inCat && inSearch;
   });
+
+  // ── Derived: recent + top today product objects ────────────────────────────
+  const recentProducts = recentIds
+    .map(id => products.find(p => p._id === id))
+    .filter((p): p is Product => !!p && p.isAvailable);
+
+  const topProducts = topToday
+    .map(row => ({ row, product: products.find(p => p.name === row.productName) }))
+    .filter((x): x is { row: ProductSalesRow; product: Product } => !!x.product && x.product.isAvailable);
 
   // ── Cart totals ────────────────────────────────────────────────────────────
   const discountAmt = parseFloat(discount) || 0;
@@ -377,13 +466,14 @@ export function NewOrderPanel() {
       taxPercent: p.taxPercent ?? 0,
       notes: '',
     });
+    addToRecent(p._id);
   }
 
   // ── Hold bill ──────────────────────────────────────────────────────────────
   function handleHold() {
     if (cart.length === 0) return;
 
-    let cashierName = shift?.cashierName ?? 'Cashier';
+    const cashierName = shift?.cashierName ?? 'Cashier';
     const label = (() => {
       if (orderType === 'dine-in' && dineIn.tableNumber) return `Table ${dineIn.tableNumber}`;
       if (orderType === 'takeaway' && takeAway.customerName) return takeAway.customerName;
@@ -425,7 +515,7 @@ export function NewOrderPanel() {
     setActiveTab('hold');
   }
 
-  // ── Submit order ──────────────────────────────────────────────────────────
+  // ── Submit order ───────────────────────────────────────────────────────────
   async function handleConfirmOrder() {
     if (cart.length === 0) return;
     setSubmitting(true);
@@ -499,7 +589,6 @@ export function NewOrderPanel() {
 
       const created = await createOrder(payload);
 
-      // For takeaway and delivery, complete the order immediately after payment collection
       if (orderType !== 'dine-in') {
         await completeOrder(created._id);
       }
@@ -511,10 +600,8 @@ export function NewOrderPanel() {
       setCashGiven('');
       setSplitCash(''); setSplitUpi(''); setSplitCard('');
 
-      // Auto-dismiss success after 3s
       setTimeout(() => setSuccessOrder(null), 3000);
 
-      // Refresh pending bills if dine-in
       if (orderType === 'dine-in') {
         setActiveTab('pending');
       }
@@ -525,10 +612,10 @@ export function NewOrderPanel() {
     }
   }
 
-  // ── Split validation ───────────────────────────────────────────────────────
+  // ── Split / cash validation ────────────────────────────────────────────────
   const splitTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) + (parseFloat(splitCard) || 0);
   const splitOk = payMethod !== 'split' || Math.abs(splitTotal - grandTotal) < 0.5;
-  const cashOk = payMethod !== 'cash' || (parseFloat(cashGiven) || 0) >= grandTotal;
+  const cashOk  = payMethod !== 'cash'  || (parseFloat(cashGiven) || 0) >= grandTotal;
   const canConfirm = cart.length > 0 && splitOk && cashOk;
 
   // ── Success overlay ────────────────────────────────────────────────────────
@@ -551,12 +638,12 @@ export function NewOrderPanel() {
       <div className="flex flex-1 flex-col min-h-0 space-y-3">
         {/* Order type */}
         <div className="flex gap-1 rounded-xl border border-border bg-canvas p-1">
-          <TypeTab active={orderType === 'dine-in'} icon={<UtensilsCrossed size={13} />} label="Dine In" onClick={() => setOrderType('dine-in')} />
-          <TypeTab active={orderType === 'takeaway'} icon={<ShoppingBag size={13} />} label="Takeaway" onClick={() => setOrderType('takeaway')} />
-          <TypeTab active={orderType === 'delivery'} icon={<Truck size={13} />} label="Delivery" onClick={() => setOrderType('delivery')} />
+          <TypeTab active={orderType === 'dine-in'}  icon={<UtensilsCrossed size={13} />} label="Dine In"   onClick={() => setOrderType('dine-in')} />
+          <TypeTab active={orderType === 'takeaway'} icon={<ShoppingBag size={13} />}     label="Takeaway"  onClick={() => setOrderType('takeaway')} />
+          <TypeTab active={orderType === 'delivery'} icon={<Truck size={13} />}            label="Delivery"  onClick={() => setOrderType('delivery')} />
         </div>
 
-        {/* Order meta form */}
+        {/* Order meta form — Dine In */}
         {orderType === 'dine-in' && (
           <div className="rounded-xl border border-border bg-canvas p-3 space-y-2">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">Dine In Details</p>
@@ -598,6 +685,7 @@ export function NewOrderPanel() {
           </div>
         )}
 
+        {/* Order meta form — Takeaway */}
         {orderType === 'takeaway' && (
           <div className="rounded-xl border border-border bg-canvas p-3 space-y-2">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">Takeaway Details</p>
@@ -627,6 +715,7 @@ export function NewOrderPanel() {
           </div>
         )}
 
+        {/* Order meta form — Delivery */}
         {orderType === 'delivery' && (
           <div className="rounded-xl border border-border bg-canvas p-3 space-y-2">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">Delivery Details</p>
@@ -691,15 +780,34 @@ export function NewOrderPanel() {
           )}
         </div>
 
-        {/* Category tabs */}
+        {/* Category tabs (with Favorites) */}
         {!search && (
           <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
             <button
               type="button"
               onClick={() => setActiveCat('')}
-              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${!activeCat ? 'bg-brand text-white' : 'border border-border bg-canvas text-ink/60 hover:bg-mist'}`}
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                !activeCat ? 'bg-brand text-white' : 'border border-border bg-canvas text-ink/60 hover:bg-mist'
+              }`}
             >
               All
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveCat(activeCat === FAVS_CAT ? '' : FAVS_CAT)}
+              className={`shrink-0 flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                activeCat === FAVS_CAT
+                  ? 'bg-amber-400 text-white'
+                  : 'border border-amber-200 bg-amber-50/60 text-amber-700 hover:bg-amber-100'
+              }`}
+            >
+              <Star size={10} className={activeCat === FAVS_CAT ? 'fill-white' : 'fill-amber-400'} />
+              Favorites
+              {favorites.length > 0 && (
+                <span className={`rounded-full px-1 text-[9px] font-bold ${activeCat === FAVS_CAT ? 'bg-white/30 text-white' : 'bg-amber-200 text-amber-800'}`}>
+                  {favorites.length}
+                </span>
+              )}
             </button>
             {categories.map(cat => (
               <button
@@ -716,6 +824,45 @@ export function NewOrderPanel() {
           </div>
         )}
 
+        {/* Recent products strip */}
+        {!search && activeCat !== FAVS_CAT && recentProducts.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/35">Recently Added</p>
+            <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+              {recentProducts.map(p => (
+                <button
+                  key={p._id}
+                  type="button"
+                  onClick={() => handleAddProduct(p)}
+                  className="shrink-0 rounded-lg border border-border bg-canvas px-2.5 py-1.5 text-xs font-medium text-ink transition hover:border-brand/30 hover:bg-mist"
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Top today strip */}
+        {!search && activeCat !== FAVS_CAT && topProducts.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/35">Top Today</p>
+            <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+              {topProducts.map(({ row, product }) => (
+                <button
+                  key={product._id}
+                  type="button"
+                  onClick={() => handleAddProduct(product)}
+                  className="shrink-0 flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50/60 px-2.5 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
+                >
+                  {product.name}
+                  <span className="text-[10px] font-bold text-amber-600">{row.totalQuantity}×</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Product grid */}
         {prodLoading ? (
           <div className="flex flex-1 items-center justify-center py-12">
@@ -723,12 +870,27 @@ export function NewOrderPanel() {
           </div>
         ) : visibleProducts.length === 0 ? (
           <div className="py-10 text-center">
-            <p className="text-sm text-ink/40">No products found</p>
+            {activeCat === FAVS_CAT ? (
+              <>
+                <Star size={20} className="mx-auto mb-2 text-ink/20" />
+                <p className="text-sm text-ink/40">No favorites yet</p>
+                <p className="text-xs text-ink/30 mt-0.5">Tap the ★ on any product to add it here</p>
+              </>
+            ) : (
+              <p className="text-sm text-ink/40">No products found</p>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
             {visibleProducts.map(p => (
-              <ProductCard key={p._id} product={p} onAdd={handleAddProduct} sym={sym} />
+              <ProductCard
+                key={p._id}
+                product={p}
+                onAdd={handleAddProduct}
+                onToggleFav={toggleFav}
+                isFav={favorites.includes(p._id)}
+                sym={sym}
+              />
             ))}
           </div>
         )}
@@ -794,7 +956,6 @@ export function NewOrderPanel() {
               <span className="text-xs font-medium text-ink">{fmtINR(sym, taxTotal)}</span>
             </div>
 
-            {/* Discount */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-ink/55 shrink-0">Discount</span>
               <input
