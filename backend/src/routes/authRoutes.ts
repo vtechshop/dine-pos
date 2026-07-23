@@ -18,6 +18,17 @@ const refreshLimiter = makeRateLimiter({
   message: { message: 'Too many token refresh requests. Please try again after 15 minutes.' },
 });
 
+// M-15: Logout without a rate limit is a free revocation oracle.
+// An attacker can enumerate valid refresh-token hashes by sending
+// crafted tokens and observing different timing side-channels.
+// 30 requests / 15 min per IP is generous for legitimate use.
+const logoutLimiter = makeRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { message: 'Too many logout requests. Please try again later.' },
+});
+
 // Admin login — strict: 10 attempts / 15 min per IP (protects full account access)
 const loginLimiter = makeRateLimiter({
   windowMs: 15 * 60 * 1000,
@@ -329,7 +340,7 @@ router.post('/cashier', staffPinLimiter, async (req: Request, res: Response) => 
 });
 
 // POST /api/auth/logout — revoke the refresh token server-side
-router.post('/logout', async (req: Request, res: Response) => {
+router.post('/logout', logoutLimiter, async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
   if (refreshToken && typeof refreshToken === 'string') {
     await RefreshToken.findOneAndUpdate(
