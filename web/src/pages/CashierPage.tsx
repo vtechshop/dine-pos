@@ -4,20 +4,26 @@ import {
   Plus, CreditCard, PauseCircle, BarChart2,
   Wallet, Search, Users, Printer, Bell, LogOut,
   TrendingUp, ShoppingBag, AlertCircle, RefreshCw,
+  Home, LayoutGrid, Flame, UserCircle, X,
 } from 'lucide-react';
 import { useShortcut } from '../hooks/useShortcut';
 import { useCashier, type CashierTab } from '../context/CashierContext';
+import { useNotifications } from '../context/NotificationContext';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { fetchDailyReport, fetchPrinterDevices } from '../api/dashboard';
-import { NewOrderPanel }      from '../components/cashier/NewOrderPanel';
-import { PendingBillsPanel }  from '../components/cashier/PendingBillsPanel';
-import { HoldBillPanel }      from '../components/cashier/HoldBillPanel';
-import { ShiftPanel }         from '../components/cashier/ShiftPanel';
-import { CashDrawerPanel }    from '../components/cashier/CashDrawerPanel';
-import { BillSearchPanel }    from '../components/cashier/BillSearchPanel';
-import { CustomerPanel }      from '../components/cashier/CustomerPanel';
-import { PrinterPanel }       from '../components/cashier/PrinterPanel';
+import { NewOrderPanel }          from '../components/cashier/NewOrderPanel';
+import { PendingBillsPanel }      from '../components/cashier/PendingBillsPanel';
+import { HoldBillPanel }          from '../components/cashier/HoldBillPanel';
+import { ShiftPanel }             from '../components/cashier/ShiftPanel';
+import { CashDrawerPanel }        from '../components/cashier/CashDrawerPanel';
+import { BillSearchPanel }        from '../components/cashier/BillSearchPanel';
+import { CustomerPanel }          from '../components/cashier/CustomerPanel';
+import { PrinterPanel }           from '../components/cashier/PrinterPanel';
+import { DashboardPanel }         from '../components/cashier/DashboardPanel';
+import { CashierTablePanel }      from '../components/cashier/CashierTablePanel';
+import { KitchenStatusPanel }     from '../components/cashier/KitchenStatusPanel';
+import { CashierProfilePanel }    from '../components/cashier/CashierProfilePanel';
 import type { DailyReport, PrinterDeviceStatus } from '../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -35,9 +41,7 @@ function parseJwt(key: string): Record<string, unknown> {
 }
 
 function getCashierIdentity() {
-  const payload =
-    parseJwt('pos_cashier_token') ||
-    parseJwt('pos_token');
+  const payload = parseJwt('pos_cashier_token') || parseJwt('pos_token');
   return {
     name: (payload.name as string | undefined) ?? 'Cashier',
     code: (payload.employeeCode as string | undefined) ?? '',
@@ -54,23 +58,24 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { key: 'new-order',  icon: <Plus size={15} />,       label: 'New Order',  shortcut: 'Ctrl+N' },
-  { key: 'pending',    icon: <CreditCard size={15} />,  label: 'Pending',    shortcut: 'F6' },
-  { key: 'hold',       icon: <PauseCircle size={15} />, label: 'Hold',       shortcut: '' },
-  { key: 'search',     icon: <Search size={15} />,      label: 'Bill Search', shortcut: 'Ctrl+F' },
-  { key: 'customers',  icon: <Users size={15} />,       label: 'Customers',  shortcut: 'F4' },
-  { key: 'shift',      icon: <BarChart2 size={15} />,   label: 'Shift',      shortcut: '' },
-  { key: 'drawer',     icon: <Wallet size={15} />,      label: 'Drawer',     shortcut: '' },
-  { key: 'printers',   icon: <Printer size={15} />,     label: 'Printers',   shortcut: '' },
+  { key: 'dashboard',  icon: <Home size={15} />,          label: 'Dashboard',   shortcut: '' },
+  { key: 'new-order',  icon: <Plus size={15} />,          label: 'New Order',   shortcut: 'Ctrl+N' },
+  { key: 'pending',    icon: <CreditCard size={15} />,    label: 'Pending',     shortcut: 'F6' },
+  { key: 'hold',       icon: <PauseCircle size={15} />,   label: 'Hold',        shortcut: '' },
+  { key: 'tables',     icon: <LayoutGrid size={15} />,    label: 'Tables',      shortcut: 'Ctrl+T' },
+  { key: 'kitchen',    icon: <Flame size={15} />,         label: 'Kitchen',     shortcut: 'Ctrl+K' },
+  { key: 'search',     icon: <Search size={15} />,        label: 'Bill Search', shortcut: 'Ctrl+F' },
+  { key: 'customers',  icon: <Users size={15} />,         label: 'Customers',   shortcut: 'F4' },
+  { key: 'shift',      icon: <BarChart2 size={15} />,     label: 'Shift',       shortcut: '' },
+  { key: 'drawer',     icon: <Wallet size={15} />,        label: 'Drawer',      shortcut: 'Ctrl+D' },
+  { key: 'printers',   icon: <Printer size={15} />,       label: 'Printers',    shortcut: '' },
+  { key: 'profile',    icon: <UserCircle size={15} />,    label: 'Profile',     shortcut: '' },
 ];
 
 // ── Header KPI strip ──────────────────────────────────────────────────────────
 
 function HeaderKpi({
-  report,
-  drawerBalance,
-  sym,
-  offlinePrinters,
+  report, drawerBalance, sym, offlinePrinters,
 }: {
   report: DailyReport | null;
   drawerBalance: number;
@@ -79,51 +84,19 @@ function HeaderKpi({
 }) {
   return (
     <div className="flex items-center gap-3 overflow-x-auto pb-0.5 scrollbar-hide">
-      <KpiChip
-        label="Sales"
-        value={fmtINR(sym, report?.totalSales ?? 0)}
-        icon={<TrendingUp size={11} />}
-        accent
-      />
-      <KpiChip
-        label="Bills"
-        value={String(report?.totalOrders ?? 0)}
-        icon={<ShoppingBag size={11} />}
-      />
-      <KpiChip
-        label="Cash"
-        value={fmtINR(sym, report?.paymentBreakdown?.cash ?? 0)}
-        icon={<Wallet size={11} />}
-      />
-      <KpiChip
-        label="Drawer"
-        value={fmtINR(sym, drawerBalance)}
-        icon={<Wallet size={11} />}
-      />
+      <KpiChip label="Sales"  value={fmtINR(sym, report?.totalSales ?? 0)}                   icon={<TrendingUp size={11} />} accent />
+      <KpiChip label="Bills"  value={String(report?.totalOrders ?? 0)}                        icon={<ShoppingBag size={11} />} />
+      <KpiChip label="Cash"   value={fmtINR(sym, report?.paymentBreakdown?.cash ?? 0)}        icon={<Wallet size={11} />} />
+      <KpiChip label="Drawer" value={fmtINR(sym, drawerBalance)}                              icon={<Wallet size={11} />} />
       {offlinePrinters > 0 && (
-        <KpiChip
-          label="Printer"
-          value={`${offlinePrinters} offline`}
-          icon={<AlertCircle size={11} />}
-          warn
-        />
+        <KpiChip label="Printer" value={`${offlinePrinters} offline`} icon={<AlertCircle size={11} />} warn />
       )}
     </div>
   );
 }
 
-function KpiChip({
-  label,
-  value,
-  icon,
-  accent,
-  warn,
-}: {
-  label: string;
-  value: string;
-  icon: React.ReactNode;
-  accent?: boolean;
-  warn?: boolean;
+function KpiChip({ label, value, icon, accent, warn }: {
+  label: string; value: string; icon: React.ReactNode; accent?: boolean; warn?: boolean;
 }) {
   return (
     <div className={`shrink-0 flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 ${
@@ -140,41 +113,90 @@ function KpiChip({
   );
 }
 
-// ── Notifications bell (printer offline alerts) ───────────────────────────────
+// ── Notification bell (uses NotificationContext) ───────────────────────────────
 
-function AlertBell({ printers, nowMs }: { printers: PrinterDeviceStatus[]; nowMs: number }) {
+const SEVERITY_CLS: Record<'critical' | 'warning' | 'info', string> = {
+  critical: 'border-red-200 bg-red-50 text-red-700',
+  warning:  'border-amber-200 bg-amber-50 text-amber-700',
+  info:     'border-blue-200 bg-blue-50 text-blue-700',
+};
+
+function NotificationBell() {
+  const { notifications, unreadCount, markAllRead, dismiss } = useNotifications();
   const [open, setOpen] = useState(false);
 
-  const offline = printers.filter(
-    p => !p.online || !p.lastHeartbeat ||
-      nowMs - new Date(p.lastHeartbeat).getTime() >= 3 * 60_000,
-  );
-
-  if (offline.length === 0) return null;
+  function handleOpen() {
+    setOpen(o => {
+      if (!o) markAllRead();
+      return !o;
+    });
+  }
 
   return (
     <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
-        className="relative rounded-lg border border-amber-200 bg-amber-50 p-1.5 text-amber-600"
+        onClick={handleOpen}
+        className={`relative rounded-lg border p-1.5 transition ${
+          unreadCount > 0
+            ? 'border-amber-200 bg-amber-50 text-amber-600'
+            : 'border-border text-ink/40 hover:bg-mist'
+        }`}
+        title="Notifications"
       >
         <Bell size={15} />
-        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
-          {offline.length}
-        </span>
+        {unreadCount > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
       </button>
+
       {open && (
-        <div className="absolute right-0 top-9 z-20 w-56 rounded-xl border border-border bg-canvas shadow-lg">
-          <p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
-            Alerts
-          </p>
-          {offline.map(p => (
-            <div key={p._id} className="flex items-center gap-2 px-3 py-2">
-              <Printer size={12} className="text-red-400" />
-              <p className="text-xs text-ink">{p.printerName ?? 'Printer'} offline</p>
+        <div className="absolute right-0 top-9 z-20 w-72 rounded-xl border border-border bg-canvas shadow-lg">
+          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">Notifications</p>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-ink/30 hover:text-ink/60"
+            >
+              <X size={13} />
+            </button>
+          </div>
+
+          {notifications.length === 0 ? (
+            <div className="px-3 py-6 text-center">
+              <Bell size={18} className="mx-auto mb-2 text-ink/20" />
+              <p className="text-xs text-ink/40">No alerts</p>
             </div>
-          ))}
+          ) : (
+            <div className="max-h-72 overflow-y-auto">
+              {notifications.slice(0, 12).map(n => (
+                <div
+                  key={n.id}
+                  className={`flex items-start gap-2 border-b border-border/60 px-3 py-2.5 last:border-0 ${
+                    !n.read ? 'bg-mist/40' : ''
+                  }`}
+                >
+                  <span className={`mt-0.5 shrink-0 rounded border px-1 py-0.5 text-[9px] font-bold uppercase ${SEVERITY_CLS[n.severity]}`}>
+                    {n.severity}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-ink leading-tight">{n.title}</p>
+                    <p className="text-[10px] text-ink/50 mt-0.5 line-clamp-2">{n.message}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => dismiss(n.id)}
+                    className="shrink-0 text-ink/20 hover:text-ink/60 transition"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -193,9 +215,9 @@ export function CashierPage() {
   const identity = getCashierIdentity();
 
   // Header data
-  const [report, setReport]         = useState<DailyReport | null>(null);
-  const [printers, setPrinters]     = useState<PrinterDeviceStatus[]>([]);
-  const [nowMs, setNowMs]           = useState(() => Date.now());
+  const [report, setReport]     = useState<DailyReport | null>(null);
+  const [printers, setPrinters] = useState<PrinterDeviceStatus[]>([]);
+  const [nowMs, setNowMs]       = useState(() => Date.now());
 
   const loadHeader = useCallback(async () => {
     let cancelled = false;
@@ -218,12 +240,9 @@ export function CashierPage() {
   }, [loadHeader]);
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
-  // F2 → this page (already registered in Sidebar); handled externally
   useShortcut('F2', () => navigate('/cashier'));
   useShortcut('F4', () => setActiveTab('customers'));
-  useShortcut('Escape', () => {
-    // Allow modals / panels to intercept Escape before this fallback fires
-  });
+  useShortcut('Escape', () => {});
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -237,27 +256,24 @@ export function CashierPage() {
           });
           break;
         case 'b': e.preventDefault(); navigate('/dashboard'); break;
+        case 'd': e.preventDefault(); setActiveTab('drawer'); break;
+        case 't': e.preventDefault(); setActiveTab('tables'); break;
+        case 'k': e.preventDefault(); setActiveTab('kitchen'); break;
         case 'p':
-          if (e.shiftKey) {
-            e.preventDefault();
-            // Ctrl+Shift+P — reprint last; delegate to PrinterPanel
-            setActiveTab('printers');
-          } else {
-            e.preventDefault();
-            setActiveTab('pending');
-          }
+          if (e.shiftKey) { e.preventDefault(); setActiveTab('printers'); }
+          else             { e.preventDefault(); setActiveTab('pending'); }
           break;
       }
     };
-    const onF5 = (e: KeyboardEvent) => {
+    const onFn = (e: KeyboardEvent) => {
       if (e.key === 'F5') { e.preventDefault(); void loadHeader(); }
       if (e.key === 'F6') { e.preventDefault(); setActiveTab('pending'); }
     };
     window.addEventListener('keydown', onKey);
-    window.addEventListener('keydown', onF5);
+    window.addEventListener('keydown', onFn);
     return () => {
       window.removeEventListener('keydown', onKey);
-      window.removeEventListener('keydown', onF5);
+      window.removeEventListener('keydown', onFn);
     };
   }, [navigate, setActiveTab, loadHeader]);
 
@@ -271,12 +287,17 @@ export function CashierPage() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="shrink-0 border-b border-border bg-canvas px-4 py-2.5">
         <div className="flex items-center gap-3">
-          {/* Profile */}
-          <div className="flex items-center gap-2">
+          {/* Profile chip */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('profile')}
+            className="flex items-center gap-2 rounded-lg hover:bg-mist px-1.5 py-1 transition"
+            title="My Profile"
+          >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10 text-sm font-bold text-brand">
               {identity.name.charAt(0).toUpperCase()}
             </div>
-            <div className="hidden sm:block">
+            <div className="hidden sm:block text-left">
               <p className="text-xs font-semibold leading-tight text-ink">{identity.name}</p>
               <p className="text-[10px] text-ink/45">
                 {identity.code && `${identity.code} · `}
@@ -285,9 +306,9 @@ export function CashierPage() {
                   : 'No active shift'}
               </p>
             </div>
-          </div>
+          </button>
 
-          {/* KPIs */}
+          {/* KPI strip */}
           <div className="flex-1 overflow-x-auto">
             <HeaderKpi
               report={report}
@@ -297,9 +318,9 @@ export function CashierPage() {
             />
           </div>
 
-          {/* Alerts + actions */}
+          {/* Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <AlertBell printers={printers} nowMs={nowMs} />
+            <NotificationBell />
             <button
               type="button"
               onClick={() => void loadHeader()}
@@ -354,14 +375,18 @@ export function CashierPage() {
 
       {/* ── Panel content ───────────────────────────────────────────────────── */}
       <main className="min-h-0 flex-1 overflow-y-auto p-4">
-        {activeTab === 'new-order' && <NewOrderPanel />}
-        {activeTab === 'pending'   && <PendingBillsPanel />}
-        {activeTab === 'hold'      && <HoldBillPanel />}
-        {activeTab === 'shift'     && <ShiftPanel />}
-        {activeTab === 'drawer'    && <CashDrawerPanel />}
-        {activeTab === 'search'    && <BillSearchPanel />}
-        {activeTab === 'customers' && <CustomerPanel />}
-        {activeTab === 'printers'  && <PrinterPanel />}
+        {activeTab === 'dashboard'  && <DashboardPanel />}
+        {activeTab === 'new-order'  && <NewOrderPanel />}
+        {activeTab === 'pending'    && <PendingBillsPanel />}
+        {activeTab === 'hold'       && <HoldBillPanel />}
+        {activeTab === 'tables'     && <CashierTablePanel />}
+        {activeTab === 'kitchen'    && <KitchenStatusPanel />}
+        {activeTab === 'shift'      && <ShiftPanel />}
+        {activeTab === 'drawer'     && <CashDrawerPanel />}
+        {activeTab === 'search'     && <BillSearchPanel />}
+        {activeTab === 'customers'  && <CustomerPanel />}
+        {activeTab === 'printers'   && <PrinterPanel />}
+        {activeTab === 'profile'    && <CashierProfilePanel />}
       </main>
     </div>
   );
