@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search, ShoppingCart, X, Plus, Minus, Trash2,
   UtensilsCrossed, ShoppingBag, Truck, ChevronRight,
@@ -338,6 +338,7 @@ export function NewOrderPanel() {
   const [tables, setTables]         = useState<Table[]>([]);
   const [prodLoading, setProdLoading] = useState(true);
   const [activeCat, setActiveCat]   = useState<string>('');
+  const pillsRef = useRef<HTMLDivElement>(null);
   const [search, setSearch]         = useState('');
 
   // ── Favorites (hotel-scoped localStorage) ──────────────────────────────────
@@ -809,10 +810,10 @@ export function NewOrderPanel() {
 
         {/* Category tabs (with Favorites) */}
         {!search && (
-          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+          <div ref={pillsRef} className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
             <button
               type="button"
-              onClick={() => setActiveCat('')}
+              onClick={() => { setActiveCat(''); pillsRef.current?.scrollTo({ left: 0, behavior: 'smooth' }); }}
               className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 !activeCat ? 'bg-brand text-white' : 'border border-border bg-canvas text-ink/60 hover:bg-mist'
               }`}
@@ -821,7 +822,7 @@ export function NewOrderPanel() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveCat(activeCat === FAVS_CAT ? '' : FAVS_CAT)}
+              onClick={() => { setActiveCat(activeCat === FAVS_CAT ? '' : FAVS_CAT); pillsRef.current?.scrollTo({ left: 0, behavior: 'smooth' }); }}
               className={`shrink-0 flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 activeCat === FAVS_CAT
                   ? 'bg-amber-400 text-white'
