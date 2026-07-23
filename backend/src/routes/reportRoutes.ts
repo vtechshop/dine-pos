@@ -159,71 +159,89 @@ router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response
     const stateCode = gstin.length >= 2 ? gstin.substring(0, 2) : '33';
     const fp = `${String(fromDate.getMonth() + 1).padStart(2, '0')}${fromDate.getFullYear()}`;
 
-    const orders = await Order.find({
-      hotelId,
-      status: { $ne: 'cancelled' },
-      createdAt: { $gte: fromDate, $lte: toDate },
-    }).populate('items.product', 'hsnCode name').lean();
+    // M-9: stream aggregation entirely in MongoDB — never loads full order documents
+    // into heap. $unwind + $lookup + $facet returns only grouped totals.
+    const [agg] = await Order.aggregate([
+      {
+        $match: {
+          hotelId,
+          status: { $ne: 'cancelled' },
+          createdAt: { $gte: fromDate, $lte: toDate },
+        },
+      },
+      { $unwind: '$items' },
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'items.product',
+          foreignField: '_id',
+          pipeline: [{ $project: { hsnCode: 1, name: 1 } }],
+          as: '_prod',
+        },
+      },
+      {
+        $set: {
+          _rawHsn:   { $trim: { input: { $ifNull: [{ $arrayElemAt: ['$_prod.hsnCode', 0] }, ''] } } },
+          _prodName: { $ifNull: [{ $arrayElemAt: ['$_prod.name', 0] }, '$items.productName'] },
+          _taxable:  { $multiply: ['$items.price', '$items.quantity'] },
+          _half:     { $divide: [{ $ifNull: ['$items.taxAmount', 0] }, 2] },
+          _total:    { $add: [{ $multiply: ['$items.price', '$items.quantity'] }, { $ifNull: ['$items.taxAmount', 0] }] },
+          _rt:       { $ifNull: ['$items.taxPercent', 0] },
+        },
+      },
+      {
+        $set: {
+          _hsn:  { $cond: [{ $eq: ['$_rawHsn', ''] }, '9963', '$_rawHsn'] },
+          _desc: { $cond: [{ $eq: ['$_rawHsn', ''] }, 'Restaurant Services', '$_prodName'] },
+        },
+      },
+      {
+        $facet: {
+          b2cs: [
+            { $match: { _rt: { $gt: 0 } } },
+            { $group: { _id: '$_rt', txval: { $sum: '$_taxable' }, camt: { $sum: '$_half' }, samt: { $sum: '$_half' } } },
+          ],
+          hsn: [
+            {
+              $group: {
+                _id:  { hsn: '$_hsn', rt: '$_rt', desc: '$_desc' },
+                qty:  { $sum: '$items.quantity' },
+                val:  { $sum: '$_total' },
+                txval:{ $sum: '$_taxable' },
+                camt: { $sum: '$_half' },
+                samt: { $sum: '$_half' },
+              },
+            },
+          ],
+        },
+      },
+    ]) as [{ b2cs: any[]; hsn: any[] }];
 
-    // Aggregate B2CS (all intra-state B2C sales) and HSN summary in one pass
-    const taxMap:  Record<number, { txval: number; camt: number; samt: number }> = {};
-    const hsnMap:  Record<string, { desc: string; qty: number; val: number; txval: number; camt: number; samt: number; rt: number }> = {};
-
-    for (const order of orders as any[]) {
-      for (const item of order.items) {
-        const rt      = +(item.taxPercent || 0);
-        const taxable = +(item.price * item.quantity).toFixed(2);
-        const taxAmt  = +(item.taxAmount || 0);
-        const total   = +(taxable + taxAmt).toFixed(2);
-        const half    = +(taxAmt / 2).toFixed(4);
-
-        // B2CS: group by tax rate (skip 0% items — not required in GSTR-1 B2CS)
-        if (rt > 0) {
-          if (!taxMap[rt]) taxMap[rt] = { txval: 0, camt: 0, samt: 0 };
-          taxMap[rt].txval += taxable;
-          taxMap[rt].camt  += half;
-          taxMap[rt].samt  += half;
-        }
-
-        // HSN: group by product hsnCode + tax rate (SAC 9963 default)
-        const product  = item.product as any;
-        const hsnCode  = ((product?.hsnCode || '') as string).trim() || '9963';
-        const hsnDesc  = hsnCode === '9963' ? 'Restaurant Services' : (product?.name || 'Food & Beverages');
-        const hsnKey   = `${hsnCode}:${rt}`;
-        if (!hsnMap[hsnKey]) hsnMap[hsnKey] = { desc: hsnDesc, qty: 0, val: 0, txval: 0, camt: 0, samt: 0, rt };
-        hsnMap[hsnKey].qty   += item.quantity;
-        hsnMap[hsnKey].txval += taxable;
-        hsnMap[hsnKey].val   += total;
-        hsnMap[hsnKey].camt  += half;
-        hsnMap[hsnKey].samt  += half;
-      }
-    }
-
-    const b2cs = Object.entries(taxMap).map(([rateStr, v]) => ({
-      camt:    +v.camt.toFixed(2),
+    const b2cs = (agg?.b2cs ?? []).map((row: any) => ({
+      camt:    +row.camt.toFixed(2),
       csamt:   0,
       iamt:    0,
       pos:     stateCode,
-      rt:      parseFloat(rateStr),
-      samt:    +v.samt.toFixed(2),
+      rt:      row._id,
+      samt:    +row.samt.toFixed(2),
       sply_ty: 'INTRA',
-      txval:   +v.txval.toFixed(2),
+      txval:   +row.txval.toFixed(2),
       typ:     'OE',
     }));
 
-    const hsnB2c = Object.entries(hsnMap).map(([hsnKey, v], idx) => ({
+    const hsnB2c = (agg?.hsn ?? []).map((row: any, idx: number) => ({
       num:    idx + 1,
-      hsn_sc: hsnKey.split(':')[0],
-      desc:   v.desc,
+      hsn_sc: row._id.hsn,
+      desc:   row._id.desc,
       uqc:    'OTH',
-      qty:    v.qty,
-      val:    +v.val.toFixed(2),
-      txval:  +v.txval.toFixed(2),
+      qty:    row.qty,
+      val:    +row.val.toFixed(2),
+      txval:  +row.txval.toFixed(2),
       iamt:   0,
-      camt:   +v.camt.toFixed(2),
-      samt:   +v.samt.toFixed(2),
+      camt:   +row.camt.toFixed(2),
+      samt:   +row.samt.toFixed(2),
       csamt:  0,
-      rt:     v.rt,
+      rt:     row._id.rt,
     }));
 
     res.json({
