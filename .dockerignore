@@ -1,0 +1,15 @@
+**/node_modules
+**/dist
+**/.env
+**/.env.local
+**/coverage
+**/*.log
+.git
+.gitignore
+marketing
+qr
+web
+mobile
+automation
+tokens
+assets
