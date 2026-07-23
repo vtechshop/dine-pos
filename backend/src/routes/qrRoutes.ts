@@ -47,6 +47,12 @@ import { io } from '../server';
 
 const router = Router();
 
+// M-16: Store only the SHA-256 hash of the guest token in the DB.
+// The raw token (returned to and stored by the client) is never persisted,
+// so a DB dump cannot be replayed as a valid guest token.
+const hashGuestToken = (raw: string): string =>
+  crypto.createHash('sha256').update(raw).digest('hex');
+
 const qrReadLimiter = makeRateLimiter({
   windowMs: 60 * 1000,
   max: 60,
@@ -212,7 +218,7 @@ router.post('/session', qrWriteLimiter, async (req: Request, res: Response): Pro
     // ── Returning-customer fast path: validate stored guestToken ──────────────
     if (guestToken && typeof guestToken === 'string') {
       const existingGuest = await Guest.findOne({
-        qrSessionToken: guestToken,
+        qrSessionToken: hashGuestToken(guestToken),
         hotelId:        new mongoose.Types.ObjectId(hotelId),
       });
 
@@ -316,11 +322,12 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     const validSource = orderSource === 'kiosk' ? 'kiosk' : 'qr';
 
     let guest: any;
+    let rawGuestToken = '';
 
     if (guestToken && typeof guestToken === 'string') {
       // ── Case B: Returning customer — validate stored guestToken ───────────────
       guest = await Guest.findOne({
-        qrSessionToken: guestToken,
+        qrSessionToken: hashGuestToken(guestToken),
         hotelId:        new mongoose.Types.ObjectId(hotelId),
       });
 
@@ -358,6 +365,8 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
         });
         return;
       }
+
+      rawGuestToken = guestToken; // raw token echoed back to client in response
 
     } else {
       // ── Case A: First order — auto-create session + guest ─────────────────────
@@ -474,6 +483,7 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
 
       const guestNumber  = updatedSession.guestCount;
       const newToken     = crypto.randomBytes(32).toString('hex');
+      rawGuestToken      = newToken; // raw token returned to client; only its hash is stored
       const expiresAt    = new Date(Date.now() + session.qrTimeoutMinutes * 60 * 1000);
       const displayLabel = (identMode !== 'disabled' && cleanName) ? cleanName : guestLabel(guestNumber);
 
@@ -485,7 +495,7 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
         customerId,
         guestNumber,
         displayLabel,
-        qrSessionToken:   newToken,
+        qrSessionToken:   hashGuestToken(newToken),
         qrTokenExpiresAt: expiresAt,
       });
 
@@ -579,9 +589,10 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       orderSource: validSource,
     });
 
-    // Always return guestToken so client can persist it for subsequent orders
+    // Always return guestToken so client can persist it for subsequent orders.
+    // rawGuestToken holds the un-hashed token; guest.qrSessionToken is its hash.
     res.status(201).json({
-      guestToken: guest.qrSessionToken,
+      guestToken: rawGuestToken,
       order,
     });
   } catch (err: any) {
@@ -615,7 +626,7 @@ router.get('/bill', qrReadLimiter, async (req: Request, res: Response): Promise<
     }
 
     const guest = await Guest.findOne({
-      qrSessionToken: token,
+      qrSessionToken: hashGuestToken(token),
       hotelId:        new mongoose.Types.ObjectId(hotel),
     });
 
