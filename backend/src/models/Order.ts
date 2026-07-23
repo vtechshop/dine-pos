@@ -197,6 +197,10 @@ OrderSchema.index({ hotelId: 1, status: 1, createdAt: -1 });                // f
 OrderSchema.index({ hotelId: 1, orderSource: 1, createdAt: -1 });           // source filter (Swiggy/Zomato analytics)
 OrderSchema.index({ hotelId: 1, customerPhone: 1, createdAt: -1 });         // customer aggregation — skips null/empty phones efficiently
 OrderSchema.index({ createdAt: -1 });                                        // admin-wide report
+// M-8: cross-hotel revenue aggregations filter { status: {$ne:'cancelled'}, createdAt: {$gte:..} }.
+// Adding status to the index lets MongoDB apply the status filter from the index without
+// fetching each document, reducing the effective scan size for the SA dashboard aggregations.
+OrderSchema.index({ createdAt: -1, status: 1 });
 // Sparse unique index: null values are excluded, non-null offlineIds must be globally unique.
 // This is the idempotency guard — a retry with the same offlineId is a no-op.
 OrderSchema.index({ offlineId: 1 }, { unique: true, sparse: true });
