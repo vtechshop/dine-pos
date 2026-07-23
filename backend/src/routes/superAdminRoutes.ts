@@ -502,6 +502,9 @@ router.get('/analytics', superAdminAuth, async (req: Request, res: Response) => 
         { $group: { _id: '$hotelId', ordersToday: { $sum: 1 }, revenueToday: { $sum: '$grandTotal' } } },
       ]),
       Device.aggregate([
+        // L-3: $match before $group so the query hits the hotelId index
+        // rather than full-scanning every device document in the collection.
+        ...(matchFilter.hotelId ? [{ $match: { hotelId: matchFilter.hotelId } }] : []),
         { $group: { _id: '$hotelId', deviceCount: { $sum: 1 }, lastSeen: { $max: '$lastSeen' } } },
       ]),
     ]);
