@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   RefreshCw, CreditCard, Printer, Trash2, AlertCircle,
   ShoppingBag, UtensilsCrossed, Truck, Clock,
 } from 'lucide-react';
-import { fetchCashierOrders, cancelOrder } from '../../api/orders';
+import { fetchCashierOrders, cancelOrder, updateOrderPayment, completeOrder } from '../../api/orders';
 import { reprintJob, fetchReceiptJobs } from '../../api/billing';
+import { PaymentModal } from './PaymentModal';
+import type { PaymentResult } from './PaymentModal';
 import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
 import { AuditModal } from './AuditModal';
@@ -31,157 +33,6 @@ const SOURCE_ICON: Record<string, React.ReactNode> = {
   delivery:   <Truck size={12} />,
 };
 
-// ── Payment quick modal ───────────────────────────────────────────────────────
-
-type PayMethod = 'cash' | 'upi' | 'card' | 'split';
-
-function QuickPayModal({
-  order,
-  sym,
-  onClose,
-  onDone,
-}: {
-  order: CashierOrderItem;
-  sym: string;
-  cashierName?: string;
-  cashierId?: string;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const [method, setMethod] = useState<PayMethod>('cash');
-  const [cashGiven, setCashGiven] = useState('');
-  const [splitCash, setSplitCash] = useState('');
-  const [splitUpi, setSplitUpi] = useState('');
-  const [splitCard, setSplitCard] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const grand = order.grandTotal;
-  const change = (parseFloat(cashGiven) || 0) - grand;
-  const splitTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) + (parseFloat(splitCard) || 0);
-
-  async function handlePay() {
-    if (method === 'cash' && (parseFloat(cashGiven) || 0) < grand) {
-      setError('Cash given is less than total'); return;
-    }
-    if (method === 'split' && Math.abs(splitTotal - grand) > 0.5) {
-      setError('Split amounts do not add up to total'); return;
-    }
-    setError(null);
-    setLoading(true);
-    try {
-      // Use the existing order status endpoint — cashier marks as completed
-      const { updateOrderPayment, completeOrder } = await import('../../api/orders');
-      const splitDetails = method === 'split'
-        ? { cash: parseFloat(splitCash) || 0, upi: parseFloat(splitUpi) || 0, card: parseFloat(splitCard) || 0 }
-        : undefined;
-      await updateOrderPayment(order._id, method, splitDetails);
-      await completeOrder(order._id);
-      onDone();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Payment failed');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const METHODS: { key: PayMethod; label: string }[] = [
-    { key: 'cash', label: 'Cash' },
-    { key: 'upi', label: 'UPI' },
-    { key: 'card', label: 'Card' },
-    { key: 'split', label: 'Split' },
-  ];
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 p-4 sm:items-center backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-canvas shadow-xl">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div>
-            <p className="text-sm font-semibold text-ink">Take Payment</p>
-            <p className="text-xs text-ink/50">#{order.orderNumber} · {order.tableNumber ? `T${order.tableNumber}` : order.customerName ?? 'Walk-in'}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-lg font-bold text-brand">{fmtINR(sym, grand)}</p>
-          </div>
-        </div>
-
-        <div className="p-4 space-y-3">
-          {/* Method */}
-          <div className="flex gap-1 rounded-lg border border-border p-1">
-            {METHODS.map(m => (
-              <button key={m.key} type="button" onClick={() => setMethod(m.key)}
-                className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition ${method === m.key ? 'bg-brand text-white' : 'text-ink/60 hover:bg-mist'}`}>
-                {m.label}
-              </button>
-            ))}
-          </div>
-
-          {method === 'cash' && (
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-1.5">
-                {[100, 200, 500, 1000].map(p => (
-                  <button key={p} type="button" onClick={() => setCashGiven(String(p))}
-                    className="rounded border border-border bg-mist px-2 py-1 text-[11px] font-medium text-ink hover:bg-canvas">
-                    {sym}{p}
-                  </button>
-                ))}
-                <button type="button" onClick={() => setCashGiven(String(Math.ceil(grand)))}
-                  className="rounded border border-brand/30 bg-brand/5 px-2 py-1 text-[11px] font-medium text-brand">Exact</button>
-              </div>
-              <input type="number" value={cashGiven} onChange={e => setCashGiven(e.target.value)}
-                placeholder={`Amount given…`}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-2 focus:ring-brand/20" />
-              {cashGiven && (
-                <div className={`flex justify-between rounded-lg px-3 py-2 ${change >= 0 ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-100'}`}>
-                  <span className="text-xs">{change >= 0 ? 'Change' : 'Short'}</span>
-                  <span className={`text-sm font-bold ${change >= 0 ? 'text-emerald-700' : 'text-red-500'}`}>{fmtINR(sym, Math.abs(change))}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {(method === 'upi' || method === 'card') && (
-            <div className="rounded-lg bg-mist px-3 py-3 text-center">
-              <p className="text-xs text-ink/60">Collect {fmtINR(sym, grand)} via {method.toUpperCase()}</p>
-            </div>
-          )}
-
-          {method === 'split' && (
-            <div className="space-y-2">
-              {(['cash', 'upi', 'card'] as const).map(k => (
-                <div key={k} className="flex items-center gap-2">
-                  <label className="w-10 text-xs capitalize text-ink/60">{k}</label>
-                  <input type="number" min="0" placeholder="0"
-                    value={k === 'cash' ? splitCash : k === 'upi' ? splitUpi : splitCard}
-                    onChange={e => { if (k === 'cash') setSplitCash(e.target.value); else if (k === 'upi') setSplitUpi(e.target.value); else setSplitCard(e.target.value); }}
-                    className="flex-1 rounded-lg border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand/50" />
-                </div>
-              ))}
-              <p className={`text-center text-xs font-medium ${Math.abs(splitTotal - grand) < 0.5 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                {Math.abs(splitTotal - grand) < 0.5 ? '✓ Balanced' : `${fmtINR(sym, Math.abs(splitTotal - grand))} ${splitTotal > grand ? 'over' : 'short'}`}
-              </p>
-            </div>
-          )}
-
-          {error && <p className="text-xs text-red-500">{error}</p>}
-
-          <div className="flex gap-2">
-            <button type="button" onClick={onClose}
-              className="flex-1 rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink/70 hover:bg-mist">
-              Cancel
-            </button>
-            <button type="button" onClick={() => void handlePay()} disabled={loading}
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60">
-              {loading && <Spinner size="sm" />}
-              {loading ? 'Processing…' : 'Confirm Payment'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Order row ─────────────────────────────────────────────────────────────────
 
 function OrderRow({
@@ -205,6 +56,7 @@ function OrderRow({
   const [showPay, setShowPay] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
   const [reprinting, setReprinting] = useState(false);
+  const paymentCompletedRef = useRef(false);
 
   const ageMs = nowMs - new Date(order.createdAt).getTime();
   const isOld = ageMs > 20 * 60_000;
@@ -292,13 +144,27 @@ function OrderRow({
       </div>
 
       {showPay && (
-        <QuickPayModal
-          order={order}
+        <PaymentModal
           sym={sym}
-          cashierName={cashierName}
-          cashierId={cashierId}
-          onClose={() => setShowPay(false)}
-          onDone={() => { setShowPay(false); onRefresh(); }}
+          orderNumber={order.orderNumber}
+          tableNumber={order.tableNumber}
+          customerName={order.customerName}
+          items={order.items}
+          subtotal={order.subtotal}
+          taxTotal={order.taxTotal}
+          appliedDiscount={order.discountAmount ?? 0}
+          onConfirm={async (result: PaymentResult) => {
+            await updateOrderPayment(order._id, result.method, result.splitDetails);
+            await completeOrder(order._id);
+            paymentCompletedRef.current = true;
+          }}
+          onClose={() => {
+            setShowPay(false);
+            if (paymentCompletedRef.current) {
+              paymentCompletedRef.current = false;
+              onRefresh();
+            }
+          }}
         />
       )}
 
