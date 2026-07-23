@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import Hotel, { IFeatureFlags } from '../models/Hotel';
 import RefreshToken from '../models/RefreshToken';
 import { getRedisClient } from '../config/redis';
+import { logger } from '../utils/logger';
 
 export interface AuthRequest extends Request {
   hotelId?: string;
@@ -86,7 +87,9 @@ export async function resolveHotelStatus(hotelId: string): Promise<StatusEntry> 
     if (end && new Date(end) < new Date()) {
       status = 'expired';
       expiredOn = new Date(end).toISOString();
-      Hotel.findByIdAndUpdate(hotelId, { status: 'expired' }).catch(() => {});
+      Hotel.findByIdAndUpdate(hotelId, { status: 'expired' }).catch(err =>
+        logger.error('auth: failed to persist expired status', { hotelId, err: String(err) }),
+      );
     }
   }
 
@@ -96,7 +99,9 @@ export async function resolveHotelStatus(hotelId: string): Promise<StatusEntry> 
     if (end && new Date(end) < new Date()) {
       status = 'expired';
       expiredOn = new Date(end).toISOString();
-      Hotel.findByIdAndUpdate(hotelId, { status: 'expired' }).catch(() => {});
+      Hotel.findByIdAndUpdate(hotelId, { status: 'expired' }).catch(err =>
+        logger.error('auth: failed to persist expired status', { hotelId, err: String(err) }),
+      );
     }
   }
 
