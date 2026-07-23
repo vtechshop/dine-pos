@@ -810,10 +810,10 @@ export function NewOrderPanel() {
 
         {/* Category tabs (with Favorites) */}
         {!search && (
-          <div ref={pillsRef} className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+          <div ref={pillsRef} className="flex gap-1.5 overflow-x-auto px-0.5 pb-1 scrollbar-hide">
             <button
               type="button"
-              onClick={() => { setActiveCat(''); pillsRef.current?.scrollTo({ left: 0, behavior: 'smooth' }); }}
+              onClick={() => { pillsRef.current?.scrollTo({ left: 0 }); setActiveCat(''); }}
               className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 !activeCat ? 'bg-brand text-white' : 'border border-border bg-canvas text-ink/60 hover:bg-mist'
               }`}
@@ -822,7 +822,7 @@ export function NewOrderPanel() {
             </button>
             <button
               type="button"
-              onClick={() => { setActiveCat(activeCat === FAVS_CAT ? '' : FAVS_CAT); pillsRef.current?.scrollTo({ left: 0, behavior: 'smooth' }); }}
+              onClick={() => { pillsRef.current?.scrollTo({ left: 0 }); setActiveCat(activeCat === FAVS_CAT ? '' : FAVS_CAT); }}
               className={`shrink-0 flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 activeCat === FAVS_CAT
                   ? 'bg-amber-400 text-white'
