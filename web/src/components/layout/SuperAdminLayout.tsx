@@ -1,5 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { Activity, BarChart2, Building2, Heart, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Tag } from 'lucide-react';
+import {
+  Activity, BarChart2, Building2, Heart, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Tag,
+  Truck, Hotel, Monitor, ShoppingBag, ReceiptText, Globe2, Settings2, ClipboardList, FileBarChart,
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { SANotificationsProvider } from '../../context/SANotificationsContext';
 import { SANotificationBell } from './SANotificationBell';
@@ -120,6 +123,40 @@ export function SuperAdminLayout() {
 
             {/* Notification bell — dropdown preview + badge */}
             <SANotificationBell />
+
+            {/* ── Delivery ───────────────────────────────────────────── */}
+            <div className="pt-3">
+              <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-ink/30">
+                Delivery
+              </p>
+              {[
+                { to: '/super-admin/aggregator',          label: 'Dashboard',   icon: <Truck          size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/aggregator/hotels',   label: 'Hotels',      icon: <Hotel          size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/aggregator/monitor',  label: 'Monitor',     icon: <Monitor        size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/aggregator/orders',   label: 'Orders',      icon: <ShoppingBag    size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/aggregator/settlement',label:'Settlement',  icon: <ReceiptText    size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/aggregator/webhooks', label: 'Webhooks',    icon: <Globe2         size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/aggregator/settings', label: 'Settings',    icon: <Settings2      size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/aggregator/audit',    label: 'Alerts & Audit', icon: <ClipboardList size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/aggregator/reports',  label: 'Reports',     icon: <FileBarChart   size={16} strokeWidth={1.75} /> },
+              ].map(({ to, label, icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/super-admin/aggregator'}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      isActive
+                        ? 'bg-brand/10 text-brand'
+                        : 'text-ink/70 hover:bg-mist hover:text-ink'
+                    }`
+                  }
+                >
+                  {icon}
+                  {label}
+                </NavLink>
+              ))}
+            </div>
           </nav>
 
           {/* Logout */}

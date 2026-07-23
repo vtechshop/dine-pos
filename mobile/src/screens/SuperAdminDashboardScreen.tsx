@@ -87,7 +87,7 @@ const formatINR = (n: number) => {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SuperAdminDashboard'>;
 
-type TabView = 'overview' | 'hotels' | 'tickets' | 'revenue' | 'notifications' | 'devices' | 'config';
+type TabView = 'overview' | 'hotels' | 'tickets' | 'revenue' | 'notifications' | 'devices' | 'config' | 'delivery';
 type StatusFilter = 'all' | 'pending' | 'trial' | 'active' | 'expired' | 'suspended' | 'rejected';
 type TicketFilter = 'all' | 'open' | 'in-progress' | 'resolved' | 'closed';
 
@@ -1715,6 +1715,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
           { id: 'notifications', icon: 'notifications', label: `Notifs (${notifications.length})` },
           { id: 'devices', icon: 'devices', label: `Devices (${devices.length})` },
           { id: 'config', icon: 'settings', label: 'Config' },
+          { id: 'delivery', icon: 'delivery-dining', label: 'Delivery' },
         ] as { id: TabView; icon: keyof typeof MaterialIcons.glyphMap; label: string }[]).map((t) => (
           <TouchableOpacity
             key={t.id}
@@ -1974,6 +1975,96 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
             ListEmptyComponent={<View style={styles.emptyState}><MaterialIcons name="store" size={48} color={Colors.textMuted} /><Text style={styles.emptyText}>No hotels found</Text></View>}
           />
         </>
+      ) : activeTab === 'delivery' ? (
+        // ── Delivery Tab ─────────────────────────────────────────────────────────
+        // Shows aggregator feature-flag status per hotel (live data from hotel list).
+        // Full cross-hotel monitoring requires /superadmin/aggregator/* backend endpoints
+        // which are not yet implemented. This tab provides SaaS-level visibility into
+        // which hotels have the aggregator feature enabled.
+        <ScrollView contentContainerStyle={{ padding: Spacing.md, paddingBottom: 60, gap: Spacing.md }}>
+          {/* Feature flag summary */}
+          <View style={wStyles.card}>
+            <Text style={wStyles.title}>Aggregator Feature Status</Text>
+            <View style={{ flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm }}>
+              <View style={{ flex: 1, backgroundColor: Colors.successBg ?? '#F0FDF4', borderRadius: BorderRadius.sm, padding: Spacing.md, alignItems: 'center' }}>
+                <Text style={{ fontSize: 28, fontWeight: 'bold', color: Colors.success }}>
+                  {hotels.filter(h => h.features?.aggregator).length}
+                </Text>
+                <Text style={{ fontSize: 10, color: Colors.textSecondary, textAlign: 'center', marginTop: 2 }}>Aggregator{'\n'}Enabled</Text>
+              </View>
+              <View style={{ flex: 1, backgroundColor: Colors.surface, borderRadius: BorderRadius.sm, padding: Spacing.md, alignItems: 'center', borderWidth: 1, borderColor: Colors.border }}>
+                <Text style={{ fontSize: 28, fontWeight: 'bold', color: Colors.text }}>
+                  {hotels.filter(h => !h.features?.aggregator).length}
+                </Text>
+                <Text style={{ fontSize: 10, color: Colors.textSecondary, textAlign: 'center', marginTop: 2 }}>Aggregator{'\n'}Disabled</Text>
+              </View>
+              <View style={{ flex: 1, backgroundColor: Colors.primaryBg ?? '#FFF3F0', borderRadius: BorderRadius.sm, padding: Spacing.md, alignItems: 'center' }}>
+                <Text style={{ fontSize: 28, fontWeight: 'bold', color: Colors.primary }}>
+                  {hotels.length > 0 ? `${Math.round(hotels.filter(h => h.features?.aggregator).length / hotels.length * 100)}%` : '0%'}
+                </Text>
+                <Text style={{ fontSize: 10, color: Colors.textSecondary, textAlign: 'center', marginTop: 2 }}>Coverage</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Backend required notice */}
+          <View style={{ backgroundColor: '#FFFBEB', borderRadius: BorderRadius.md, padding: Spacing.md, borderWidth: 1, borderColor: '#FDE68A', gap: Spacing.xs }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs }}>
+              <MaterialIcons name="warning" size={16} color="#D97706" />
+              <Text style={{ fontSize: FontSize.sm, fontWeight: '700', color: '#92400E' }}>
+                Cross-hotel monitoring requires backend
+              </Text>
+            </View>
+            <Text style={{ fontSize: FontSize.xs, color: '#92400E', lineHeight: 18 }}>
+              The following endpoints need to be implemented:{'\n'}
+              {'• GET /superadmin/aggregator/dashboard\n'}
+              {'• GET /superadmin/aggregator/hotels\n'}
+              {'• GET /superadmin/aggregator/orders\n'}
+              {'• GET /superadmin/aggregator/webhooks\n'}
+              {'• GET /superadmin/aggregator/settlement\n'}
+              {'• GET /superadmin/aggregator/analytics\n'}
+              {'• GET /superadmin/aggregator/alerts\n'}
+              {'• GET /superadmin/aggregator/audit'}
+            </Text>
+          </View>
+
+          {/* Hotels with aggregator enabled */}
+          <View style={wStyles.card}>
+            <Text style={wStyles.title}>Enabled Hotels</Text>
+            {hotels.filter(h => h.features?.aggregator).length === 0 ? (
+              <Text style={{ color: Colors.textMuted, fontSize: FontSize.sm, marginTop: Spacing.sm }}>
+                No hotels have aggregator enabled.
+              </Text>
+            ) : (
+              hotels.filter(h => h.features?.aggregator).map(h => (
+                <View key={h._id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.xs, borderBottomWidth: 1, borderBottomColor: Colors.border }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: Colors.text, fontSize: FontSize.sm, fontWeight: '600' }}>{h.hotelName}</Text>
+                    <Text style={{ color: Colors.textMuted, fontSize: FontSize.xs }}>{h.city}, {h.state}</Text>
+                  </View>
+                  <View style={{ backgroundColor: Colors.successBg ?? '#F0FDF4', paddingHorizontal: 8, paddingVertical: 2, borderRadius: BorderRadius.round }}>
+                    <Text style={{ color: Colors.success, fontSize: 10, fontWeight: '700' }}>ENABLED</Text>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+
+          {/* Platform KPIs — backend required */}
+          {[
+            { label: 'Today Orders',      key: 'todayOrders',     placeholder: 'Requires /aggregator/dashboard' },
+            { label: 'Today Revenue',     key: 'todayRevenue',    placeholder: 'Requires /aggregator/dashboard' },
+            { label: 'Swiggy Connected',  key: 'swiggyConnected', placeholder: 'Requires /aggregator/hotels'   },
+            { label: 'Zomato Connected',  key: 'zomatoConnected', placeholder: 'Requires /aggregator/hotels'   },
+            { label: 'Failed Webhooks',   key: 'failedWebhooks',  placeholder: 'Requires /aggregator/webhooks' },
+            { label: 'Sync Failures',     key: 'syncFailed',      placeholder: 'Requires /aggregator/sync-status' },
+          ].map(item => (
+            <View key={item.key} style={{ backgroundColor: Colors.card, borderRadius: BorderRadius.sm, padding: Spacing.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: Colors.border }}>
+              <Text style={{ color: Colors.textSecondary, fontSize: FontSize.sm }}>{item.label}</Text>
+              <Text style={{ color: '#D97706', fontSize: FontSize.xs, fontStyle: 'italic' }}>{item.placeholder}</Text>
+            </View>
+          ))}
+        </ScrollView>
       ) : renderTicketsTab()}
 
       {renderDetailModal()}

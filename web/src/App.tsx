@@ -27,6 +27,15 @@ import { SANotificationsPage }      from './pages/super-admin/SANotificationsPag
 import { BroadcastCenterPage }      from './pages/super-admin/BroadcastCenterPage';
 import { HotelAnalyticsPage }      from './pages/super-admin/HotelAnalyticsPage';
 import { HotelHealthPage }         from './pages/super-admin/HotelHealthPage';
+import { AggregatorDashboardPage } from './pages/super-admin/AggregatorDashboardPage';
+import { AggregatorHotelsPage }    from './pages/super-admin/AggregatorHotelsPage';
+import { AggregatorMonitorPage }   from './pages/super-admin/AggregatorMonitorPage';
+import { AggregatorOrdersPage }    from './pages/super-admin/AggregatorOrdersPage';
+import { AggregatorSettlementPage }from './pages/super-admin/AggregatorSettlementPage';
+import { AggregatorWebhooksPage }  from './pages/super-admin/AggregatorWebhooksPage';
+import { AggregatorSettingsPage }  from './pages/super-admin/AggregatorSettingsPage';
+import { AggregatorAuditPage }     from './pages/super-admin/AggregatorAuditPage';
+import { AggregatorReportsPage }   from './pages/super-admin/AggregatorReportsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
@@ -98,8 +107,18 @@ export function App() {
                       <Route path="/super-admin/versions"       element={<VersionManagementPage />} />
                       <Route path="/super-admin/notifications" element={<SANotificationsPage />} />
                       <Route path="/super-admin/broadcast"    element={<BroadcastCenterPage />} />
-                      <Route path="/super-admin/analytics"   element={<HotelAnalyticsPage />} />
+                      <Route path="/super-admin/analytics"          element={<HotelAnalyticsPage />} />
                       <Route path="/super-admin/hotels/:id/health" element={<HotelHealthPage />} />
+                      {/* Aggregator — M1-M15 */}
+                      <Route path="/super-admin/aggregator"             element={<AggregatorDashboardPage />} />
+                      <Route path="/super-admin/aggregator/hotels"      element={<AggregatorHotelsPage />} />
+                      <Route path="/super-admin/aggregator/monitor"     element={<AggregatorMonitorPage />} />
+                      <Route path="/super-admin/aggregator/orders"      element={<AggregatorOrdersPage />} />
+                      <Route path="/super-admin/aggregator/settlement"  element={<AggregatorSettlementPage />} />
+                      <Route path="/super-admin/aggregator/webhooks"    element={<AggregatorWebhooksPage />} />
+                      <Route path="/super-admin/aggregator/settings"    element={<AggregatorSettingsPage />} />
+                      <Route path="/super-admin/aggregator/audit"       element={<AggregatorAuditPage />} />
+                      <Route path="/super-admin/aggregator/reports"     element={<AggregatorReportsPage />} />
                     </Route>
                   </Route>
 
