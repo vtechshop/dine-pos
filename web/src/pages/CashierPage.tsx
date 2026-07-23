@@ -4,7 +4,7 @@ import {
   Plus, CreditCard, PauseCircle, BarChart2,
   Wallet, Search, Users, Printer, Bell, LogOut,
   TrendingUp, ShoppingBag, AlertCircle, RefreshCw,
-  Home, LayoutGrid, Flame, UserCircle, X, Monitor,
+  Home, LayoutGrid, Flame, UserCircle, X, Monitor, Shield,
 } from 'lucide-react';
 import { useShortcut } from '../hooks/useShortcut';
 import { useCashier, calcCartTotals, type CashierTab } from '../context/CashierContext';
@@ -29,6 +29,7 @@ import { DashboardPanel }         from '../components/cashier/DashboardPanel';
 import { CashierTablePanel }      from '../components/cashier/CashierTablePanel';
 import { KitchenStatusPanel }     from '../components/cashier/KitchenStatusPanel';
 import { CashierProfilePanel }    from '../components/cashier/CashierProfilePanel';
+import { PermissionsPanel }       from '../components/cashier/PermissionsPanel';
 import type { DailyReport, PrinterDeviceStatus } from '../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -74,7 +75,8 @@ const TABS: TabDef[] = [
   { key: 'shift',      icon: <BarChart2 size={15} />,     label: 'Shift',       shortcut: '' },
   { key: 'drawer',     icon: <Wallet size={15} />,        label: 'Drawer',      shortcut: 'Ctrl+D' },
   { key: 'printers',   icon: <Printer size={15} />,       label: 'Printers',    shortcut: '' },
-  { key: 'profile',    icon: <UserCircle size={15} />,    label: 'Profile',     shortcut: '' },
+  { key: 'profile',      icon: <UserCircle size={15} />,  label: 'Profile',      shortcut: '' },
+  { key: 'permissions',  icon: <Shield size={15} />,      label: 'Permissions',  shortcut: '' },
 ];
 
 // ── Header KPI strip ──────────────────────────────────────────────────────────
@@ -482,8 +484,9 @@ export function CashierPage() {
         {activeTab === 'drawer'     && <CashDrawerPanel />}
         {activeTab === 'search'     && <BillSearchPanel />}
         {activeTab === 'customers'  && <CustomerPanel />}
-        {activeTab === 'printers'   && <PrinterPanel />}
-        {activeTab === 'profile'    && <CashierProfilePanel />}
+        {activeTab === 'printers'    && <PrinterPanel />}
+        {activeTab === 'profile'     && <CashierProfilePanel />}
+        {activeTab === 'permissions' && <PermissionsPanel />}
       </main>
     </div>
   );

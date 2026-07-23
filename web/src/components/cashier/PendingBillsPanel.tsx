@@ -10,6 +10,7 @@ import { OrderTimelineModal } from './OrderTimelineModal';
 import type { PaymentResult } from './PaymentModal';
 import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
+import { useCashierPermissions } from '../../hooks/useCashierPermissions';
 import { AuditModal } from './AuditModal';
 import { Spinner } from '../ui/Spinner';
 import type { CashierOrderItem } from '../../api/orders';
@@ -53,6 +54,7 @@ function OrderRow({
   cashierId: string;
   onRefresh: () => void;
 }) {
+  const perms = useCashierPermissions();
   const [expanded, setExpanded] = useState(false);
   const [showPay, setShowPay] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
@@ -124,19 +126,20 @@ function OrderRow({
               {receiptJob && (
                 <button
                   type="button"
-                  title="Reprint"
-                  onClick={() => void handleReprint()}
-                  disabled={reprinting}
-                  className="rounded-lg border border-border p-1.5 text-ink/40 hover:bg-mist disabled:opacity-50"
+                  title={perms.canVoidOrder ? 'Reprint' : 'Reprint — permission required'}
+                  onClick={() => { if (perms.canVoidOrder) void handleReprint(); }}
+                  disabled={reprinting || !perms.canVoidOrder}
+                  className="rounded-lg border border-border p-1.5 text-ink/40 hover:bg-mist disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {reprinting ? <Spinner size="sm" /> : <Printer size={13} />}
                 </button>
               )}
               <button
                 type="button"
-                title="Cancel order"
-                onClick={() => setShowCancel(true)}
-                className="rounded-lg border border-border p-1.5 text-ink/40 hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+                title={perms.canCancelOrder ? 'Cancel order' : 'Cancel — permission required'}
+                onClick={() => { if (perms.canCancelOrder) setShowCancel(true); }}
+                disabled={!perms.canCancelOrder}
+                className="rounded-lg border border-border p-1.5 text-ink/40 hover:border-red-200 hover:bg-red-50 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:bg-transparent disabled:hover:text-ink/40"
               >
                 <Trash2 size={13} />
               </button>

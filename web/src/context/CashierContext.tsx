@@ -18,7 +18,8 @@ export type CashierTab =
   | 'search'
   | 'customers'
   | 'printers'
-  | 'profile';
+  | 'profile'
+  | 'permissions';
 
 export interface OrderPrefill {
   orderType: 'dine-in' | 'takeaway' | 'delivery';

@@ -13,6 +13,7 @@ import { fetchTables } from '../../api/tables';
 import { createOrder, completeOrder } from '../../api/orders';
 import { fetchProductSalesReport } from '../../api/reports';
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
+import { useCashierPermissions } from '../../hooks/useCashierPermissions';
 import type { Product, Category, Table } from '../../types';
 import type { ProductSalesRow } from '../../types/reports';
 
@@ -319,6 +320,7 @@ export function NewOrderPanel() {
   const { settings } = useSettings();
   const { hotelId } = useAuth();
   const sym = settings?.currencySymbol ?? '₹';
+  const perms = useCashierPermissions();
 
   // Hotel-scoped localStorage keys
   const favsKey   = hotelId ? `pos_favs_${hotelId}`   : '';
@@ -983,15 +985,24 @@ export function NewOrderPanel() {
 
             <div className="flex items-center gap-2">
               <span className="text-xs text-ink/55 shrink-0">Discount</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={discount}
-                onChange={e => setDiscount(e.target.value)}
-                placeholder="0"
-                className="flex-1 rounded border border-border bg-mist px-2 py-0.5 text-right text-xs text-ink outline-none focus:border-brand/40"
-              />
+              {perms.canApplyDiscount ? (
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={discount}
+                  onChange={e => setDiscount(e.target.value)}
+                  placeholder="0"
+                  className="flex-1 rounded border border-border bg-mist px-2 py-0.5 text-right text-xs text-ink outline-none focus:border-brand/40"
+                />
+              ) : (
+                <span
+                  className="flex-1 rounded border border-border/50 bg-mist/60 px-2 py-0.5 text-right text-xs text-ink/30 cursor-not-allowed"
+                  title="You do not have permission to apply discounts"
+                >
+                  Not permitted
+                </span>
+              )}
             </div>
 
             <div className="flex items-center justify-between border-t border-border pt-2">
