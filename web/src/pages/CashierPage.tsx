@@ -282,7 +282,7 @@ export function CashierPage() {
     for (const entry of queue) {
       try {
         const payload = entry.payload as Parameters<typeof createOrder>[0];
-        const created = await createOrder(payload);
+        const created = await createOrder({ ...payload, offlineId: entry.id });
         if (payload.orderSource !== 'dine-in') {
           await completeOrder(created._id);
         }
