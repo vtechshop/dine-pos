@@ -260,16 +260,21 @@ export function CashierPage() {
   // ── Offline queue sync ─────────────────────────────────────────────────────
   const [queueLen, setQueueLen] = useState(0);
   const [syncing, setSyncing]   = useState(false);
+  // Ref guards concurrent runs without adding `syncing` to useCallback deps,
+  // which would cause a new syncQueue reference on every setSyncing call and
+  // trigger an infinite effect→syncQueue→setState→effect loop.
+  const syncingRef = useRef(false);
 
   useEffect(() => {
     setQueueLen(hotelId ? getQueue(hotelId).length : 0);
   }, [hotelId, activeTab]);
 
   const syncQueue = useCallback(async () => {
-    if (!hotelId || syncing) return;
+    if (!hotelId || syncingRef.current) return;
     const { removeFromQueue } = await import('../utils/offlineQueue');
     const queue = getQueue(hotelId);
     if (queue.length === 0) { setQueueLen(0); return; }
+    syncingRef.current = true;
     setSyncing(true);
     let remaining = queue.length;
     for (const entry of queue) {
@@ -284,8 +289,9 @@ export function CashierPage() {
       } catch { /* leave in queue, will retry next sync */ }
     }
     setQueueLen(remaining);
+    syncingRef.current = false;
     setSyncing(false);
-  }, [hotelId, syncing]);
+  }, [hotelId]);
 
   // Auto-sync when socket reconnects
   useEffect(() => {

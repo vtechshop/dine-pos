@@ -2,6 +2,7 @@ import {
   createContext, useContext, useState, useEffect, useCallback,
   type ReactNode,
 } from 'react';
+import { useAuth } from './AuthContext';
 import { useCashier } from './CashierContext';
 import { fetchPrinterDevices } from '../api/dashboard';
 import { fetchCashierOrders, fetchKitchenOrders } from '../api/orders';
@@ -40,6 +41,7 @@ const NotifCtx = createContext<NotifCtxValue | null>(null);
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth();
   const { shift, drawerBalance } = useCashier();
   const [notifMap, setNotifMap] = useState<Map<string, CashierNotif>>(new Map());
 
@@ -203,19 +205,24 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, [drawerBalance, upsert, remove]);
 
-  // ── Polling intervals ─────────────────────────────────────────────────────
+  // ── Polling intervals — only when authenticated ───────────────────────────
+  // Guard prevents polling on /login: unauthenticated API calls return 401,
+  // which triggers window.location.replace('/login'), causing an infinite
+  // hard-reload loop before the rate limiter kicks in with 429s.
   useEffect(() => {
+    if (!isAuthenticated) return;
     void pollPrinters();
     const t = setInterval(() => void pollPrinters(), 60_000);
     return () => clearInterval(t);
-  }, [pollPrinters]);
+  }, [pollPrinters, isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     void pollKitchen();
     void pollPayments();
     const t = setInterval(() => { void pollKitchen(); void pollPayments(); }, 30_000);
     return () => clearInterval(t);
-  }, [pollKitchen, pollPayments]);
+  }, [pollKitchen, pollPayments, isAuthenticated]);
 
   // ── Context value ─────────────────────────────────────────────────────────
   const notifications = Array.from(notifMap.values())
