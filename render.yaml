@@ -77,6 +77,22 @@ services:
       - key: AGGREGATOR_SECRET
         sync: false         # Shared secret verified in X-Aggregator-Secret header
 
+      # ── Lead Email Alerts (REQUIRED for lead notification emails) ───────────
+      - key: SMTP_HOST
+        sync: false         # SMTP server hostname (e.g. smtp.sendgrid.net)
+
+      - key: SMTP_PORT
+        sync: false         # 465 (TLS) or 587 (STARTTLS) — match your provider
+
+      - key: SMTP_USER
+        sync: false         # SMTP username (SendGrid: "apikey"; Gmail: your address)
+
+      - key: SMTP_PASS
+        sync: false         # SMTP password or API key — treat as a secret
+
+      - key: LEAD_ALERT_EMAIL
+        sync: false         # Recipient email for new-lead alert emails
+
       # ── Error Tracking (optional — strongly recommended for production) ────
       - key: SENTRY_DSN
         sync: false         # Sentry → Project → Settings → Client Keys → DSN
@@ -145,6 +161,21 @@ services:
         sync: false
 
       - key: CLOUDINARY_API_SECRET
+        sync: false
+
+      - key: SMTP_HOST
+        sync: false
+
+      - key: SMTP_PORT
+        sync: false
+
+      - key: SMTP_USER
+        sync: false
+
+      - key: SMTP_PASS
+        sync: false
+
+      - key: LEAD_ALERT_EMAIL
         sync: false
 
       - key: SENTRY_DSN
