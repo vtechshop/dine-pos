@@ -27,7 +27,7 @@ const upload = multer({
 });
 
 // POST /api/uploads/image — returns { url: 'https://res.cloudinary.com/...' }
-router.post('/image', authMiddleware, upload.single('image'), (req: AuthRequest, res: Response) => {
+router.post('/image', upload.single('image'), (req: AuthRequest, res: Response) => {
   if (!req.file) return res.status(400).json({ message: 'No image file provided' });
 
   const stream = cloudinary.uploader.upload_stream(
