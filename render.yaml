@@ -46,6 +46,10 @@ services:
       - key: SUPER_ADMIN_PASS
         sync: false
 
+      # ── Socket.IO CSP (REQUIRED) ──────────────────────────────────────────
+      - key: SOCKET_ORIGIN
+        value: wss://api.dinepos.com
+
       # ── CORS (REQUIRED) ───────────────────────────────────────────────────
       - key: ALLOWED_ORIGINS
         sync: false         # Comma-separated list of ALL frontend origins.
