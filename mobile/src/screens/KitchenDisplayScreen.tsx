@@ -123,15 +123,12 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         if (mountedRef.current) setSocketLost(true);
       });
 
-      // New order arrives — dedup, vibrate, play sound, reload
-      socket.on('new_order', (data: { orderId?: string; _id?: string }) => {
-        console.log(`[SOCKET][Kitchen] new_order received | data=${JSON.stringify(data)}`);
+      const handleNewOrder = (data: { orderId?: string; _id?: string }) => {
         if (!mountedRef.current) return;
         const id = data.orderId || data._id || '';
-        if (id && seenOrderIds.current.has(id)) return; // dedup
+        if (id && seenOrderIds.current.has(id)) return;
         if (id) {
           if (seenOrderIds.current.size >= 500) {
-            // Evict the oldest entry to prevent unbounded growth
             seenOrderIds.current.delete(seenOrderIds.current.values().next().value!);
           }
           seenOrderIds.current.add(id);
@@ -141,6 +138,18 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         notifyNewKitchenOrder();
         setNewOrderCount(c => c + 1);
         loadOrders();
+      };
+
+      // New order arrives — dedup, vibrate, play sound, reload
+      socket.on('new_order', (data: { orderId?: string; _id?: string }) => {
+        console.log(`[SOCKET][Kitchen] new_order received | data=${JSON.stringify(data)}`);
+        handleNewOrder(data);
+      });
+
+      // Delivery order from Swiggy/Zomato
+      socket.on('new_delivery_order', (data: { orderId?: string; _id?: string }) => {
+        console.log(`[SOCKET][Kitchen] new_delivery_order received | data=${JSON.stringify(data)}`);
+        handleNewOrder(data);
       });
 
       // Status updated by admin or another KDS instance
@@ -249,6 +258,18 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
             {order.isParcel ? 'TAKEAWAY' : 'DINE IN'}
           </Text>
         </View>
+
+        {/* Platform badge for delivery orders */}
+        {(order.orderSource === 'swiggy' || order.orderSource === 'zomato') && (
+          <View style={[styles.platformBadge, order.orderSource === 'swiggy' ? styles.platformBadgeSwiggy : styles.platformBadgeZomato]}>
+            <Text style={[styles.platformBadgeText, { color: order.orderSource === 'swiggy' ? '#FC8019' : '#E23744' }]}>
+              {order.orderSource === 'swiggy' ? '🛵 SWIGGY' : '🍕 ZOMATO'}
+            </Text>
+          </View>
+        )}
+        {!!order.deliveryAddress && (
+          <Text style={styles.deliveryAddressText} numberOfLines={2}>{order.deliveryAddress}</Text>
+        )}
 
         {/* Items */}
         <View style={styles.itemsWrap}>
@@ -504,6 +525,19 @@ const styles = StyleSheet.create({
   orderTypePillDineIn:    { backgroundColor: Colors.primaryBg, borderColor: Colors.primary + '40' },
   orderTypePillTakeaway:  { backgroundColor: Colors.warningBg, borderColor: Colors.warning + '40' },
   orderTypePillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+
+  platformBadge: {
+    flexDirection: 'row' as const, alignItems: 'center' as const,
+    alignSelf: 'flex-start' as const, paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 6, marginBottom: Spacing.sm, borderWidth: 1,
+  },
+  platformBadgeSwiggy: { backgroundColor: 'rgba(252,128,25,0.12)', borderColor: 'rgba(252,128,25,0.40)' },
+  platformBadgeZomato: { backgroundColor: 'rgba(226,55,68,0.12)', borderColor: 'rgba(226,55,68,0.40)' },
+  platformBadgeText: { fontSize: 10, fontWeight: '800' as const, letterSpacing: 0.5 },
+  deliveryAddressText: {
+    fontSize: FontSize.xs, color: Colors.textSecondary,
+    marginBottom: Spacing.sm, fontStyle: 'italic' as const,
+  },
 
   itemsWrap: { marginBottom: Spacing.sm },
   itemRow: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.sm, paddingVertical: 3 },

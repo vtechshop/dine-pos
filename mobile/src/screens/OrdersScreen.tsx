@@ -170,7 +170,7 @@ const OrdersScreen: React.FC = () => {
         if (!order?._id) return;
 
         // Notify
-        void notifyNewOrder(order as any);
+        void notifyNewOrder(order.tableNumber || '', order.grandTotal, order.items?.length ?? 0);
 
         // Show new order banner
         setNewOrderCount(c => c + 1);

@@ -31,6 +31,7 @@ type Props = CompositeScreenProps<
 
 interface Stats { todayOrders: number; todaySales: number; totalProducts: number; totalCategories: number; parcelOrders: number }
 interface NewOrderAlert { _id?: string; orderNumber: string; tableNumber: string; customerName: string; grandTotal: number; itemCount: number }
+interface DeliveryToday { swiggy: number; swiggyRev: number; zomato: number; zomatoRev: number }
 
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { settings, refreshSettings } = useSettings();
@@ -46,6 +47,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [lowStockCount, setLowStockCount] = useState(0);
   const [lowIngredientCount, setLowIngredientCount] = useState(0);
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null);
+  const [deliveryToday, setDeliveryToday] = useState<DeliveryToday>({ swiggy: 0, swiggyRev: 0, zomato: 0, zomatoRev: 0 });
   const [notifUnread, setNotifUnread] = useState(0);
   const [printError, setPrintError] = useState(false);
   const [orderStatusAlert, setOrderStatusAlert] = useState<{ label: string; isReady: boolean; isServed: boolean; isCompleted: boolean } | null>(null);
@@ -69,6 +71,14 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         getNotifications().catch(() => ({ notifications: [], unreadCount: 0 })),
       ]);
       setStats({ todayOrders: report.totalOrders, todaySales: report.totalSales, totalProducts: products.length, totalCategories: categories.length, parcelOrders: report.parcelOrders ?? 0 });
+      if (report.sourceBreakdown) {
+        setDeliveryToday({
+          swiggy:    report.sourceBreakdown.swiggy?.orders  ?? 0,
+          swiggyRev: report.sourceBreakdown.swiggy?.revenue ?? 0,
+          zomato:    report.sourceBreakdown.zomato?.orders  ?? 0,
+          zomatoRev: report.sourceBreakdown.zomato?.revenue ?? 0,
+        });
+      }
       setLowStockCount(lowStock.products.length);
       setLowIngredientCount(lowIngredients.ingredients.length);
       setNotifUnread(notifs.unreadCount);
@@ -170,6 +180,13 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         if (!mounted) return;
         const label = data.tableNumber ? `Table ${data.tableNumber}` : (data.orderNumber || 'Order');
         setOrderStatusAlert({ label, isReady: false, isServed: true, isCompleted: false });
+        fetchStats();
+      });
+      socket.on('new_delivery_order', (data: NewOrderAlert) => {
+        if (!mounted) return;
+        incAdminBadge();
+        setNewOrderAlert(data);
+        setOrderBadge(p => p + 1);
         fetchStats();
       });
       socket.on('new_order', async (data: NewOrderAlert) => {
@@ -465,20 +482,47 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         )}
 
+        {/* ── Delivery Stats Row (Swiggy + Zomato) ── */}
+        {(deliveryToday.swiggy > 0 || deliveryToday.zomato > 0) && (
+          <View style={styles.deliveryRow}>
+            <TouchableOpacity
+              style={[styles.deliveryCard, { borderColor: '#FC801940' }]}
+              onPress={() => navigation.navigate('OnlineOrders' as any)}
+              activeOpacity={0.8}
+            >
+              <Text style={{ fontSize: 18 }}>🛵</Text>
+              <Text style={[styles.deliveryCount, { color: '#FC8019' }]}>{deliveryToday.swiggy}</Text>
+              <Text style={styles.deliveryLabel}>Swiggy</Text>
+              {deliveryToday.swiggyRev > 0 && <Text style={[styles.deliveryRev, { color: '#FC8019' }]}>{fmt(deliveryToday.swiggyRev)}</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.deliveryCard, { borderColor: '#E2374440' }]}
+              onPress={() => navigation.navigate('OnlineOrders' as any)}
+              activeOpacity={0.8}
+            >
+              <Text style={{ fontSize: 18 }}>🍕</Text>
+              <Text style={[styles.deliveryCount, { color: '#E23744' }]}>{deliveryToday.zomato}</Text>
+              <Text style={styles.deliveryLabel}>Zomato</Text>
+              {deliveryToday.zomatoRev > 0 && <Text style={[styles.deliveryRev, { color: '#E23744' }]}>{fmt(deliveryToday.zomatoRev)}</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* ── Quick Actions ── */}
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
           {[
-            { label: 'New Bill',     icon: 'receipt' as const,          color: Colors.primary, bg: Colors.primaryBg, nav: 'Billing' },
-            { label: 'Orders',       icon: 'receipt-long' as const,     color: Colors.success, bg: Colors.successBg, nav: 'Orders' },
-            { label: 'Products',     icon: 'inventory' as const,         color: Colors.warning, bg: Colors.warningBg, nav: 'Products' },
-            { label: 'Reports',      icon: 'bar-chart' as const,         color: Colors.info,    bg: Colors.infoBg,    nav: 'Reports' },
-            { label: 'Floor Map',    icon: 'table-restaurant' as const,  color: Colors.accent,  bg: Colors.accentBg,  nav: 'TableLayout' },
-            { label: 'Bookings',     icon: 'event-available' as const,   color: '#6A1B9A',      bg: 'rgba(106,27,154,0.1)', nav: 'Reservations' },
-            { label: 'Customers',    icon: 'people' as const,            color: '#25D366',      bg: 'rgba(37,211,102,0.1)', nav: 'Customers' },
-            { label: 'Ingredients',  icon: 'kitchen' as const,           color: '#8D6E63',      bg: 'rgba(141,110,99,0.1)', nav: 'Ingredients' },
-            { label: 'Expenses',     icon: 'account-balance-wallet' as const, color: Colors.danger, bg: Colors.dangerBg, nav: 'Expenses' },
-            { label: 'Settings',     icon: 'settings' as const,          color: Colors.textSecondary, bg: Colors.elevated, nav: 'Settings' },
+            { label: 'New Bill',       icon: 'receipt' as const,            color: Colors.primary,       bg: Colors.primaryBg,             nav: 'Billing' },
+            { label: 'Orders',         icon: 'receipt-long' as const,       color: Colors.success,       bg: Colors.successBg,             nav: 'Orders' },
+            { label: 'Online Orders',  icon: 'delivery-dining' as const,    color: '#FC8019',            bg: 'rgba(252,128,25,0.10)',       nav: 'OnlineOrders' },
+            { label: 'Products',       icon: 'inventory' as const,          color: Colors.warning,       bg: Colors.warningBg,             nav: 'Products' },
+            { label: 'Reports',        icon: 'bar-chart' as const,          color: Colors.info,          bg: Colors.infoBg,                nav: 'Reports' },
+            { label: 'Floor Map',      icon: 'table-restaurant' as const,   color: Colors.accent,        bg: Colors.accentBg,              nav: 'TableLayout' },
+            { label: 'Bookings',       icon: 'event-available' as const,    color: '#6A1B9A',            bg: 'rgba(106,27,154,0.1)',        nav: 'Reservations' },
+            { label: 'Customers',      icon: 'people' as const,             color: '#25D366',            bg: 'rgba(37,211,102,0.1)',        nav: 'Customers' },
+            { label: 'Ingredients',    icon: 'kitchen' as const,            color: '#8D6E63',            bg: 'rgba(141,110,99,0.1)',        nav: 'Ingredients' },
+            { label: 'Expenses',       icon: 'account-balance-wallet' as const, color: Colors.danger,   bg: Colors.dangerBg,              nav: 'Expenses' },
+            { label: 'Settings',       icon: 'settings' as const,           color: Colors.textSecondary, bg: Colors.elevated,              nav: 'Settings' },
           ].map((a, i) => (
             <TouchableOpacity
               key={i}
@@ -604,6 +648,17 @@ const styles = StyleSheet.create({
   },
   orderTypeCount: { fontSize: FontSize.xl, fontWeight: '800' },
   orderTypeLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  // Delivery stats row
+  deliveryRow: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.xl, marginTop: -Spacing.sm },
+  deliveryCard: {
+    flex: 1, alignItems: 'center', gap: 3,
+    backgroundColor: Colors.card, borderRadius: BorderRadius.lg,
+    padding: Spacing.md, borderWidth: 1.5, ...Shadows.sm,
+  },
+  deliveryCount: { fontSize: FontSize.xl, fontWeight: '900' },
+  deliveryLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
+  deliveryRev: { fontSize: FontSize.xs, fontWeight: '700' },
 
   // Actions
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginBottom: Spacing.xl },

@@ -1218,6 +1218,8 @@ export interface KitchenOrder {
   notes: string;
   status: 'pending' | 'preparing';
   isParcel: boolean;
+  orderSource?: string;
+  deliveryAddress?: string;
   createdAt: string;
   items: KitchenOrderItem[];
 }
@@ -1544,6 +1546,52 @@ export const completeOrderPayment = async (orderId: string, paymentMethod: 'cash
     throw new Error((data as any).message || 'Failed to complete order');
   }
 };
+
+// ==================== AGGREGATOR / ONLINE DELIVERY ====================
+
+export interface OnlineDeliveryOrder {
+  _id: string;
+  orderNumber: string;
+  orderSource: 'swiggy' | 'zomato';
+  platformOrderId: string;
+  status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
+  customerName: string;
+  deliveryAddress: string;
+  deliveryFee: number;
+  platformCommission: number;
+  grandTotal: number;
+  subtotal: number;
+  taxTotal: number;
+  items: { productName: string; quantity: number; price: number }[];
+  notes: string;
+  acceptedAt: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string;
+  deliveryPartnerName: string;
+  createdAt: string;
+}
+
+export const getOnlineOrders = (
+  params?: { platform?: string; status?: string; date?: string; limit?: string; page?: string }
+): Promise<{ orders: OnlineDeliveryOrder[]; total: number; page: number; pages: number }> => {
+  const query = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
+  return fetchAPI(`/aggregator/orders${query}`);
+};
+
+export const acceptOnlineOrder = (orderId: string, prepMinutes?: number): Promise<{ ok: boolean }> =>
+  fetchAPI(`/aggregator/orders/${orderId}/accept`, {
+    method: 'POST',
+    body: JSON.stringify({ prepMinutes: prepMinutes ?? 20 }),
+  });
+
+export const rejectOnlineOrder = (orderId: string, reason: string): Promise<{ ok: boolean }> =>
+  fetchAPI(`/aggregator/orders/${orderId}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+
+export const dispatchOnlineOrder = (orderId: string): Promise<{ ok: boolean }> =>
+  fetchAPI(`/aggregator/orders/${orderId}/dispatch`, { method: 'POST' });
 
 // ── Customer menu cache ────────────────────────────────────────────────────────
 const MENU_CACHE_TTL = 60 * 60 * 1000; // 1 hour

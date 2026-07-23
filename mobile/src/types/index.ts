@@ -82,6 +82,13 @@ export interface Order {
   customerPhone: string;
   tableNumber: string;
   notes: string;
+  // Delivery / aggregator fields (present only for Swiggy/Zomato orders)
+  platformOrderId?: string;
+  deliveryAddress?: string;
+  deliveryFee?: number;
+  platformCommission?: number;
+  acceptedAt?: string | null;
+  deliveryPartnerName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -443,6 +450,7 @@ export type RootStackParamList = {
   Chat: undefined;
   KitchenLogin: undefined;
   KitchenDisplay: undefined;
+  OnlineOrders: undefined;
   WaiterLogin: undefined;
   WaiterDisplay: undefined;
   WaiterManagement: undefined;
