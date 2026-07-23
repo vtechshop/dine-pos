@@ -85,6 +85,17 @@ if (!process.env.MONGODB_URI) {
   console.error('❌ FATAL: MONGODB_URI is not set. Add it to your .env file.');
   process.exit(1);
 }
+if (
+  process.env.NODE_ENV !== 'production' &&
+  process.env.MONGODB_URI.includes('.mongodb.net')
+) {
+  console.error(
+    '❌ FATAL: MONGODB_URI points to a production Atlas cluster (*.mongodb.net) ' +
+    'but NODE_ENV is not "production". Set NODE_ENV=production or switch MONGODB_URI ' +
+    'to a local/dev cluster to prevent dev traffic from hitting production data.',
+  );
+  process.exit(1);
+}
 
 const SUPER_ADMIN_JWT_SECRET = process.env.SUPER_ADMIN_JWT_SECRET;
 const SA_JWT_KNOWN_BAD = [
