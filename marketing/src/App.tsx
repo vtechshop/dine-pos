@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 import { HomePage }    from './pages/HomePage';
@@ -10,9 +11,16 @@ import { BookDemoPage } from './pages/BookDemoPage';
 import { FAQPage }      from './pages/FAQPage';
 import { BlogPage }     from './pages/BlogPage';
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
+
 export function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <div className="flex min-h-screen flex-col">
         <Header />
         <main className="flex-1">
