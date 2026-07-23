@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Users, Clock, LayoutGrid, RefreshCw, AlertCircle,
-  UtensilsCrossed, CheckCircle, CreditCard, Plus,
-  Search, X, ChevronRight,
+  UtensilsCrossed, CreditCard, Plus,
+  Search, X, ChevronRight, ArrowRightLeft, GitMerge, Scissors, UserCog,
+  ShoppingBag, Flame,
 } from 'lucide-react';
 import { fetchTables, fetchOpenSessions } from '../../api/tables';
+import { fetchCashierOrders } from '../../api/orders';
 import { useCashier } from '../../context/CashierContext';
 import { useSettings } from '../../context/SettingsContext';
 import { Spinner } from '../ui/Spinner';
 import type { Table, SessionSummary } from '../../types';
+import type { CashierOrderItem } from '../../api/orders';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -23,10 +26,12 @@ function fmtElapsed(openedAt: string, nowMs: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-// ── Table grid item with merged session ────────────────────────────────────────
+// ── Table grid item with merged session + order info ──────────────────────────
 
 interface TableWithSession extends Table {
   session?: SessionSummary;
+  pendingOrderCount: number;
+  hasPendingBill: boolean;
 }
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -117,12 +122,25 @@ function TableCard({
         <div className="mt-2 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-ink/50">{table.session.activeGuestCount ?? table.session.guestCount} guests</span>
-            <span className="text-[10px] font-medium text-ink">{fmtINR(sym, table.session.runningTotal)}</span>
+            <span className="text-[10px] font-semibold text-ink">{fmtINR(sym, table.session.runningTotal)}</span>
           </div>
-          <div className="flex items-center gap-1 text-[10px] text-ink/45">
-            <Clock size={9} />
-            {table.session.openedAt ? fmtElapsed(table.session.openedAt, nowMs) : '—'}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1 text-[10px] text-ink/45">
+              <Clock size={9} />
+              {table.session.openedAt ? fmtElapsed(table.session.openedAt, nowMs) : '—'}
+            </div>
+            {table.pendingOrderCount > 0 && (
+              <div className="flex items-center gap-0.5 text-[9px] font-bold text-amber-600">
+                <Flame size={9} />
+                {table.pendingOrderCount}
+              </div>
+            )}
           </div>
+          {table.hasPendingBill && (
+            <span className="inline-flex items-center gap-0.5 rounded bg-emerald-100 px-1 py-0.5 text-[9px] font-bold text-emerald-700">
+              <CreditCard size={8} /> Bill ready
+            </span>
+          )}
         </div>
       ) : (
         <div className="mt-2">
@@ -161,7 +179,7 @@ function TableDetailPanel({
           <UtensilsCrossed size={16} className="text-brand" />
           <div>
             <p className="text-sm font-bold text-ink">{table.name || `Table ${table.number}`}</p>
-            <p className="text-[10px] text-ink/50">{table.capacity} seats</p>
+            <p className="text-[10px] text-ink/50">{table.capacity} seats · {isOccupied ? 'Occupied' : 'Available'}</p>
           </div>
         </div>
         <button type="button" onClick={onClose} className="rounded-lg border border-border p-1 text-ink/40 hover:bg-mist">
@@ -173,15 +191,20 @@ function TableDetailPanel({
       <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${cfg.border} ${cfg.bg} ${cfg.text}`}>
         <div className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
         {cfg.label}
+        {table.pendingOrderCount > 0 && (
+          <span className="ml-1 flex items-center gap-0.5 font-bold text-amber-600">
+            <Flame size={9} />{table.pendingOrderCount} order{table.pendingOrderCount !== 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
       {/* Session info */}
       {table.session ? (
         <div className="rounded-lg border border-border p-3 space-y-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">Current Session</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">Session</p>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <p className="text-[10px] text-ink/50">Running Total</p>
+              <p className="text-[10px] text-ink/50">Bill Total</p>
               <p className="text-base font-bold text-brand">{fmtINR(sym, table.session.runningTotal)}</p>
             </div>
             <div>
@@ -206,7 +229,7 @@ function TableDetailPanel({
         </div>
       ) : null}
 
-      {/* Actions */}
+      {/* Primary actions */}
       <div className="space-y-2">
         {!isOccupied ? (
           <button
@@ -215,7 +238,7 @@ function TableDetailPanel({
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand/90"
           >
             <Plus size={16} />
-            Open Table & New Order
+            Open Table &amp; New Order
           </button>
         ) : (
           <>
@@ -235,12 +258,64 @@ function TableDetailPanel({
               onClick={onNewOrder}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-semibold text-ink hover:bg-mist"
             >
-              <Plus size={14} />
+              <ShoppingBag size={14} />
               Add More Items
             </button>
           </>
         )}
       </div>
+
+      {/* Quick menu grid — session-level actions */}
+      {isOccupied && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">More Actions</p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {/* Transfer — needs guest ID: go to Billing panel */}
+            <button
+              type="button"
+              disabled
+              title="Open Billing panel → select guest → Transfer"
+              className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 py-2 text-[11px] font-medium text-ink/35 disabled:cursor-not-allowed"
+            >
+              <ArrowRightLeft size={11} />
+              Transfer Guest
+            </button>
+            {/* Merge — needs guest IDs */}
+            <button
+              type="button"
+              disabled
+              title="Open Billing panel → select guests → Merge"
+              className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 py-2 text-[11px] font-medium text-ink/35 disabled:cursor-not-allowed"
+            >
+              <GitMerge size={11} />
+              Merge Guests
+            </button>
+            {/* Split — needs guest ID + order IDs */}
+            <button
+              type="button"
+              disabled
+              title="Open Billing panel → select guest → Split"
+              className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 py-2 text-[11px] font-medium text-ink/35 disabled:cursor-not-allowed"
+            >
+              <Scissors size={11} />
+              Split Bill
+            </button>
+            {/* Change Waiter — no API */}
+            <button
+              type="button"
+              disabled
+              title="Requires: PATCH /sessions/:id/assign-waiter"
+              className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 py-2 text-[11px] font-medium text-ink/35 disabled:cursor-not-allowed"
+            >
+              <UserCog size={11} />
+              Change Waiter
+            </button>
+          </div>
+          <p className="text-[9px] text-ink/30 leading-tight">
+            Transfer / Merge / Split: use Billing panel. Change Waiter: requires PATCH /sessions/:id/assign-waiter
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -263,22 +338,35 @@ export function CashierTablePanel() {
   const load = useCallback(async () => {
     let cancelled = false;
     setLoading(true);
-    const [tblRes, sessRes] = await Promise.allSettled([
+    const [tblRes, sessRes, ordersRes] = await Promise.allSettled([
       fetchTables(),
       fetchOpenSessions(),
+      fetchCashierOrders(),
     ]);
     if (!cancelled) {
-      if (tblRes.status === 'fulfilled' && sessRes.status === 'fulfilled') {
-        const sessions = sessRes.value;
-        const merged: TableWithSession[] = tblRes.value.map(t => ({
-          ...t,
-          session: sessions.find(s => s._id === t.currentSessionId) ??
-                   sessions.find(s => s.tableNumber === String(t.number)),
-        }));
+      if (tblRes.status === 'fulfilled') {
+        const sessions: SessionSummary[] = sessRes.status === 'fulfilled' ? sessRes.value : [];
+        const orders: CashierOrderItem[] = ordersRes.status === 'fulfilled' ? ordersRes.value : [];
+
+        // Build per-table order stats
+        const ordersByTable = orders.reduce<Record<string, CashierOrderItem[]>>((acc, o) => {
+          if (o.tableNumber) {
+            acc[o.tableNumber] = [...(acc[o.tableNumber] ?? []), o];
+          }
+          return acc;
+        }, {});
+
+        const merged: TableWithSession[] = tblRes.value.map(t => {
+          const tableOrders = ordersByTable[String(t.number)] ?? [];
+          return {
+            ...t,
+            session: sessions.find(s => s._id === t.currentSessionId) ??
+                     sessions.find(s => s.tableNumber === String(t.number)),
+            pendingOrderCount: tableOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length,
+            hasPendingBill: tableOrders.some(o => o.status === 'served' || o.status === 'ready'),
+          };
+        });
         setTables(merged);
-        setError(null);
-      } else if (tblRes.status === 'fulfilled') {
-        setTables(tblRes.value);
         setError(null);
       } else {
         setError('Failed to load tables');
