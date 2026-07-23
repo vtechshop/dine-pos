@@ -50,6 +50,7 @@ jobs:
           NODE_ENV: test
         run: |
           npm ci
+          npm run build
           npm start &
           timeout 30 bash -c 'until curl -s http://localhost:5000/health 2>/dev/null; do sleep 2; done'
 
@@ -58,10 +59,10 @@ jobs:
         run: |
           npm ci
           npm run build
-          npm start &
+          npx vite preview --port 3000 &
           timeout 30 bash -c 'until curl -s http://localhost:3000 2>/dev/null; do sleep 2; done'
         env:
-          REACT_APP_API_URL: http://localhost:5000
+          VITE_API_URL: http://localhost:5000
 
       - name: Install Playwright
         working-directory: automation

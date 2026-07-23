@@ -61,6 +61,10 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+
       - name: Start backend server
         working-directory: backend
         env:
