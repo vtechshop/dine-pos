@@ -31,6 +31,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
 import { CashierPage } from './pages/CashierPage';
+import { CustomerDisplayPage } from './pages/CustomerDisplayPage';
 // Heavy pages — code-split to reduce initial JS parse time
 const OrdersPage      = lazy(() => import('./pages/OrdersPage').then(m => ({ default: m.OrdersPage })));
 const ProductsPage    = lazy(() => import('./pages/ProductsPage').then(m => ({ default: m.ProductsPage })));
@@ -80,6 +81,7 @@ export function App() {
                   <Route path="/register"          element={<RegisterPage />} />
                   <Route path="/register/success"  element={<RegisterSuccessPage />} />
                   <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
+                  <Route path="/customer-display"  element={<CustomerDisplayPage />} />
 
                   {/* Super Admin protected routes */}
                   <Route element={<SuperAdminRoute />}>

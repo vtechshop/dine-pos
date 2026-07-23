@@ -1,13 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, CreditCard, PauseCircle, BarChart2,
   Wallet, Search, Users, Printer, Bell, LogOut,
   TrendingUp, ShoppingBag, AlertCircle, RefreshCw,
-  Home, LayoutGrid, Flame, UserCircle, X,
+  Home, LayoutGrid, Flame, UserCircle, X, Monitor,
 } from 'lucide-react';
 import { useShortcut } from '../hooks/useShortcut';
-import { useCashier, type CashierTab } from '../context/CashierContext';
+import { useCashier, calcCartTotals, type CashierTab } from '../context/CashierContext';
+import { DISPLAY_KEY, type CustomerDisplayData } from './CustomerDisplayPage';
 import { useNotifications } from '../context/NotificationContext';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
@@ -211,11 +212,46 @@ function NotificationBell() {
 
 export function CashierPage() {
   const navigate = useNavigate();
-  const { activeTab, setActiveTab, heldBills, shift, drawerBalance } = useCashier();
+  const { activeTab, setActiveTab, heldBills, shift, drawerBalance, cart } = useCashier();
   const { settings } = useSettings();
   const { logout, hotelId } = useAuth();
   const { connected: socketConnected } = useSocket();
   const sym = settings?.currencySymbol ?? '₹';
+
+  // ── Customer display window ────────────────────────────────────────────────
+  const displayWindowRef = useRef<Window | null>(null);
+
+  function openCustomerDisplay() {
+    if (displayWindowRef.current && !displayWindowRef.current.closed) {
+      displayWindowRef.current.focus();
+      return;
+    }
+    displayWindowRef.current = window.open(
+      '/customer-display',
+      'pos_customer_display',
+      'width=1280,height=720,menubar=no,toolbar=no,status=no,scrollbars=yes',
+    );
+  }
+
+  // Publish cart state to localStorage whenever cart changes
+  useEffect(() => {
+    const { subtotal, taxTotal, grandTotal } = calcCartTotals(cart, 0);
+    const payload: CustomerDisplayData = {
+      hotelName: settings?.hotelName ?? '',
+      sym: settings?.currencySymbol ?? '₹',
+      items: cart.map(i => ({
+        name: i.productName,
+        qty: i.quantity,
+        price: i.price,
+        ...(i.notes ? { notes: i.notes } : {}),
+      })),
+      subtotal,
+      taxTotal,
+      grandTotal,
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(DISPLAY_KEY, JSON.stringify(payload));
+  }, [cart, settings]);
 
   const identity = getCashierIdentity();
 
@@ -364,6 +400,14 @@ export function CashierPage() {
           {/* Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
             <NotificationBell />
+            <button
+              type="button"
+              onClick={openCustomerDisplay}
+              className="rounded-lg border border-border p-1.5 text-ink/40 hover:bg-mist hover:text-ink/70"
+              title="Customer Display (second screen)"
+            >
+              <Monitor size={13} />
+            </button>
             <button
               type="button"
               onClick={() => void loadHeader()}
