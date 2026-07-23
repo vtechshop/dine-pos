@@ -11,6 +11,10 @@ import { useCashier, type CashierTab } from '../context/CashierContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
+import { OfflineBanner } from '../components/cashier/OfflineBanner';
+import { getQueue } from '../utils/offlineQueue';
+import { createOrder, completeOrder } from '../api/orders';
 import { fetchDailyReport, fetchPrinterDevices } from '../api/dashboard';
 import { NewOrderPanel }          from '../components/cashier/NewOrderPanel';
 import { PendingBillsPanel }      from '../components/cashier/PendingBillsPanel';
@@ -209,10 +213,49 @@ export function CashierPage() {
   const navigate = useNavigate();
   const { activeTab, setActiveTab, heldBills, shift, drawerBalance } = useCashier();
   const { settings } = useSettings();
-  const { logout } = useAuth();
+  const { logout, hotelId } = useAuth();
+  const { connected: socketConnected } = useSocket();
   const sym = settings?.currencySymbol ?? '₹';
 
   const identity = getCashierIdentity();
+
+  // ── Offline queue sync ─────────────────────────────────────────────────────
+  const [queueLen, setQueueLen] = useState(0);
+  const [syncing, setSyncing]   = useState(false);
+
+  useEffect(() => {
+    setQueueLen(hotelId ? getQueue(hotelId).length : 0);
+  }, [hotelId, activeTab]);
+
+  const syncQueue = useCallback(async () => {
+    if (!hotelId || syncing) return;
+    const { removeFromQueue } = await import('../utils/offlineQueue');
+    const queue = getQueue(hotelId);
+    if (queue.length === 0) { setQueueLen(0); return; }
+    setSyncing(true);
+    let remaining = queue.length;
+    for (const entry of queue) {
+      try {
+        const payload = entry.payload as Parameters<typeof createOrder>[0];
+        const created = await createOrder(payload);
+        if (payload.orderSource !== 'dine-in') {
+          await completeOrder(created._id);
+        }
+        removeFromQueue(hotelId, entry.id);
+        remaining--;
+      } catch { /* leave in queue, will retry next sync */ }
+    }
+    setQueueLen(remaining);
+    setSyncing(false);
+  }, [hotelId, syncing]);
+
+  // Auto-sync when socket reconnects
+  useEffect(() => {
+    if (socketConnected && hotelId) {
+      const q = getQueue(hotelId);
+      if (q.length > 0) void syncQueue();
+    }
+  }, [socketConnected, hotelId, syncQueue]);
 
   // Header data
   const [report, setReport]     = useState<DailyReport | null>(null);
@@ -340,6 +383,16 @@ export function CashierPage() {
           </div>
         </div>
       </header>
+
+      {/* ── Offline banner ─────────────────────────────────────────────────── */}
+      <div className="shrink-0 px-4 pt-2">
+        <OfflineBanner
+          socketConnected={socketConnected}
+          queueLength={queueLen}
+          onRetrySync={() => void syncQueue()}
+          syncing={syncing}
+        />
+      </div>
 
       {/* ── Tab bar ────────────────────────────────────────────────────────── */}
       <div className="shrink-0 overflow-x-auto border-b border-border bg-canvas px-2">
