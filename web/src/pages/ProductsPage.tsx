@@ -128,9 +128,6 @@ export function ProductsPage() {
 
 // ── Products panel ────────────────────────────────────────────────────────────
 
-interface QuickAddState { name: string; price: string; category: string; isVeg: boolean }
-const QUICK_BLANK: QuickAddState = { name: '', price: '', category: '', isVeg: true };
-
 function ProductsPanel({ categories }: { categories: Category[] }) {
   const [products, setProducts]       = useState<Product[]>([]);
   const [loading, setLoading]         = useState(true);
@@ -143,12 +140,8 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
   const [toggling, setToggling]       = useState<Set<string>>(new Set());
   const [importMsg, setImportMsg]     = useState('');
   const [importing, setImporting]     = useState(false);
-  const [quickAdd, setQuickAdd]       = useState<QuickAddState | null>(null);
-  const [quickSaving, setQuickSaving] = useState(false);
-  const [quickErr, setQuickErr]       = useState<string | null>(null);
   const fileInputRef                  = useRef<HTMLInputElement>(null);
   const searchRef                     = useRef<HTMLInputElement>(null);
-  const quickNameRef                  = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -263,29 +256,6 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
     if (e.target) e.target.value = '';
   }
 
-  async function handleQuickAdd(q: QuickAddState) {
-    if (!q.name.trim() || !q.price || !q.category) return;
-    setQuickSaving(true); setQuickErr(null);
-    try {
-      const created = await createProduct({
-        name:       q.name.trim(),
-        price:      parseFloat(q.price),
-        category:   q.category,
-        isVeg:      q.isVeg,
-        isAvailable: true,
-        taxPercent:  5,
-        shortCode:  '',
-        description: '',
-        stock:      -1,
-        hsnCode:    '',
-      });
-      setProducts(prev => [created, ...prev]);
-      setQuickAdd({ ...QUICK_BLANK, category: q.category, isVeg: q.isVeg });
-      setTimeout(() => quickNameRef.current?.focus(), 50);
-    } catch (e) { setQuickErr(e instanceof Error ? e.message : 'Failed to add'); }
-    finally { setQuickSaving(false); }
-  }
-
   const hasFilter = catFilter || vegFilter !== 'all' || availFilter !== null || search;
 
   return (
@@ -320,17 +290,25 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
           <button
             key={v}
             onClick={() => setVegFilter(v)}
-            className={`chip ${vegFilter === v ? 'active' : ''}`}
+            className={`h-8 rounded-lg border px-3 text-xs font-medium transition-colors ${
+              vegFilter === v
+                ? 'border-blue-500 bg-blue-50 text-blue-700'
+                : 'border-border bg-canvas text-ink/50 hover:bg-mist'
+            }`}
           >
-            {v === 'all' ? 'All' : v === 'veg' ? '🟢 Veg' : '🔴 Non-veg'}
+            {v === 'all' ? 'All' : v === 'veg' ? '● Veg' : '● Non-veg'}
           </button>
         ))}
 
         <button
           onClick={() => setAvailFilter(availFilter === true ? null : true)}
-          className={`chip ${availFilter === true ? 'active' : ''}`}
+          className={`h-8 rounded-lg border px-3 text-xs font-medium transition-colors ${
+            availFilter === true
+              ? 'border-green-500 bg-green-50 text-green-700'
+              : 'border-border bg-canvas text-ink/50 hover:bg-mist'
+          }`}
         >
-          Available
+          Available only
         </button>
 
         <div className="flex-1" />
@@ -371,19 +349,10 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
         </label>
 
         <button
-          onClick={() => {
-            if (quickAdd) { setQuickAdd(null); }
-            else { setQuickAdd({ ...QUICK_BLANK, category: categories[0]?._id ?? '' }); setTimeout(() => quickNameRef.current?.focus(), 50); }
-          }}
-          className={`btn btn-sm ${quickAdd ? 'btn-secondary' : 'btn-brand-outline'}`}
-        >
-          <Plus size={12} />{quickAdd ? 'Close Quick Add' : 'Quick Add'}
-        </button>
-        <button
           onClick={() => setEditing('new')}
-          className="btn btn-sm btn-primary"
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand/90"
         >
-          <Plus size={12} />New (F2)
+          <Plus size={13} />New (F2)
         </button>
       </div>
 
@@ -403,54 +372,6 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
           </button>
         )}
       </div>
-
-      {/* Quick Add Bar */}
-      {quickAdd && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-brand/20 bg-brand-subtle px-5 py-2.5 flex-wrap animate-slide-up">
-          <input
-            ref={quickNameRef}
-            type="text"
-            value={quickAdd.name}
-            onChange={e => setQuickAdd(q => q && ({ ...q, name: e.target.value }))}
-            onKeyDown={e => { if (e.key === 'Enter') void handleQuickAdd(quickAdd); }}
-            placeholder="Product name"
-            className="ds-input h-8 w-44 text-xs"
-          />
-          <input
-            type="number"
-            value={quickAdd.price}
-            onChange={e => setQuickAdd(q => q && ({ ...q, price: e.target.value }))}
-            onKeyDown={e => { if (e.key === 'Enter') void handleQuickAdd(quickAdd); }}
-            placeholder="Price"
-            className="ds-input h-8 w-24 text-xs"
-          />
-          <select
-            value={quickAdd.category}
-            onChange={e => setQuickAdd(q => q && ({ ...q, category: e.target.value }))}
-            className="ds-input h-8 text-xs w-40"
-          >
-            <option value="">— Category —</option>
-            {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-          </select>
-          <button
-            onClick={() => setQuickAdd(q => q && ({ ...q, isVeg: !q.isVeg }))}
-            className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
-              quickAdd.isVeg ? 'border-green-300 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'
-            }`}
-          >
-            {quickAdd.isVeg ? '🟢 Veg' : '🔴 Non-veg'}
-          </button>
-          {quickErr && <span className="text-xs text-error">{quickErr}</span>}
-          <button
-            onClick={() => void handleQuickAdd(quickAdd)}
-            disabled={quickSaving || !quickAdd.name.trim() || !quickAdd.price || !quickAdd.category}
-            className="btn btn-sm btn-primary"
-          >
-            {quickSaving ? 'Adding…' : 'Add'}
-          </button>
-          <span className="text-[10px] text-ink/35">Enter to add, stays open for batch entry</span>
-        </div>
-      )}
 
       {/* Table */}
       <div className="flex-1 overflow-y-auto">
@@ -478,18 +399,30 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
           </div>
         ) : (
           <>
-          <div className="ds-table-wrap">
-          <table className="ds-table">
+          <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
             <thead>
-              <tr>
-                <th className="w-7" />
-                <th>Name</th>
-                <th className="w-36">Category</th>
-                <th className="w-24 text-right">Price</th>
-                <th className="w-16 text-center">Tax%</th>
-                <th className="w-24 text-center">Stock</th>
-                <th className="w-24 text-center">Avail.</th>
-                <th className="w-20" />
+              <tr className="border-b border-border bg-mist text-left">
+                <th className="w-7 px-3 py-2.5" />
+                <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink/40">
+                  Name
+                </th>
+                <th className="w-36 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink/40">
+                  Category
+                </th>
+                <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">
+                  Price
+                </th>
+                <th className="w-16 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-ink/40">
+                  Tax%
+                </th>
+                <th className="w-20 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-ink/40">
+                  Stock
+                </th>
+                <th className="w-24 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-ink/40">
+                  Avail.
+                </th>
+                <th className="w-20 px-3 py-2.5" />
               </tr>
             </thead>
             <tbody>
@@ -539,15 +472,13 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                       {p.taxPercent}%
                     </td>
                     {/* Stock */}
-                    <td className="px-3 py-2.5 text-center">
+                    <td className="px-3 py-2.5 text-center text-xs">
                       {p.stock === -1 ? (
-                        <span className="text-xs text-ink/30">∞</span>
-                      ) : p.stock === 0 ? (
-                        <span className="badge badge-error text-[10px]">Out</span>
-                      ) : p.stock <= 5 ? (
-                        <span className="badge badge-warning text-[10px]">{p.stock} Low</span>
+                        <span className="text-ink/40">∞</span>
                       ) : (
-                        <span className="text-xs text-ink/60 tabular-nums">{p.stock}</span>
+                        <span className={p.stock <= 5 ? 'font-semibold text-orange-500' : 'text-ink/70'}>
+                          {p.stock}
+                        </span>
                       )}
                     </td>
                     {/* Toggle */}

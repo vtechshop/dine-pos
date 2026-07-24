@@ -1,6 +1,8 @@
 import { memo } from 'react';
-import { Users, Clock, Loader2, ChevronRight } from 'lucide-react';
+import { Users, Clock, Loader2 } from 'lucide-react';
 import type { TableGridItem } from '../../types';
+import { StatusChip } from './StatusChip';
+import { LiveBadge } from './LiveBadge';
 
 interface TableCardProps {
   table:            TableGridItem;
@@ -11,122 +13,107 @@ interface TableCardProps {
   isOpening?:       boolean;
 }
 
-function elapsedMins(openedAt: string): number {
-  return Math.floor((Date.now() - new Date(openedAt).getTime()) / 60_000);
-}
-
-function elapsedLabel(mins: number): string {
+function elapsedLabel(openedAt: string): string {
+  const mins = Math.floor((Date.now() - new Date(openedAt).getTime()) / 60_000);
   if (mins < 60) return `${mins}m`;
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
-// Time-on-table bar — green→amber→red; critical >90m pulses
-function TimeBar({ openedAt }: { openedAt: string }) {
-  const mins = elapsedMins(openedAt);
-  const pct  = Math.min((mins / 90) * 100, 100);
-  const color = mins < 30  ? 'bg-green-400'
-              : mins < 60  ? 'bg-amber-400'
-              : 'bg-[#DC2626]';
-  return (
-    <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-border/50">
-      <div
-        className={`h-full rounded-full transition-all duration-500 ${color} ${mins >= 90 ? 'animate-pulse' : ''}`}
-        style={{ width: `${pct}%` }}
-      />
-    </div>
-  );
+function borderColor(status: TableGridItem['status'], hasNewOrder: boolean): string {
+  if (hasNewOrder)           return 'border-[#E8380D]/60 ring-1 ring-[#E8380D]/20';
+  if (status === 'occupied') return 'border-green-200';
+  if (status === 'reserved') return 'border-amber-200';
+  if (status === 'inactive') return 'border-dashed border-gray-200';
+  return 'border-gray-100';
 }
 
-// Card border + bg based on state
-function cardClass(status: TableGridItem['status'], hasNewOrder: boolean, clickable: boolean): string {
-  const base = 'relative flex flex-col rounded-xl border p-3 transition-all duration-150 ';
-  const interact = clickable ? 'cursor-pointer hover:shadow-2 active:scale-[.98] ' : '';
-  if (hasNewOrder) return base + interact + 'border-brand/50 bg-brand-light ring-1 ring-brand/20 ';
-  if (status === 'occupied') return base + interact + 'border-green-200 bg-canvas hover:border-green-300 ';
-  if (status === 'reserved') return base + interact + 'border-amber-200 bg-amber-50/60 ';
-  if (status === 'inactive') return base + 'border-dashed border-border/60 bg-ink/[.02] opacity-60 ';
-  return base + interact + 'border-border bg-canvas hover:border-brand/30 ';
+function bgColor(status: TableGridItem['status']): string {
+  if (status === 'occupied') return 'bg-white';
+  if (status === 'reserved') return 'bg-amber-50';
+  if (status === 'inactive') return 'bg-gray-50';
+  return 'bg-gray-50';
 }
 
 export const TableCard = memo(function TableCard({
-  table, hasNewOrder, currencySymbol,
-  onSelect, onOpenAvailable, isOpening = false,
+  table,
+  hasNewOrder,
+  currencySymbol,
+  onSelect,
+  onOpenAvailable,
+  isOpening = false,
 }: TableCardProps) {
   const { session, status } = table;
   const displayName = table.name || `T${table.number}`;
-  const clickable   = (!!onSelect && !!table.currentSessionId) || !!onOpenAvailable;
-  const mins        = session?.openedAt ? elapsedMins(session.openedAt) : 0;
+  const clickable = (!!onSelect && !!table.currentSessionId) || !!onOpenAvailable;
 
   function handleClick() {
     if (isOpening) return;
-    if (onOpenAvailable && status === 'available') onOpenAvailable();
-    else if (onSelect && table.currentSessionId) onSelect(table.currentSessionId);
+    if (onOpenAvailable && status === 'available') {
+      onOpenAvailable();
+    } else if (onSelect && table.currentSessionId) {
+      onSelect(table.currentSessionId);
+    }
   }
 
   return (
-    <div onClick={clickable ? handleClick : undefined} className={cardClass(status, hasNewOrder, clickable)}>
-
-      {/* New order pulse badge */}
+    <div
+      onClick={clickable ? handleClick : undefined}
+      className={`relative flex flex-col rounded-xl border p-3.5 transition-shadow hover:shadow-md ${borderColor(status, hasNewOrder)} ${bgColor(status)} ${clickable ? 'cursor-pointer active:scale-[0.98]' : ''}`}
+    >
+      {/* New order badge */}
       {hasNewOrder && (
-        <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 z-10">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-60" />
-          <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-brand" />
-        </span>
+        <div className="absolute -right-1.5 -top-1.5 z-10">
+          <LiveBadge />
+        </div>
       )}
 
-      {/* Header row: name + status chip */}
-      <div className="flex items-start justify-between gap-1 mb-1.5">
-        <span className="text-sm font-bold leading-tight text-ink">{displayName}</span>
-        {status === 'occupied' && (
-          <span className="shrink-0 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">OCC</span>
-        )}
-        {status === 'available' && (
-          <span className="shrink-0 rounded-full bg-ink/6 px-1.5 py-0.5 text-[10px] font-semibold text-ink/40">FREE</span>
-        )}
-        {status === 'reserved' && (
-          <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">RES</span>
-        )}
-        {status === 'inactive' && (
-          <span className="shrink-0 rounded-full bg-border/60 px-1.5 py-0.5 text-[10px] font-semibold text-ink/30">OFF</span>
-        )}
+      {/* Header */}
+      <div className="mb-2 flex items-start justify-between gap-1">
+        <span className="text-base font-bold text-gray-900 leading-tight">{displayName}</span>
+        <StatusChip
+          status={status === 'available' ? 'available' : status === 'occupied' ? 'occupied' : status === 'reserved' ? 'reserved' : 'inactive'}
+          size="xs"
+        />
       </div>
 
-      {/* Occupied: session data */}
+      {/* Session data */}
       {status === 'occupied' && session ? (
-        <>
-          <div className="flex items-center justify-between text-xs mt-0.5">
-            <span className="flex items-center gap-0.5 text-ink/40">
-              <Users size={10} />{session.activeGuestCount}/{session.guestCount}
+        <div className="space-y-1.5 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1 text-gray-400">
+              <Users size={11} /> Guests
             </span>
-            <span className="font-bold tabular-nums text-ink">
+            <span className="font-semibold text-gray-700">
+              {session.activeGuestCount}/{session.guestCount}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-gray-400">Total</span>
+            <span className="font-bold text-gray-900 tabular-nums">
               {currencySymbol}{session.runningTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </span>
           </div>
-          <div className="flex items-center gap-0.5 mt-1 text-[11px]">
-            <Clock size={10} className={mins >= 60 ? 'text-[#DC2626]' : mins >= 30 ? 'text-amber-500' : 'text-green-500'} />
-            <span className={mins >= 60 ? 'text-[#DC2626] font-semibold' : 'text-ink/40'}>
-              {elapsedLabel(mins)}
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1 text-gray-400">
+              <Clock size={11} /> Open
             </span>
+            <span className="text-gray-500">{elapsedLabel(session.openedAt)}</span>
           </div>
-          <TimeBar openedAt={session.openedAt} />
-        </>
+        </div>
       ) : status === 'reserved' ? (
-        <p className="mt-1 text-[11px] text-amber-600 font-medium">Reserved</p>
+        <p className="mt-auto text-xs text-amber-600">Reserved</p>
       ) : status === 'inactive' ? (
-        <p className="mt-1 text-[11px] text-ink/30">Inactive</p>
+        <p className="mt-auto text-xs text-gray-400">Inactive</p>
       ) : isOpening ? (
-        <p className="mt-1 flex items-center gap-1 text-[11px] text-brand">
-          <Loader2 size={10} className="animate-spin" /> Opening…
+        <p className="mt-auto flex items-center gap-1 text-xs text-[#E8380D]">
+          <Loader2 size={11} className="animate-spin" /> Opening…
         </p>
       ) : onOpenAvailable ? (
-        <div className="mt-1 flex items-center justify-between">
-          <span className="text-[11px] text-ink/40">{table.capacity} seats</span>
-          <span className="text-[11px] text-brand flex items-center gap-0.5 font-medium">
-            Open <ChevronRight size={10} />
-          </span>
-        </div>
+        <p className="mt-auto text-xs text-[#E8380D]/70">Tap to seat guests</p>
       ) : (
-        <p className="mt-1 text-[11px] text-ink/40">{table.capacity} seats</p>
+        <p className="mt-auto text-xs text-gray-400">
+          {table.capacity} seats
+        </p>
       )}
     </div>
   );
