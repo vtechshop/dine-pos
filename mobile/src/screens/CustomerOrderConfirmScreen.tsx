@@ -46,11 +46,15 @@ const CustomerOrderConfirmScreen: React.FC<Props> = ({ navigation, route }) => {
       useNativeDriver: true,
     }).start();
 
-    const timer = setTimeout(() => {
-      navigation.reset({ index: 0, routes: [{ name: 'CustomerTabs' }] });
-    }, 2000);
-
-    return () => clearTimeout(timer);
+    // Only auto-navigate for non-UPI payments — UPI requires the user to
+    // confirm via "Payment Done" → "Done", so we must not interrupt QR scanning.
+    if (!isUPI) {
+      const timer = setTimeout(() => {
+        navigation.reset({ index: 0, routes: [{ name: 'CustomerTabs' }] });
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const goBack = () => {
@@ -208,7 +212,7 @@ const styles = StyleSheet.create({
 
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: Colors.success,
     marginBottom: Spacing.xs,
   },
@@ -239,7 +243,7 @@ const styles = StyleSheet.create({
 
   orderNumber: {
     fontSize: FontSize.xxl,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: Colors.primary,
     marginBottom: Spacing.md,
   },
@@ -253,7 +257,7 @@ const styles = StyleSheet.create({
 
   orderTotal: {
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: Colors.text,
   },
 
@@ -264,14 +268,14 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#9C27B0',
+    borderColor: Colors.upi,
     marginBottom: Spacing.lg,
   },
 
   qrTitle: {
     fontSize: FontSize.xl,
-    fontWeight: 'bold',
-    color: '#9C27B0',
+    fontWeight: '700',
+    color: Colors.upi,
   },
 
   qrSubtitle: {
@@ -289,7 +293,7 @@ const styles = StyleSheet.create({
 
   upiAmount: {
     fontSize: FontSize.xxl,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: Colors.text,
   },
 
@@ -306,7 +310,7 @@ const styles = StyleSheet.create({
   },
 
   payDoneBtn: {
-    backgroundColor: '#FF7A45',
+    backgroundColor: Colors.warning,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.xxl,
     borderRadius: BorderRadius.lg,
@@ -315,7 +319,7 @@ const styles = StyleSheet.create({
   payDoneText: {
     color: Colors.white,
     fontSize: FontSize.lg,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
 
   backBtn: {
@@ -331,7 +335,7 @@ const styles = StyleSheet.create({
   backBtnText: {
     color: Colors.white,
     fontSize: FontSize.lg,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
 
 });
