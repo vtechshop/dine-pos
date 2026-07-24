@@ -12,7 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList, Settings, Order } from '../types';
 import {
   getCashierOrders, completeOrderPayment, clearCashierToken,
-  getCashierToken, getBaseUrl, getStoredHotelId, getSocketUrl, CashierOrder,
+  getCashierToken, getStoredHotelId, getSocketUrl, getSettings, CashierOrder,
 } from '../services/api';
 import { CASHIER_PROFILE_KEY } from './CashierLoginScreen';
 import { setupNotifications } from '../utils/notifications';
@@ -110,24 +110,14 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       if (raw && mountedRef.current) setCashierName((JSON.parse(raw) as { name?: string }).name || '');
     });
 
-    (async () => {
-      try {
-        const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
-        const res = await fetch(`${base}/settings`, { headers: { Authorization: `Bearer ${token}` } });
-        if (res.ok && mountedRef.current) setSettings(await res.json());
-      } catch { /* no print without settings */ }
-    })();
+    getSettings().then(s => { if (mountedRef.current) setSettings(s); }).catch(() => {});
 
     let socket: Socket;
     (async () => {
       const [hotelId, url, token] = await Promise.all([
         getStoredHotelId(), getSocketUrl(), getCashierToken(),
       ]);
-      console.log(`[SOCKET][Cashier] hotelId=${hotelId} | url=${url} | hasToken=${!!token}`);
-      if (cancelled || !hotelId) {
-        console.log('[SOCKET][Cashier] ABORT — cancelled or hotelId missing');
-        return;
-      }
+      if (cancelled || !hotelId) return;
 
       socket = io(url, {
         transports: ['websocket'],
@@ -138,14 +128,11 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       socketRef.current = socket;
 
       socket.on('connect', () => {
-        console.log(`[SOCKET][Cashier] Connected | socketId=${socket.id}`);
         socket.emit('join_hotel', hotelId);
-        console.log(`[SOCKET][Cashier] join_hotel emitted | hotelId=${hotelId}`);
         loadOrders();
       });
 
       socket.on('connect_error', (err) => {
-        console.log(`[SOCKET][Cashier] connect_error: ${err.message}`);
         if (!mountedRef.current) return;
         if (err.message?.includes('authentication')) {
           clearCashierToken().then(() => {
@@ -154,17 +141,11 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         }
       });
 
-      socket.on('disconnect', (reason) => {
-        console.log(`[SOCKET][Cashier] Disconnected | reason=${reason}`);
-      });
-
       socket.on('reconnect_failed', () => {
-        console.log('[SOCKET][Cashier] reconnect_failed — showing connection lost overlay');
         if (mountedRef.current) setSocketLost(true);
       });
 
       socket.on('new_order', (data: { _id?: string; orderNumber?: string }) => {
-        console.log(`[SOCKET][Cashier] new_order received | data=${JSON.stringify(data)}`);
         if (!mountedRef.current) return;
         Vibration.vibrate([0, 200, 100, 200]);
         Notifications.scheduleNotificationAsync({
@@ -180,14 +161,12 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       });
 
       socket.on('order_completed',    () => { if (mountedRef.current) loadOrders(); });
-      socket.on('order_served',       (data: any) => {
-        console.log(`[SOCKET][Cashier] order_served received | data=${JSON.stringify(data)}`);
+      socket.on('order_served', () => {
         if (!mountedRef.current) return;
         incCashierBadge();
         loadOrders();
       });
-      socket.on('order_status_update',(data: any) => {
-        console.log(`[SOCKET][Cashier] order_status_update received | status=${data?.status}`);
+      socket.on('order_status_update', () => {
         if (mountedRef.current) loadOrders();
       });
     })();

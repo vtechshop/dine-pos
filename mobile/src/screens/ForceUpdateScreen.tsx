@@ -1,11 +1,14 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ForceUpdate'>;
 
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.vtechshop.dinepos';
+const APP_STORE_URL  = 'https://apps.apple.com/app/dine-pos/id6740476480';
+
+const storeUrl = Platform.OS === 'ios' ? APP_STORE_URL : PLAY_STORE_URL;
 
 export default function ForceUpdateScreen({ route }: Props) {
   const { minimumVersion, message } = route.params;
@@ -20,7 +23,7 @@ export default function ForceUpdateScreen({ route }: Props) {
       </Text>
       <TouchableOpacity
         style={styles.button}
-        onPress={() => Linking.openURL(PLAY_STORE_URL)}
+        onPress={() => Linking.openURL(storeUrl)}
         activeOpacity={0.8}
       >
         <Text style={styles.buttonText}>Update Now</Text>

@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
   orderTotal: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.text,
   },
 
   qrSection: {
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   upiAmount: {
     fontSize: FontSize.xxl,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.text,
   },
 
   upiId: {

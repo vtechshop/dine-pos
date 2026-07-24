@@ -46,11 +46,17 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bg: str
 };
 
 const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
-  pending: 'completed',
+  pending:   'preparing',
+  preparing: 'ready',
+  ready:     'served',
+  served:    'completed',
 };
 
 const NEXT_LABEL: Partial<Record<OrderStatus, string>> = {
-  pending: 'Mark Completed',
+  pending:   'Start Cooking',
+  preparing: 'Mark Ready',
+  ready:     'Mark Served',
+  served:    'Mark Completed',
 };
 
 const TAB_FILTERS: { key: string; label: string }[] = [

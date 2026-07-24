@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Modal, ActivityIndicator, StatusBar, TextInput, Alert,
-  ScrollView, Linking, Clipboard, Platform,
+  ScrollView, Linking, Share,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -68,11 +68,7 @@ function delaySeverity(order: OnlineDeliveryOrder): DelaySev {
 }
 
 function copyText(text: string) {
-  if (Platform.OS === 'android') {
-    Clipboard.setString(text);
-  } else {
-    Clipboard.setString(text);
-  }
+  Share.share({ message: text }).catch(() => {});
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────

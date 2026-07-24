@@ -420,7 +420,7 @@ const CustomersScreen: React.FC = () => {
         <FlatList
           data={customers}
           renderItem={renderCustomer}
-          keyExtractor={c => c.phone}
+          keyExtractor={(c, i) => `${c.phone}-${i}`}
           contentContainerStyle={[styles.list, broadcastMode && { paddingBottom: 120 }]}
           ListHeaderComponent={
             customers.length > 0 && !broadcastMode ? (

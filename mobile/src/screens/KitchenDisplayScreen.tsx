@@ -83,11 +83,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       const [hotelId, url, token] = await Promise.all([
         getStoredHotelId(), getSocketUrl(), getKitchenToken(),
       ]);
-      console.log(`[SOCKET][Kitchen] hotelId=${hotelId} | url=${url} | hasToken=${!!token}`);
-      if (cancelled || !hotelId) {
-        console.log('[SOCKET][Kitchen] ABORT — cancelled or hotelId missing');
-        return;
-      }
+      if (cancelled || !hotelId) return;
 
       socket = io(url, {
         transports: ['websocket'],
@@ -98,14 +94,11 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       socketRef.current = socket;
 
       socket.on('connect', () => {
-        console.log(`[SOCKET][Kitchen] Connected | socketId=${socket.id}`);
         socket.emit('join_hotel', hotelId);
-        console.log(`[SOCKET][Kitchen] join_hotel emitted | hotelId=${hotelId}`);
         loadOrders();
       });
 
       socket.on('connect_error', (err) => {
-        console.log(`[SOCKET][Kitchen] connect_error: ${err.message}`);
         if (!mountedRef.current) return;
         if (err.message?.includes('authentication')) {
           clearKitchenToken().then(() => {
@@ -114,12 +107,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         }
       });
 
-      socket.on('disconnect', (reason) => {
-        console.log(`[SOCKET][Kitchen] Disconnected | reason=${reason}`);
-      });
-
       socket.on('reconnect_failed', () => {
-        console.log('[SOCKET][Kitchen] reconnect_failed — showing connection lost overlay');
         if (mountedRef.current) setSocketLost(true);
       });
 
@@ -141,16 +129,8 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       };
 
       // New order arrives — dedup, vibrate, play sound, reload
-      socket.on('new_order', (data: { orderId?: string; _id?: string }) => {
-        console.log(`[SOCKET][Kitchen] new_order received | data=${JSON.stringify(data)}`);
-        handleNewOrder(data);
-      });
-
-      // Delivery order from Swiggy/Zomato
-      socket.on('new_delivery_order', (data: { orderId?: string; _id?: string }) => {
-        console.log(`[SOCKET][Kitchen] new_delivery_order received | data=${JSON.stringify(data)}`);
-        handleNewOrder(data);
-      });
+      socket.on('new_order', handleNewOrder);
+      socket.on('new_delivery_order', handleNewOrder);
 
       // Status updated by admin or another KDS instance
       socket.on('order_status_update', (data: { orderId: string; status: string }) => {
