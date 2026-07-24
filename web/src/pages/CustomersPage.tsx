@@ -242,11 +242,7 @@ export function CustomersPage() {
                 <button
                   key={f}
                   onClick={() => setStatusFilter(f)}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-medium capitalize transition-colors ${
-                    statusFilter === f
-                      ? 'bg-brand text-white'
-                      : 'bg-ink/5 text-ink/50 hover:bg-ink/10'
-                  }`}
+                  className={`chip ${statusFilter === f ? 'active' : ''} capitalize`}
                 >
                   {f}
                 </button>
@@ -262,11 +258,7 @@ export function CustomersPage() {
                 <button
                   key={mode}
                   onClick={() => setSortMode(mode)}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                    sortMode === mode
-                      ? 'bg-ink text-white'
-                      : 'bg-ink/5 text-ink/50 hover:bg-ink/10'
-                  }`}
+                  className={`chip ${sortMode === mode ? 'active' : ''}`}
                 >
                   {label}
                 </button>
