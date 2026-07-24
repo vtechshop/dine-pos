@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  ActivityIndicator, StatusBar, Vibration, Modal, Alert,
+  ActivityIndicator, StatusBar, Vibration, Modal, Alert, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -23,7 +23,7 @@ import UnreadBadge from '../components/UnreadBadge';
 import { printReceipt } from '../utils/receipt';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CashierDashboard'>;
-type PaymentMethod = 'cash' | 'upi' | 'card';
+type PaymentMethod = 'cash' | 'upi' | 'card' | 'split';
 
 const ACTIVE_STATUSES = ['pending', 'preparing', 'ready', 'served'];
 
@@ -35,6 +35,9 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [cashierName, setCashierName] = useState('');
   const [payModal, setPayModal] = useState<{ order: CashierOrder } | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('cash');
+  const [splitCash, setSplitCash] = useState('');
+  const [splitCard, setSplitCard] = useState('');
+  const [splitUpi,  setSplitUpi]  = useState('');
   const [completing, setCompleting] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [socketLost, setSocketLost] = useState(false);
@@ -184,6 +187,13 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleCollectPayment = async () => {
     if (!payModal || submittingRef.current) return;
+    if (selectedMethod === 'split') {
+      const splitTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitCard) || 0) + (parseFloat(splitUpi) || 0);
+      if (Math.abs(splitTotal - payModal.order.grandTotal) > 1) {
+        Alert.alert('Split Mismatch', `Split total (₹${splitTotal.toFixed(2)}) must equal ₹${payModal.order.grandTotal.toFixed(2)}.`);
+        return;
+      }
+    }
     submittingRef.current = true;
     setCompleting(true);
     try {
@@ -191,6 +201,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       const paid = { ...payModal.order, status: 'completed' as const, paymentMethod: selectedMethod };
       setOrders(prev => prev.map(o => o._id === paid._id ? paid : o));
       setPayModal(null);
+      setSplitCash(''); setSplitCard(''); setSplitUpi('');
       if (settings) {
         Alert.alert(
           'Payment Collected ✓',
@@ -280,7 +291,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
         <TouchableOpacity
           style={styles.payBtn}
-          onPress={() => { setSelectedMethod('cash'); setPayModal({ order: item }); }}
+          onPress={() => { setSelectedMethod('cash'); setSplitCash(''); setSplitCard(''); setSplitUpi(''); setPayModal({ order: item }); }}
           activeOpacity={0.85}
         >
           <MaterialIcons name="point-of-sale" size={18} color={Colors.white} />
@@ -409,7 +420,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         }
       />
 
-      <Modal visible={!!payModal} transparent animationType="slide" onRequestClose={() => setPayModal(null)}>
+      <Modal visible={!!payModal} transparent animationType="slide" onRequestClose={() => { setPayModal(null); setSplitCash(''); setSplitCard(''); setSplitUpi(''); }}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { paddingBottom: bottom + Spacing.xl }]}>
             <View style={styles.modalHandle} />
@@ -427,20 +438,61 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
                 <Text style={styles.modalMethodLabel}>Payment Method</Text>
                 <View style={styles.methodRow}>
-                  {(['cash', 'upi', 'card'] as PaymentMethod[]).map(m => (
+                  {(['cash', 'upi', 'card', 'split'] as PaymentMethod[]).map(m => (
                     <TouchableOpacity
                       key={m}
                       style={[styles.methodBtn, selectedMethod === m && styles.methodBtnActive]}
                       onPress={() => setSelectedMethod(m)}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.methodBtnIcon}>{m === 'cash' ? '💵' : m === 'upi' ? '📱' : '💳'}</Text>
+                      <Text style={styles.methodBtnIcon}>{m === 'cash' ? '💵' : m === 'upi' ? '📱' : m === 'split' ? '🔀' : '💳'}</Text>
                       <Text style={[styles.methodBtnText, selectedMethod === m && styles.methodBtnTextActive]}>
                         {m.toUpperCase()}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
+
+                {selectedMethod === 'split' && payModal && (
+                  <View style={styles.splitSection}>
+                    <View style={styles.splitRow}>
+                      <Text style={styles.splitMethodLabel}>Cash</Text>
+                      <TextInput
+                        style={styles.splitInput}
+                        value={splitCash}
+                        onChangeText={setSplitCash}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor={Colors.textMuted}
+                      />
+                    </View>
+                    <View style={styles.splitRow}>
+                      <Text style={styles.splitMethodLabel}>Card</Text>
+                      <TextInput
+                        style={styles.splitInput}
+                        value={splitCard}
+                        onChangeText={setSplitCard}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor={Colors.textMuted}
+                      />
+                    </View>
+                    <View style={styles.splitRow}>
+                      <Text style={styles.splitMethodLabel}>UPI</Text>
+                      <TextInput
+                        style={styles.splitInput}
+                        value={splitUpi}
+                        onChangeText={setSplitUpi}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor={Colors.textMuted}
+                      />
+                    </View>
+                    <Text style={styles.splitHint}>
+                      {`Remaining: ₹${(payModal.order.grandTotal - (parseFloat(splitCash) || 0) - (parseFloat(splitCard) || 0) - (parseFloat(splitUpi) || 0)).toFixed(2)}`}
+                    </Text>
+                  </View>
+                )}
 
                 <TouchableOpacity
                   style={[styles.confirmBtn, completing && styles.confirmBtnDisabled]}
@@ -457,7 +509,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
                   }
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setPayModal(null)}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => { setPayModal(null); setSplitCash(''); setSplitCard(''); setSplitUpi(''); }}>
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
               </>
@@ -632,7 +684,12 @@ const styles = StyleSheet.create({
   confirmBtnDisabled: { opacity: 0.5 },
   confirmBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '800' },
   cancelBtn:     { alignItems: 'center', paddingVertical: Spacing.md },
-  cancelBtnText: { fontSize: FontSize.md, color: Colors.textSecondary, fontWeight: '600' },
+  cancelBtnText:    { fontSize: FontSize.md, color: Colors.textSecondary, fontWeight: '600' },
+  splitSection:     { gap: Spacing.sm, marginBottom: Spacing.xl },
+  splitRow:         { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, backgroundColor: Colors.background, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: 12, borderWidth: 1, borderColor: Colors.border },
+  splitMethodLabel: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text, width: 44 },
+  splitInput:       { flex: 1, fontSize: FontSize.lg, fontWeight: '700', color: Colors.text, textAlign: 'right', paddingVertical: 0 },
+  splitHint:        { fontSize: FontSize.sm, color: Colors.textSecondary, textAlign: 'right', fontWeight: '600' },
 
   // Connection lost overlay
   connectionLostOverlay: {

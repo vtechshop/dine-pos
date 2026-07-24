@@ -1534,7 +1534,7 @@ export const getCashierOrders = async (): Promise<CashierOrder[]> => {
   return res.json();
 };
 
-export const completeOrderPayment = async (orderId: string, paymentMethod: 'cash' | 'upi' | 'card'): Promise<void> => {
+export const completeOrderPayment = async (orderId: string, paymentMethod: 'cash' | 'upi' | 'card' | 'split'): Promise<void> => {
   const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
   const res = await fetch(`${base}/orders/${orderId}/status`, {
     method: 'PATCH',

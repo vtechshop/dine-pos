@@ -79,6 +79,9 @@ const BillingScreen: React.FC = () => {
   const [discountType,      setDiscountType]     = useState<DiscountType>('percent');
   const [showSuccess,       setShowSuccess]      = useState<OrderSuccess | null>(null);
   const [showUpiQr,         setShowUpiQr]        = useState(false);
+  const [splitCash,         setSplitCash]        = useState('');
+  const [splitCard,         setSplitCard]        = useState('');
+  const [splitUpi,          setSplitUpi]         = useState('');
   const [customerPhone,     setCustomerPhone]    = useState('');
   const [orderSource,       setOrderSource]      = useState<OrderSource>('dine-in');
   const [printingKot,       setPrintingKot]      = useState(false);
@@ -195,6 +198,13 @@ Thank you for dining with us! 🍽️`;
   };
 
   const confirmOrder = async () => {
+    if (payMethod === 'split') {
+      const splitTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitCard) || 0) + (parseFloat(splitUpi) || 0);
+      if (Math.abs(splitTotal - cart.grandTotal) > 1) {
+        showAlert('Split Mismatch', `Split total (${fmt(splitTotal)}) must equal ${fmt(cart.grandTotal)}.`);
+        return;
+      }
+    }
     setShowPayModal(false);
     setPlacing(true);
     const isOrderParcel = ['swiggy', 'zomato', 'takeaway'].includes(orderSource);
@@ -226,6 +236,13 @@ Thank you for dining with us! 🍽️`;
       notes:         cart.notes,
       isParcel:      isOrderParcel,
       orderSource,
+      ...(payMethod === 'split' ? {
+        splitDetails: {
+          cash: parseFloat(splitCash) || 0,
+          card: parseFloat(splitCard) || 0,
+          upi:  parseFloat(splitUpi)  || 0,
+        },
+      } : {}),
     };
     // Snapshot cart before clearCart wipes it
     const cartSnapshot = {
@@ -256,6 +273,7 @@ Thank you for dining with us! 🍽️`;
         clearCart();
         setDiscountInput('');
         setDiscount({ type: 'percent', value: 0 });
+        setSplitCash(''); setSplitCard(''); setSplitUpi('');
         return;
       }
       const tokenNum = order.orderNumber.split('-').pop() || '1';
@@ -264,6 +282,7 @@ Thank you for dining with us! 🍽️`;
       clearCart();
       setDiscountInput('');
       setDiscount({ type: 'percent', value: 0 });
+      setSplitCash(''); setSplitCard(''); setSplitUpi('');
     } catch (e: any) {
       showAlert('Error', e.message || 'Failed to place order');
     } finally { setPlacing(false); }
@@ -765,6 +784,50 @@ Thank you for dining with us! 🍽️`;
               ))}
             </View>
 
+            {payMethod === 'split' && (
+              <View style={styles.splitSection}>
+                <View style={styles.splitRow}>
+                  <MaterialIcons name="payments" size={18} color={Colors.cash} />
+                  <Text style={styles.splitMethodLabel}>Cash</Text>
+                  <TextInput
+                    style={styles.splitInput}
+                    value={splitCash}
+                    onChangeText={setSplitCash}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
+                <View style={styles.splitRow}>
+                  <MaterialIcons name="credit-card" size={18} color={Colors.cardPayment} />
+                  <Text style={styles.splitMethodLabel}>Card</Text>
+                  <TextInput
+                    style={styles.splitInput}
+                    value={splitCard}
+                    onChangeText={setSplitCard}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
+                <View style={styles.splitRow}>
+                  <MaterialIcons name="qr-code" size={18} color={Colors.upi} />
+                  <Text style={styles.splitMethodLabel}>UPI</Text>
+                  <TextInput
+                    style={styles.splitInput}
+                    value={splitUpi}
+                    onChangeText={setSplitUpi}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
+                <Text style={styles.splitHint}>
+                  {`Remaining: ${fmt(cart.grandTotal - (parseFloat(splitCash) || 0) - (parseFloat(splitCard) || 0) - (parseFloat(splitUpi) || 0))}`}
+                </Text>
+              </View>
+            )}
+
             <View style={styles.payActions}>
               <TouchableOpacity style={styles.payCancel} onPress={() => setShowPayModal(false)}>
                 <Text style={styles.payCancelText}>Cancel</Text>
@@ -849,7 +912,7 @@ Thank you for dining with us! 🍽️`;
                 <Text style={[styles.successPrintText, { color: Colors.warning }]}>Print KOT</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={[styles.successDoneBtn, { width: '100%', marginTop: 8 }]} onPress={() => { setShowSuccess(null); setCustomerPhone(''); setOrderSource('dine-in'); setParcel(false); }}>
+            <TouchableOpacity style={[styles.successDoneBtn, { width: '100%', marginTop: 8 }]} onPress={() => { setShowSuccess(null); setCustomerPhone(''); setOrderSource('dine-in'); setParcel(false); setSplitCash(''); setSplitCard(''); setSplitUpi(''); }}>
               <Text style={styles.successDoneText}>New Order</Text>
               <MaterialIcons name="add" size={18} color={Colors.white} />
             </TouchableOpacity>
@@ -1059,6 +1122,11 @@ const styles = StyleSheet.create({
   payIconWrap: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.sm },
   payLabel: { color: Colors.textSecondary, fontSize: FontSize.md, fontWeight: '700' },
   payCheck: { position: 'absolute', top: 8, right: 8 },
+  splitSection:     { gap: Spacing.sm, marginBottom: Spacing.xl },
+  splitRow:         { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, paddingHorizontal: Spacing.md, paddingVertical: 12, borderWidth: 1, borderColor: Colors.border },
+  splitMethodLabel: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text, width: 44 },
+  splitInput:       { flex: 1, fontSize: FontSize.lg, fontWeight: '700', color: Colors.text, textAlign: 'right', paddingVertical: 0 },
+  splitHint:        { fontSize: FontSize.sm, color: Colors.textSecondary, textAlign: 'right', fontWeight: '600' },
   payActions: { flexDirection: 'row', gap: Spacing.md },
   payCancel: { flex: 1, paddingVertical: 14, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center' },
   payCancelText: { color: Colors.textSecondary, fontSize: FontSize.lg, fontWeight: '600' },
