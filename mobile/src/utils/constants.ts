@@ -82,10 +82,42 @@ export const Colors = {
   statusCancelled:   '#B71C1C',
   statusCancelledBg: 'rgba(183,28,28,0.12)',
 
+  // ── Delivery platforms ──
+  swiggy:        '#FC8019',
+  swiggyBg:      'rgba(252,128,25,0.10)',
+  zomato:        '#E23744',
+  zomatoBg:      'rgba(226,55,68,0.10)',
+
+  // ── Communication ──
+  whatsApp:      '#25D366',
+  whatsAppBg:    'rgba(37,211,102,0.10)',
+
+  // ── Order status: served ──
+  served:        '#00897B',
+  servedBg:      'rgba(0,137,123,0.10)',
+
+  // ── Inventory / ingredient category ──
+  ingredient:    '#8D6E63',
+  ingredientBg:  'rgba(141,110,99,0.10)',
+
+  // ── Bookings / reservations ──
+  bookings:      '#6A1B9A',
+  bookingsBg:    'rgba(106,27,154,0.10)',
+
   white:         '#FFFFFF',
   black:         '#000000',
   transparent:   'transparent',
 };
+
+// ── Font Weight ───────────────────────────────────────────────────────────────
+export const FontWeight = {
+  regular:   '400',
+  medium:    '500',
+  semibold:  '600',
+  bold:      '700',
+  extrabold: '800',
+  black:     '900',
+} as const;
 
 // ── Spacing ──────────────────────────────────────────────────────────────────
 export const Spacing = {

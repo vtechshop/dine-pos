@@ -27,7 +27,7 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
   const { settings } = useSettings();
   const { clearCart } = useCart();
-  const { bottom } = useSafeAreaInsets();
+  const { top, bottom } = useSafeAreaInsets();
 
   const [time, setTime] = useState(() => {
     const n = new Date();
@@ -73,7 +73,7 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
       const n = new Date();
       setTime(`${pad(n.getHours())}:${pad(n.getMinutes())}`);
       setDateStr(`${DAYS[n.getDay()]}, ${n.getDate()} ${MONTHS[n.getMonth()]}`);
-    }, 10_000);
+    }, 60_000);
     return () => clearInterval(id);
   }, []);
 
@@ -82,7 +82,7 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} translucent={false} />
 
       {/* ── Orange banner ───────────────────────────────────────────────── */}
-      <View style={styles.banner}>
+      <View style={[styles.banner, { paddingTop: top + Spacing.md }]}>
         <View style={styles.bannerLeft}>
           <Text style={styles.bannerEmoji}>🍽️</Text>
           <View>
@@ -99,7 +99,7 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       {/* ── Body ────────────────────────────────────────────────────────── */}
-      <View style={styles.body}>
+      <View style={[styles.body, { paddingBottom: bottom }]}>
         <Text style={styles.sectionTitle}>Select Your Role</Text>
 
         <Animated.View style={[styles.cards, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>

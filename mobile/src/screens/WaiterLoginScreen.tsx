@@ -163,8 +163,8 @@ const styles = StyleSheet.create({
   errorText: { color: Colors.danger, fontSize: FontSize.sm },
   loginBtn: {
     width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: Spacing.sm, backgroundColor: Colors.accent, borderRadius: BorderRadius.xl,
-    paddingVertical: 16, ...Shadows.sm,
+    gap: Spacing.sm, backgroundColor: Colors.primary, borderRadius: BorderRadius.xl,
+    paddingVertical: 16, ...Shadows.primary,
   },
   loginBtnDisabled: { opacity: 0.5 },
   loginBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '800' },

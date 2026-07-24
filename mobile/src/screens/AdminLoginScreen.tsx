@@ -8,6 +8,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { showAlert } from '../utils/alert';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { adminLogin, getSettings, requestCredentialReset, checkResetStatus, registerDevice } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
@@ -32,6 +33,7 @@ async function getOrCreateDeviceId(): Promise<string> {
 const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
   const { login } = useAuth();
   const { setFlags } = useFeatureFlags();
+  const { top } = useSafeAreaInsets();
   const [userId, setUserId]       = useState('');
   const [password, setPassword]   = useState('');
   const [showPass, setShowPass]   = useState(false);
@@ -206,11 +208,11 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
         {/* Top banner */}
-        <View style={styles.topBanner}>
+        <View style={[styles.topBanner, { paddingTop: top + Spacing.xl }]}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.replace('RoleSelect')}>
             <MaterialIcons name="arrow-back" size={22} color={Colors.white} />
           </TouchableOpacity>
-          <Text style={styles.bannerTitle}>Staff Login</Text>
+          <Text style={styles.bannerTitle}>Admin Login</Text>
         </View>
 
         {/* Icon */}
@@ -293,7 +295,7 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: Colors.background },
   topBanner: {
-    backgroundColor: Colors.primary, paddingTop: 52, paddingBottom: Spacing.xl,
+    backgroundColor: Colors.primary, paddingTop: Spacing.xl, paddingBottom: Spacing.xl,
     paddingHorizontal: Spacing.xl, flexDirection: 'row', alignItems: 'center', gap: Spacing.lg,
   },
   backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },

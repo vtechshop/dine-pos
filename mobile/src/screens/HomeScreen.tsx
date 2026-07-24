@@ -338,7 +338,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         {/* ── Low Ingredient Stock Alert ── */}
         {lowIngredientCount > 0 && (
           <TouchableOpacity
-            style={[styles.alertBanner, { backgroundColor: '#8D6E63' }]}
+            style={[styles.alertBanner, { backgroundColor: Colors.ingredient }]}
             onPress={() => navigation.navigate('Ingredients' as any)}
             activeOpacity={0.88}
           >
@@ -474,24 +474,24 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         {(deliveryToday.swiggy > 0 || deliveryToday.zomato > 0) && (
           <View style={styles.deliveryRow}>
             <TouchableOpacity
-              style={[styles.deliveryCard, { borderColor: '#FC801940' }]}
+              style={[styles.deliveryCard, { borderColor: Colors.swiggy + '40' }]}
               onPress={() => navigation.navigate('OnlineOrders' as any)}
               activeOpacity={0.8}
             >
               <Text style={{ fontSize: 18 }}>🛵</Text>
-              <Text style={[styles.deliveryCount, { color: '#FC8019' }]}>{deliveryToday.swiggy}</Text>
+              <Text style={[styles.deliveryCount, { color: Colors.swiggy }]}>{deliveryToday.swiggy}</Text>
               <Text style={styles.deliveryLabel}>Swiggy</Text>
-              {deliveryToday.swiggyRev > 0 && <Text style={[styles.deliveryRev, { color: '#FC8019' }]}>{fmt(deliveryToday.swiggyRev)}</Text>}
+              {deliveryToday.swiggyRev > 0 && <Text style={[styles.deliveryRev, { color: Colors.swiggy }]}>{fmt(deliveryToday.swiggyRev)}</Text>}
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.deliveryCard, { borderColor: '#E2374440' }]}
+              style={[styles.deliveryCard, { borderColor: Colors.zomato + '40' }]}
               onPress={() => navigation.navigate('OnlineOrders' as any)}
               activeOpacity={0.8}
             >
               <Text style={{ fontSize: 18 }}>🍕</Text>
-              <Text style={[styles.deliveryCount, { color: '#E23744' }]}>{deliveryToday.zomato}</Text>
+              <Text style={[styles.deliveryCount, { color: Colors.zomato }]}>{deliveryToday.zomato}</Text>
               <Text style={styles.deliveryLabel}>Zomato</Text>
-              {deliveryToday.zomatoRev > 0 && <Text style={[styles.deliveryRev, { color: '#E23744' }]}>{fmt(deliveryToday.zomatoRev)}</Text>}
+              {deliveryToday.zomatoRev > 0 && <Text style={[styles.deliveryRev, { color: Colors.zomato }]}>{fmt(deliveryToday.zomatoRev)}</Text>}
             </TouchableOpacity>
           </View>
         )}
@@ -502,13 +502,13 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           {[
             { label: 'New Bill',       icon: 'receipt' as const,            color: Colors.primary,       bg: Colors.primaryBg,             nav: 'Billing' },
             { label: 'Orders',         icon: 'receipt-long' as const,       color: Colors.success,       bg: Colors.successBg,             nav: 'Orders' },
-            { label: 'Online Orders',  icon: 'delivery-dining' as const,    color: '#FC8019',            bg: 'rgba(252,128,25,0.10)',       nav: 'OnlineOrders' },
+            { label: 'Online Orders',  icon: 'delivery-dining' as const,    color: Colors.swiggy,        bg: Colors.swiggyBg,               nav: 'OnlineOrders' },
             { label: 'Products',       icon: 'inventory' as const,          color: Colors.warning,       bg: Colors.warningBg,             nav: 'Products' },
             { label: 'Reports',        icon: 'bar-chart' as const,          color: Colors.info,          bg: Colors.infoBg,                nav: 'Reports' },
             { label: 'Floor Map',      icon: 'table-restaurant' as const,   color: Colors.accent,        bg: Colors.accentBg,              nav: 'TableLayout' },
-            { label: 'Bookings',       icon: 'event-available' as const,    color: '#6A1B9A',            bg: 'rgba(106,27,154,0.1)',        nav: 'Reservations' },
-            { label: 'Customers',      icon: 'people' as const,             color: '#25D366',            bg: 'rgba(37,211,102,0.1)',        nav: 'Customers' },
-            { label: 'Ingredients',    icon: 'kitchen' as const,            color: '#8D6E63',            bg: 'rgba(141,110,99,0.1)',        nav: 'Ingredients' },
+            { label: 'Bookings',       icon: 'event-available' as const,    color: Colors.bookings,      bg: Colors.bookingsBg,             nav: 'Reservations' },
+            { label: 'Customers',      icon: 'people' as const,             color: Colors.whatsApp,      bg: Colors.whatsAppBg,             nav: 'Customers' },
+            { label: 'Ingredients',    icon: 'kitchen' as const,            color: Colors.ingredient,    bg: Colors.ingredientBg,           nav: 'Ingredients' },
             { label: 'Expenses',       icon: 'account-balance-wallet' as const, color: Colors.danger,   bg: Colors.dangerBg,              nav: 'Expenses' },
             { label: 'Settings',       icon: 'settings' as const,           color: Colors.textSecondary, bg: Colors.elevated,              nav: 'Settings' },
           ].map((a, i) => (

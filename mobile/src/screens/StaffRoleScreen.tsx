@@ -11,14 +11,14 @@ import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/const
 type Props = NativeStackScreenProps<RootStackParamList, 'StaffRole'>;
 
 const StaffRoleScreen: React.FC<Props> = ({ navigation }) => {
-  const { bottom } = useSafeAreaInsets();
+  const { top, bottom } = useSafeAreaInsets();
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} translucent={false} />
 
       {/* ── Orange banner ───────────────────────────────────────────────── */}
-      <View style={styles.banner}>
+      <View style={[styles.banner, { paddingTop: top + Spacing.md }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
           <MaterialIcons name="arrow-back" size={22} color={Colors.white} />
         </TouchableOpacity>

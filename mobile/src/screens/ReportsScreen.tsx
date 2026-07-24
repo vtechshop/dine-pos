@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import { showAlert } from '../utils/alert';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
@@ -65,6 +66,7 @@ const shortDate = (s: string) => { const d = new Date(s); return `${d.getDate()}
 
 const ReportsScreen: React.FC = () => {
   const { settings } = useSettings();
+  const navigation = useNavigation();
   const [tab, setTab] = useState<Tab>('daily');
   const [date, setDate] = useState(getTodayString());
   const [report, setReport] = useState<DailyReport | null>(null);
@@ -432,7 +434,7 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
         <Text style={styles.headerTitle}>Reports</Text>
         {tab === 'daily' && (
           <TouchableOpacity
-            style={[styles.headerAddBtn, { backgroundColor: '#25D366' }]}
+            style={[styles.headerAddBtn, { backgroundColor: Colors.whatsApp }]}
             onPress={() => requirePremium('WhatsApp Report Share', () => {
               setShareDate(date); setSharePeriod('daily'); setShowShareModal(true);
             })}
@@ -897,7 +899,7 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
 
             <TouchableOpacity
               style={styles.premiumUpgradeBtn}
-              onPress={() => { setShowPremiumModal(false); }}
+              onPress={() => { setShowPremiumModal(false); navigation.navigate('Support' as never); }}
               activeOpacity={0.85}
             >
               <MaterialIcons name="upgrade" size={18} color={Colors.white} />
@@ -989,7 +991,7 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
                 <Text style={styles.modalCancelTxt}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalSaveBtn, { backgroundColor: '#25D366' }]}
+                style={[styles.modalSaveBtn, { backgroundColor: Colors.whatsApp }]}
                 onPress={handleShareSubmit}
                 disabled={shareLoading}
               >
@@ -1111,7 +1113,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerTitle: { fontSize: FontSize.xxl, fontWeight: 'bold', color: Colors.text },
+  headerTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.text },
   headerAddBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center',
@@ -1145,7 +1147,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 3,
   },
-  badgeText: { color: Colors.white, fontSize: 9, fontWeight: 'bold' },
+  badgeText: { color: Colors.white, fontSize: 9, fontWeight: '700' },
 
   dateRow: {
     flexDirection: 'row',
@@ -1166,7 +1168,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  dateArrowText: { color: Colors.text, fontSize: FontSize.lg, fontWeight: 'bold' },
+  dateArrowText: { color: Colors.text, fontSize: FontSize.lg, fontWeight: '700' },
   dateInput: {
     flex: 1,
     backgroundColor: Colors.card,
@@ -1220,8 +1222,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: Spacing.xs,
   },
-  statValueBig: { fontSize: 34, fontWeight: 'bold', color: Colors.text },
-  statValueMed: { fontSize: FontSize.xxl, fontWeight: 'bold', color: Colors.text },
+  statValueBig: { fontSize: 34, fontWeight: '700', color: Colors.text },
+  statValueMed: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.text },
 
   section: {
     backgroundColor: Colors.card,
@@ -1258,7 +1260,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.card,
   },
-  rankText: { fontSize: FontSize.sm, fontWeight: 'bold' },
+  rankText: { fontSize: FontSize.sm, fontWeight: '700' },
   productName: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   productSub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   productRevenue: { fontSize: FontSize.md, fontWeight: '700', color: Colors.primary },

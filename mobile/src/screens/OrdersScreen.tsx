@@ -40,7 +40,7 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bg: str
   pending:   { label: 'Pending',   color: Colors.warning,       bg: Colors.warningBg,       icon: 'hourglass-empty' },
   preparing: { label: 'Preparing', color: Colors.statusPreparing, bg: Colors.statusPreparingBg, icon: 'restaurant' },
   ready:     { label: 'Ready',     color: Colors.success,       bg: Colors.successBg,       icon: 'check-circle' },
-  served:    { label: 'Served',    color: '#00897B',            bg: 'rgba(0,137,123,0.10)', icon: 'room-service' },
+  served:    { label: 'Served',    color: Colors.served,        bg: Colors.servedBg,        icon: 'room-service' },
   completed: { label: 'Completed', color: Colors.textSecondary, bg: Colors.card,            icon: 'done-all' },
   cancelled: { label: 'Cancelled', color: Colors.danger,        bg: Colors.dangerBg,        icon: 'cancel' },
 };

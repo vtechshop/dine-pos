@@ -32,7 +32,7 @@ type StatusConfig = {
 
 const HotelStatusScreen: React.FC<Props> = ({ navigation, route }) => {
   const { status, hotelName, trialDaysRemaining } = route.params;
-  const { bottom } = useSafeAreaInsets();
+  const { top, bottom } = useSafeAreaInsets();
 
   const configs: Record<string, StatusConfig> = {
     pending: {
@@ -110,7 +110,7 @@ const HotelStatusScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Spacing.xxl + bottom }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: top + Spacing.xxl, paddingBottom: Spacing.xxl + bottom }]} showsVerticalScrollIndicator={false}>
         <View style={[styles.iconCircle, cfg.iconStyle]}>
           <MaterialIcons name={cfg.icon} size={64} color={Colors.white} />
         </View>
@@ -167,7 +167,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     alignItems: 'center',
     padding: Spacing.xxl,
-    paddingTop: 80,
     gap: Spacing.xl,
   },
 
@@ -181,12 +180,12 @@ const styles = StyleSheet.create({
   },
   iconPending: { backgroundColor: Colors.warning },
   iconTrial: { backgroundColor: Colors.accent },
-  iconExpired: { backgroundColor: Colors.textSecondary },
+  iconExpired: { backgroundColor: Colors.danger },
   iconSuspended: { backgroundColor: Colors.danger },
 
   title: {
     fontSize: FontSize.title,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: Colors.text,
     textAlign: 'center',
   },
@@ -235,7 +234,7 @@ const styles = StyleSheet.create({
   stepsTitle: {
     color: Colors.primary,
     fontSize: FontSize.md,
-    fontWeight: 'bold',
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: Spacing.xs,
@@ -254,7 +253,7 @@ const styles = StyleSheet.create({
     width: '100%',
     justifyContent: 'center',
   },
-  continueBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: 'bold' },
+  continueBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '700' },
   supportBtn: {
     flexDirection: 'row',
     backgroundColor: Colors.primary,
@@ -266,7 +265,7 @@ const styles = StyleSheet.create({
     width: '100%',
     justifyContent: 'center',
   },
-  supportBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: 'bold' },
+  supportBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '700' },
 
   logoutBtn: {
     flexDirection: 'row',
