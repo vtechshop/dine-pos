@@ -35,7 +35,7 @@
   .badge-error    { @apply bg-[#FEE2E2] text-[#B91C1C]; }
   .badge-info     { @apply bg-[#DBEAFE] text-[#1D4ED8]; }
   .badge-brand    { @apply bg-brand-light text-brand; }
-  .badge-neutral  { @apply bg-ink/8 text-ink/60; }
+  .badge-neutral  { background-color: rgb(var(--ink) / 0.08); color: rgb(var(--ink) / 0.6); @apply rounded-full; }
 
   .chip        { @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border border-border bg-surface text-ink/70 cursor-pointer hover:bg-mist transition-colors; }
   .chip.active { @apply bg-brand-light border-brand/30 text-brand; }
