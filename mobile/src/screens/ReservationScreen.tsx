@@ -32,6 +32,7 @@ const ReservationScreen: React.FC = () => {
   const [date, setDate]                 = useState(todayStr());
   const [showModal, setShowModal]       = useState(false);
   const [saving, setSaving]             = useState(false);
+  const [editingId, setEditingId]       = useState<string | null>(null);
 
   const emptyForm = { customerName: '', phone: '', partySize: '2', date: todayStr(), time: '19:00', tableNumber: '', notes: '' };
   const [form, setForm] = useState(emptyForm);
@@ -47,24 +48,44 @@ const ReservationScreen: React.FC = () => {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const openAdd = () => { setForm({ ...emptyForm, date }); setShowModal(true); };
+  const openAdd = () => { setEditingId(null); setForm({ ...emptyForm, date }); setShowModal(true); };
+
+  const openEdit = (r: Reservation) => {
+    setEditingId(r._id);
+    setForm({
+      customerName: r.customerName,
+      phone:        r.phone,
+      partySize:    String(r.partySize),
+      date:         r.date,
+      time:         r.time,
+      tableNumber:  r.tableNumber ? String(r.tableNumber) : '',
+      notes:        r.notes || '',
+    });
+    setShowModal(true);
+  };
 
   const save = async () => {
     if (!form.customerName.trim() || !form.phone.trim()) {
       Alert.alert('Error', 'Name and phone are required'); return;
     }
     setSaving(true);
+    const payload = {
+      customerName: form.customerName.trim(),
+      phone:        form.phone.trim(),
+      partySize:    parseInt(form.partySize) || 2,
+      date:         form.date,
+      time:         form.time,
+      tableNumber:  form.tableNumber ? parseInt(form.tableNumber) : undefined,
+      notes:        form.notes.trim(),
+    };
     try {
-      await api.createReservation({
-        customerName: form.customerName.trim(),
-        phone:        form.phone.trim(),
-        partySize:    parseInt(form.partySize) || 2,
-        date:         form.date,
-        time:         form.time,
-        tableNumber:  form.tableNumber ? parseInt(form.tableNumber) : undefined,
-        notes:        form.notes.trim(),
-      });
+      if (editingId) {
+        await api.updateReservation(editingId, payload);
+      } else {
+        await api.createReservation(payload);
+      }
       setShowModal(false);
+      setEditingId(null);
       load();
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to save');
@@ -100,11 +121,13 @@ const ReservationScreen: React.FC = () => {
   const renderItem = ({ item }: { item: Reservation }) => {
     const sc = STATUS_COLORS[item.status];
     return (
-      <TouchableOpacity style={styles.card} onPress={() => changeStatus(item)} activeOpacity={0.85}>
+      <TouchableOpacity style={styles.card} onPress={() => openEdit(item)} activeOpacity={0.85}>
         <View style={styles.cardLeft}>
-          <View style={[styles.statusPill, { backgroundColor: sc.bg }]}>
-            <Text style={[styles.statusTxt, { color: sc.text }]}>{item.status}</Text>
-          </View>
+          <TouchableOpacity onPress={() => changeStatus(item)}>
+            <View style={[styles.statusPill, { backgroundColor: sc.bg }]}>
+              <Text style={[styles.statusTxt, { color: sc.text }]}>{item.status}</Text>
+            </View>
+          </TouchableOpacity>
           <Text style={styles.name}>{item.customerName}</Text>
           <Text style={styles.meta}>
             {item.time}  ·  {item.partySize} pax
@@ -113,9 +136,14 @@ const ReservationScreen: React.FC = () => {
           <Text style={styles.phone}>{item.phone}</Text>
           {item.notes ? <Text style={styles.notes} numberOfLines={1}>{item.notes}</Text> : null}
         </View>
-        <TouchableOpacity style={styles.delBtn} onPress={() => del(item)}>
-          <MaterialIcons name="delete-outline" size={20} color={Colors.danger} />
-        </TouchableOpacity>
+        <View style={styles.cardActions}>
+          <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(item)}>
+            <MaterialIcons name="edit" size={18} color={Colors.info} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.delBtn} onPress={() => del(item)}>
+            <MaterialIcons name="delete-outline" size={20} color={Colors.danger} />
+          </TouchableOpacity>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -176,12 +204,12 @@ const ReservationScreen: React.FC = () => {
       )}
 
       {/* Add Modal */}
-      <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
+      <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => { setShowModal(false); setEditingId(null); }}>
         <View style={styles.overlay}>
           <ScrollView>
             <View style={[styles.modal, { paddingBottom: 40 + bottom }]}>
               <View style={styles.handle} />
-              <Text style={styles.modalTitle}>New Reservation</Text>
+              <Text style={styles.modalTitle}>{editingId ? 'Edit Reservation' : 'New Reservation'}</Text>
 
               {[
                 { label: 'Customer Name *', key: 'customerName', placeholder: 'Ramesh Kumar' },
@@ -235,12 +263,12 @@ const ReservationScreen: React.FC = () => {
               </View>
 
               <View style={styles.mActions}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowModal(false)}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => { setShowModal(false); setEditingId(null); }}>
                   <Text style={styles.cancelTxt}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving}>
                   {saving ? <ActivityIndicator size="small" color={Colors.white} />
-                    : <Text style={styles.saveTxt}>Book</Text>}
+                    : <Text style={styles.saveTxt}>{editingId ? 'Save' : 'Book'}</Text>}
                 </TouchableOpacity>
               </View>
             </View>
@@ -293,6 +321,8 @@ const styles = StyleSheet.create({
   meta:        { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 2 },
   phone:       { fontSize: FontSize.sm, color: Colors.info, marginTop: 2 },
   notes:       { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: 4 },
+  cardActions: { alignItems: 'center', gap: 4 },
+  editBtn:     { padding: Spacing.sm },
   delBtn:      { padding: Spacing.sm },
 
   empty:      { alignItems: 'center', paddingVertical: 80 },
