@@ -7,6 +7,9 @@ import {
   Download,
   Printer,
   RefreshCw,
+  Plus,
+  Trash2,
+  X,
 } from 'lucide-react';
 import type {
   SalesReport,
@@ -16,6 +19,7 @@ import type {
   HourlyBucket,
   DatePreset,
 } from '../types/reports';
+import type { Expense } from '../types';
 import {
   fetchSalesReport,
   fetchProductSalesReport,
@@ -25,6 +29,11 @@ import {
   fetchExpensePnL,
   fetchOrdersForHourly,
 } from '../api/reports';
+import {
+  fetchExpenses as apiFetchExpenses,
+  createExpense as apiCreateExpense,
+  deleteExpense as apiDeleteExpense,
+} from '../api/expenses';
 import { ApiError } from '../api/client';
 import { Spinner } from '../components/ui/Spinner';
 import { useSettings } from '../context/SettingsContext';
@@ -249,6 +258,17 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
   );
 }
 
+// ── Expense categories ────────────────────────────────────────────────────────
+
+const EXP_CATEGORIES: Array<{ id: Expense['category']; label: string; color: string }> = [
+  { id: 'ingredients', label: 'Ingredients', color: '#E65100' },
+  { id: 'utilities',   label: 'Utilities',   color: '#1565C0' },
+  { id: 'staff',       label: 'Staff',       color: '#6A1B9A' },
+  { id: 'maintenance', label: 'Maintenance', color: '#2E7D32' },
+  { id: 'rent',        label: 'Rent',        color: '#C62828' },
+  { id: 'other',       label: 'Other',       color: '#616161' },
+];
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function ReportsPage() {
@@ -300,6 +320,16 @@ export function ReportsPage() {
   const [pnlLoading, setPnlLoading]     = useState(false);
   const [pnlError, setPnlError]         = useState<string | null>(null);
   const [expFeature, setExpFeature]     = useState(true);
+  const [expenses, setExpenses]         = useState<Expense[]>([]);
+  const [showExpModal, setShowExpModal] = useState(false);
+  const [expSaving, setExpSaving]       = useState(false);
+  const [expDeleting, setExpDeleting]   = useState<string | null>(null);
+  const [expForm, setExpForm]           = useState({
+    description: '',
+    amount:      '',
+    category:    'other' as Expense['category'],
+    notes:       '',
+  });
 
   // ── Load overview ───────────────────────────────────────────────────────────
 
@@ -401,8 +431,14 @@ export function ReportsPage() {
 
     void (async () => {
       try {
-        const data = await fetchExpensePnL(expenseDate);
-        if (!cancelled) setPnl(data);
+        const [pnlData, { expenses: list }] = await Promise.all([
+          fetchExpensePnL(expenseDate),
+          apiFetchExpenses(expenseDate),
+        ]);
+        if (!cancelled) {
+          setPnl(pnlData);
+          setExpenses(list);
+        }
       } catch (e) {
         if (e instanceof ApiError && e.status === 403) {
           if (!cancelled) setExpFeature(false);
@@ -416,6 +452,47 @@ export function ReportsPage() {
 
     return () => { cancelled = true; };
   }, [tab, expenseDate]);
+
+  // ── Expense create / delete ─────────────────────────────────────────────────
+
+  const reloadExpenses = useCallback(async (date: string) => {
+    const [pnlData, { expenses: list }] = await Promise.all([
+      fetchExpensePnL(date),
+      apiFetchExpenses(date),
+    ]);
+    setPnl(pnlData);
+    setExpenses(list);
+  }, []);
+
+  const handleCreateExpense = useCallback(async () => {
+    if (!expForm.description.trim() || !expForm.amount) return;
+    setExpSaving(true);
+    try {
+      await apiCreateExpense({
+        description: expForm.description.trim(),
+        amount:      parseFloat(expForm.amount),
+        category:    expForm.category,
+        date:        expenseDate,
+        notes:       expForm.notes.trim(),
+      });
+      setShowExpModal(false);
+      setExpForm({ description: '', amount: '', category: 'other', notes: '' });
+      await reloadExpenses(expenseDate);
+    } catch { /* silent — user can retry */ } finally {
+      setExpSaving(false);
+    }
+  }, [expForm, expenseDate, reloadExpenses]);
+
+  const handleDeleteExpense = useCallback(async (id: string) => {
+    if (!confirm('Delete this expense?')) return;
+    setExpDeleting(id);
+    try {
+      await apiDeleteExpense(id);
+      await reloadExpenses(expenseDate);
+    } catch { /* silent */ } finally {
+      setExpDeleting(null);
+    }
+  }, [expenseDate, reloadExpenses]);
 
   // ── CSV exports ─────────────────────────────────────────────────────────────
 
@@ -958,6 +1035,13 @@ export function ReportsPage() {
                     Today
                   </button>
                   {pnlLoading && <Spinner size="sm" />}
+                  <button
+                    onClick={() => setShowExpModal(true)}
+                    className="ml-auto flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"
+                  >
+                    <Plus size={12} />
+                    Add Expense
+                  </button>
                 </div>
 
                 {pnlError && (
@@ -992,6 +1076,64 @@ export function ReportsPage() {
                         value={`${pnl.profitMargin}%`}
                       />
                     </div>
+
+                    {/* Individual expense log */}
+                    {expenses.length > 0 && (
+                      <Card className="overflow-hidden !p-0">
+                        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                          <h3 className="text-sm font-semibold text-ink">
+                            Expense Log — {fmtDisplayDate(expenseDate)}
+                          </h3>
+                          <span className="text-xs text-ink/40">{expenses.length} entries</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-mist">
+                                <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">Description</th>
+                                <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">Category</th>
+                                <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Amount</th>
+                                <th className="px-5 py-2" />
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                              {expenses.map(e => {
+                                const cat = EXP_CATEGORIES.find(c => c.id === e.category) ?? EXP_CATEGORIES[5];
+                                return (
+                                  <tr key={e._id} className="hover:bg-mist">
+                                    <td className="px-5 py-2.5">
+                                      <p className="font-medium text-ink">{e.description}</p>
+                                      {e.notes && <p className="text-xs text-ink/40">{e.notes}</p>}
+                                    </td>
+                                    <td className="px-5 py-2.5">
+                                      <span
+                                        className="rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize"
+                                        style={{ background: cat.color + '20', color: cat.color }}
+                                      >
+                                        {cat.label}
+                                      </span>
+                                    </td>
+                                    <td className="px-5 py-2.5 text-right font-semibold tabular-nums text-ink">
+                                      {fmtCur(e.amount, sym)}
+                                    </td>
+                                    <td className="px-5 py-2.5 text-right">
+                                      <button
+                                        onClick={() => { void handleDeleteExpense(e._id); }}
+                                        disabled={expDeleting === e._id}
+                                        className="text-ink/30 hover:text-red-500 disabled:opacity-40"
+                                        title="Delete expense"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </Card>
+                    )}
 
                     {/* Expense breakdown */}
                     {pnl.breakdown.length > 0 && (
@@ -1053,6 +1195,91 @@ export function ReportsPage() {
           </div>
         )}
       </div>
+
+      {/* ════════════════ ADD EXPENSE MODAL ════════════════ */}
+      {showExpModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="mx-4 w-full max-w-md rounded-xl border border-border bg-canvas p-6 shadow-xl">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">Add Expense</h2>
+              <button
+                onClick={() => setShowExpModal(false)}
+                className="text-ink/40 hover:text-ink"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-ink/60">Description *</label>
+                <input
+                  type="text"
+                  value={expForm.description}
+                  onChange={e => setExpForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="e.g. Vegetable purchase"
+                  className="w-full rounded-lg border border-border bg-mist px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-ink/60">Amount ({sym}) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={expForm.amount}
+                    onChange={e => setExpForm(f => ({ ...f, amount: e.target.value }))}
+                    placeholder="0.00"
+                    className="w-full rounded-lg border border-border bg-mist px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-ink/60">Category</label>
+                  <select
+                    value={expForm.category}
+                    onChange={e => setExpForm(f => ({ ...f, category: e.target.value as Expense['category'] }))}
+                    className="w-full rounded-lg border border-border bg-mist px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+                  >
+                    {EXP_CATEGORIES.map(c => (
+                      <option key={c.id} value={c.id}>{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-ink/60">Notes</label>
+                <input
+                  type="text"
+                  value={expForm.notes}
+                  onChange={e => setExpForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Optional"
+                  className="w-full rounded-lg border border-border bg-mist px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-2">
+              <button
+                onClick={() => setShowExpModal(false)}
+                className="flex-1 rounded-lg border border-border py-2 text-sm text-ink/50 hover:bg-mist"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { void handleCreateExpense(); }}
+                disabled={expSaving || !expForm.description.trim() || !expForm.amount}
+                className="flex-1 rounded-lg bg-brand py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-40"
+              >
+                {expSaving ? 'Saving…' : 'Add Expense'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

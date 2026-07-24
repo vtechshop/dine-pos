@@ -266,3 +266,38 @@ export interface PrinterDeviceStatus {
   lastHeartbeat: string | null;
   lastSeen: string | null;
 }
+
+// ── Expenses ──────────────────────────────────────────────────────────────────
+
+export interface Expense {
+  _id: string;
+  description: string;
+  amount: number;
+  category: 'ingredients' | 'utilities' | 'staff' | 'maintenance' | 'rent' | 'other';
+  date: string;
+  notes: string;
+  createdAt: string;
+}
+
+// ── Waste Logs ────────────────────────────────────────────────────────────────
+
+export interface WasteLog {
+  _id: string;
+  productId?: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+  reason: 'expired' | 'damaged' | 'overcooked' | 'returned' | 'other';
+  estimatedLoss: number;
+  date: string;
+  notes: string;
+  createdAt: string;
+}
+
+export interface WasteAnalytics {
+  date: string;
+  totalLoss: number;
+  totalEntries: number;
+  topItems: Array<{ productName: string; totalQty: number; totalLoss: number }>;
+  byReason: Array<{ _id: string; count: number; totalLoss: number }>;
+}

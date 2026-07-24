@@ -1,4 +1,4 @@
-import { brand } from '../../packages/shared/tokens/brand.ts';
+import { brand } from '../packages/shared/tokens/brand.ts';
 
 /** @type {import('tailwindcss').Config} */
 export default {
