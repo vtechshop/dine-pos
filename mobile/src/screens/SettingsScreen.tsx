@@ -759,6 +759,27 @@ const SettingsScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
+        {/* Loyalty Program */}
+        <Text style={styles.sectionHeader}>Loyalty Program</Text>
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.navRow}
+            onPress={() => navigation.navigate('LoyaltyProgram' as any)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.navRowLeft}>
+              <View style={[styles.navRowIcon, { backgroundColor: Colors.successBg }]}>
+                <Text style={{ fontSize: 18 }}>🎁</Text>
+              </View>
+              <View>
+                <Text style={styles.navRowTitle}>Loyalty Program</Text>
+                <Text style={styles.navRowSub}>Manage customer points &amp; rewards</Text>
+              </View>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={Colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
         {/* API Section */}
         <Text style={styles.sectionHeader}>Server Connection</Text>
         <View style={styles.section}>

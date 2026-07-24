@@ -187,6 +187,41 @@ export interface FeatureFlags {
   ingredients: boolean;
   waste: boolean;
   aggregator: boolean;
+  loyaltyProgram?: boolean;
+}
+
+// Loyalty
+export interface LoyaltyConfig {
+  rewardName: string;
+  pointsPerHundredRupees: number;
+  minimumRedeemPoints: number;
+  maximumRedeemPercent: number;
+  pointValueInPaisa: number;
+  expiryDays: number | null;
+  roundingRule: 'floor' | 'ceil' | 'round';
+  calculationBase: 'subtotal' | 'grandTotal';
+}
+
+export interface LoyaltyCustomer {
+  _id: string;
+  customerId: string;
+  name: string;
+  phone: string;
+  loyaltyBalance: number;
+  lifetimeSpend: number;
+  visitCount: number;
+  lastVisitAt: string;
+  status: 'active' | 'merged' | 'blocked';
+}
+
+export interface LoyaltyTransaction {
+  _id: string;
+  type: 'earn' | 'redeem' | 'manual' | 'expire';
+  points: number;
+  balance: number;
+  orderNumber?: string;
+  remarks?: string;
+  createdAt: string;
 }
 
 // Remote Config (system-wide, fetched on startup)
@@ -448,6 +483,7 @@ export type RootStackParamList = {
   Customers: undefined;
   Ingredients: undefined;
   Chat: undefined;
+  LoyaltyProgram: undefined;
   KitchenLogin: undefined;
   KitchenDisplay: undefined;
   OnlineOrders: undefined;
