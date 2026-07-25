@@ -24,7 +24,7 @@ const CustomerMenuScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const rootNav = useNavigation<NavProp>();
   const { width: screenWidth } = useWindowDimensions();
-  const { bottom } = useSafeAreaInsets();
+  const { top, bottom } = useSafeAreaInsets();
 
   const isTablet = screenWidth >= 600;
   const COLS = 2; // Always 2 columns — better card size on both phone and tablet
@@ -354,7 +354,7 @@ const CustomerMenuScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
 
       {/* Offline banner */}
       {isOffline && (
@@ -365,7 +365,7 @@ const CustomerMenuScreen: React.FC = () => {
       )}
 
       {/* ── Header ── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: top + Spacing.md }]}>
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={handleSecretTap} activeOpacity={1} style={{ flex: 1 }}>
             <Text style={styles.hotelName}>{settings.hotelName || 'Menu'}</Text>
@@ -490,7 +490,6 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: Colors.primary,
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl + 4,
     paddingBottom: Spacing.lg,
   },
   headerTop: {

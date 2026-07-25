@@ -4,6 +4,7 @@ import {
   RefreshControl, ActivityIndicator, StatusBar, Alert, Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -37,6 +38,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { settings, refreshSettings } = useSettings();
   const { logout } = useAuth();
   const { clearCart } = useCart();
+  const { top } = useSafeAreaInsets();
   const { increment: incAdminBadge } = useBadgeCount(BADGE_KEYS.adminOrders);
   const [stats, setStats]           = useState<Stats>({ todayOrders: 0, todaySales: 0, totalProducts: 0, totalCategories: 0, parcelOrders: 0 });
   const [loading, setLoading]       = useState(true);
@@ -246,7 +248,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.loader}>
-        <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
+        <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
     <ActivityIndicator size="large" color={Colors.primary} />
         <Text style={styles.loaderText}>Loading dashboard...</Text>
       </View>
@@ -264,36 +266,40 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
-      >
-        {/* ── Header ── */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity style={styles.avatarBtn} onPress={() => { clearCart(); logout(); }} activeOpacity={0.7}>
-              <MaterialIcons name="logout" size={18} color={Colors.textSecondary} />
-            </TouchableOpacity>
-            <View style={{ marginLeft: Spacing.md }}>
-              <Text style={styles.greetText}>{greeting} 👋</Text>
-              <Text style={styles.hotelNameText} numberOfLines={1}>{settings.hotelName}</Text>
-            </View>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+
+      {/* ── Branded fixed header ── */}
+      <View style={[styles.header, { paddingTop: top + Spacing.md }]}>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity style={styles.avatarBtn} onPress={() => { clearCart(); logout(); }} activeOpacity={0.7}>
+            <MaterialIcons name="logout" size={18} color="rgba(255,255,255,0.85)" />
+          </TouchableOpacity>
+          <View style={{ marginLeft: Spacing.md }}>
+            <Text style={styles.greetText}>{greeting} 👋</Text>
+            <Text style={styles.hotelNameText} numberOfLines={1}>{settings.hotelName}</Text>
           </View>
-          <TouchableOpacity style={[styles.settingsBtn, { position: 'relative' }]} onPress={() => (navigation as any).navigate('Notifications')} activeOpacity={0.8}>
-            <MaterialIcons name="notifications" size={22} color={notifUnread > 0 ? Colors.primary : Colors.textSecondary} />
+        </View>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={[styles.headerBtn, { position: 'relative' }]} onPress={() => (navigation as any).navigate('Notifications')} activeOpacity={0.8}>
+            <MaterialIcons name="notifications" size={22} color={Colors.white} />
             {notifUnread > 0 && (
               <View style={styles.notifBadge}>
                 <Text style={styles.notifBadgeText}>{notifUnread > 9 ? '9+' : notifUnread}</Text>
               </View>
             )}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.settingsBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.8}>
-            <MaterialIcons name="settings" size={22} color={Colors.textSecondary} />
+          <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.8}>
+            <MaterialIcons name="settings" size={22} color={Colors.white} />
           </TouchableOpacity>
         </View>
+      </View>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
+      >
 
         {/* ── Error banner ── */}
         {error && (
@@ -544,19 +550,27 @@ const styles = StyleSheet.create({
   loaderText: { color: Colors.textSecondary, fontSize: FontSize.md, marginTop: Spacing.md },
   scrollContent: { padding: Spacing.lg, paddingBottom: 100 },
 
-  // Header
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.xl, paddingTop: Spacing.md },
+  // Header — branded primary banner (fixed, outside ScrollView)
+  header: {
+    backgroundColor: Colors.primary,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.lg,
+  },
   headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  headerActions: { flexDirection: 'row', gap: Spacing.sm },
   avatarBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border,
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
-  greetText: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  hotelNameText: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.text, maxWidth: 200 },
-  settingsBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border,
+  greetText: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
+  hotelNameText: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.white, maxWidth: 200, letterSpacing: -0.3 },
+  headerBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
   notifBadge: {
