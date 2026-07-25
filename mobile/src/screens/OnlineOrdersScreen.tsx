@@ -763,9 +763,9 @@ const styles = StyleSheet.create({
   statValue: { fontSize: FontSize.md, fontWeight: '900', color: Colors.text },
   statLabel: { fontSize: 9, fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.3 },
 
-  filterBar: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  statusBar:  { backgroundColor: Colors.card },
-  filterBarContent: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: Spacing.sm },
+  filterBar: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, maxHeight: 50 },
+  statusBar:  { backgroundColor: Colors.card, maxHeight: 46 },
+  filterBarContent: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: Spacing.sm, alignItems: 'center' },
   filterChip: {
     paddingHorizontal: 14, paddingVertical: 6,
     borderRadius: BorderRadius.round, borderWidth: 1.5, borderColor: Colors.border,
@@ -773,7 +773,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.textSecondary },
   statusChip: {
-    paddingHorizontal: 14, paddingVertical: 5,
+    paddingHorizontal: 12, paddingVertical: 5,
     borderRadius: BorderRadius.round, borderWidth: 1, borderColor: Colors.border,
     backgroundColor: Colors.surface,
   },

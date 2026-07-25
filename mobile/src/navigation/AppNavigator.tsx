@@ -259,6 +259,7 @@ const AppNavigator = () => {
             <Stack.Screen name="CashierDashboard"     component={(p: any) => <ErrorBoundary><CashierDashboardScreen {...p} /></ErrorBoundary>}     options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="HotelRegister"        component={HotelRegisterScreen}        options={{ contentStyle: safeTop }} />
             <Stack.Screen name="HotelRegisterSuccess" component={HotelRegisterSuccessScreen} options={{ contentStyle: safeTop, gestureEnabled: false }} />
+            <Stack.Screen name="Support"              component={SupportScreen}              options={{ contentStyle: safeTop }} />
           </>
         ) : (
           <>
