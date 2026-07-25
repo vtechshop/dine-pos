@@ -13,6 +13,7 @@ import { Expense, PnLReport } from '../types';
 import { PremiumGate } from '../components/PremiumGate';
 
 type Tab = 'expenses' | 'pnl';
+type PnLPeriod = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 
 const CATEGORIES: { id: Expense['category']; label: string; icon: string; color: string }[] = [
   { id: 'ingredients', label: 'Ingredients', icon: 'kitchen',       color: '#E65100' },
@@ -40,21 +41,54 @@ const ExpenseScreen: React.FC = () => {
   const [saving, setSaving]     = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  const [pnlPeriod, setPnlPeriod] = useState<PnLPeriod>('today');
+  const [pnlFrom, setPnlFrom]     = useState(todayStr());
+  const [pnlTo, setPnlTo]         = useState(todayStr());
+  const [customFrom, setCustomFrom] = useState(todayStr());
+  const [customTo, setCustomTo]     = useState(todayStr());
+
   const emptyForm = { description: '', amount: '', category: 'ingredients' as Expense['category'], date: todayStr(), notes: '' };
   const [form, setForm] = useState(emptyForm);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [exp, pnlData] = await Promise.all([
+      const [expResult, pnlData] = await Promise.all([
         api.getExpenses({ date }),
-        api.getPnLReport(date),
+        api.getPnLReport({ from: pnlFrom, to: pnlTo }),
       ]);
-      setExpenses(exp);
+      setExpenses(expResult);
       setPnl(pnlData);
     } catch { Alert.alert('Error', 'Failed to load data'); }
     finally { setLoading(false); }
-  }, [date]);
+  }, [date, pnlFrom, pnlTo]);
+
+  const applyPeriod = useCallback((period: PnLPeriod) => {
+    if (period === 'custom') {
+      setPnlPeriod('custom');
+      return;
+    }
+    const today = new Date();
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    let from: string, to: string;
+    if (period === 'today') {
+      from = to = todayStr();
+    } else if (period === 'yesterday') {
+      const y = new Date(today); y.setDate(y.getDate() - 1);
+      from = to = fmt(y);
+    } else if (period === 'week') {
+      const day = today.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      const mon = new Date(today); mon.setDate(today.getDate() + diff);
+      from = fmt(mon); to = todayStr();
+    } else {
+      from = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+      to = todayStr();
+    }
+    setPnlFrom(from);
+    setPnlTo(to);
+    setPnlPeriod(period);
+  }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -183,6 +217,55 @@ const ExpenseScreen: React.FC = () => {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* P&L period picker — only on P&L tab */}
+      {tab === 'pnl' && (
+        <>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.periodBar}
+            contentContainerStyle={styles.periodBarContent}
+          >
+            {(['today', 'yesterday', 'week', 'month', 'custom'] as PnLPeriod[]).map(p => (
+              <TouchableOpacity
+                key={p}
+                style={[styles.periodChip, pnlPeriod === p && styles.periodChipActive]}
+                onPress={() => applyPeriod(p)}
+              >
+                <Text style={[styles.periodChipTxt, pnlPeriod === p && styles.periodChipTxtActive]}>
+                  {p === 'today' ? 'Today' : p === 'yesterday' ? 'Yesterday' : p === 'week' ? 'This Week' : p === 'month' ? 'This Month' : 'Custom'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          {pnlPeriod === 'custom' && (
+            <View style={styles.customRangeRow}>
+              <TextInput
+                style={styles.customDateInput}
+                value={customFrom}
+                onChangeText={setCustomFrom}
+                placeholder="From YYYY-MM-DD"
+                placeholderTextColor={Colors.textMuted}
+              />
+              <Text style={styles.customDateSep}>—</Text>
+              <TextInput
+                style={styles.customDateInput}
+                value={customTo}
+                onChangeText={setCustomTo}
+                placeholder="To YYYY-MM-DD"
+                placeholderTextColor={Colors.textMuted}
+              />
+              <TouchableOpacity
+                style={styles.customApplyBtn}
+                onPress={() => { setPnlFrom(customFrom); setPnlTo(customTo); }}
+              >
+                <Text style={styles.customApplyTxt}>Apply</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
+      )}
 
       {loading ? (
         <View style={styles.loader}><ActivityIndicator size="large" color={Colors.primary} /></View>
@@ -447,6 +530,18 @@ const styles = StyleSheet.create({
   catDot:       { width: 10, height: 10, borderRadius: 5, marginRight: Spacing.md },
   breakdownCat: { flex: 1, fontSize: FontSize.md, color: Colors.text },
   breakdownAmt: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
+
+  periodBar: { maxHeight: 44, backgroundColor: Colors.surface },
+  periodBarContent: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: Spacing.sm, alignItems: 'center' as const },
+  periodChip: { paddingHorizontal: Spacing.md, paddingVertical: 6, borderRadius: BorderRadius.round, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card },
+  periodChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  periodChipTxt: { fontSize: FontSize.sm, fontWeight: '600' as const, color: Colors.textSecondary },
+  periodChipTxtActive: { color: Colors.white },
+  customRangeRow: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: Spacing.sm, backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  customDateInput: { flex: 1, fontSize: FontSize.sm, color: Colors.text, borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.sm, paddingVertical: 6, backgroundColor: Colors.card },
+  customDateSep: { fontSize: FontSize.md, color: Colors.textSecondary },
+  customApplyBtn: { paddingHorizontal: Spacing.md, paddingVertical: 7, backgroundColor: Colors.primary, borderRadius: BorderRadius.sm },
+  customApplyTxt: { color: Colors.white, fontSize: FontSize.sm, fontWeight: '700' as const },
 
   overlay: { flex: 1, backgroundColor: Colors.overlay },
   modal: {

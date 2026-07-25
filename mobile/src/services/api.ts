@@ -1019,8 +1019,8 @@ export const getExpenses = (params?: { date?: string; from?: string; to?: string
   return fetchAPI<Expense[]>(`/expenses${q}`);
 };
 
-export const getPnLReport = (date?: string): Promise<PnLReport> => {
-  const q = date ? `?date=${date}` : '';
+export const getPnLReport = (params?: { date?: string; from?: string; to?: string }): Promise<PnLReport> => {
+  const q = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
   return fetchAPI<PnLReport>(`/expenses/pnl${q}`);
 };
 

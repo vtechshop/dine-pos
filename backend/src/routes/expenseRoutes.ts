@@ -46,14 +46,26 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET P&L report for a date range
+// GET P&L report — supports ?from=YYYY-MM-DD&to=YYYY-MM-DD (range) or legacy ?date=YYYY-MM-DD (single day)
 router.get('/pnl', async (req: AuthRequest, res: Response) => {
   try {
-    const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
-    if (!isValidDateParam(dateStr)) return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' });
-    const date  = new Date(dateStr);
-    const start = new Date(date); start.setHours(0, 0, 0, 0);
-    const end   = new Date(date); end.setHours(23, 59, 59, 999);
+    let start: Date, end: Date;
+
+    if (req.query.from && req.query.to) {
+      const rawFrom = req.query.from as string;
+      const rawTo   = req.query.to   as string;
+      if (!isValidDateParam(rawFrom) || !isValidDateParam(rawTo)) {
+        return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' });
+      }
+      start = new Date(rawFrom); start.setHours(0, 0, 0, 0);
+      end   = new Date(rawTo);   end.setHours(23, 59, 59, 999);
+    } else {
+      const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+      if (!isValidDateParam(dateStr)) return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' });
+      const date = new Date(dateStr);
+      start = new Date(date); start.setHours(0, 0, 0, 0);
+      end   = new Date(date); end.setHours(23, 59, 59, 999);
+    }
 
     const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
 
@@ -78,7 +90,7 @@ router.get('/pnl', async (req: AuthRequest, res: Response) => {
     const profit    = revenue - expenses;
 
     res.json({
-      date: dateStr,
+      date: start.toISOString().slice(0, 10),
       revenue,
       orders,
       expenses,
