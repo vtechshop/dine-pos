@@ -12,6 +12,7 @@ import {
   Alert,
   Linking,
   Image,
+  Switch,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ROLE_IMG_KEYS } from './RoleSelectScreen';
@@ -23,7 +24,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
 import { useSettings } from '../context/SettingsContext';
 import { useCart } from '../context/CartContext';
-import { registerHotel, clearApiUrlCache, seedData, uploadImage } from '../services/api';
+import { registerHotel, clearApiUrlCache, seedData, uploadImage, getSubscriptionInfo } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../types';
 import { getPairedDevices, connectPrinter, BluetoothDevice, BT_PERMISSION_DENIED } from '../utils/bluetoothPrint';
@@ -55,13 +56,20 @@ const SettingsScreen: React.FC = () => {
   const [bankIfscCode, setBankIfscCode] = useState('');
   const [upiId, setUpiId] = useState('');
   const [defaultTaxPercent, setDefaultTaxPercent] = useState('');
-  const [printerWidth, setPrinterWidth] = useState<'58mm' | '80mm'>('80mm');
-  const [footerText, setFooterText] = useState('');
-  const [kitchenPin, setKitchenPin] = useState('');
-  const [apiBaseUrl, setApiBaseUrl] = useState('');
+  const [printerWidth, setPrinterWidth]   = useState<'58mm' | '80mm'>('80mm');
+  const [printerMode, setPrinterMode]     = useState<'single' | 'dual'>('single');
+  const [kitchenPrinterAddress, setKitchenPrinterAddress] = useState('');
+  const [cashierPrinterAddress, setCashierPrinterAddress] = useState('');
+  const [kotAutoPrint, setKotAutoPrint]   = useState(false);
+  const [currencySymbol, setCurrencySymbol] = useState('₹');
+  const [qrGuestTimeout, setQrGuestTimeout] = useState('');
+  const [footerText, setFooterText]       = useState('');
+  const [kitchenPin, setKitchenPin]       = useState('');
+  const [apiBaseUrl, setApiBaseUrl]       = useState('');
 
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving]           = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [subscriptionInfo, setSubscriptionInfo] = useState<import('../types').SubscriptionInfo | null>(null);
 
   // Role card images
   const [roleImgs, setRoleImgs] = useState({ customer: '', admin: '', staff: '' });
@@ -128,9 +136,20 @@ const SettingsScreen: React.FC = () => {
     setUpiId(settings.upiId || '');
     setDefaultTaxPercent(String(settings.defaultTaxPercent || 5));
     setPrinterWidth(settings.printerWidth || '80mm');
+    setPrinterMode(settings.printerMode || 'single');
+    setKitchenPrinterAddress(settings.kitchenPrinterAddress || '');
+    setCashierPrinterAddress(settings.cashierPrinterAddress || '');
+    setKotAutoPrint(settings.kotAutoPrint ?? false);
+    setCurrencySymbol(settings.currencySymbol || '₹');
+    setQrGuestTimeout(settings.qrGuestTimeoutMinutes != null ? String(settings.qrGuestTimeoutMinutes) : '');
     setFooterText(settings.footerText || '');
     setKitchenPin((settings as any).kitchenPin || '');
   }, [settings]);
+
+  // Load subscription info once on mount
+  useEffect(() => {
+    getSubscriptionInfo().then(setSubscriptionInfo).catch(() => {});
+  }, []);
 
   // Load stored API base URL and printer
   useEffect(() => {
@@ -246,7 +265,13 @@ const SettingsScreen: React.FC = () => {
         bankIfscCode: bankIfscCode.trim().toUpperCase(),
         upiId: upiId.trim(),
         defaultTaxPercent: taxNum,
+        currencySymbol: currencySymbol.trim() || '₹',
+        qrGuestTimeoutMinutes: qrGuestTimeout ? parseInt(qrGuestTimeout) : undefined,
         printerWidth,
+        printerMode,
+        kitchenPrinterAddress: kitchenPrinterAddress.trim(),
+        cashierPrinterAddress: cashierPrinterAddress.trim(),
+        kotAutoPrint,
         footerText: footerText.trim(),
         kitchenPin: kitchenPin.trim(),
       });
@@ -441,6 +466,30 @@ const SettingsScreen: React.FC = () => {
               ))}
             </View>
           </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Currency Symbol</Text>
+            <TextInput
+              style={styles.input}
+              value={currencySymbol}
+              onChangeText={setCurrencySymbol}
+              placeholder="₹"
+              placeholderTextColor={Colors.textMuted}
+              maxLength={3}
+            />
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>QR Guest Session Timeout (minutes)</Text>
+            <TextInput
+              style={styles.input}
+              value={qrGuestTimeout}
+              onChangeText={v => setQrGuestTimeout(v.replace(/[^0-9]/g, ''))}
+              placeholder="e.g. 60 (leave empty for default)"
+              placeholderTextColor={Colors.textMuted}
+              keyboardType="number-pad"
+            />
+          </View>
         </View>
 
         {/* Legal Section */}
@@ -608,6 +657,68 @@ const SettingsScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Printer Mode</Text>
+            <View style={styles.toggleRow}>
+              {(['single', 'dual'] as const).map(m => (
+                <TouchableOpacity
+                  key={m}
+                  style={[styles.toggleOption, printerMode === m && styles.toggleOptionActive]}
+                  onPress={() => setPrinterMode(m)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.toggleText, printerMode === m && styles.toggleTextActive]}>
+                    {m === 'single' ? 'Single' : 'Dual (Kitchen + Cashier)'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {printerMode === 'dual' && (
+            <>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Cashier Printer IP / Address</Text>
+                <TextInput
+                  style={styles.input}
+                  value={cashierPrinterAddress}
+                  onChangeText={setCashierPrinterAddress}
+                  placeholder="e.g. 192.168.1.101"
+                  placeholderTextColor={Colors.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="default"
+                />
+              </View>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Kitchen Printer IP / Address</Text>
+                <TextInput
+                  style={styles.input}
+                  value={kitchenPrinterAddress}
+                  onChangeText={setKitchenPrinterAddress}
+                  placeholder="e.g. 192.168.1.102"
+                  placeholderTextColor={Colors.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="default"
+                />
+              </View>
+            </>
+          )}
+
+          <View style={[styles.fieldGroup, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.label}>Auto-Print KOT</Text>
+              <Text style={[styles.hint, { marginTop: 0 }]}>Automatically print KOT on new order</Text>
+            </View>
+            <Switch
+              value={kotAutoPrint}
+              onValueChange={setKotAutoPrint}
+              trackColor={{ false: Colors.border, true: Colors.success + '60' }}
+              thumbColor={kotAutoPrint ? Colors.success : Colors.textMuted}
+            />
+          </View>
         </View>
 
         {/* Receipt Section */}
@@ -774,6 +885,100 @@ const SettingsScreen: React.FC = () => {
               <View>
                 <Text style={styles.navRowTitle}>Loyalty Program</Text>
                 <Text style={styles.navRowSub}>Manage customer points &amp; rewards</Text>
+              </View>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={Colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Subscription Status */}
+        {subscriptionInfo && (
+          <>
+            <Text style={styles.sectionHeader}>Subscription</Text>
+            <View style={styles.section}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm }}>
+                <Text style={[styles.label, { marginBottom: 0 }]}>Plan</Text>
+                <Text style={{ fontSize: FontSize.md, fontWeight: '800', color: Colors.primary, textTransform: 'capitalize' }}>
+                  {subscriptionInfo.subscriptionType || 'Trial'}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm }}>
+                <Text style={[styles.label, { marginBottom: 0 }]}>Status</Text>
+                <Text style={{ fontSize: FontSize.md, fontWeight: '700', color: subscriptionInfo.isExpired ? Colors.danger : Colors.success, textTransform: 'capitalize' }}>
+                  {subscriptionInfo.subscriptionStatus}
+                </Text>
+              </View>
+              {subscriptionInfo.daysRemaining > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm }}>
+                  <Text style={[styles.label, { marginBottom: 0 }]}>Days Remaining</Text>
+                  <Text style={{ fontSize: FontSize.md, fontWeight: '700', color: subscriptionInfo.daysRemaining <= 7 ? Colors.danger : Colors.text }}>
+                    {subscriptionInfo.daysRemaining}
+                  </Text>
+                </View>
+              )}
+              {subscriptionInfo.subscriptionEndDate && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={[styles.label, { marginBottom: 0 }]}>Expires</Text>
+                  <Text style={{ fontSize: FontSize.sm, color: Colors.textMuted }}>
+                    {new Date(subscriptionInfo.subscriptionEndDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </Text>
+                </View>
+              )}
+              {subscriptionInfo.trialEndDate && !subscriptionInfo.subscriptionEndDate && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={[styles.label, { marginBottom: 0 }]}>Trial Ends</Text>
+                  <Text style={{ fontSize: FontSize.sm, color: Colors.textMuted }}>
+                    {new Date(subscriptionInfo.trialEndDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </>
+        )}
+
+        {/* Feature Flags */}
+        {settings.features && (
+          <>
+            <Text style={styles.sectionHeader}>Enabled Features</Text>
+            <View style={styles.section}>
+              {Object.entries(settings.features).map(([key, enabled]) => (
+                <View
+                  key={key}
+                  style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.xs }}
+                >
+                  <Text style={{ fontSize: FontSize.sm, color: Colors.text, textTransform: 'capitalize' }}>
+                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                  </Text>
+                  <View style={[
+                    { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+                    enabled ? { backgroundColor: Colors.successBg } : { backgroundColor: Colors.background },
+                  ]}>
+                    <Text style={{ fontSize: FontSize.xs, fontWeight: '700', color: enabled ? Colors.success : Colors.textMuted }}>
+                      {enabled ? 'ON' : 'OFF'}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+              <Text style={[styles.hint, { marginTop: Spacing.sm }]}>Feature flags are managed by your service provider.</Text>
+            </View>
+          </>
+        )}
+
+        {/* Online Delivery */}
+        <Text style={styles.sectionHeader}>Online Delivery</Text>
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.navRow}
+            onPress={() => navigation.navigate('AggregatorConfig' as any)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.navRowLeft}>
+              <View style={[styles.navRowIcon, { backgroundColor: '#FC801920' }]}>
+                <Text style={{ fontSize: 18 }}>🚚</Text>
+              </View>
+              <View>
+                <Text style={styles.navRowTitle}>Swiggy &amp; Zomato Config</Text>
+                <Text style={styles.navRowSub}>API keys, enable/disable, menu sync</Text>
               </View>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={Colors.textMuted} />
