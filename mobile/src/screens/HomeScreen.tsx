@@ -282,6 +282,14 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.hotelNameText} numberOfLines={1}>{settings.hotelName}</Text>
             </View>
           </View>
+          <TouchableOpacity style={[styles.settingsBtn, { position: 'relative' }]} onPress={() => (navigation as any).navigate('Notifications')} activeOpacity={0.8}>
+            <MaterialIcons name="notifications" size={22} color={notifUnread > 0 ? Colors.primary : Colors.textSecondary} />
+            {notifUnread > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{notifUnread > 9 ? '9+' : notifUnread}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
           <TouchableOpacity style={styles.settingsBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.8}>
             <MaterialIcons name="settings" size={22} color={Colors.textSecondary} />
           </TouchableOpacity>
@@ -551,6 +559,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
+  notifBadge: {
+    position: 'absolute', top: 6, right: 6,
+    minWidth: 14, height: 14, borderRadius: 7,
+    backgroundColor: Colors.danger, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  notifBadgeText: { fontSize: 8, fontWeight: '900', color: '#fff' },
 
   // Banners
   errorBanner: {

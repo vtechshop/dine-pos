@@ -117,11 +117,13 @@ export interface Settings {
   footerText: string;
   kitchenPin: string;
   isSetupComplete: boolean;
+  qrGuestTimeoutMinutes?: number;
   // Phase 7 — dual printer engine
   printerMode?: 'single' | 'dual';
   kitchenPrinterAddress?: string;
   cashierPrinterAddress?: string;
   kotAutoPrint?: boolean;
+  features?: FeatureFlags;
   isPremium?: boolean;
   premiumPlan?: string;
   premiumExpiry?: string | null;
@@ -459,6 +461,57 @@ export interface PnLReport {
   breakdown: { _id: string; total: number; count: number }[];
 }
 
+// Aggregator Integration
+export interface AggregatorIntegration {
+  _id: string;
+  platform: 'swiggy' | 'zomato';
+  enabled: boolean;
+  storeId: string;
+  apiKey: string;
+  apiSecret: string;
+  webhookSecret: string;
+  autoAccept: boolean;
+  connectionStatus: 'disconnected' | 'connected' | 'error';
+  menuSyncStatus: 'idle' | 'syncing' | 'success' | 'failed';
+  lastSyncAt: string | null;
+  lastSyncError: string | null;
+  syncedItemCount: number;
+  failedItemCount: number;
+  lastOrderAt: string | null;
+}
+
+export interface AggregatorSyncStatus {
+  menuSyncStatus: string;
+  lastSyncAt: string | null;
+  lastSyncError: string | null;
+  syncedItemCount: number;
+  failedItemCount: number;
+  connectionStatus: string;
+  lastOrderAt: string | null;
+}
+
+export interface WebhookLog {
+  _id: string;
+  platform: string;
+  status: 'pending' | 'success' | 'failed' | 'retrying';
+  orderId: string | null;
+  errorMessage: string | null;
+  retryCount: number;
+  createdAt: string;
+  nextRetryAt: string | null;
+}
+
+// Settings additions
+export interface SubscriptionInfo {
+  subscriptionStatus: string;
+  subscriptionType: string;
+  trialEndDate: string | null;
+  subscriptionEndDate: string | null;
+  daysRemaining: number;
+  isExpired: boolean;
+  hotelName: string;
+}
+
 export type RootStackParamList = {
   Splash: undefined;
   RoleSelect: undefined;
@@ -498,6 +551,8 @@ export type RootStackParamList = {
   SubscriptionExpired: { hotelName: string; expiredOn: string; subscriptionType: string };
   HotelRegister: undefined;
   HotelRegisterSuccess: undefined;
+  Notifications: undefined;
+  AggregatorConfig: undefined;
 };
 
 export type TabParamList = {

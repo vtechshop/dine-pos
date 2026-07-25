@@ -59,6 +59,8 @@ import SubscriptionExpiredScreen from '../screens/SubscriptionExpiredScreen';
 import TrustedDevicesScreen from '../screens/TrustedDevicesScreen';
 import OnlineOrdersScreen from '../screens/OnlineOrdersScreen';
 import LoyaltyProgramScreen from '../screens/LoyaltyProgramScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
+import AggregatorConfigScreen from '../screens/AggregatorConfigScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<TabParamList>();
@@ -267,6 +269,8 @@ const AppNavigator = () => {
             <Stack.Screen name="SubscriptionExpired" component={SubscriptionExpiredScreen} options={{ contentStyle: { backgroundColor: Colors.primary }, gestureEnabled: false }} />
             <Stack.Screen name="OnlineOrders"        component={(p: any) => <ErrorBoundary><OnlineOrdersScreen {...p} /></ErrorBoundary>} options={{ contentStyle: safeTop }} />
             <Stack.Screen name="LoyaltyProgram"      component={LoyaltyProgramScreen}      options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="Notifications"      component={NotificationsScreen}       options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="AggregatorConfig"   component={AggregatorConfigScreen}    options={{ contentStyle: safeTop }} />
             <Stack.Screen
               name="AddProduct"
               component={AddProductScreen}

@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL } from '../utils/constants';
-import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport, GSTR1Json, RemoteConfig, Device, AppNotification, FeatureFlags, LoyaltyConfig, LoyaltyCustomer, LoyaltyTransaction } from '../types';
+import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport, GSTR1Json, RemoteConfig, Device, AppNotification, FeatureFlags, LoyaltyConfig, LoyaltyCustomer, LoyaltyTransaction, AggregatorIntegration, AggregatorSyncStatus, WebhookLog } from '../types';
 import { navigateGlobal } from '../utils/navigationRef';
 import { emitSessionExpired } from '../utils/authEvents';
 
@@ -1614,6 +1614,38 @@ export const rejectOnlineOrder = (orderId: string, reason: string): Promise<{ ok
 
 export const dispatchOnlineOrder = (orderId: string): Promise<{ ok: boolean }> =>
   fetchAPI(`/aggregator/orders/${orderId}/dispatch`, { method: 'POST' });
+
+// ── Aggregator integration management ─────────────────────────────────────────
+
+export const getAggregatorIntegrations = (): Promise<{ integrations: AggregatorIntegration[] }> =>
+  fetchAPI('/aggregator/integrations');
+
+export const getAggregatorIntegration = (platform: string): Promise<{ integration: AggregatorIntegration }> =>
+  fetchAPI(`/aggregator/integrations/${platform}`);
+
+export const updateAggregatorIntegration = (
+  platform: string,
+  data: Partial<Pick<AggregatorIntegration, 'enabled' | 'storeId' | 'apiKey' | 'apiSecret' | 'webhookSecret' | 'autoAccept'>>,
+): Promise<{ integration: AggregatorIntegration }> =>
+  fetchAPI(`/aggregator/integrations/${platform}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const syncAggregatorMenu = (
+  platform: string,
+): Promise<{ success: boolean; result: { syncedCount: number; failedCount: number } }> =>
+  fetchAPI(`/aggregator/integrations/${platform}/sync-menu`, { method: 'POST' });
+
+export const getAggregatorSyncStatus = (platform: string): Promise<{ status: AggregatorSyncStatus }> =>
+  fetchAPI(`/aggregator/integrations/${platform}/sync-status`);
+
+export const getWebhookLogs = (params?: {
+  platform?: string; status?: string; page?: string; limit?: string;
+}): Promise<{ logs: WebhookLog[]; total: number; page: number; pages: number }> => {
+  const q = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
+  return fetchAPI(`/aggregator/webhook-logs${q}`);
+};
+
+export const retryWebhook = (id: string): Promise<{ ok: boolean }> =>
+  fetchAPI(`/aggregator/webhook-logs/${id}/retry`, { method: 'POST' });
 
 // ── Customer menu cache ────────────────────────────────────────────────────────
 const MENU_CACHE_TTL = 60 * 60 * 1000; // 1 hour
