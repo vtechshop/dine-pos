@@ -32,6 +32,7 @@ import ChatScreen from '../screens/ChatScreen';
 import CustomerMenuScreen from '../screens/CustomerMenuScreen';
 import CustomerCartScreen from '../screens/CustomerCartScreen';
 import CustomerOrderConfirmScreen from '../screens/CustomerOrderConfirmScreen';
+import CustomerOrderStatusScreen from '../screens/CustomerOrderStatusScreen';
 import AdminLoginScreen from '../screens/AdminLoginScreen';
 import BusinessSetupScreen from '../screens/BusinessSetupScreen';
 import SuperAdminLoginScreen from '../screens/SuperAdminLoginScreen';
@@ -197,6 +198,16 @@ const CustomerTabNavigator = () => {
             height: 18,
             lineHeight: 18,
           },
+        }}
+      />
+      <CTab.Screen
+        name="OrderStatus"
+        component={CustomerOrderStatusScreen}
+        options={{
+          tabBarLabel: 'My Order',
+          tabBarIcon: ({ color, focused }) => (
+            <MaterialIcons name="receipt-long" size={focused ? 26 : 22} color={color} />
+          ),
         }}
       />
     </CTab.Navigator>

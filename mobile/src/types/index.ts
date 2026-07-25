@@ -566,4 +566,5 @@ export type TabParamList = {
 export type CustomerTabParamList = {
   Menu: undefined;
   Cart: undefined;
+  OrderStatus: undefined;
 };

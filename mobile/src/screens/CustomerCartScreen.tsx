@@ -15,6 +15,7 @@ import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
 import { getStoredHotelId, enqueueCustomerOrder, getSocketUrl } from '../services/api';
+import { CUSTOMER_ORDER_KEY } from './CustomerOrderStatusScreen';
 import { io as socketIO, Socket } from 'socket.io-client';
 import { isConnected } from '../sync/syncEngine';
 import { RootStackParamList, CartItem, Order } from '../types';
@@ -185,6 +186,18 @@ const CustomerCartScreen: React.FC = () => {
       clearCart();
       Vibration.vibrate([0, 100, 80, 300]);
       setPlacedOrder(snapshot);
+      // Persist order for the My Order tab so customers can track it after navigating away
+      AsyncStorage.setItem(CUSTOMER_ORDER_KEY, JSON.stringify({
+        _id: snapshot._id,
+        orderNumber: snapshot.orderNumber,
+        token: snapshot.token,
+        items: snapshot.items.map(i => ({ name: i.product.name, quantity: i.quantity, total: i.total })),
+        grandTotal: snapshot.grandTotal,
+        tableNumber: snapshot.tableNumber,
+        hotelId,
+        status: 'received',
+        placedAt: new Date().toISOString(),
+      })).catch(() => {});
       // Fire-and-forget auto-print — only if BT printer is configured
       (async () => {
         try {
