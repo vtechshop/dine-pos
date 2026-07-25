@@ -20,7 +20,7 @@ interface CartState {
 }
 
 type CartAction =
-  | { type: 'ADD_ITEM';    payload: Product; defaultTax: number }
+  | { type: 'ADD_ITEM';    payload: Product; defaultTax: number; effectivePrice: number }
   | { type: 'INCREMENT';   payload: string;  defaultTax: number }
   | { type: 'DECREMENT';   payload: string;  defaultTax: number }
   | { type: 'REMOVE_ITEM'; payload: string }
@@ -47,16 +47,16 @@ const initialState: CartState = {
   discount: { type: 'percent', value: 0 },
 };
 
-const calcItemTax = (product: Product, quantity: number, defaultTax: number): number => {
-  const rate = product.taxPercent > 0 ? product.taxPercent : defaultTax;
-  return (product.price * quantity * rate) / 100;
+const calcItemTax = (price: number, quantity: number, taxPercent: number, defaultTax: number): number => {
+  const rate = taxPercent > 0 ? taxPercent : defaultTax;
+  return (price * quantity * rate) / 100;
 };
 
 const calculateTotals = (
   items: CartItem[],
   discount: { type: DiscountType; value: number }
 ): { subtotal: number; taxTotal: number; discountAmount: number; grandTotal: number } => {
-  const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const subtotal = items.reduce((sum, item) => sum + item.effectivePrice * item.quantity, 0);
   const taxTotal = items.reduce((sum, item) => sum + item.taxAmount, 0);
   const preTax = subtotal + taxTotal;
 
@@ -74,22 +74,28 @@ const calculateTotals = (
 
 const cartReducer = (state: CartState, action: CartAction): CartState => {
   switch (action.type) {
-    case 'RESTORE_SNAPSHOT': return action.payload;
+    case 'RESTORE_SNAPSHOT': return {
+      ...action.payload,
+      items: action.payload.items.map(item => ({
+        ...item,
+        effectivePrice: (item as any).effectivePrice ?? item.product.price,
+      })),
+    };
 
     case 'ADD_ITEM': {
-      const product = action.payload;
+      const { payload: product, defaultTax, effectivePrice } = action;
       const existingIndex = state.items.findIndex((i) => i.product._id === product._id);
       let newItems: CartItem[];
       if (existingIndex >= 0) {
         newItems = state.items.map((item, idx) => {
           if (idx !== existingIndex) return item;
           const newQty = item.quantity + 1;
-          const taxAmount = calcItemTax(product, newQty, action.defaultTax);
-          return { ...item, quantity: newQty, taxAmount, total: product.price * newQty + taxAmount };
+          const taxAmount = calcItemTax(item.effectivePrice, newQty, product.taxPercent, defaultTax);
+          return { ...item, quantity: newQty, taxAmount, total: item.effectivePrice * newQty + taxAmount };
         });
       } else {
-        const taxAmount = calcItemTax(product, 1, action.defaultTax);
-        newItems = [...state.items, { product, quantity: 1, taxAmount, total: product.price + taxAmount }];
+        const taxAmount = calcItemTax(effectivePrice, 1, product.taxPercent, defaultTax);
+        newItems = [...state.items, { product, quantity: 1, taxAmount, total: effectivePrice + taxAmount, effectivePrice }];
       }
       return { ...state, items: newItems, ...calculateTotals(newItems, state.discount) };
     }
@@ -103,8 +109,8 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
       const newItems = state.items.map((item) => {
         if (item.product._id !== action.payload) return item;
         const newQty = item.quantity + 1;
-        const taxAmount = calcItemTax(item.product, newQty, action.defaultTax);
-        return { ...item, quantity: newQty, taxAmount, total: item.product.price * newQty + taxAmount };
+        const taxAmount = calcItemTax(item.effectivePrice, newQty, item.product.taxPercent, action.defaultTax);
+        return { ...item, quantity: newQty, taxAmount, total: item.effectivePrice * newQty + taxAmount };
       });
       return { ...state, items: newItems, ...calculateTotals(newItems, state.discount) };
     }
@@ -115,8 +121,8 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
           if (item.product._id !== action.payload) return item;
           const newQty = item.quantity - 1;
           if (newQty <= 0) return null;
-          const taxAmount = calcItemTax(item.product, newQty, action.defaultTax);
-          return { ...item, quantity: newQty, taxAmount, total: item.product.price * newQty + taxAmount };
+          const taxAmount = calcItemTax(item.effectivePrice, newQty, item.product.taxPercent, action.defaultTax);
+          return { ...item, quantity: newQty, taxAmount, total: item.effectivePrice * newQty + taxAmount };
         })
         .filter(Boolean) as CartItem[];
       return { ...state, items: newItems, ...calculateTotals(newItems, state.discount) };
@@ -139,7 +145,7 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
 
 interface CartContextType {
   cart: CartState;
-  addItem: (product: Product) => void;
+  addItem: (product: Product, effectivePrice?: number) => void;
   removeItem: (productId: string) => void;
   increment: (productId: string) => void;
   decrement: (productId: string) => void;
@@ -183,7 +189,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
   const value: CartContextType = useMemo(() => ({
     cart,
-    addItem:     (product) => dispatch({ type: 'ADD_ITEM',    payload: product, defaultTax }),
+    addItem:     (product, ep) => dispatch({ type: 'ADD_ITEM', payload: product, defaultTax, effectivePrice: ep ?? product.price }),
     removeItem:  (id)      => dispatch({ type: 'REMOVE_ITEM', payload: id }),
     increment:   (id)      => dispatch({ type: 'INCREMENT',   payload: id, defaultTax }),
     decrement:   (id)      => dispatch({ type: 'DECREMENT',   payload: id, defaultTax }),

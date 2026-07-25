@@ -15,6 +15,13 @@ export interface RecipeItem {
 }
 
 // Product
+export interface ChannelPrices {
+  swiggy?: number;
+  zomato?: number;
+  qr?: number;
+  kiosk?: number;
+}
+
 export interface Product {
   _id: string;
   name: string;
@@ -29,6 +36,7 @@ export interface Product {
   description: string;
   stock: number; // -1 = unlimited, 0 = out of stock, >0 = count
   recipe?: RecipeItem[];
+  channelPrices?: ChannelPrices;
 }
 
 // Ingredient (raw material)
@@ -47,6 +55,7 @@ export interface CartItem {
   quantity: number;
   taxAmount: number;
   total: number;
+  effectivePrice: number; // channel-aware unit price (may differ from product.price)
 }
 
 // Order Item (stored in DB)

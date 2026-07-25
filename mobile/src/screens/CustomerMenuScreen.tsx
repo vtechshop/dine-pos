@@ -34,6 +34,11 @@ const CustomerMenuScreen: React.FC = () => {
   const CARD_FONT = isTablet ? FontSize.lg : FontSize.md;
   const PRICE_FONT = isTablet ? FontSize.xxl : FontSize.xl;
 
+  const qrPrice = (p: Product): number => {
+    const cp = p.channelPrices?.qr;
+    return cp && cp > 0 ? cp : p.price;
+  };
+
   const [categories,    setCategories]   = useState<Category[]>([]);
   const [products,      setProducts]     = useState<Product[]>([]);
   const [filtered,      setFiltered]     = useState<Product[]>([]);
@@ -180,7 +185,7 @@ const CustomerMenuScreen: React.FC = () => {
           {item.description ? (
             <Text style={styles.prodDesc} numberOfLines={1}>{item.description}</Text>
           ) : null}
-          <Text style={[styles.prodPrice, { fontSize: PRICE_FONT }]}>{cur}{item.price.toFixed(0)}</Text>
+          <Text style={[styles.prodPrice, { fontSize: PRICE_FONT }]}>{cur}{qrPrice(item).toFixed(0)}</Text>
         </View>
 
         {/* Add / Qty controls */}
@@ -189,7 +194,7 @@ const CustomerMenuScreen: React.FC = () => {
             ? (
               <TouchableOpacity
                 style={styles.addBtn}
-                onPress={() => addItem(item)}
+                onPress={() => addItem(item, qrPrice(item))}
                 activeOpacity={0.8}
               >
                 <MaterialIcons name="add" size={18} color={Colors.white} />
@@ -278,13 +283,14 @@ const CustomerMenuScreen: React.FC = () => {
 
               {/* Price breakdown */}
               {(() => {
-                const gst = item.taxPercent > 0 ? (item.price * item.taxPercent) / 100 : 0;
-                const total = item.price + gst;
+                const ep  = qrPrice(item);
+                const gst = item.taxPercent > 0 ? (ep * item.taxPercent) / 100 : 0;
+                const total = ep + gst;
                 return (
                   <View style={styles.priceBox}>
                     <View style={styles.priceRow}>
                       <Text style={styles.priceLabel}>Menu Price</Text>
-                      <Text style={styles.priceValue}>{cur}{item.price.toFixed(2)}</Text>
+                      <Text style={styles.priceValue}>{cur}{ep.toFixed(2)}</Text>
                     </View>
                     {gst > 0 && (
                       <View style={styles.priceRow}>
@@ -306,7 +312,7 @@ const CustomerMenuScreen: React.FC = () => {
                 ? (
                   <TouchableOpacity
                     style={styles.modalAddBtn}
-                    onPress={() => { addItem(item); setDetailProduct(null); }}
+                    onPress={() => { addItem(item, qrPrice(item)); setDetailProduct(null); }}
                     activeOpacity={0.85}
                   >
                     <MaterialIcons name="add-shopping-cart" size={18} color={Colors.white} />

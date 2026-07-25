@@ -149,6 +149,18 @@ const BillingScreen: React.FC = () => {
     setDiscount({ type: discountType, value: val });
   };
 
+  const getChannelPrice = (product: Product): number => {
+    const cp = product.channelPrices;
+    if (!cp) return product.price;
+    const key = orderSource === 'swiggy' ? 'swiggy'
+              : orderSource === 'zomato'  ? 'zomato'
+              : orderSource === 'qr'      ? 'qr'
+              : null;
+    if (!key) return product.price;
+    const p = cp[key];
+    return p && p > 0 ? p : product.price;
+  };
+
   const buildUpiUrl = (amount: number) => {
     const upiId  = settings.upiId || UPI_ID;
     const name   = encodeURIComponent(settings.hotelName || UPI_NAME);
@@ -219,7 +231,7 @@ Thank you for dining with us! 🍽️`;
         product: item.product._id,
         productName: item.product.name,
         quantity: item.quantity,
-        price: item.product.price,
+        price: item.effectivePrice,
         taxPercent: item.product.taxPercent,
         taxAmount: item.taxAmount,
         total: item.total,
@@ -246,7 +258,7 @@ Thank you for dining with us! 🍽️`;
     };
     // Snapshot cart before clearCart wipes it
     const cartSnapshot = {
-      items:          cart.items.map(i => ({ name: i.product.name, qty: i.quantity, price: i.product.price })),
+      items:          cart.items.map(i => ({ name: i.product.name, qty: i.quantity, price: i.effectivePrice })),
       subtotal:       cart.subtotal,
       taxTotal:       cart.taxTotal,
       discountAmount: cart.discountAmount,
@@ -341,7 +353,7 @@ Thank you for dining with us! 🍽️`;
     return (
       <TouchableOpacity
         style={[styles.prodTile, qty > 0 && styles.prodTileActive]}
-        onPress={() => addItem(item)}
+        onPress={() => addItem(item, getChannelPrice(item))}
         activeOpacity={0.75}
       >
         {/* Image / placeholder */}
@@ -370,7 +382,7 @@ Thank you for dining with us! 🍽️`;
         <View style={styles.prodTileInner}>
           <Text style={styles.prodTileName} numberOfLines={2}>{item.name}</Text>
           <View style={styles.prodTilePriceRow}>
-            <Text style={styles.prodTilePrice}>{cur}{item.price.toFixed(0)}</Text>
+            <Text style={styles.prodTilePrice}>{cur}{getChannelPrice(item).toFixed(0)}</Text>
             {item.taxPercent > 0 && <Text style={styles.prodTileTax}> +{item.taxPercent}%</Text>}
           </View>
           {qty > 0 ? (
@@ -379,12 +391,12 @@ Thank you for dining with us! 🍽️`;
                 <MaterialIcons name="remove" size={13} color={Colors.white} />
               </TouchableOpacity>
               <Text style={styles.prodTileQtyNum}>{qty}</Text>
-              <TouchableOpacity style={styles.prodTileQtyBtn} onPress={() => addItem(item)} hitSlop={{ top: 6, bottom: 6, left: 4, right: 8 }}>
+              <TouchableOpacity style={styles.prodTileQtyBtn} onPress={() => addItem(item, getChannelPrice(item))} hitSlop={{ top: 6, bottom: 6, left: 4, right: 8 }}>
                 <MaterialIcons name="add" size={13} color={Colors.white} />
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity style={styles.prodTileAddRow} onPress={() => addItem(item)} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.prodTileAddRow} onPress={() => addItem(item, getChannelPrice(item))} activeOpacity={0.7}>
               <MaterialIcons name="add" size={14} color={Colors.white} />
               <Text style={styles.prodTileAddText}>ADD</Text>
             </TouchableOpacity>
@@ -403,11 +415,11 @@ Thank you for dining with us! 🍽️`;
         </View>
         <View style={{ flex: 1, marginLeft: 8 }}>
           <Text style={styles.cartItemName} numberOfLines={1}>{item.product.name}</Text>
-          <Text style={styles.cartItemUnitPrice}>{cur}{item.product.price.toFixed(0)} each</Text>
+          <Text style={styles.cartItemUnitPrice}>{cur}{item.effectivePrice.toFixed(0)} each</Text>
         </View>
       </View>
       <View style={styles.cartItemRight}>
-        <Text style={styles.cartItemTotal}>{cur}{(item.product.price * item.quantity).toFixed(0)}</Text>
+        <Text style={styles.cartItemTotal}>{cur}{(item.effectivePrice * item.quantity).toFixed(0)}</Text>
         <View style={styles.qtyRow}>
           <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item.product._id)}>
             <MaterialIcons name="remove" size={15} color={Colors.primary} />
