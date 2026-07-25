@@ -64,7 +64,7 @@ const LoyaltyProgramScreen: React.FC = () => {
     pointValueInPaisa: '',
     expiryDays: '',
     roundingRule: 'floor' as LoyaltyConfig['roundingRule'],
-    calculationBase: 'grandTotal' as LoyaltyConfig['calculationBase'],
+    calculationBase: 'after_gst' as LoyaltyConfig['calculationBase'],
   });
 
   const loadConfig = useCallback(async () => {
@@ -435,8 +435,8 @@ const LoyaltyProgramScreen: React.FC = () => {
               <Text style={[styles.adjLabel, { marginTop: Spacing.sm }]}>Calculation Base</Text>
               <View style={[styles.toggleRow, { marginBottom: Spacing.xxl }]}>
                 {([
-                  { value: 'subtotal' as const, label: 'Subtotal (excl. GST)' },
-                  { value: 'grandTotal' as const, label: 'Grand Total (incl. GST)' },
+                  { value: 'before_gst' as const, label: 'Subtotal (excl. GST)' },
+                  { value: 'after_gst' as const, label: 'Grand Total (incl. GST)' },
                 ]).map(opt => (
                   <TouchableOpacity
                     key={opt.value}

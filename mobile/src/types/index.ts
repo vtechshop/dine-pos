@@ -201,7 +201,7 @@ export interface LoyaltyConfig {
   pointValueInPaisa: number;
   expiryDays: number | null;
   roundingRule: 'floor' | 'ceil' | 'round';
-  calculationBase: 'subtotal' | 'grandTotal';
+  calculationBase: 'before_gst' | 'after_gst';
 }
 
 export interface LoyaltyCustomer {
