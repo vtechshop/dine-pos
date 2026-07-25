@@ -896,7 +896,13 @@ Thank you for dining with us! 🍽️`;
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.successPrintBtn, { flex: 1 }]}
-                onPress={() => setShowUpiQr(true)}
+                onPress={() => {
+                  if (!(settings.upiId || UPI_ID)) {
+                    showAlert('UPI Not Configured', 'Configure your UPI ID in Settings to accept UPI payments.');
+                    return;
+                  }
+                  setShowUpiQr(true);
+                }}
               >
                 <MaterialIcons name="qr-code" size={18} color={Colors.upi} />
                 <Text style={[styles.successPrintText, { color: Colors.upi }]}>UPI QR</Text>
