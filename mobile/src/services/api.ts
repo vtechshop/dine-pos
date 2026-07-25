@@ -1201,6 +1201,20 @@ export const getSystemHealth = (): Promise<{
   timestamp: string;
 }> => superAdminFetch('/superadmin/health');
 
+// ── Staff fetch: raw fetch with 12 s timeout (mirrors apiRequest timeout) ─────
+const staffFetch = async (url: string, opts: RequestInit = {}): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } catch (e: any) {
+    if (e?.name === 'AbortError') throw new Error('Request timed out. Check your connection.');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 // ==================== KITCHEN DISPLAY ====================
 
 const KITCHEN_TOKEN_KEY = '@hotel_pos_kitchen_token';
@@ -1226,7 +1240,7 @@ export const clearKitchenToken = async (): Promise<void> => {
 
 export const kitchenLogin = async (hotelId: string, pin: string): Promise<string> => {
   const base = await getBaseUrl();
-  const res = await fetch(`${base}/auth/kitchen`, {
+  const res = await staffFetch(`${base}/auth/kitchen`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ hotelId, pin }),
@@ -1256,7 +1270,7 @@ export interface KitchenOrder {
 
 export const getKitchenOrders = async (): Promise<KitchenOrder[]> => {
   const [base, token] = await Promise.all([getBaseUrl(), getKitchenToken()]);
-  const res = await fetch(`${base}/orders/kitchen`, {
+  const res = await staffFetch(`${base}/orders/kitchen`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
@@ -1268,7 +1282,7 @@ export const getKitchenOrders = async (): Promise<KitchenOrder[]> => {
 
 export const updateKitchenOrderStatus = async (orderId: string, status: string): Promise<void> => {
   const [base, token] = await Promise.all([getBaseUrl(), getKitchenToken()]);
-  const res = await fetch(`${base}/orders/${orderId}/status`, {
+  const res = await staffFetch(`${base}/orders/${orderId}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ status }),
@@ -1304,7 +1318,7 @@ export const clearWaiterToken = async (): Promise<void> => {
 
 export const waiterLogin = async (hotelId: string, employeeCode: string, pin: string): Promise<{ token: string; waiter: { _id: string; name: string; employeeCode: string; mobile: string } }> => {
   const base = await getBaseUrl();
-  const res = await fetch(`${base}/auth/waiter`, {
+  const res = await staffFetch(`${base}/auth/waiter`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ hotelId, employeeCode, pin }),
@@ -1327,14 +1341,14 @@ export interface WaiterProfile {
 
 export const getWaiters = async (): Promise<WaiterProfile[]> => {
   const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
-  const res = await fetch(`${base}/waiters`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await staffFetch(`${base}/waiters`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error('Failed to fetch waiters');
   return res.json();
 };
 
 export const addWaiter = async (payload: { name: string; employeeCode: string; pin: string; mobile?: string }): Promise<WaiterProfile> => {
   const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
-  const res = await fetch(`${base}/waiters`, {
+  const res = await staffFetch(`${base}/waiters`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
@@ -1346,7 +1360,7 @@ export const addWaiter = async (payload: { name: string; employeeCode: string; p
 
 export const updateWaiter = async (id: string, payload: { name?: string; mobile?: string; employeeCode?: string }): Promise<WaiterProfile> => {
   const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
-  const res = await fetch(`${base}/waiters/${id}`, {
+  const res = await staffFetch(`${base}/waiters/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
@@ -1358,7 +1372,7 @@ export const updateWaiter = async (id: string, payload: { name?: string; mobile?
 
 export const resetWaiterPin = async (id: string, pin: string): Promise<void> => {
   const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
-  const res = await fetch(`${base}/waiters/${id}/pin`, {
+  const res = await staffFetch(`${base}/waiters/${id}/pin`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ pin }),
@@ -1368,7 +1382,7 @@ export const resetWaiterPin = async (id: string, pin: string): Promise<void> => 
 
 export const toggleWaiter = async (id: string): Promise<{ isActive: boolean }> => {
   const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
-  const res = await fetch(`${base}/waiters/${id}/toggle`, {
+  const res = await staffFetch(`${base}/waiters/${id}/toggle`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -1378,7 +1392,7 @@ export const toggleWaiter = async (id: string): Promise<{ isActive: boolean }> =
 
 export const deleteWaiter = async (id: string): Promise<void> => {
   const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
-  const res = await fetch(`${base}/waiters/${id}`, {
+  const res = await staffFetch(`${base}/waiters/${id}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -1400,7 +1414,7 @@ export interface WaiterOrder {
 
 export const getWaiterOrders = async (): Promise<WaiterOrder[]> => {
   const [base, token] = await Promise.all([getBaseUrl(), getWaiterToken()]);
-  const res = await fetch(`${base}/orders/waiter`, {
+  const res = await staffFetch(`${base}/orders/waiter`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error('Failed to fetch waiter orders');
@@ -1409,7 +1423,7 @@ export const getWaiterOrders = async (): Promise<WaiterOrder[]> => {
 
 export const markOrderServed = async (orderId: string): Promise<void> => {
   const [base, token] = await Promise.all([getBaseUrl(), getWaiterToken()]);
-  const res = await fetch(`${base}/orders/${orderId}/status`, {
+  const res = await staffFetch(`${base}/orders/${orderId}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ status: 'served' }),
@@ -1445,7 +1459,7 @@ export const clearCashierToken = async (): Promise<void> => {
 
 export const cashierLogin = async (hotelId: string, employeeCode: string, pin: string): Promise<{ token: string; cashier: { _id: string; name: string; employeeCode: string; mobile: string } }> => {
   const base = await getBaseUrl();
-  const res = await fetch(`${base}/auth/cashier`, {
+  const res = await staffFetch(`${base}/auth/cashier`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ hotelId, employeeCode, pin }),
@@ -1468,14 +1482,14 @@ export interface CashierProfile {
 
 export const getCashiers = async (): Promise<CashierProfile[]> => {
   const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
-  const res = await fetch(`${base}/cashiers`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await staffFetch(`${base}/cashiers`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error('Failed to load cashiers');
   return res.json();
 };
 
 export const addCashier = async (payload: { name: string; employeeCode: string; pin: string; mobile?: string }): Promise<CashierProfile> => {
   const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
-  const res = await fetch(`${base}/cashiers`, {
+  const res = await staffFetch(`${base}/cashiers`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
@@ -1487,7 +1501,7 @@ export const addCashier = async (payload: { name: string; employeeCode: string; 
 
 export const updateCashier = async (id: string, payload: { name?: string; mobile?: string; employeeCode?: string }): Promise<CashierProfile> => {
   const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
-  const res = await fetch(`${base}/cashiers/${id}`, {
+  const res = await staffFetch(`${base}/cashiers/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
@@ -1499,7 +1513,7 @@ export const updateCashier = async (id: string, payload: { name?: string; mobile
 
 export const resetCashierPin = async (id: string, pin: string): Promise<void> => {
   const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
-  const res = await fetch(`${base}/cashiers/${id}/pin`, {
+  const res = await staffFetch(`${base}/cashiers/${id}/pin`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ pin }),
@@ -1512,7 +1526,7 @@ export const resetCashierPin = async (id: string, pin: string): Promise<void> =>
 
 export const toggleCashier = async (id: string): Promise<{ isActive: boolean }> => {
   const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
-  const res = await fetch(`${base}/cashiers/${id}/toggle`, {
+  const res = await staffFetch(`${base}/cashiers/${id}/toggle`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -1523,7 +1537,7 @@ export const toggleCashier = async (id: string): Promise<{ isActive: boolean }> 
 
 export const deleteCashier = async (id: string): Promise<void> => {
   const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
-  const res = await fetch(`${base}/cashiers/${id}`, {
+  const res = await staffFetch(`${base}/cashiers/${id}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -1557,7 +1571,7 @@ export interface CashierOrder {
 
 export const getCashierOrders = async (): Promise<CashierOrder[]> => {
   const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
-  const res = await fetch(`${base}/orders/cashier`, {
+  const res = await staffFetch(`${base}/orders/cashier`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error('Failed to load orders');
@@ -1566,7 +1580,7 @@ export const getCashierOrders = async (): Promise<CashierOrder[]> => {
 
 export const completeOrderPayment = async (orderId: string, paymentMethod: 'cash' | 'upi' | 'card' | 'split'): Promise<void> => {
   const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
-  const res = await fetch(`${base}/orders/${orderId}/status`, {
+  const res = await staffFetch(`${base}/orders/${orderId}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ status: 'completed', paymentMethod }),

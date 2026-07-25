@@ -22,6 +22,7 @@ const WaiterManagementScreen: React.FC<Props> = ({ navigation }) => {
   const { top } = useSafeAreaInsets();
   const [waiters, setWaiters] = useState<WaiterProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selected, setSelected] = useState<WaiterProfile | null>(null);
@@ -34,11 +35,13 @@ const WaiterManagementScreen: React.FC<Props> = ({ navigation }) => {
   const [formError, setFormError] = useState('');
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(false);
     try {
       const data = await getWaiters();
       setWaiters(data);
     } catch {
-      // silent
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -185,6 +188,16 @@ const WaiterManagementScreen: React.FC<Props> = ({ navigation }) => {
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.accent} />
+        </View>
+      ) : loadError ? (
+        <View style={styles.center}>
+          <MaterialIcons name="cloud-off" size={48} color={Colors.textMuted} />
+          <Text style={[styles.emptyTitle, { marginTop: 12 }]}>Could not load waiters</Text>
+          <Text style={styles.emptySub}>Check your connection and try again</Text>
+          <TouchableOpacity style={[styles.addBtn, { marginTop: 16 }]} onPress={load}>
+            <MaterialIcons name="refresh" size={18} color={Colors.white} />
+            <Text style={styles.addBtnText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : waiters.length === 0 ? (
         <View style={styles.center}>

@@ -21,6 +21,7 @@ const CashierManagementScreen: React.FC<Props> = ({ navigation }) => {
   const { top } = useSafeAreaInsets();
   const [cashiers, setCashiers] = useState<CashierProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selected, setSelected] = useState<CashierProfile | null>(null);
@@ -32,11 +33,13 @@ const CashierManagementScreen: React.FC<Props> = ({ navigation }) => {
   const [formError, setFormError] = useState('');
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(false);
     try {
       const data = await getCashiers();
       setCashiers(data);
     } catch {
-      // silent
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -182,6 +185,16 @@ const CashierManagementScreen: React.FC<Props> = ({ navigation }) => {
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.info} />
+        </View>
+      ) : loadError ? (
+        <View style={styles.center}>
+          <MaterialIcons name="cloud-off" size={48} color={Colors.textMuted} />
+          <Text style={[styles.emptyTitle, { marginTop: 12 }]}>Could not load cashiers</Text>
+          <Text style={styles.emptySub}>Check your connection and try again</Text>
+          <TouchableOpacity style={[styles.addBtn, { marginTop: 16 }]} onPress={load}>
+            <MaterialIcons name="refresh" size={18} color={Colors.white} />
+            <Text style={styles.addBtnText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : cashiers.length === 0 ? (
         <View style={styles.center}>
