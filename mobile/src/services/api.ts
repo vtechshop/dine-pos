@@ -1121,6 +1121,17 @@ export const markNotificationRead = (id: string): Promise<{ ok: boolean }> =>
 export const markAllNotificationsRead = (): Promise<{ ok: boolean }> =>
   fetchAPI('/notifications/read-all', { method: 'PUT' });
 
+// ==================== CHAT ====================
+
+export const getChatTables = (): Promise<any[]> =>
+  fetchAPI('/chat');
+
+export const getChatMessages = (tableNumber: string): Promise<any[]> =>
+  fetchAPI(`/chat/${tableNumber}`);
+
+export const markChatRead = (tableNumber: string): Promise<void> =>
+  fetchAPI(`/chat/${tableNumber}/read`, { method: 'PATCH' });
+
 // ==================== SUPER ADMIN — SAAS FEATURES ====================
 
 export const expireHotel = (id: string): Promise<{ message: string }> =>

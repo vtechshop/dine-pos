@@ -125,13 +125,32 @@ const AggregatorConfigScreen: React.FC = () => {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const { result } = await api.syncAggregatorMenu(activePlatform);
-      Alert.alert(
-        'Menu Sync Complete',
-        `Synced: ${result.syncedCount} items\nFailed: ${result.failedCount} items`,
-      );
-      const { integration } = await api.getAggregatorIntegration(activePlatform);
-      setIntegrations(prev => ({ ...prev, [activePlatform]: integration }));
+      await api.syncAggregatorMenu(activePlatform);
+
+      // Poll sync status until complete or 30 s timeout
+      const deadline = Date.now() + 30_000;
+      while (Date.now() < deadline) {
+        await new Promise<void>(r => setTimeout(r, 2_000));
+        try {
+          const { status } = await api.getAggregatorSyncStatus(activePlatform);
+          setIntegrations(prev => {
+            const cur = prev[activePlatform];
+            if (!cur) return prev;
+            return {
+              ...prev,
+              [activePlatform]: {
+                ...cur,
+                menuSyncStatus: status.menuSyncStatus as AggregatorIntegration['menuSyncStatus'],
+                lastSyncAt: status.lastSyncAt,
+                lastSyncError: status.lastSyncError,
+                syncedItemCount: status.syncedItemCount,
+                failedItemCount: status.failedItemCount,
+              },
+            };
+          });
+          if (status.menuSyncStatus === 'success' || status.menuSyncStatus === 'failed') break;
+        } catch { /* poll error — keep trying until deadline */ }
+      }
     } catch (e: any) {
       Alert.alert('Sync Error', e.message || 'Menu sync failed');
     } finally { setSyncing(false); }

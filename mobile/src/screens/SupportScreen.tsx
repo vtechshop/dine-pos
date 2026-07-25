@@ -10,8 +10,8 @@ import { io, Socket } from 'socket.io-client';
 import { RootStackParamList } from '../types';
 import { showAlert } from '../utils/alert';
 import { useSettings } from '../context/SettingsContext';
-import { raiseTicket, getMyTickets, replyToTicket, Ticket, getToken, getStoredHotelId, getSocketUrl } from '../services/api';
-import { Colors, FontSize, Spacing, BorderRadius, API_BASE_URL } from '../utils/constants';
+import { raiseTicket, getMyTickets, replyToTicket, getChatTables, getChatMessages, markChatRead, Ticket, getToken, getStoredHotelId, getSocketUrl } from '../services/api';
+import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ChatMsg {
@@ -123,16 +123,9 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const chatAuthHeaders = async (): Promise<Record<string, string>> => {
-    const token = await getToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   const fetchChatTables = async () => {
     try {
-      const headers = await chatAuthHeaders();
-      const res = await fetch(`${API_BASE_URL}/chat`, { headers });
-      const data = await res.json();
+      const data = await getChatTables();
       setChatTables(data);
       const total = data.reduce((s: number, t: any) => s + (t.unread || 0), 0);
       setChatUnread(total);
@@ -144,13 +137,11 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
     setSelectedChatTable(tableNum);
     setChatMessages([]);
     try {
-      const headers = await chatAuthHeaders();
-      const res = await fetch(`${API_BASE_URL}/chat/${tableNum}`, { headers });
-      const data = await res.json();
+      const data = await getChatMessages(tableNum);
       setChatMessages(data);
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
       scrollTimerRef.current = setTimeout(() => chatListRef.current?.scrollToEnd({ animated: false }), 100);
-      await fetch(`${API_BASE_URL}/chat/${tableNum}/read`, { method: 'PATCH', headers });
+      await markChatRead(tableNum);
       setChatTables(prev => prev.map((t: any) => t._id === tableNum ? { ...t, unread: 0 } : t));
     } catch (_) {}
   };
