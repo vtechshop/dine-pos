@@ -9,9 +9,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
-import { DailyReport, GSTReport, TallyReport, GSTR1Json, Product } from '../types';
+import { DailyReport, GSTReport, TallyReport, GSTR1Json, Product, WasteLog } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
-import { getDailyReport, getRangeReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics, createWasteLog, getGSTReport, getTallyExport, getGSTR1Json } from '../services/api';
+import { getDailyReport, getRangeReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics, getWasteLogs, createWasteLog, deleteWasteLog, getGSTReport, getTallyExport, getGSTR1Json } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
 
 type Tab = 'daily' | 'products' | 'stock' | 'waste' | 'gst';
@@ -73,6 +73,8 @@ const ReportsScreen: React.FC = () => {
   const [productSales, setProductSales] = useState<ProductSale[]>([]);
   const [lowStock, setLowStock] = useState<Product[]>([]);
   const [wasteData, setWasteData] = useState<any>(null);
+  const [wasteLogs, setWasteLogs] = useState<WasteLog[]>([]);
+  const [wasteDeleting, setWasteDeleting] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showWasteModal, setShowWasteModal] = useState(false);
   const [wasteSaving, setWasteSaving] = useState(false);
@@ -135,8 +137,12 @@ const ReportsScreen: React.FC = () => {
   const fetchWaste = useCallback(async (d: string) => {
     setLoading(true);
     try {
-      const data = await getWasteAnalytics(d);
-      setWasteData(data);
+      const [analytics, logs] = await Promise.all([
+        getWasteAnalytics(d),
+        getWasteLogs(d),
+      ]);
+      setWasteData(analytics);
+      setWasteLogs(logs ?? []);
     } catch (e: any) {
       showAlert('Error', e.message || 'Failed to load waste data');
     } finally { setLoading(false); }
@@ -400,6 +406,19 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
     if (isNaN(d.getTime())) return;
     d.setDate(d.getDate() + dir);
     setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+  };
+
+  const handleDeleteWaste = async (id: string) => {
+    setWasteDeleting(id);
+    try {
+      await deleteWasteLog(id);
+      setWasteLogs(prev => prev.filter(w => w._id !== id));
+      fetchWaste(date);
+    } catch (e: any) {
+      showAlert('Error', e.message || 'Failed to delete');
+    } finally {
+      setWasteDeleting(null);
+    }
   };
 
   const saveWasteLog = async () => {
@@ -700,6 +719,32 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
                           <View style={[styles.stockBadge, { backgroundColor: Colors.warningBg, marginLeft: 8 }]}>
                             <Text style={[styles.stockCount, { color: Colors.warning }]}>{cur}{r.totalLoss.toFixed(0)}</Text>
                           </View>
+                        </View>
+                      ))}
+                    </>
+                  )}
+                  {wasteLogs.length > 0 && (
+                    <>
+                      <Text style={[styles.sectionTitle, { marginTop: Spacing.lg }]}>Log Entries</Text>
+                      {wasteLogs.map(log => (
+                        <View key={log._id} style={[styles.stockRow, { alignItems: 'flex-start' }]}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.productName}>{log.productName}</Text>
+                            <Text style={styles.productSub}>{log.quantity} {log.unit}  ·  {log.reason}</Text>
+                            {!!log.notes && <Text style={[styles.productSub, { color: Colors.textMuted }]}>{log.notes}</Text>}
+                          </View>
+                          <Text style={[styles.stockCount, { color: Colors.danger, marginRight: Spacing.sm, marginTop: 2 }]}>
+                            {cur}{log.estimatedLoss.toFixed(0)}
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => handleDeleteWaste(log._id)}
+                            disabled={wasteDeleting === log._id}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            {wasteDeleting === log._id
+                              ? <ActivityIndicator size="small" color={Colors.danger} />
+                              : <MaterialIcons name="delete-outline" size={20} color={Colors.danger} />}
+                          </TouchableOpacity>
                         </View>
                       ))}
                     </>

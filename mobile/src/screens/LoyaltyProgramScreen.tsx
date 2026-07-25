@@ -53,6 +53,20 @@ const LoyaltyProgramScreen: React.FC = () => {
   const [adjRemarks, setAdjRemarks]   = useState('');
   const [adjusting, setAdjusting]     = useState(false);
 
+  // Edit config modal
+  const [showEditConfig, setShowEditConfig] = useState(false);
+  const [editConfigSaving, setEditConfigSaving] = useState(false);
+  const [editConfigForm, setEditConfigForm] = useState({
+    rewardName: '',
+    pointsPerHundredRupees: '',
+    minimumRedeemPoints: '',
+    maximumRedeemPercent: '',
+    pointValueInPaisa: '',
+    expiryDays: '',
+    roundingRule: 'floor' as LoyaltyConfig['roundingRule'],
+    calculationBase: 'grandTotal' as LoyaltyConfig['calculationBase'],
+  });
+
   const loadConfig = useCallback(async () => {
     try {
       const { config: c } = await api.getLoyaltyConfig();
@@ -126,6 +140,39 @@ const LoyaltyProgramScreen: React.FC = () => {
     }
   };
 
+  const handleSaveConfig = async () => {
+    const f = editConfigForm;
+    if (!f.rewardName.trim()) { Alert.alert('Error', 'Reward name is required'); return; }
+    const pph = parseFloat(f.pointsPerHundredRupees);
+    const minPts = parseInt(f.minimumRedeemPoints);
+    const maxPct = parseFloat(f.maximumRedeemPercent);
+    const ptVal = parseFloat(f.pointValueInPaisa);
+    if (!pph || pph <= 0) { Alert.alert('Error', 'Points per ₹100 must be positive'); return; }
+    if (!minPts || minPts < 0) { Alert.alert('Error', 'Minimum redeem points must be ≥ 0'); return; }
+    if (!maxPct || maxPct <= 0 || maxPct > 100) { Alert.alert('Error', 'Max redeem % must be 1–100'); return; }
+    if (!ptVal || ptVal <= 0) { Alert.alert('Error', 'Point value must be positive'); return; }
+    setEditConfigSaving(true);
+    try {
+      const { config: updated } = await api.updateLoyaltyConfig({
+        rewardName: f.rewardName.trim(),
+        pointsPerHundredRupees: pph,
+        minimumRedeemPoints: minPts,
+        maximumRedeemPercent: maxPct,
+        pointValueInPaisa: Math.round(ptVal * 100),
+        expiryDays: f.expiryDays ? parseInt(f.expiryDays) : null,
+        roundingRule: f.roundingRule,
+        calculationBase: f.calculationBase,
+      });
+      setConfig(updated);
+      setShowEditConfig(false);
+      Alert.alert('Saved', 'Loyalty settings updated');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to save');
+    } finally {
+      setEditConfigSaving(false);
+    }
+  };
+
   const renderCustomer = ({ item }: { item: LoyaltyCustomer }) => (
     <TouchableOpacity style={styles.custCard} onPress={() => openDetail(item)} activeOpacity={0.82}>
       <View style={styles.custAvatar}>
@@ -174,7 +221,26 @@ const LoyaltyProgramScreen: React.FC = () => {
           <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Loyalty Program</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => {
+            if (config) {
+              setEditConfigForm({
+                rewardName: config.rewardName,
+                pointsPerHundredRupees: String(config.pointsPerHundredRupees),
+                minimumRedeemPoints: String(config.minimumRedeemPoints),
+                maximumRedeemPercent: String(config.maximumRedeemPercent),
+                pointValueInPaisa: String((config.pointValueInPaisa / 100).toFixed(2)),
+                expiryDays: config.expiryDays != null ? String(config.expiryDays) : '',
+                roundingRule: config.roundingRule,
+                calculationBase: config.calculationBase,
+              });
+            }
+            setShowEditConfig(true);
+          }}
+        >
+          <MaterialIcons name="settings" size={22} color={Colors.primary} />
+        </TouchableOpacity>
       </View>
 
       {/* Config strip */}
@@ -287,6 +353,117 @@ const LoyaltyProgramScreen: React.FC = () => {
             <TouchableOpacity style={styles.closeBtn} onPress={() => setShowDetail(false)}>
               <Text style={styles.closeBtnText}>Close</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Config Modal */}
+      <Modal visible={showEditConfig} transparent animationType="slide" onRequestClose={() => setShowEditConfig(false)}>
+        <View style={styles.overlay}>
+          <View style={[styles.sheet, { paddingBottom: bottom + Spacing.xl, maxHeight: '88%' }]}>
+            <View style={styles.handle} />
+            <Text style={[styles.sheetTitle, { marginBottom: 2 }]}>Loyalty Settings</Text>
+            <Text style={[styles.sheetSub, { marginBottom: Spacing.lg }]}>Program configuration</Text>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.adjLabel}>Reward Name</Text>
+              <TextInput
+                style={[styles.adjInput, { fontSize: FontSize.md }]}
+                value={editConfigForm.rewardName}
+                onChangeText={v => setEditConfigForm(p => ({ ...p, rewardName: v }))}
+                placeholder="e.g. Points"
+                placeholderTextColor={Colors.textMuted}
+              />
+              <Text style={styles.adjLabel}>Points per ₹100 Spend</Text>
+              <TextInput
+                style={[styles.adjInput, { fontSize: FontSize.md }]}
+                value={editConfigForm.pointsPerHundredRupees}
+                onChangeText={v => setEditConfigForm(p => ({ ...p, pointsPerHundredRupees: v.replace(/[^0-9.]/g, '') }))}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 5"
+                placeholderTextColor={Colors.textMuted}
+              />
+              <Text style={styles.adjLabel}>Minimum Redeem Points</Text>
+              <TextInput
+                style={[styles.adjInput, { fontSize: FontSize.md }]}
+                value={editConfigForm.minimumRedeemPoints}
+                onChangeText={v => setEditConfigForm(p => ({ ...p, minimumRedeemPoints: v.replace(/[^0-9]/g, '') }))}
+                keyboardType="number-pad"
+                placeholder="e.g. 100"
+                placeholderTextColor={Colors.textMuted}
+              />
+              <Text style={styles.adjLabel}>Maximum Redeem % of Bill</Text>
+              <TextInput
+                style={[styles.adjInput, { fontSize: FontSize.md }]}
+                value={editConfigForm.maximumRedeemPercent}
+                onChangeText={v => setEditConfigForm(p => ({ ...p, maximumRedeemPercent: v.replace(/[^0-9.]/g, '') }))}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 20"
+                placeholderTextColor={Colors.textMuted}
+              />
+              <Text style={styles.adjLabel}>Point Value (₹ per point)</Text>
+              <TextInput
+                style={[styles.adjInput, { fontSize: FontSize.md }]}
+                value={editConfigForm.pointValueInPaisa}
+                onChangeText={v => setEditConfigForm(p => ({ ...p, pointValueInPaisa: v.replace(/[^0-9.]/g, '') }))}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 0.25"
+                placeholderTextColor={Colors.textMuted}
+              />
+              <Text style={styles.adjLabel}>Points Expiry (days, empty = never)</Text>
+              <TextInput
+                style={[styles.adjInput, { fontSize: FontSize.md }]}
+                value={editConfigForm.expiryDays}
+                onChangeText={v => setEditConfigForm(p => ({ ...p, expiryDays: v.replace(/[^0-9]/g, '') }))}
+                keyboardType="number-pad"
+                placeholder="Leave empty for no expiry"
+                placeholderTextColor={Colors.textMuted}
+              />
+              <Text style={styles.adjLabel}>Points Rounding</Text>
+              <View style={styles.toggleRow}>
+                {(['floor', 'ceil', 'round'] as LoyaltyConfig['roundingRule'][]).map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.togglePill, editConfigForm.roundingRule === opt && styles.togglePillActive]}
+                    onPress={() => setEditConfigForm(p => ({ ...p, roundingRule: opt }))}
+                  >
+                    <Text style={[styles.togglePillText, editConfigForm.roundingRule === opt && styles.togglePillTextActive]}>
+                      {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={[styles.adjLabel, { marginTop: Spacing.sm }]}>Calculation Base</Text>
+              <View style={[styles.toggleRow, { marginBottom: Spacing.xxl }]}>
+                {([
+                  { value: 'subtotal' as const, label: 'Subtotal (excl. GST)' },
+                  { value: 'grandTotal' as const, label: 'Grand Total (incl. GST)' },
+                ]).map(opt => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.togglePill, editConfigForm.calculationBase === opt.value && styles.togglePillActive]}
+                    onPress={() => setEditConfigForm(p => ({ ...p, calculationBase: opt.value }))}
+                  >
+                    <Text style={[styles.togglePillText, editConfigForm.calculationBase === opt.value && styles.togglePillTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+            <View style={[styles.adjActions, { marginTop: Spacing.md }]}>
+              <TouchableOpacity style={styles.adjCancel} onPress={() => setShowEditConfig(false)}>
+                <Text style={styles.adjCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.adjConfirm, editConfigSaving && { opacity: 0.6 }]}
+                onPress={handleSaveConfig}
+                disabled={editConfigSaving}
+              >
+                {editConfigSaving
+                  ? <ActivityIndicator size="small" color={Colors.white} />
+                  : <Text style={styles.adjConfirmText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -440,6 +617,12 @@ const styles = StyleSheet.create({
   adjCancelText:   { color: Colors.textSecondary, fontSize: FontSize.md, fontWeight: '600' },
   adjConfirm:      { flex: 2, paddingVertical: 13, borderRadius: BorderRadius.lg, backgroundColor: Colors.primary, alignItems: 'center', ...Shadows.primary },
   adjConfirmText:  { color: Colors.white, fontSize: FontSize.md, fontWeight: '800' },
+
+  toggleRow:         { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap', marginBottom: Spacing.xl },
+  togglePill:        { paddingHorizontal: Spacing.md, paddingVertical: 8, borderRadius: BorderRadius.round, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.background },
+  togglePillActive:  { borderColor: Colors.primary, backgroundColor: Colors.primaryBg },
+  togglePillText:    { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary },
+  togglePillTextActive: { color: Colors.primary },
 });
 
 export default LoyaltyProgramScreen;

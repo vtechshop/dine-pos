@@ -38,6 +38,7 @@ const ExpenseScreen: React.FC = () => {
   const [loading, setLoading]   = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving]     = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const emptyForm = { description: '', amount: '', category: 'ingredients' as Expense['category'], date: todayStr(), notes: '' };
   const [form, setForm] = useState(emptyForm);
@@ -63,14 +64,20 @@ const ExpenseScreen: React.FC = () => {
     }
     setSaving(true);
     try {
-      await api.createExpense({
+      const payload = {
         description: form.description.trim(),
         amount:      parseFloat(form.amount),
         category:    form.category,
         date:        form.date,
         notes:       form.notes.trim(),
-      });
+      };
+      if (editingId) {
+        await api.updateExpense(editingId, payload);
+      } else {
+        await api.createExpense(payload);
+      }
       setShowModal(false);
+      setEditingId(null);
       load();
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to save');
@@ -103,7 +110,21 @@ const ExpenseScreen: React.FC = () => {
   const renderExpense = ({ item }: { item: Expense }) => {
     const cat = getCat(item.category);
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => {
+          setEditingId(item._id);
+          setForm({
+            description: item.description,
+            amount:      String(item.amount),
+            category:    item.category,
+            date:        item.date,
+            notes:       item.notes || '',
+          });
+          setShowModal(true);
+        }}
+        activeOpacity={0.82}
+      >
         <View style={[styles.catIcon, { backgroundColor: cat.color + '20' }]}>
           <MaterialIcons name={cat.icon as any} size={22} color={cat.color} />
         </View>
@@ -118,7 +139,7 @@ const ExpenseScreen: React.FC = () => {
             <MaterialIcons name="delete-outline" size={18} color={Colors.danger} />
           </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -129,7 +150,7 @@ const ExpenseScreen: React.FC = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Expenses & P&L</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={() => { setForm({ ...emptyForm, date }); setShowModal(true); }}>
+        <TouchableOpacity style={styles.addBtn} onPress={() => { setEditingId(null); setForm({ ...emptyForm, date }); setShowModal(true); }}>
           <MaterialIcons name="add" size={22} color={Colors.white} />
         </TouchableOpacity>
       </View>
@@ -242,13 +263,18 @@ const ExpenseScreen: React.FC = () => {
         </ScrollView>
       )}
 
-      {/* Add Expense Modal */}
-      <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
+      {/* Add / Edit Expense Modal */}
+      <Modal
+        visible={showModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { setShowModal(false); setEditingId(null); setForm(emptyForm); }}
+      >
         <View style={styles.overlay}>
           <ScrollView>
             <View style={[styles.modal, { paddingBottom: 40 + bottom }]}>
               <View style={styles.handle} />
-              <Text style={styles.modalTitle}>Log Expense</Text>
+              <Text style={styles.modalTitle}>{editingId ? 'Edit Expense' : 'Log Expense'}</Text>
 
               <Text style={styles.label}>Description *</Text>
               <TextInput
@@ -326,7 +352,7 @@ const ExpenseScreen: React.FC = () => {
               />
 
               <View style={styles.mActions}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowModal(false)}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => { setShowModal(false); setEditingId(null); setForm(emptyForm); }}>
                   <Text style={styles.cancelTxt}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving}>

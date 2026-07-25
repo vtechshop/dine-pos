@@ -998,6 +998,9 @@ export const deleteReservation = (id: string): Promise<void> =>
 export const getLoyaltyConfig = (): Promise<{ config: LoyaltyConfig }> =>
   fetchAPI('/loyalty/config');
 
+export const updateLoyaltyConfig = (data: Partial<LoyaltyConfig>): Promise<{ config: LoyaltyConfig }> =>
+  fetchAPI('/loyalty/config', { method: 'PUT', body: JSON.stringify(data) });
+
 export const getLoyaltyCustomers = (params?: { phone?: string; name?: string; page?: number }): Promise<{ customers: LoyaltyCustomer[]; total: number }> => {
   const q = params ? '?' + new URLSearchParams(Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)]))).toString() : '';
   return fetchAPI(`/loyalty/customers${q}`);
