@@ -13,7 +13,7 @@ import jwt from 'jsonwebtoken';
 import { makeRateLimiter } from './utils/rateLimiter';
 import { setIo } from './utils/ioRegistry';
 import connectDB from './config/database';
-import { connectRedis, getRedisClient, closeRedis, redisHealthCheck } from './config/redis';
+import { connectRedis, getRedisClient, closeRedis, redisHealthCheck, registerSubClient } from './config/redis';
 import { logger } from './utils/logger';
 import ChatMessage from './models/ChatMessage';
 import PrinterDevice from './models/PrinterDevice';
@@ -709,15 +709,19 @@ process.on('SIGINT', shutdown);
     await connectDB();
     await connectRedis();
 
-    // Attach Redis adapter to Socket.IO if Redis is available
+    // Attach Redis adapter to Socket.IO if Redis is available.
+    // duplicate() inherits lazyConnect:true from the parent, so we must
+    // explicitly connect the sub-client before the adapter can subscribe.
     const redisClient = getRedisClient();
     if (redisClient) {
       const pubClient = redisClient;
       const subClient = pubClient.duplicate();
+      await subClient.connect(); // required: duplicate() starts disconnected
       io.adapter(createAdapter(pubClient, subClient));
-      logger.info('Socket.IO using Redis adapter');
+      registerSubClient(subClient); // hand off to redis.ts for graceful shutdown
+      logger.info('Socket.IO using Redis adapter (pub/sub both connected)');
     } else {
-      logger.info('Socket.IO using in-memory adapter');
+      logger.info('Socket.IO using in-memory adapter (set REDIS_URL to enable clustering)');
     }
 
     httpServer.listen(Number(PORT), '0.0.0.0', () => {
