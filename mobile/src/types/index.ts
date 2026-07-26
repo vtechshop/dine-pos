@@ -743,6 +743,45 @@ export interface VendorLedgerStatement {
   currentOutstanding: number;
 }
 
+export interface FinanceDashboard {
+  period: { from: string; to: string };
+  revenue: number;
+  orderCount: number;
+  cogs: number;
+  foodCostPct: number;
+  grossProfit: number;
+  grossMarginPct: number;
+  totalExpenses: number;
+  wasteTotal: number;
+  netProfit: number;
+  netMarginPct: number;
+}
+
+export interface MenuProfitabilityItem {
+  productId: string;
+  productName: string;
+  qtySold: number;
+  revenue: number;
+  totalCOGS: number;
+  grossProfit: number;
+  avgSellingPrice: number;
+  avgRecipeCostPerUnit: number;
+  grossProfitPerUnit: number;
+  marginPct: number;
+  contributionMarginPerUnit: number;
+}
+
+export interface MenuProfitabilityReport {
+  items: MenuProfitabilityItem[];
+  total: number;
+  summary: {
+    totalRevenue: number;
+    totalCOGS: number;
+    totalGrossProfit: number;
+    overallMarginPct: number;
+  };
+}
+
 export type RootStackParamList = {
   Splash: undefined;
   RoleSelect: undefined;

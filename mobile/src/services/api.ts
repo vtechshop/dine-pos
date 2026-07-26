@@ -1935,6 +1935,25 @@ export const getVendorStatement = (
 ): Promise<VendorLedgerStatement> =>
   fetchAPI(`/vendor-ledger/${vendorId}/statement${poQS(params as Record<string, string | undefined>)}`);
 
+// ── Finance / Food Cost Analytics ─────────────────────────────────────────────
+
+import type { FinanceDashboard, MenuProfitabilityReport } from '../types';
+
+export const getFinanceDashboard = (
+  params?: { from?: string; to?: string },
+): Promise<FinanceDashboard> =>
+  fetchAPI(`/finance/dashboard${poQS(params as Record<string, string | undefined>)}`);
+
+export const getMenuProfitability = (
+  params?: { from?: string; to?: string; sort?: string; dir?: string; limit?: number },
+): Promise<MenuProfitabilityReport> =>
+  fetchAPI(`/finance/menu-profitability${poQS(params as Record<string, string | number | undefined>)}`);
+
+export const getCogsTrend = (
+  params?: { from?: string; to?: string; groupBy?: string },
+): Promise<Array<{ period: string; revenue: number; cogs: number; grossProfit: number; grossMarginPct: number; orders: number }>> =>
+  fetchAPI(`/finance/cogs-trend${poQS(params as Record<string, string | undefined>)}`);
+
 // ── SA Push Token Registration ────────────────────────────────────────────────
 
 export const registerSAPushToken = (

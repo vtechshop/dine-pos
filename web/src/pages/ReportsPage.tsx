@@ -20,6 +20,9 @@ import type {
   HourlyBucket,
   DatePreset,
   ModifierReport,
+  FinanceDashboard,
+  MenuProfitabilityReport,
+  CogsTrendPoint,
 } from '../types/reports';
 import type { Expense } from '../types';
 import {
@@ -37,13 +40,18 @@ import {
   createExpense as apiCreateExpense,
   deleteExpense as apiDeleteExpense,
 } from '../api/expenses';
+import {
+  fetchFinanceDashboard,
+  fetchMenuProfitability,
+  fetchCogsTrend,
+} from '../api/finance';
 import { ApiError } from '../api/client';
 import { Spinner } from '../components/ui/Spinner';
 import { useSettings } from '../context/SettingsContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'products' | 'gst' | 'expenses' | 'modifiers';
+type Tab = 'overview' | 'products' | 'gst' | 'expenses' | 'modifiers' | 'foodcost';
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -340,6 +348,15 @@ export function ReportsPage() {
   const [modLoading, setModLoading]     = useState(false);
   const [modError, setModError]         = useState<string | null>(null);
 
+  // ── Food Cost state ─────────────────────────────────────────────────────────
+
+  const [finDash,    setFinDash]        = useState<FinanceDashboard | null>(null);
+  const [menuProfit, setMenuProfit]     = useState<MenuProfitabilityReport | null>(null);
+  const [cogsTrend,  setCogsTrend]      = useState<CogsTrendPoint[]>([]);
+  const [fcLoading,  setFcLoading]      = useState(false);
+  const [fcError,    setFcError]        = useState<string | null>(null);
+  const [menuSort,   setMenuSort]       = useState<'margin' | 'revenue' | 'qty'>('revenue');
+
   // ── Load overview ───────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -484,6 +501,35 @@ export function ReportsPage() {
     return () => { cancelled = true; };
   }, [tab, from, to]);
 
+  // ── Load food cost ──────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (tab !== 'foodcost') return;
+    let cancelled = false;
+    setFcLoading(true);
+    setFcError(null);
+
+    void (async () => {
+      try {
+        const [dash, menu, trend] = await Promise.all([
+          fetchFinanceDashboard(from, to),
+          fetchMenuProfitability({ from, to, sort: menuSort, dir: 'desc', limit: 50 }),
+          fetchCogsTrend(from, to, days <= 31 ? 'day' : days <= 90 ? 'week' : 'month'),
+        ]);
+        if (cancelled) return;
+        setFinDash(dash);
+        setMenuProfit(menu);
+        setCogsTrend(trend);
+      } catch (e) {
+        if (!cancelled) setFcError(e instanceof Error ? e.message : 'Failed to load');
+      } finally {
+        if (!cancelled) setFcLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [tab, from, to, days, menuSort]);
+
   // ── Expense create / delete ─────────────────────────────────────────────────
 
   const reloadExpenses = useCallback(async (date: string) => {
@@ -593,7 +639,7 @@ export function ReportsPage() {
       ['Modifier Option', 'Group', 'Qty Sold', 'Revenue', 'Orders'],
       [modifiers.topModifiers.map(m => [
         m.modifierOptionName,
-        modifiers.groupRevenue.find(g =>
+        modifiers.groupRevenue.find(_g =>
           modifiers.topModifiers.some(tm => tm.modifierOptionId === m.modifierOptionId)
         )?.modifierGroupName ?? '',
         m.totalQuantity,
@@ -603,6 +649,23 @@ export function ReportsPage() {
     );
   }, [modifiers, from, to]);
 
+  const exportFoodCostCSV = useCallback(() => {
+    if (!menuProfit) return;
+    downloadCSV(`food-cost-${from}-${to}.csv`,
+      ['Product', 'Qty Sold', 'Revenue', 'COGS', 'Gross Profit', 'Margin %', 'Avg Selling Price', 'Avg Recipe Cost'],
+      [menuProfit.items.map(i => [
+        i.productName,
+        i.qtySold,
+        i.revenue,
+        i.totalCOGS,
+        i.grossProfit,
+        i.marginPct,
+        i.avgSellingPrice,
+        i.avgRecipeCostPerUnit,
+      ])],
+    );
+  }, [menuProfit, from, to]);
+
   // ── Current tab CSV handler ─────────────────────────────────────────────────
 
   const handleCSV = () => {
@@ -611,6 +674,7 @@ export function ReportsPage() {
     if (tab === 'gst')       exportGSTCSV();
     if (tab === 'expenses')  exportExpensesCSV();
     if (tab === 'modifiers') exportModifiersCSV();
+    if (tab === 'foodcost')  exportFoodCostCSV();
   };
 
   // ── Hourly chart data (trim to 7–22) ────────────────────────────────────────
@@ -630,6 +694,7 @@ export function ReportsPage() {
     { id: 'gst',       label: 'GST / Tax', icon: <FileText size={12} />     },
     { id: 'expenses',  label: 'Expenses',  icon: <TrendingDown size={12} /> },
     { id: 'modifiers', label: 'Modifiers', icon: <Layers size={12} />       },
+    { id: 'foodcost',  label: 'Food Cost', icon: <RefreshCw size={12} />    },
   ];
 
   const PRESETS: Array<{ id: DatePreset; label: string }> = [
@@ -683,8 +748,8 @@ export function ReportsPage() {
           </div>
         </div>
 
-        {/* Date range bar — shown for overview, gst, and modifiers tabs */}
-        {(tab === 'overview' || tab === 'gst' || tab === 'modifiers') && (
+        {/* Date range bar — shown for overview, gst, modifiers, and foodcost tabs */}
+        {(tab === 'overview' || tab === 'gst' || tab === 'modifiers' || tab === 'foodcost') && (
           <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5">
             {PRESETS.map(p => (
               <button
@@ -1370,6 +1435,164 @@ export function ReportsPage() {
                     <Layers size={36} className="mb-3 text-ink/10" />
                     <p className="text-sm text-ink/40">No modifier orders in this period</p>
                     <p className="mt-1 text-xs text-ink/25">Try a wider date range.</p>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+        )}
+        {/* ════ FOOD COST TAB ════ */}
+        {tab === 'foodcost' && (
+          <div className="p-5 space-y-5">
+            {fcError && (
+              <div className="rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
+                {fcError}
+              </div>
+            )}
+
+            {fcLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Spinner size="lg" />
+              </div>
+            ) : finDash ? (
+              <>
+                {/* KPI cards */}
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  <KPICard label="Revenue"         value={fmtCur(finDash.revenue, sym)}      sub={`${finDash.orderCount} orders`} accent />
+                  <KPICard label="COGS"             value={fmtCur(finDash.cogs, sym)}         sub={`Food cost ${finDash.foodCostPct}%`} />
+                  <KPICard label="Gross Profit"     value={fmtCur(finDash.grossProfit, sym)}  sub={`Margin ${finDash.grossMarginPct}%`} />
+                  <KPICard label="Net Profit"       value={fmtCur(finDash.netProfit, sym)}    sub={`Margin ${finDash.netMarginPct}%`} />
+                  <KPICard label="Total Expenses"   value={fmtCur(finDash.totalExpenses, sym)} sub="Op-ex" />
+                  <KPICard label="Waste Loss"       value={fmtCur(finDash.wasteTotal, sym)}   sub="Recorded waste" />
+                  <KPICard label="Food Cost %"      value={`${finDash.foodCostPct}%`}         sub="COGS / Revenue" />
+                  <KPICard label="Gross Margin %"   value={`${finDash.grossMarginPct}%`}      sub="Gross Profit / Revenue" />
+                </div>
+
+                {/* COGS Trend chart */}
+                {cogsTrend.length > 0 && (
+                  <Card>
+                    <SectionHead title="Revenue vs COGS Trend" />
+                    <div className="mb-3 flex items-center gap-4 text-xs text-ink/40">
+                      <span className="flex items-center gap-1.5">
+                        <span className="inline-block h-2 w-3 rounded-sm bg-brand/70" />
+                        Revenue
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="inline-block h-2 w-3 rounded-sm bg-ink/20" />
+                        COGS
+                      </span>
+                    </div>
+                    <div className="relative flex items-end gap-px overflow-hidden" style={{ height: 120 }}>
+                      {cogsTrend.map((pt, i) => {
+                        const maxVal = Math.max(...cogsTrend.map(p => p.revenue), 1);
+                        const revPct = Math.max((pt.revenue / maxVal) * 85, pt.revenue > 0 ? 3 : 0);
+                        const cogPct = Math.max((pt.cogs / maxVal) * 85, pt.cogs > 0 ? 2 : 0);
+                        return (
+                          <div
+                            key={i}
+                            className="group relative flex flex-1 flex-col items-center justify-end"
+                            style={{ height: '100%' }}
+                            title={`${pt.period}: Rev ${sym}${pt.revenue.toLocaleString('en-IN')} · COGS ${sym}${pt.cogs.toLocaleString('en-IN')} · Margin ${pt.grossMarginPct}%`}
+                          >
+                            <div className="absolute bottom-5 flex w-full gap-px">
+                              <div className="flex-1 rounded-sm bg-brand/70 transition-all group-hover:bg-brand" style={{ height: `${revPct}%` }} />
+                              <div className="flex-1 rounded-sm bg-ink/20 transition-all group-hover:bg-ink/30" style={{ height: `${cogPct}%` }} />
+                            </div>
+                            <span className="mt-1 block w-full truncate text-center text-[8px] text-ink/40">
+                              {pt.period.slice(-5)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                )}
+
+                {/* Menu profitability table */}
+                {menuProfit && menuProfit.items.length > 0 && (
+                  <Card className="overflow-hidden !p-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-3">
+                      <h3 className="text-sm font-semibold text-ink">
+                        Menu Profitability
+                        <span className="ml-2 text-xs font-normal text-ink/40">
+                          {menuProfit.total} products · Overall margin {menuProfit.summary.overallMarginPct}%
+                        </span>
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <div className="flex rounded-lg border border-border overflow-hidden text-xs">
+                          {(['revenue', 'margin', 'qty'] as const).map(s => (
+                            <button
+                              key={s}
+                              onClick={() => setMenuSort(s)}
+                              className={`px-2.5 py-1 font-medium capitalize transition-colors ${
+                                menuSort === s ? 'bg-brand text-white' : 'text-ink/50 hover:bg-ink/5'
+                              }`}
+                            >
+                              {s === 'qty' ? 'Qty' : s === 'margin' ? 'Margin' : 'Revenue'}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={exportFoodCostCSV}
+                          className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5"
+                        >
+                          <Download size={11} />
+                          CSV
+                        </button>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-mist">
+                            <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">#</th>
+                            <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">Product</th>
+                            <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Qty</th>
+                            <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Revenue</th>
+                            <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">COGS</th>
+                            <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Gross Profit</th>
+                            <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Margin %</th>
+                            <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Recipe Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {menuProfit.items.map((item, i) => (
+                            <tr key={item.productId} className="hover:bg-mist">
+                              <td className="px-4 py-2.5 text-xs tabular-nums text-ink/30">{i + 1}</td>
+                              <td className="px-4 py-2.5 text-sm text-ink">{item.productName}</td>
+                              <td className="px-4 py-2.5 text-right text-sm tabular-nums text-ink/60">{item.qtySold}</td>
+                              <td className="px-4 py-2.5 text-right text-sm tabular-nums text-ink">{fmtCur(item.revenue, sym)}</td>
+                              <td className="px-4 py-2.5 text-right text-sm tabular-nums text-ink/60">{fmtCur(item.totalCOGS, sym)}</td>
+                              <td className="px-4 py-2.5 text-right text-sm font-semibold tabular-nums text-ink">{fmtCur(item.grossProfit, sym)}</td>
+                              <td className="px-4 py-2.5 text-right text-sm tabular-nums">
+                                <span className={`font-semibold ${item.marginPct >= 50 ? 'text-green-600' : item.marginPct >= 25 ? 'text-amber-600' : 'text-brand'}`}>
+                                  {item.marginPct}%
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 text-right text-xs tabular-nums text-ink/50">{fmtCur(item.avgRecipeCostPerUnit, sym)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 border-border bg-mist font-semibold">
+                            <td className="px-4 py-2.5" colSpan={3} />
+                            <td className="px-4 py-2.5 text-right text-sm tabular-nums text-ink">{fmtCur(menuProfit.summary.totalRevenue, sym)}</td>
+                            <td className="px-4 py-2.5 text-right text-sm tabular-nums text-ink/60">{fmtCur(menuProfit.summary.totalCOGS, sym)}</td>
+                            <td className="px-4 py-2.5 text-right text-sm tabular-nums text-ink">{fmtCur(menuProfit.summary.totalGrossProfit, sym)}</td>
+                            <td className="px-4 py-2.5 text-right text-sm tabular-nums text-ink">{menuProfit.summary.overallMarginPct}%</td>
+                            <td />
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </Card>
+                )}
+
+                {menuProfit && menuProfit.items.length === 0 && (
+                  <div className="flex h-48 flex-col items-center justify-center text-center">
+                    <BarChart2 size={36} className="mb-3 text-ink/10" />
+                    <p className="text-sm text-ink/40">No sales data with recipe cost in this period</p>
+                    <p className="mt-1 text-xs text-ink/25">Set ingredient costs in Ingredients and link them to product recipes.</p>
                   </div>
                 )}
               </>

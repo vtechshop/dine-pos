@@ -257,6 +257,30 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     // Fire inventory updates in parallel
     await Promise.all(inventoryOps.map(fn => fn()));
 
+    // WAC (weighted average cost) update: recalculate costPerUnit for each received ingredient
+    const wacOps = processedItems
+      .filter(item => item.ingredientId && (item.purchasePrice as number) > 0)
+      .map(async (item) => {
+        const accepted = Math.max(0,
+          (item.receivedQty  as number) -
+          (item.damagedQty   as number) -
+          (item.rejectedQty  as number),
+        );
+        if (accepted <= 0) return;
+        const iId = item.ingredientId as mongoose.Types.ObjectId;
+        const ing = await Ingredient.findOne({ _id: iId, hotelId: req.hotelId }).select('costPerUnit currentStock');
+        if (!ing || ing.currentStock <= 0) return;
+        const prevStock = Math.max(0, ing.currentStock - accepted);
+        const newCost   = (prevStock * ing.costPerUnit + accepted * (item.purchasePrice as number)) / ing.currentStock;
+        if (!isNaN(newCost) && newCost > 0) {
+          await Ingredient.updateOne(
+            { _id: iId, hotelId: req.hotelId },
+            { $set: { costPerUnit: +newCost.toFixed(4) } },
+          );
+        }
+      });
+    await Promise.all(wacOps);
+
     // Vendor ledger: GRN increases outstanding (accepted qty × purchase price)
     const grnValue = processedItems.reduce((sum, item) => {
       const accepted = Math.max(0, (item.receivedQty as number) - (item.rejectedQty as number));

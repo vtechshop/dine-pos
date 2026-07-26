@@ -9,12 +9,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
-import { DailyReport, GSTReport, TallyReport, GSTR1Json, Product, WasteLog } from '../types';
+import { DailyReport, GSTReport, TallyReport, GSTR1Json, Product, WasteLog, FinanceDashboard, MenuProfitabilityReport } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
-import { getDailyReport, getRangeReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics, getWasteLogs, createWasteLog, deleteWasteLog, getGSTReport, getTallyExport, getGSTR1Json } from '../services/api';
+import { getDailyReport, getRangeReport, getProductSalesReport, getLowStockProducts, getWasteAnalytics, getWasteLogs, createWasteLog, deleteWasteLog, getGSTReport, getTallyExport, getGSTR1Json, getFinanceDashboard, getMenuProfitability } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
 
-type Tab = 'daily' | 'products' | 'stock' | 'waste' | 'gst';
+type Tab = 'daily' | 'products' | 'stock' | 'waste' | 'gst' | 'foodcost';
 
 interface ProductSale {
   productName: string;
@@ -85,6 +85,15 @@ const ReportsScreen: React.FC = () => {
   const [gstr1Exporting, setGstr1Exporting] = useState(false);
   const [gstFrom, setGstFrom] = useState(getMonthStart());
   const [gstTo, setGstTo] = useState(getTodayString());
+
+  // food cost state
+  const [fcFrom, setFcFrom]             = useState(getMonthStart());
+  const [fcTo, setFcTo]                 = useState(getTodayString());
+  const [fcDash, setFcDash]             = useState<FinanceDashboard | null>(null);
+  const [fcMenu, setFcMenu]             = useState<MenuProfitabilityReport | null>(null);
+  const [fcLoading, setFcLoading]       = useState(false);
+  const [fcMenuSort, setFcMenuSort]     = useState<'revenue' | 'margin' | 'qty'>('revenue');
+
   const emptyWasteForm = { productName: '', quantity: '', unit: 'portion', reason: 'expired' as WasteReason, estimatedLoss: '', notes: '' };
   const [wasteForm, setWasteForm] = useState(emptyWasteForm);
   const cur = settings.currencySymbol || '₹';
@@ -157,6 +166,22 @@ const ReportsScreen: React.FC = () => {
       showAlert('Error', e.message || 'Failed to load GST report');
     } finally {
       setGstLoading(false);
+    }
+  }, []);
+
+  const fetchFoodCost = useCallback(async (from: string, to: string, sort: 'revenue' | 'margin' | 'qty') => {
+    setFcLoading(true);
+    try {
+      const [dash, menu] = await Promise.all([
+        getFinanceDashboard({ from, to }),
+        getMenuProfitability({ from, to, sort, dir: 'desc', limit: 50 }),
+      ]);
+      setFcDash(dash);
+      setFcMenu(menu);
+    } catch (e: any) {
+      showAlert('Error', e.message || 'Failed to load food cost data');
+    } finally {
+      setFcLoading(false);
     }
   }, []);
 
@@ -399,7 +424,8 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
     else if (tab === 'stock') fetchLowStock();
     else if (tab === 'waste') fetchWaste(date);
     else if (tab === 'gst') fetchGSTReport(gstFrom, gstTo);
-  }, [tab, date, fetchDaily, fetchLowStock, fetchWaste, fetchGSTReport]);
+    else if (tab === 'foodcost') fetchFoodCost(fcFrom, fcTo, fcMenuSort);
+  }, [tab, date, fetchDaily, fetchLowStock, fetchWaste, fetchGSTReport, fetchFoodCost, fcMenuSort]);
 
   const navigateDate = (dir: -1 | 1) => {
     const d = new Date(date);
@@ -481,6 +507,7 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
           { key: 'stock',    label: 'Stock',    icon: 'warning' },
           { key: 'waste',    label: 'Waste',    icon: 'delete-sweep' },
           { key: 'gst',      label: 'GST',      icon: 'receipt' },
+          { key: 'foodcost', label: 'Food Cost', icon: 'pie-chart' },
         ] as { key: Tab; label: string; icon: any }[]).map(t => (
           <TouchableOpacity
             key={t.key}
@@ -505,8 +532,8 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
         ))}
       </View>
 
-      {/* Date selector (not shown on stock or gst tabs) */}
-      {tab !== 'stock' && tab !== 'gst' && (
+      {/* Date selector (not shown on stock, gst, or foodcost tabs — they have their own range pickers) */}
+      {tab !== 'stock' && tab !== 'gst' && tab !== 'foodcost' && (
         <View style={styles.dateRow}>
           <TouchableOpacity style={styles.dateArrow} onPress={() => navigateDate(-1)} activeOpacity={0.7}>
             <Text style={styles.dateArrowText}>{'<'}</Text>
@@ -916,6 +943,171 @@ td{padding:9px 8px;font-size:12px;border-bottom:1px solid #E8EAF6;vertical-align
                 ))
               )}
             </View>
+          )}
+
+          {/* ── FOOD COST TAB ── */}
+          {tab === 'foodcost' && (
+            <>
+              {/* Date Range Row */}
+              <View style={styles.gstRangeRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.gstRangeLabel}>From</Text>
+                  <TextInput
+                    style={styles.gstRangeInput}
+                    value={fcFrom}
+                    onChangeText={setFcFrom}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
+                <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                  <Text style={styles.gstRangeLabel}>To</Text>
+                  <TextInput
+                    style={styles.gstRangeInput}
+                    value={fcTo}
+                    onChangeText={setFcTo}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={Colors.textMuted}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={styles.gstFetchBtn}
+                  onPress={() => fetchFoodCost(fcFrom, fcTo, fcMenuSort)}
+                  activeOpacity={0.8}
+                >
+                  {fcLoading
+                    ? <ActivityIndicator size="small" color={Colors.white} />
+                    : <Text style={styles.gstFetchBtnText}>Fetch</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+
+              {fcDash && (
+                <>
+                  {/* KPI Cards */}
+                  <View style={styles.statsRow}>
+                    <View style={[styles.statCard, { borderLeftColor: Colors.primary }]}>
+                      <Text style={styles.statLabel}>Revenue</Text>
+                      <Text style={styles.statValueBig}>{cur}{fcDash.revenue.toFixed(2)}</Text>
+                      <Text style={[styles.statLabel, { marginTop: 2 }]}>{fcDash.orderCount} orders</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.statsRowDouble}>
+                    <View style={[styles.statCardHalf, { borderLeftColor: Colors.warning }]}>
+                      <Text style={styles.statLabel}>COGS</Text>
+                      <Text style={styles.statValueMed}>{cur}{fcDash.cogs.toFixed(2)}</Text>
+                      <Text style={[styles.statLabel, { marginTop: 2, color: Colors.warning }]}>
+                        Food Cost {fcDash.foodCostPct}%
+                      </Text>
+                    </View>
+                    <View style={[styles.statCardHalf, { borderLeftColor: Colors.success }]}>
+                      <Text style={styles.statLabel}>Gross Profit</Text>
+                      <Text style={styles.statValueMed}>{cur}{fcDash.grossProfit.toFixed(2)}</Text>
+                      <Text style={[styles.statLabel, { marginTop: 2, color: Colors.success }]}>
+                        Margin {fcDash.grossMarginPct}%
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.statsRowDouble}>
+                    <View style={[styles.statCardHalf, { borderLeftColor: '#6A1B9A' }]}>
+                      <Text style={styles.statLabel}>Net Profit</Text>
+                      <Text style={styles.statValueMed}>{cur}{fcDash.netProfit.toFixed(2)}</Text>
+                      <Text style={[styles.statLabel, { marginTop: 2 }]}>
+                        Margin {fcDash.netMarginPct}%
+                      </Text>
+                    </View>
+                    <View style={[styles.statCardHalf, { borderLeftColor: '#C62828' }]}>
+                      <Text style={styles.statLabel}>Waste + Expenses</Text>
+                      <Text style={styles.statValueMed}>{cur}{(fcDash.totalExpenses + fcDash.wasteTotal).toFixed(2)}</Text>
+                      <Text style={[styles.statLabel, { marginTop: 2 }]}>
+                        Exp {cur}{fcDash.totalExpenses.toFixed(0)} · Waste {cur}{fcDash.wasteTotal.toFixed(0)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Menu Profitability */}
+                  {fcMenu && fcMenu.items.length > 0 && (
+                    <View style={styles.section}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.sm }}>
+                        <Text style={styles.sectionTitle}>
+                          Menu Profitability · {fcMenu.summary.overallMarginPct}% avg margin
+                        </Text>
+                      </View>
+
+                      {/* Sort pills */}
+                      <View style={{ flexDirection: 'row', gap: 6, marginBottom: Spacing.sm }}>
+                        {(['revenue', 'margin', 'qty'] as const).map(s => (
+                          <TouchableOpacity
+                            key={s}
+                            onPress={() => {
+                              setFcMenuSort(s);
+                              fetchFoodCost(fcFrom, fcTo, s);
+                            }}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 4,
+                              borderRadius: BorderRadius.sm,
+                              backgroundColor: fcMenuSort === s ? Colors.primary : Colors.border,
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={{
+                              fontSize: FontSize.xs,
+                              fontWeight: '600',
+                              color: fcMenuSort === s ? Colors.white : Colors.textSecondary,
+                              textTransform: 'capitalize',
+                            }}>
+                              {s === 'qty' ? 'Qty' : s === 'margin' ? 'Margin' : 'Revenue'}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      {/* Table header */}
+                      <View style={[styles.gstRow, styles.gstHeaderRow]}>
+                        <Text style={[styles.gstCell, styles.gstCellHdr, { flex: 3 }]}>Product</Text>
+                        <Text style={[styles.gstCell, styles.gstCellHdr, { flex: 2, textAlign: 'right' }]}>Revenue</Text>
+                        <Text style={[styles.gstCell, styles.gstCellHdr, { flex: 2, textAlign: 'right' }]}>COGS</Text>
+                        <Text style={[styles.gstCell, styles.gstCellHdr, { flex: 1.5, textAlign: 'right' }]}>Margin</Text>
+                      </View>
+
+                      {fcMenu.items.map((item, i) => (
+                        <View key={item.productId} style={[styles.gstRow, i % 2 === 1 ? { backgroundColor: Colors.surface } : {}]}>
+                          <Text style={[styles.gstCell, { flex: 3 }]} numberOfLines={1}>{item.productName}</Text>
+                          <Text style={[styles.gstCell, { flex: 2, textAlign: 'right' }]}>{cur}{item.revenue.toFixed(0)}</Text>
+                          <Text style={[styles.gstCell, { flex: 2, textAlign: 'right', color: Colors.textSecondary }]}>{cur}{item.totalCOGS.toFixed(0)}</Text>
+                          <Text style={[styles.gstCell, { flex: 1.5, textAlign: 'right', fontWeight: '700',
+                            color: item.marginPct >= 50 ? Colors.success : item.marginPct >= 25 ? Colors.warning : Colors.danger,
+                          }]}>
+                            {item.marginPct}%
+                          </Text>
+                        </View>
+                      ))}
+
+                      {/* Summary row */}
+                      <View style={[styles.gstRow, styles.gstTotalRow]}>
+                        <Text style={[styles.gstCell, styles.gstTotalCell, { flex: 3 }]}>TOTAL</Text>
+                        <Text style={[styles.gstCell, styles.gstTotalCell, { flex: 2, textAlign: 'right' }]}>{cur}{fcMenu.summary.totalRevenue.toFixed(0)}</Text>
+                        <Text style={[styles.gstCell, styles.gstTotalCell, { flex: 2, textAlign: 'right' }]}>{cur}{fcMenu.summary.totalCOGS.toFixed(0)}</Text>
+                        <Text style={[styles.gstCell, styles.gstTotalCell, { flex: 1.5, textAlign: 'right', color: Colors.primary }]}>{fcMenu.summary.overallMarginPct}%</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {fcMenu && fcMenu.items.length === 0 && (
+                    <View style={styles.emptyBox}>
+                      <MaterialIcons name="pie-chart" size={40} color={Colors.textMuted} />
+                      <Text style={styles.emptyText}>No recipe-linked sales in this period</Text>
+                      <Text style={[styles.emptyText, { fontSize: FontSize.xs, marginTop: 4 }]}>
+                        Set ingredient costs in Ingredients and link them to product recipes.
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
+            </>
           )}
 
         </ScrollView>
