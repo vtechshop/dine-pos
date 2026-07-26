@@ -293,7 +293,11 @@ router.post('/verify', async (req: AuthRequest, res: Response) => {
 
     try {
       const gateway = GatewayFactory.create(gatewayConfig);
-      const result = await gateway.verifyPayment({ gatewayTransactionId: gatewayTransactionId ?? payment.gatewayTransactionId, signature });
+      const result = await gateway.verifyPayment({
+        gatewayTransactionId: gatewayTransactionId ?? payment.gatewayTransactionId,
+        gatewayOrderId:       payment.gatewayOrderId,
+        signature,
+      });
 
       payment.status          = result.status;
       payment.paymentMethod   = result.paymentMethod ?? 'other';

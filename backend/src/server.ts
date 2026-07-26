@@ -62,10 +62,15 @@ import inventoryIntelligenceRoutes from './routes/inventoryIntelligenceRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import paymentGatewayConfigRoutes from './routes/paymentGatewayConfigRoutes';
 import paymentWebhookRoutes from './routes/paymentWebhookRoutes';
+import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
+import GatewayFactory from './services/payment/GatewayFactory';
 import * as Sentry from '@sentry/node';
 import helmet from 'helmet';
 
 dotenv.config();
+
+// ── Register payment gateway SDKs ─────────────────────────────────────────────
+GatewayFactory.register('razorpay', RazorpayGateway);
 
 // TODO: Set SENTRY_DSN in production environment (e.g., via Render environment variables)
 if (process.env.SENTRY_DSN) {
@@ -208,7 +213,7 @@ app.use(express.json({
   limit: '1mb',
   verify: (req, _res, buf, encoding) => {
     const url = (req as express.Request).url ?? '';
-    if (url.startsWith('/api/aggregator') || url.startsWith('/api/payment-webhooks')) {
+    if (url.startsWith('/api/aggregator') || url.startsWith('/api/payment-webhooks/')) {
       (req as any).rawBody = buf.toString((encoding as BufferEncoding) || 'utf8');
     }
   },
