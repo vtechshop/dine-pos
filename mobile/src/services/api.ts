@@ -1853,6 +1853,51 @@ export const cancelPurchaseOrder = (id: string, reason: string): Promise<Purchas
 export const duplicatePurchaseOrder = (id: string): Promise<PurchaseOrder> =>
   fetchAPI<PurchaseOrder>(`/purchase-orders/${id}/duplicate`, { method: 'POST' });
 
+// ── GRN ───────────────────────────────────────────────────────────────────────
+
+import type { GRN } from '../types';
+
+export interface GRNItemInput {
+  poItemIndex?:      number;
+  productId?:        string;
+  ingredientId?:     string;
+  productName:       string;
+  variantId?:        string;
+  variantName?:      string;
+  orderedQty:        number;
+  receivedQty:       number;
+  damagedQty?:       number;
+  rejectedQty?:      number;
+  unit:              string;
+  purchasePrice?:    number;
+  batchNumber?:      string;
+  expiryDate?:       string;
+  warehouse?:        string;
+  notes?:            string;
+}
+
+export interface GRNInput {
+  poId:         string;
+  receiveDate?: string;
+  notes?:       string;
+  items:        GRNItemInput[];
+}
+
+export const getGRNs = (params?: {
+  status?: string; poId?: string; vendorId?: string;
+  from?: string; to?: string; limit?: number; skip?: number;
+}): Promise<{ grns: GRN[]; total: number }> =>
+  fetchAPI(`/grn${poQS(params as Record<string, string | number | undefined>)}`);
+
+export const getGRN = (id: string): Promise<GRN> =>
+  fetchAPI<GRN>(`/grn/${id}`);
+
+export const createGRN = (data: GRNInput): Promise<GRN> =>
+  fetchAPI<GRN>('/grn', { method: 'POST', body: JSON.stringify(data) });
+
+export const cancelGRN = (id: string, reason: string): Promise<GRN> =>
+  fetchAPI<GRN>(`/grn/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) });
+
 // ── SA Push Token Registration ────────────────────────────────────────────────
 
 export const registerSAPushToken = (

@@ -64,6 +64,7 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import AggregatorConfigScreen from '../screens/AggregatorConfigScreen';
 import VendorScreen from '../screens/VendorScreen';
 import PurchaseOrderScreen from '../screens/PurchaseOrderScreen';
+import GoodsReceiveScreen from '../screens/GoodsReceiveScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<TabParamList>();
@@ -287,6 +288,7 @@ const AppNavigator = () => {
             <Stack.Screen name="AggregatorConfig"   component={AggregatorConfigScreen}    options={{ contentStyle: safeTop }} />
             <Stack.Screen name="Vendors"            component={VendorScreen}              options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Vendors',         headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="PurchaseOrders"     component={PurchaseOrderScreen}       options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Purchase Orders',  headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="GoodsReceive"       component={GoodsReceiveScreen}        options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Receive Goods',     headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen
               name="AddProduct"
               component={AddProductScreen}

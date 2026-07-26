@@ -600,6 +600,49 @@ export interface Vendor {
   updatedAt:          string;
 }
 
+// GRN
+export type GRNStatus = 'pending' | 'partial' | 'completed' | 'cancelled';
+
+export interface GRNItem {
+  _id?:              string;
+  poItemIndex?:      number;
+  productId?:        string;
+  ingredientId?:     string;
+  productName:       string;
+  variantId?:        string;
+  variantName?:      string;
+  orderedQty:        number;
+  receivedQty:       number;
+  damagedQty:        number;
+  rejectedQty:       number;
+  pendingQty:        number;
+  unit:              string;
+  purchasePrice:     number;
+  batchNumber?:      string;
+  manufacturingDate?: string;
+  expiryDate?:       string;
+  warehouse?:        string;
+  notes?:            string;
+}
+
+export interface GRN {
+  _id:          string;
+  grnNumber:    string;
+  poId:         string;
+  poNumber:     string;
+  vendorId:     string;
+  vendorSnapshot: { businessName: string; vendorCode: string; mobile: string; gstNumber: string };
+  receiveDate:  string;
+  status:       GRNStatus;
+  items:        GRNItem[];
+  notes:        string;
+  receivedBy:   string;
+  cancelReason: string;
+  isDeleted:    boolean;
+  createdAt:    string;
+  updatedAt:    string;
+}
+
 // Purchase Orders
 export type POStatus =
   | 'draft'
@@ -700,6 +743,7 @@ export type RootStackParamList = {
   AggregatorConfig: undefined;
   Vendors: undefined;
   PurchaseOrders: undefined;
+  GoodsReceive:   undefined;
 };
 
 export type TabParamList = {

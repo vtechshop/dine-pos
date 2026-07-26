@@ -1056,6 +1056,7 @@ const SettingsScreen: React.FC = () => {
               { label: 'QR Ordering Menu',  sub: 'Generate QR codes for tables',       icon: 'qr-code'               as const, nav: 'QRMenu'          as const },
               { label: 'Vendors',           sub: 'Manage suppliers & outstanding',     icon: 'store'                 as const, nav: 'Vendors'         as const },
               { label: 'Purchase Orders',   sub: 'Create and track POs',              icon: 'shopping-bag'           as const, nav: 'PurchaseOrders'  as const },
+              { label: 'Receive Goods',     sub: 'Record stock receipts & GRNs',      icon: 'inventory'               as const, nav: 'GoodsReceive'    as const },
             ].map((item) => (
               <TouchableOpacity
                 key={item.nav}
