@@ -316,6 +316,88 @@ export interface VendorReport {
   }>;
 }
 
+// ── Purchase Orders ───────────────────────────────────────────────────────────
+
+export type POStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'approved'
+  | 'sent'
+  | 'partially_received'
+  | 'received'
+  | 'cancelled';
+
+export interface POItem {
+  _id?:        string;
+  productId?:  string;
+  productName: string;
+  variantId?:  string;
+  variantName?: string;
+  orderedQty:  number;
+  receivedQty: number;
+  unit:        string;
+  unitPrice:   number;
+  discount:    number;
+  taxPercent:  number;
+  lineTotal:   number;
+  notes?:      string;
+}
+
+export interface PurchaseOrder {
+  _id:          string;
+  poNumber:     string;
+  vendorId:     string;
+  vendorSnapshot: {
+    businessName: string;
+    vendorCode:   string;
+    mobile:       string;
+    gstNumber:    string;
+  };
+  status:               POStatus;
+  orderDate:            string;
+  expectedDeliveryDate: string | null;
+  currency:             string;
+  notes:                string;
+  items:                POItem[];
+  subtotal:             number;
+  taxTotal:             number;
+  discount:             number;
+  tax:                  number;
+  shipping:             number;
+  total:                number;
+  createdBy:            string;
+  approvedBy:           string;
+  approvedAt:           string | null;
+  cancelReason:         string;
+  isDeleted:            boolean;
+  createdAt:            string;
+  updatedAt:            string;
+}
+
+export interface POReport {
+  totalPOs:       number;
+  draftCount:     number;
+  pendingCount:   number;
+  approvedCount:  number;
+  sentCount:      number;
+  partialCount:   number;
+  receivedCount:  number;
+  cancelledCount: number;
+  totalValue:     number;
+  pendingValue:   number;
+  byVendor: Array<{
+    _id:          string;
+    businessName: string;
+    poCount:      number;
+    totalValue:   number;
+  }>;
+  byMonth: Array<{
+    _id:        string;
+    poCount:    number;
+    totalValue: number;
+  }>;
+}
+
 // ── Expenses ──────────────────────────────────────────────────────────────────
 
 export interface Expense {
