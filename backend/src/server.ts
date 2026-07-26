@@ -51,6 +51,7 @@ import qrRoutes from './routes/qrRoutes';
 import loyaltyRoutes from './routes/loyaltyRoutes';
 import printRoutes from './routes/printRoutes';
 import inquiryRoutes from './routes/inquiryRoutes';
+import modifierRoutes from './routes/modifierRoutes';
 import * as Sentry from '@sentry/node';
 import helmet from 'helmet';
 
@@ -273,6 +274,8 @@ app.use('/api/sessions', sessionRoutes);
 app.use('/api/loyalty', loyaltyRoutes);
 app.use('/api/print-jobs', printRoutes);
 app.use('/api/inquiries', inquiryRoutes);
+app.use('/api/modifiers', _rl(60, 60_000));
+app.use('/api/modifiers', modifierRoutes);
 
 // Enhanced health check — covers MongoDB, Redis, memory, uptime, version
 app.get('/api/health', async (_req, res) => {

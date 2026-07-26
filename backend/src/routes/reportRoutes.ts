@@ -262,4 +262,86 @@ router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response
   }
 });
 
+// ── GET /api/reports/modifiers?from=YYYY-MM-DD&to=YYYY-MM-DD ─────────────────
+// Aggregates selectedModifiers across all non-cancelled orders.
+// Returns: topModifiers[], modifierGroupRevenue[], totalModifierRevenue, totalModifierOrders
+router.get('/modifiers', async (req: AuthRequest, res: Response) => {
+  try {
+    const { from, to } = req.query as { from?: string; to?: string };
+    if (from && !isValidDateParam(from)) return res.status(400).json({ message: 'Invalid from date. Use YYYY-MM-DD.' });
+    if (to   && !isValidDateParam(to))   return res.status(400).json({ message: 'Invalid to date. Use YYYY-MM-DD.' });
+    const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
+
+    const today = new Date();
+    const fromDate = from ? new Date(from) : new Date(today.getFullYear(), today.getMonth(), 1);
+    fromDate.setHours(0, 0, 0, 0);
+    const toDate = to ? new Date(to) : new Date();
+    toDate.setHours(23, 59, 59, 999);
+
+    const [topModifiers, groupRevenue] = await Promise.all([
+      // Top modifier options by quantity and revenue
+      Order.aggregate([
+        { $match: { hotelId, status: { $ne: 'cancelled' }, createdAt: { $gte: fromDate, $lte: toDate } } },
+        { $unwind: '$items' },
+        { $unwind: '$items.selectedModifiers' },
+        {
+          $group: {
+            _id:  { optionId: '$items.selectedModifiers.modifierOptionId', optionName: '$items.selectedModifiers.modifierOptionName', groupName: '$items.selectedModifiers.modifierGroupName' },
+            totalQty:     { $sum: '$items.quantity' },
+            totalRevenue: { $sum: { $multiply: ['$items.selectedModifiers.modifierPrice', '$items.quantity'] } },
+            orderCount:   { $sum: 1 },
+          },
+        },
+        { $sort: { totalRevenue: -1 } },
+        { $limit: 20 },
+        {
+          $project: {
+            _id:          0,
+            optionId:     '$_id.optionId',
+            optionName:   '$_id.optionName',
+            groupName:    '$_id.groupName',
+            totalQty:     1,
+            totalRevenue: 1,
+            orderCount:   1,
+          },
+        },
+      ]),
+
+      // Revenue by modifier group
+      Order.aggregate([
+        { $match: { hotelId, status: { $ne: 'cancelled' }, createdAt: { $gte: fromDate, $lte: toDate } } },
+        { $unwind: '$items' },
+        { $unwind: '$items.selectedModifiers' },
+        {
+          $group: {
+            _id:  { groupId: '$items.selectedModifiers.modifierGroupId', groupName: '$items.selectedModifiers.modifierGroupName' },
+            totalRevenue: { $sum: { $multiply: ['$items.selectedModifiers.modifierPrice', '$items.quantity'] } },
+            totalQty:     { $sum: '$items.quantity' },
+            orderCount:   { $sum: 1 },
+          },
+        },
+        { $sort: { totalRevenue: -1 } },
+        {
+          $project: {
+            _id:          0,
+            groupId:      '$_id.groupId',
+            groupName:    '$_id.groupName',
+            totalRevenue: 1,
+            totalQty:     1,
+            orderCount:   1,
+          },
+        },
+      ]),
+    ]);
+
+    const totalModifierRevenue = groupRevenue.reduce((s: number, r: any) => s + (r.totalRevenue || 0), 0);
+    const totalModifierOrders  = groupRevenue.reduce((s: number, r: any) => s + (r.orderCount  || 0), 0);
+
+    res.json({ from: fromDate, to: toDate, topModifiers, groupRevenue, totalModifierRevenue: +totalModifierRevenue.toFixed(2), totalModifierOrders });
+  } catch (err) {
+    logger.error('Modifier report error', { err });
+    sendError(res, 500, 'Failed to generate modifier report', err);
+  }
+});
+
 export default router;

@@ -14,7 +14,7 @@ export interface KOTPayload {
   tableNumber:  string;
   guestLabel?:  string;
   orderSource:  string;
-  items:        { productName: string; quantity: number; variantName?: string }[];
+  items:        { productName: string; quantity: number; variantName?: string; modifierNames?: string[] }[];
   notes?:       string;
   createdAt:    string;
 }
@@ -31,7 +31,7 @@ export interface ReceiptPayload {
   tableNumber:           string;
   guestLabel?:           string;
   paymentMethod:         string;
-  items:                 { productName: string; variantName?: string; quantity: number; price: number; total: number }[];
+  items:                 { productName: string; variantName?: string; modifierLines?: { name: string; price: number }[]; quantity: number; price: number; total: number }[];
   subtotal:              number;
   taxTotal:              number;
   grandTotal:            number;
@@ -155,7 +155,14 @@ export async function scheduleKOTPrint(
     tableNumber:  order.tableNumber ?? '',
     guestLabel:   order.customerName || undefined,
     orderSource:  order.orderSource  ?? 'admin',
-    items:        order.items.map(i => ({ productName: i.productName, quantity: i.quantity, variantName: (i as any).variantName || undefined })),
+    items:        order.items.map(i => ({
+      productName:   i.productName,
+      quantity:      i.quantity,
+      variantName:   (i as any).variantName   || undefined,
+      modifierNames: ((i as any).selectedModifiers || []).map((m: any) => m.modifierOptionName).filter(Boolean).length
+        ? ((i as any).selectedModifiers as any[]).map(m => m.modifierOptionName)
+        : undefined,
+    })),
     notes:        order.notes || undefined,
     createdAt:    order.createdAt instanceof Date
       ? order.createdAt.toISOString()
@@ -217,12 +224,16 @@ export async function scheduleReceiptPrint(
     subtotal += Number(o.subtotal) || 0;
     taxTotal += Number(o.taxTotal) || 0;
     for (const item of (o.items || [])) {
+      const mods = ((item as any).selectedModifiers || []) as any[];
       items.push({
-        productName: item.productName,
-        variantName: (item as any).variantName || undefined,
-        quantity:    item.quantity,
-        price:       item.price,
-        total:       item.total,
+        productName:   item.productName,
+        variantName:   (item as any).variantName || undefined,
+        modifierLines: mods.length
+          ? mods.map(m => ({ name: m.modifierOptionName, price: m.modifierPrice }))
+          : undefined,
+        quantity:      item.quantity,
+        price:         item.price,
+        total:         item.total,
       });
     }
   }

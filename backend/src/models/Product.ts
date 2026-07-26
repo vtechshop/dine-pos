@@ -24,6 +24,8 @@ export interface IProduct extends Document {
     kiosk?:   number | null;
     website?: number | null;
   };
+  // ── Modifier groups assigned to this product ──────────────────────────────
+  modifierGroups: mongoose.Types.ObjectId[];
   // ── Platform item IDs after menu sync ─────────────────────────────────────
   platformIds: {
     swiggy?: string;
@@ -107,6 +109,8 @@ const ProductSchema: Schema = new Schema(
       kiosk:   { type: Number, default: null },
       website: { type: Number, default: null },
     },
+    // ── Modifier groups assigned to this product ──────────────────────────────
+    modifierGroups: [{ type: Schema.Types.ObjectId, ref: 'ModifierGroup' }],
     // ── Platform item IDs after menu sync ─────────────────────────────────────
     platformIds: {
       swiggy: { type: String, default: '' },

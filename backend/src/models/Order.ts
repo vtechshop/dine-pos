@@ -1,11 +1,21 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface ISelectedModifier {
+  modifierGroupId:   string;
+  modifierGroupName: string;
+  modifierOptionId:  string;
+  modifierOptionName: string;
+  modifierPrice:     number;
+  modifierTotal:     number;
+}
+
 // Single item in an order
 export interface IOrderItem {
   product: mongoose.Types.ObjectId;
   productName: string;
   variantId: string;
   variantName: string;
+  selectedModifiers: ISelectedModifier[];
   quantity: number;
   price: number;
   taxPercent: number;
@@ -61,6 +71,15 @@ export interface IOrder extends Document {
   updatedAt: Date;
 }
 
+const SelectedModifierSchema: Schema = new Schema({
+  modifierGroupId:    { type: String, default: '' },
+  modifierGroupName:  { type: String, default: '' },
+  modifierOptionId:   { type: String, default: '' },
+  modifierOptionName: { type: String, default: '' },
+  modifierPrice:      { type: Number, default: 0 },
+  modifierTotal:      { type: Number, default: 0 },
+}, { _id: false });
+
 const OrderItemSchema: Schema = new Schema({
   product: {
     type: Schema.Types.ObjectId,
@@ -70,8 +89,9 @@ const OrderItemSchema: Schema = new Schema({
     type: String,
     required: true,
   },
-  variantId:   { type: String, default: '' },
-  variantName: { type: String, default: '' },
+  variantId:         { type: String, default: '' },
+  variantName:       { type: String, default: '' },
+  selectedModifiers: { type: [SelectedModifierSchema], default: [] },
   quantity: {
     type: Number,
     required: true,

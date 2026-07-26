@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import Product from '../models/Product';
+import ModifierGroup from '../models/ModifierGroup';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
@@ -23,6 +24,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     const products = await Product.find(filter)
       .populate('category', 'name color')
+      .populate({ path: 'modifierGroups', match: { isDeleted: false } })
       .sort({ name: 1 });
     res.json(products);
   } catch (error) {
@@ -73,7 +75,7 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
 // PUT update product — admin only
 router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const ALLOWED = ['name', 'description', 'price', 'taxPercent', 'category', 'isAvailable', 'isVeg', 'shortCode', 'image', 'stock', 'variants'] as const;
+    const ALLOWED = ['name', 'description', 'price', 'taxPercent', 'category', 'isAvailable', 'isVeg', 'shortCode', 'image', 'stock', 'variants', 'modifierGroups'] as const;
     const update: Record<string, unknown> = {};
     for (const key of ALLOWED) {
       if (req.body[key] !== undefined) update[key] = req.body[key];
@@ -104,6 +106,51 @@ router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     if (!product) return res.status(404).json({ message: 'Product not found' });
     logAudit(req, 'product.deleted', 'product', req.params.id, { name: (product as any).name });
     res.json({ message: 'Product deleted' });
+  } catch (error) {
+    sendError(res, 500, 'Server error', error);
+  }
+});
+
+// ── Modifier Group assignment routes ──────────────────────────────────────────
+
+// POST /products/:id/modifier-groups — assign a modifier group
+router.post('/:id/modifier-groups', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const { modifierGroupId } = req.body;
+    if (!modifierGroupId || !mongoose.isValidObjectId(modifierGroupId)) {
+      return res.status(400).json({ message: 'Valid modifierGroupId is required' });
+    }
+    const mgId = new mongoose.Types.ObjectId(modifierGroupId);
+    const mg = await ModifierGroup.findOne({ _id: mgId, hotelId: req.hotelId, isDeleted: false });
+    if (!mg) return res.status(404).json({ message: 'Modifier group not found' });
+
+    const product = await Product.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId, isDeleted: false },
+      { $addToSet: { modifierGroups: mgId } },
+      { new: true }
+    ).populate('category', 'name color').populate({ path: 'modifierGroups', match: { isDeleted: false } });
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    logAudit(req, 'product.modifierGroup.assigned', 'product', req.params.id, { modifierGroupId, modifierGroupName: mg.name });
+    res.json(product);
+  } catch (error) {
+    sendError(res, 500, 'Server error', error);
+  }
+});
+
+// DELETE /products/:id/modifier-groups/:mgId — remove a modifier group
+router.delete('/:id/modifier-groups/:mgId', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.mgId)) {
+      return res.status(400).json({ message: 'Invalid modifierGroupId' });
+    }
+    const product = await Product.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId },
+      { $pull: { modifierGroups: new mongoose.Types.ObjectId(req.params.mgId) } },
+      { new: true }
+    ).populate('category', 'name color').populate({ path: 'modifierGroups', match: { isDeleted: false } });
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    logAudit(req, 'product.modifierGroup.removed', 'product', req.params.id, { modifierGroupId: req.params.mgId });
+    res.json(product);
   } catch (error) {
     sendError(res, 500, 'Server error', error);
   }
