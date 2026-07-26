@@ -102,7 +102,7 @@ export interface PurchaseIntelligence {
 
 // ── API calls ─────────────────────────────────────────────────────────────────
 
-const base = '/api/inventory-intelligence';
+const base = '/inventory-intelligence';
 
 export function fetchWasteAnalysis(from?: string, to?: string): Promise<WasteAnalysis> {
   const p = new URLSearchParams();

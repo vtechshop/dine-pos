@@ -742,7 +742,7 @@ export function PaymentSettingsPage() {
   const [tab, setTab] = useState<Tab>('gateways');
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex shrink-0 items-center gap-3 border-b border-border px-6 py-4">
         <CreditCard size={20} className="text-brand" />

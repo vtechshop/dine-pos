@@ -67,7 +67,7 @@ export interface PaymentReport {
 
 // ── Gateway Config APIs ───────────────────────────────────────────────────────
 
-const GW = '/api/payment-gateway-configs';
+const GW = '/payment-gateway-configs';
 
 export const fetchGatewayConfigs = (): Promise<GatewayConfig[]> =>
   apiFetch<GatewayConfig[]>(GW);
@@ -95,7 +95,7 @@ export const testGatewayConnection = (id: string): Promise<{ success: boolean; m
 
 // ── Payment APIs ──────────────────────────────────────────────────────────────
 
-const PM = '/api/payments';
+const PM = '/payments';
 
 export const fetchPayments = (params?: {
   from?: string; to?: string; status?: string; gateway?: string; method?: string; page?: number; limit?: number;
