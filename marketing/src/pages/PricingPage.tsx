@@ -1,108 +1,71 @@
-import { CheckCircle2, X } from 'lucide-react';
+import { CheckCircle2, Printer } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePageSEO } from '../hooks/usePageSEO';
 
-interface Plan {
-  name:     string;
-  price:    string;
-  period:   string;
-  tagline:  string;
-  cta:      string;
-  ctaTo:    string;
-  popular?: boolean;
-  features: Array<{ label: string; included: boolean }>;
-}
+const PROFESSIONAL_FEATURES = [
+  '1 Year Subscription',
+  '1 Outlet',
+  'Unlimited Billing',
+  'Unlimited Products',
+  'QR Ordering',
+  'Kitchen Display System',
+  'Kitchen Printing',
+  'Inventory Management',
+  'Vendor Management',
+  'Purchase Orders',
+  'Goods Receive Note (GRN)',
+  'Vendor Ledger',
+  'Food Cost & COGS Reports',
+  'Inventory Intelligence',
+  'Reports & Analytics',
+  'Swiggy Integration',
+  'Zomato Integration',
+  'Mobile App',
+  'Web Dashboard',
+  'Free Installation',
+  'Free Training',
+  'Phone & WhatsApp Support',
+];
 
-const PLANS: Plan[] = [
-  {
-    name:    'Starter',
-    price:   '₹999',
-    period:  '/month',
-    tagline: 'Perfect for single-outlet restaurants.',
-    cta:     'Start Free Trial',
-    ctaTo:   '/book-demo',
-    features: [
-      { label: '1 outlet',                     included: true },
-      { label: 'Unlimited products',            included: true },
-      { label: 'Table management',              included: true },
-      { label: 'Billing & payments',            included: true },
-      { label: 'Kitchen printing',              included: true },
-      { label: 'Daily reports',                 included: true },
-      { label: 'Email support',                 included: true },
-      { label: 'Inventory tracking',            included: false },
-      { label: 'Loyalty program',               included: false },
-      { label: 'Multi-outlet management',       included: false },
-      { label: 'Priority support',              included: false },
-    ],
-  },
-  {
-    name:    'Pro',
-    price:   '₹1,999',
-    period:  '/month',
-    tagline: 'For restaurants that need the full suite.',
-    cta:     'Start Free Trial',
-    ctaTo:   '/book-demo',
-    popular: true,
-    features: [
-      { label: 'Up to 3 outlets',               included: true },
-      { label: 'Unlimited products',             included: true },
-      { label: 'Table management',               included: true },
-      { label: 'Billing & payments',             included: true },
-      { label: 'Kitchen printing',               included: true },
-      { label: 'Daily reports',                  included: true },
-      { label: 'Email support',                  included: true },
-      { label: 'Inventory tracking',             included: true },
-      { label: 'Loyalty program',                included: true },
-      { label: 'Multi-outlet management',        included: false },
-      { label: 'Priority support',               included: false },
-    ],
-  },
-  {
-    name:    'Enterprise',
-    price:   'Custom',
-    period:  '',
-    tagline: 'For chains and cloud kitchens with 4+ outlets.',
-    cta:     'Contact Sales',
-    ctaTo:   '/contact',
-    features: [
-      { label: 'Unlimited outlets',              included: true },
-      { label: 'Unlimited products',             included: true },
-      { label: 'Table management',               included: true },
-      { label: 'Billing & payments',             included: true },
-      { label: 'Kitchen printing',               included: true },
-      { label: 'Daily reports',                  included: true },
-      { label: 'Email support',                  included: true },
-      { label: 'Inventory tracking',             included: true },
-      { label: 'Loyalty program',                included: true },
-      { label: 'Multi-outlet management',        included: true },
-      { label: 'Priority support',               included: true },
-    ],
-  },
+const ENTERPRISE_FEATURES = [
+  'Unlimited Outlets',
+  'Multi Branch',
+  'Central Dashboard',
+  'Enterprise Reports',
+  'Custom Integrations',
+  'Priority Support',
+  'Free Installation',
+  'Free Training',
+];
+
+const SUITABLE_FOR = [
+  'Restaurants', 'Hotels', 'Cafes',
+  'Bakeries', 'Cloud Kitchens', 'Fast Food', 'Food Courts',
 ];
 
 const FAQ_ITEMS = [
   {
-    q: 'Is there a free trial?',
-    a: 'Yes — all plans come with a 14-day free trial. No credit card required.',
+    q: 'Are there any monthly charges?',
+    a: 'None. You pay ₹12,000 once per year per outlet. No monthly billing, no hidden fees.',
   },
   {
-    q: 'Can I change plans later?',
-    a: 'Absolutely. Upgrade or downgrade at any time from your account settings.',
+    q: 'Is the FREE Dual Thermal Printer really free?',
+    a: 'Yes — every new Professional subscription includes a free dual thermal printer for your kitchen or billing counter. Subject to availability.',
   },
   {
-    q: 'Is the price per outlet or per account?',
-    a: 'The Starter plan covers 1 outlet. Pro covers up to 3. Enterprise is unlimited.',
+    q: 'What happens after one year?',
+    a: 'You can renew at the same rate. We will notify you 30 days before expiry so there is no interruption to your service.',
   },
   {
-    q: 'Is there a setup fee?',
-    a: 'No setup fee on any plan. You pay only the monthly subscription.',
+    q: 'Is there a setup or installation fee?',
+    a: 'No. Installation, configuration, and staff training are all included free with every plan.',
   },
 ];
 
 export function PricingPage() {
   usePageSEO(
     'Pricing — Dine POS',
-    'Simple, honest pricing for Dine POS. Starter from ₹999/month, Pro from ₹1,999/month. No setup fees, no hidden charges. 14-day free trial on all plans.',
+    'Dine POS annual pricing — ₹12,000/year per outlet. No monthly charges. Includes free dual thermal printer, free installation, and training.',
   );
   return (
     <div>
@@ -110,72 +73,124 @@ export function PricingPage() {
       <section className="bg-[#1C0800] px-5 py-20 text-center text-white">
         <h1 className="mb-4 text-4xl font-extrabold">Simple, honest pricing</h1>
         <p className="text-gray-400">
-          No hidden fees. No per-feature charges. Cancel any time.
+          One annual subscription. No monthly charges. No hidden fees.
         </p>
       </section>
 
       {/* Plans */}
-      <section className="mx-auto max-w-5xl px-5 py-16">
-        <div className="grid gap-6 md:grid-cols-3">
-          {PLANS.map(plan => (
-            <div
-              key={plan.name}
-              className={`relative flex flex-col rounded-2xl border p-7 shadow-sm ${
-                plan.popular
-                  ? 'border-[#E8380D] ring-1 ring-[#E8380D]'
-                  : 'border-gray-200 bg-white'
-              }`}
-            >
-              {plan.popular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#E8380D] px-3 py-0.5 text-xs font-bold text-white">
-                  Most Popular
-                </div>
-              )}
+      <section className="mx-auto max-w-4xl px-5 py-16">
+        <div className="grid gap-6 md:grid-cols-2">
 
-              <div className="mb-5">
-                <div className="mb-1 text-sm font-semibold uppercase tracking-widest text-gray-400">
-                  {plan.name}
-                </div>
-                <div className="flex items-end gap-1">
-                  <span className="text-4xl font-extrabold text-gray-900">{plan.price}</span>
-                  {plan.period && (
-                    <span className="mb-1 text-sm text-gray-400">{plan.period}</span>
-                  )}
-                </div>
-                <p className="mt-2 text-sm text-gray-500">{plan.tagline}</p>
-              </div>
-
-              <ul className="mb-7 flex-1 space-y-2.5">
-                {plan.features.map(({ label, included }) => (
-                  <li key={label} className="flex items-center gap-2 text-sm">
-                    {included ? (
-                      <CheckCircle2 size={15} className="shrink-0 text-green-500" />
-                    ) : (
-                      <X size={15} className="shrink-0 text-gray-300" />
-                    )}
-                    <span className={included ? 'text-gray-700' : 'text-gray-400'}>
-                      {label}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-
-              <Link
-                to={plan.ctaTo}
-                className={`block rounded-xl py-3 text-center text-sm font-semibold transition-colors ${
-                  plan.popular
-                    ? 'bg-[#E8380D] text-white hover:bg-[#C93008]'
-                    : 'border border-gray-200 bg-white text-gray-800 hover:bg-gray-50'
-                }`}
-              >
-                {plan.cta}
-              </Link>
+          {/* ── Professional ──────────────────────────────── */}
+          <div className="relative flex flex-col rounded-2xl border border-[#E8380D] ring-1 ring-[#E8380D] bg-white p-7 shadow-sm">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#E8380D] px-4 py-0.5 text-xs font-bold text-white">
+              Most Popular
             </div>
-          ))}
+
+            <div className="mb-1 text-sm font-semibold uppercase tracking-widest text-gray-400">
+              Professional
+            </div>
+
+            <div className="flex items-end gap-1.5">
+              <span className="text-4xl font-extrabold text-gray-900">₹12,000</span>
+              <span className="mb-1.5 text-sm font-medium text-gray-400">/ Year</span>
+            </div>
+
+            <div className="mt-2 space-y-0.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-green-600">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+                No Monthly Charges
+              </div>
+              <p className="text-xs text-gray-400">One Time Annual Subscription</p>
+            </div>
+
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Suitable for
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {SUITABLE_FOR.map(type => (
+                  <span
+                    key={type}
+                    className="rounded-full border border-orange-100 bg-[#FFF6EE] px-2.5 py-0.5 text-xs font-medium text-[#E8380D]"
+                  >
+                    {type}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="my-5 border-t border-gray-100" />
+
+            <ul className="mb-5 flex-1 space-y-2.5">
+              {PROFESSIONAL_FEATURES.map(label => (
+                <li key={label} className="flex items-center gap-2 text-sm">
+                  <CheckCircle2 size={15} className="shrink-0 text-green-500" />
+                  <span className="text-gray-700">{label}</span>
+                </li>
+              ))}
+            </ul>
+
+            {/* Free Printer premium badge */}
+            <div className="mb-5 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100">
+                <Printer size={17} className="text-amber-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-amber-800">FREE Dual Thermal Printer</p>
+                <p className="text-xs text-amber-600">Included with every new subscription</p>
+              </div>
+              <span className="ml-auto shrink-0 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                Free
+              </span>
+            </div>
+
+            <Link
+              to="/book-demo"
+              className="block rounded-xl bg-[#E8380D] py-3 text-center text-sm font-semibold text-white transition-colors hover:bg-[#C93008]"
+            >
+              Book Demo
+            </Link>
+          </div>
+
+          {/* ── Enterprise ────────────────────────────────── */}
+          <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-7 shadow-sm">
+            <div className="mb-1 text-sm font-semibold uppercase tracking-widest text-gray-400">
+              Enterprise
+            </div>
+
+            <div className="flex items-end gap-1.5">
+              <span className="text-4xl font-extrabold text-gray-900">Custom</span>
+              <span className="mb-1.5 text-sm font-medium text-gray-400">Pricing</span>
+            </div>
+
+            <p className="mt-2 text-sm text-gray-500">
+              For restaurant chains and franchises.
+            </p>
+
+            <div className="my-5 border-t border-gray-100" />
+
+            <ul className="mb-7 flex-1 space-y-2.5">
+              {ENTERPRISE_FEATURES.map(label => (
+                <li key={label} className="flex items-center gap-2 text-sm">
+                  <CheckCircle2 size={15} className="shrink-0 text-green-500" />
+                  <span className="text-gray-700">{label}</span>
+                </li>
+              ))}
+            </ul>
+
+            <Link
+              to="/contact"
+              className="block rounded-xl border border-gray-200 bg-white py-3 text-center text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
+            >
+              Contact Sales
+            </Link>
+          </div>
+
         </div>
       </section>
 
-      {/* Mini FAQ */}
+      {/* FAQ */}
       <section className="border-t border-gray-100 bg-[#FFF6EE] px-5 py-16">
         <div className="mx-auto max-w-2xl">
           <h2 className="mb-8 text-center text-2xl font-bold text-gray-900">
