@@ -10,11 +10,13 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import QRCode from 'react-native-qrcode-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import RazorpayCheckout from 'react-native-razorpay';
 import { showAlert } from '../utils/alert';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
 import { getStoredHotelId, enqueueCustomerOrder, getSocketUrl } from '../services/api';
+import type { PublicGatewayInfo } from '../services/api';
 import { CUSTOMER_ORDER_KEY } from './CustomerOrderStatusScreen';
 import { io as socketIO, Socket } from 'socket.io-client';
 import { isConnected } from '../sync/syncEngine';
@@ -48,6 +50,8 @@ const CustomerCartScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const [placing, setPlacing] = useState(false);
   const [nameError, setNameError] = useState(false);
+  const [activeGateway, setActiveGateway] = useState<PublicGatewayInfo | null>(null);
+  const [razorpayBusy, setRazorpayBusy] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
   const [countdown, setCountdown] = useState(6);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -60,6 +64,20 @@ const CustomerCartScreen: React.FC = () => {
   const fmt = (n: number) => `${cur}${n.toFixed(0)}`;
 
   const billUrl = placedOrder ? `${BACKEND_URL}/bill/${placedOrder._id}` : '';
+
+  // Fetch active payment gateway once on mount (decides whether to show Pay Online)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const hotelId = await getStoredHotelId();
+      if (!hotelId || !mounted) return;
+      try {
+        const gw = await api.getPublicGateway(hotelId);
+        if (mounted) setActiveGateway(gw);
+      } catch { /* non-critical — falls back to pay-at-counter */ }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   // Auto-navigate back to menu after order placed (KFC style)
   useEffect(() => {
@@ -108,6 +126,99 @@ const CustomerCartScreen: React.FC = () => {
       }
     };
   }, [placedOrder?._id]);
+
+  const handleRazorpayPayment = async () => {
+    if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items from the menu first.'); return; }
+    if (!cart.customerName.trim()) { setNameError(true); return; }
+
+    const hotelId = await getStoredHotelId();
+    if (!hotelId) { showAlert('Error', 'Hotel not found. Scan the QR code again.'); return; }
+
+    setRazorpayBusy(true);
+
+    const orderPayload = {
+      hotel:         hotelId,
+      source:        'dine-in' as const,
+      orderSource:   'qr',
+      items:         cart.items.map(item => ({
+        product:           item.product._id,
+        productName:       item.product.name,
+        variantId:         item.variantId   || '',
+        variantName:       item.variantName || '',
+        selectedModifiers: (item.selectedModifiers || []).map(m => ({ ...m, modifierTotal: m.modifierPrice * item.quantity })),
+        quantity:          item.quantity,
+        price:             item.effectivePrice + item.modifierTotal,
+        taxPercent:        item.product.taxPercent,
+        taxAmount:         item.taxAmount,
+        total:             item.total,
+      })),
+      tableNumber:   cart.tableNumber,
+      customerName:  cart.customerName,
+      notes:         cart.notes,
+      isParcel:      cart.isParcel,
+      subtotal:      cart.subtotal,
+      taxTotal:      cart.taxTotal,
+      grandTotal:    cart.grandTotal,
+      paymentMethod: 'razorpay',
+      status:        'pending',
+    };
+
+    try {
+      // 1. Create the order
+      const order = await api.createPublicOrder(orderPayload);
+
+      // 2. Create Razorpay order via public endpoint (no auth)
+      const rzpOrder = await api.createPublicRazorpayOrder(
+        hotelId, order._id, cart.grandTotal,
+        { currency: 'INR', customerName: cart.customerName || undefined },
+      );
+
+      if (!rzpOrder.keyId || !rzpOrder.razorpayOrderId) {
+        showAlert('Payment Error', 'Could not initialise payment. Please pay at the counter.');
+        setRazorpayBusy(false);
+        return;
+      }
+
+      // 3. Open Razorpay native checkout
+      await RazorpayCheckout.open({
+        key:         rzpOrder.keyId,
+        amount:      String(rzpOrder.amount),
+        currency:    rzpOrder.currency,
+        name:        settings.hotelName || 'Restaurant',
+        description: `Order ${order.orderNumber}`,
+        order_id:    rzpOrder.razorpayOrderId,
+        prefill: {
+          name: cart.customerName || undefined,
+        },
+        theme: { color: '#528FF0' },
+      });
+
+      // 4. Payment captured — webhook updates status async.
+      //    Show success confirmation to customer.
+      const token = order.orderNumber.split('-').pop() || '1';
+      clearCart();
+      Vibration.vibrate([0, 100, 80, 300]);
+      setPlacedOrder({
+        _id:          order._id,
+        orderNumber:  order.orderNumber,
+        token,
+        items:        cart.items,
+        subtotal:     cart.subtotal,
+        taxTotal:     cart.taxTotal,
+        grandTotal:   cart.grandTotal,
+        customerName: cart.customerName,
+        customerPhone:cart.customerPhone,
+        tableNumber:  cart.tableNumber,
+        notes:        cart.notes,
+      });
+    } catch (e: any) {
+      if (e?.code !== 'USER_CANCEL') {
+        showAlert('Payment Failed', e?.description ?? e?.message ?? 'Payment could not be completed. Please try again.');
+      }
+    } finally {
+      setRazorpayBusy(false);
+    }
+  };
 
   const handlePlaceOrder = async () => {
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items from the menu first.'); return; }
@@ -568,16 +679,44 @@ const CustomerCartScreen: React.FC = () => {
                 <Text style={styles.grandLabel}>Total to Pay</Text>
                 <Text style={styles.grandVal}>{fmt(cart.grandTotal)}</Text>
               </View>
-              <Text style={styles.payNote}>💵 Pay at counter after receiving order</Text>
+              <Text style={styles.payNote}>
+                {activeGateway?.active && activeGateway?.isIntegrated && activeGateway?.gatewayType === 'razorpay'
+                  ? '💳 Pay online via UPI / Card / Razorpay'
+                  : '💵 Pay at counter after receiving order'}
+              </Text>
             </View>
           </ScrollView>
 
-          {/* Place order button */}
+          {/* Place order button(s) */}
           <View style={[styles.bottomBar, { paddingBottom: Spacing.md + bottom }]}>
+            {activeGateway?.active && activeGateway?.isIntegrated && activeGateway?.gatewayType === 'razorpay' && (
+              <TouchableOpacity
+                style={[styles.placeBtn, styles.rzpBtn, (razorpayBusy || placing) && { opacity: 0.7 }]}
+                onPress={handleRazorpayPayment}
+                disabled={razorpayBusy || placing}
+                activeOpacity={0.88}
+              >
+                {razorpayBusy ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <>
+                    <View>
+                      <Text style={styles.placeBtnText}>Pay Online</Text>
+                      <Text style={styles.placeBtnSub}>UPI · Cards · {fmt(cart.grandTotal)}</Text>
+                    </View>
+                    <MaterialIcons name="payment" size={22} color={Colors.white} />
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
-              style={[styles.placeBtn, placing && { opacity: 0.7 }]}
+              style={[
+                styles.placeBtn,
+                activeGateway?.active && activeGateway?.isIntegrated && styles.placeBtnSecondary,
+                placing && { opacity: 0.7 },
+              ]}
               onPress={handlePlaceOrder}
-              disabled={placing}
+              disabled={placing || razorpayBusy}
               activeOpacity={0.88}
             >
               {placing ? (
@@ -585,10 +724,20 @@ const CustomerCartScreen: React.FC = () => {
               ) : (
                 <>
                   <View>
-                    <Text style={styles.placeBtnText}>Place Order</Text>
-                    <Text style={styles.placeBtnSub}>Pay {fmt(cart.grandTotal)} at counter</Text>
+                    <Text style={[
+                      styles.placeBtnText,
+                      activeGateway?.active && activeGateway?.isIntegrated && styles.placeBtnTextDark,
+                    ]}>Place Order</Text>
+                    <Text style={[
+                      styles.placeBtnSub,
+                      activeGateway?.active && activeGateway?.isIntegrated && styles.placeBtnTextDark,
+                    ]}>Pay {fmt(cart.grandTotal)} at counter</Text>
                   </View>
-                  <MaterialIcons name="arrow-forward" size={22} color={Colors.white} />
+                  <MaterialIcons
+                    name="arrow-forward"
+                    size={22}
+                    color={activeGateway?.active && activeGateway?.isIntegrated ? Colors.text : Colors.white}
+                  />
                 </>
               )}
             </TouchableOpacity>
@@ -679,6 +828,15 @@ const styles = StyleSheet.create({
   },
   placeBtnText: { color: Colors.white, fontSize: FontSize.xl, fontWeight: '800' },
   placeBtnSub: { color: 'rgba(255,255,255,0.75)', fontSize: FontSize.xs, marginTop: 2 },
+  rzpBtn: { backgroundColor: Colors.info, marginBottom: Spacing.sm },
+  placeBtnSecondary: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  placeBtnTextDark: { color: Colors.text },
 
   // ── Bill screen (after order placed) ─────────────────────────────────────
   billScroll: { padding: Spacing.lg, paddingBottom: 40 },

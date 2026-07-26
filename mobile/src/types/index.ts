@@ -129,7 +129,7 @@ export interface Order {
   taxTotal: number;
   discountAmount: number;
   grandTotal: number;
-  paymentMethod: 'cash' | 'upi' | 'card' | 'split';
+  paymentMethod: 'cash' | 'upi' | 'card' | 'split' | 'razorpay';
   splitDetails: {
     cash?: number;
     upi?: number;

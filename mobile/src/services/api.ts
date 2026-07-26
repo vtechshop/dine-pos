@@ -2056,6 +2056,80 @@ export const getPayments = (params?: {
 export const getPaymentStats = (params?: { from?: string; to?: string }): Promise<MobilePaymentReport> =>
   fetchAPI(`/payments/reports/summary${poQS(params as Record<string, string | undefined>)}`);
 
+// ── Razorpay checkout — cashier billing (authenticated) ───────────────────────
+
+export interface MobilePaymentIntentResult {
+  payment: {
+    internalTransactionId: string;
+    gatewayType:           string;
+    amount:                number;
+    status:                string;
+  };
+  gatewayData: {
+    gatewayTransactionId: string;
+    gatewayOrderId:       string;
+    metadata: {
+      keyId:    string;
+      orderId:  string;
+      amount:   number;
+      currency: string;
+    };
+  };
+  gatewayError:      string | null;
+  gatewayIntegrated: boolean;
+}
+
+export const createPaymentIntent = (
+  orderId: string,
+  amount:  number,
+  opts?: { currency?: string; customerName?: string; description?: string },
+): Promise<MobilePaymentIntentResult> =>
+  fetchAPI('/payments/create', {
+    method: 'POST',
+    body:   JSON.stringify({ orderId, amount, ...opts }),
+  });
+
+export const verifyPaymentIntent = (
+  internalTransactionId: string,
+  gatewayTransactionId:  string,
+  signature?:            string,
+): Promise<{ verified: boolean; message?: string; payment: MobilePaymentRecord }> =>
+  fetchAPI('/payments/verify', {
+    method: 'POST',
+    body:   JSON.stringify({ internalTransactionId, gatewayTransactionId, signature }),
+  });
+
+// ── Razorpay checkout — QR ordering (public, no auth) ────────────────────────
+
+export interface PublicGatewayInfo {
+  active:        boolean;
+  gatewayType?:  string;
+  isIntegrated?: boolean;
+  displayName?:  string;
+}
+
+export const getPublicGateway = (hotelId: string): Promise<PublicGatewayInfo> =>
+  fetchAPI(`/public/payments/gateway/${hotelId}`, undefined, true);
+
+export interface PublicRazorpayOrder {
+  keyId:                 string;
+  razorpayOrderId:       string;
+  internalTransactionId: string;
+  amount:                number;   // paise
+  currency:              string;
+}
+
+export const createPublicRazorpayOrder = (
+  hotelId:  string,
+  orderId:  string,
+  amount:   number,
+  opts?: { currency?: string; customerName?: string },
+): Promise<PublicRazorpayOrder> =>
+  fetchAPI('/public/payments/razorpay-order', {
+    method: 'POST',
+    body:   JSON.stringify({ hotelId, orderId, amount, ...opts }),
+  }, true);
+
 // ── SA Push Token Registration ────────────────────────────────────────────────
 
 export const registerSAPushToken = (

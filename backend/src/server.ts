@@ -62,6 +62,7 @@ import inventoryIntelligenceRoutes from './routes/inventoryIntelligenceRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import paymentGatewayConfigRoutes from './routes/paymentGatewayConfigRoutes';
 import paymentWebhookRoutes from './routes/paymentWebhookRoutes';
+import publicPaymentRoutes from './routes/publicPaymentRoutes';
 import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
 import GatewayFactory from './services/payment/GatewayFactory';
 import * as Sentry from '@sentry/node';
@@ -270,8 +271,9 @@ app.use('/api/uploads', uploadRoutes);
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/seed', seedRoutes);
 }
-app.use('/api/public/qr', qrRoutes); // mount before /api/public so paths are matched first
-app.use('/api/public', menuRoutes);
+app.use('/api/public/qr',       qrRoutes);       // mount before /api/public so paths are matched first
+app.use('/api/public/payments', publicPaymentRoutes); // public Razorpay endpoints for QR ordering
+app.use('/api/public',          menuRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/tables', tableRoutes);
 app.use('/api/reservations', reservationRoutes);

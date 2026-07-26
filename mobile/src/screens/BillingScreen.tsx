@@ -15,6 +15,7 @@ import * as api from '../services/api';
 import { Category, Product, Table } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, UPI_ID, UPI_NAME } from '../utils/constants';
 import { SelectedModifier, ModifierGroup } from '../types';
+import RazorpayCheckout from 'react-native-razorpay';
 import { enqueueOrder } from '../utils/offlineQueue';
 import { getLocalCategories, getLocalProducts, saveCategories, saveProducts } from '../database/localCacheDao';
 import { printKOT } from '../utils/receipt';
@@ -23,7 +24,7 @@ import { KOTOrderInput } from '../types';
 const CAT_W  = 100; // tablet landscape vertical sidebar width
 const CART_W = 340; // tablet landscape cart panel width
 
-type PayMethod = 'cash' | 'upi' | 'card' | 'split';
+type PayMethod = 'cash' | 'upi' | 'card' | 'split' | 'razorpay';
 type OrderSource = 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr';
 
 const SOURCE_OPTIONS: { id: OrderSource; label: string; emoji: string; color: string }[] = [
@@ -35,10 +36,11 @@ const SOURCE_OPTIONS: { id: OrderSource; label: string; emoji: string; color: st
 ];
 
 const PAY_OPTIONS: { id: PayMethod; label: string; icon: any; color: string; bg: string }[] = [
-  { id: 'cash',  label: 'Cash',  icon: 'payments',     color: Colors.cash,        bg: Colors.cashBg },
-  { id: 'upi',   label: 'UPI',   icon: 'qr-code',      color: Colors.upi,         bg: Colors.upiBg },
-  { id: 'card',  label: 'Card',  icon: 'credit-card',  color: Colors.cardPayment, bg: Colors.cardBg },
-  { id: 'split', label: 'Split', icon: 'call-split',   color: Colors.split,       bg: Colors.splitBg },
+  { id: 'cash',     label: 'Cash',     icon: 'payments',        color: Colors.cash,        bg: Colors.cashBg },
+  { id: 'upi',      label: 'UPI',      icon: 'qr-code',         color: Colors.upi,         bg: Colors.upiBg },
+  { id: 'card',     label: 'Card',     icon: 'credit-card',     color: Colors.cardPayment, bg: Colors.cardBg },
+  { id: 'split',    label: 'Split',    icon: 'call-split',      color: Colors.split,       bg: Colors.splitBg },
+  { id: 'razorpay', label: 'Razorpay', icon: 'currency-rupee',  color: Colors.info,        bg: Colors.infoBg },
 ];
 
 interface OrderSuccess {
@@ -270,6 +272,121 @@ Thank you for dining with us! 🍽️`;
     setShowPayModal(true);
   };
 
+  const handleRazorpayCheckout = async () => {
+    const isOrderParcel = ['swiggy', 'zomato', 'takeaway'].includes(orderSource);
+    const getTableNumber = () => {
+      if (orderSource === 'swiggy')   return 'Swiggy';
+      if (orderSource === 'zomato')   return 'Zomato';
+      if (orderSource === 'takeaway') return 'Takeaway';
+      return cart.tableNumber;
+    };
+    const orderData = {
+      items: cart.items.map(item => ({
+        product:           item.product._id,
+        productName:       item.product.name,
+        variantId:         item.variantId   || '',
+        variantName:       item.variantName || '',
+        selectedModifiers: (item.selectedModifiers || []).map(m => ({ ...m, modifierTotal: m.modifierPrice * item.quantity })),
+        quantity:          item.quantity,
+        price:             item.effectivePrice + item.modifierTotal,
+        taxPercent:        item.product.taxPercent,
+        taxAmount:         item.taxAmount,
+        total:             item.total,
+      })),
+      subtotal:      cart.subtotal,
+      taxTotal:      cart.taxTotal,
+      grandTotal:    cart.grandTotal,
+      discountAmount:cart.discountAmount,
+      paymentMethod: 'razorpay' as const,
+      status:        'pending' as const,
+      tableNumber:   getTableNumber(),
+      customerName:  cart.customerName,
+      customerPhone: customerPhone.replace(/\D/g, '').replace(/^0+/, '').slice(0, 12) || undefined,
+      notes:         cart.notes,
+      isParcel:      isOrderParcel,
+      orderSource,
+    };
+
+    const cartSnapshot = {
+      items:          cart.items.map(i => ({ name: i.variantName ? `${i.product.name} (${i.variantName})` : i.product.name, qty: i.quantity, price: i.effectivePrice })),
+      subtotal:       cart.subtotal,
+      taxTotal:       cart.taxTotal,
+      discountAmount: cart.discountAmount,
+      grandTotal:     cart.grandTotal,
+    };
+    const kotSnapshot: Omit<KOTOrderInput, 'orderNumber'> = {
+      items:       cart.items.map(i => ({ productName: i.variantName ? `${i.product.name} (${i.variantName})` : i.product.name, quantity: i.quantity })),
+      tableNumber: getTableNumber(),
+      notes:       cart.notes,
+      createdAt:   new Date().toISOString(),
+    };
+
+    try {
+      // 1. Create the order
+      const order = await api.createOrder(orderData);
+
+      // 2. Create Razorpay order on backend (links payment to this order)
+      const intent = await api.createPaymentIntent(order._id, cart.grandTotal, {
+        currency:     'INR',
+        customerName: cart.customerName || undefined,
+        description:  `Order ${order.orderNumber}`,
+      });
+
+      if (!intent.gatewayIntegrated || intent.gatewayError) {
+        showAlert('Payment Error', intent.gatewayError ?? 'Gateway not integrated. Use another payment method.');
+        setPlacing(false);
+        return;
+      }
+
+      const keyId         = intent.gatewayData?.metadata?.keyId;
+      const razorpayOrder = intent.gatewayData?.metadata?.orderId ?? intent.gatewayData?.gatewayOrderId;
+      const amountPaise   = intent.gatewayData?.metadata?.amount ?? Math.round(cart.grandTotal * 100);
+
+      if (!keyId || !razorpayOrder) {
+        showAlert('Payment Error', 'Gateway returned invalid checkout parameters.');
+        setPlacing(false);
+        return;
+      }
+
+      // 3. Open Razorpay native checkout
+      const response = await RazorpayCheckout.open({
+        key:         keyId,
+        amount:      String(amountPaise),
+        currency:    'INR',
+        name:        settings.hotelName || 'Restaurant',
+        description: `Order ${order.orderNumber}`,
+        order_id:    razorpayOrder,
+        prefill: {
+          name:    cart.customerName || undefined,
+          contact: customerPhone.replace(/\D/g, '').slice(0, 10) || undefined,
+        },
+        theme: { color: Colors.info },
+      });
+
+      // 4. Verify signature on backend
+      await api.verifyPaymentIntent(
+        intent.payment.internalTransactionId,
+        response.razorpay_payment_id,
+        response.razorpay_signature,
+      );
+
+      // 5. Success
+      const tokenNum = order.orderNumber.split('-').pop() || '1';
+      setShowSuccess({ orderNumber: order.orderNumber, token: tokenNum, ...cartSnapshot, grandTotal: order.grandTotal, kot: { orderNumber: order.orderNumber, ...kotSnapshot } });
+      Vibration.vibrate([0, 100, 80, 200]);
+      clearCart();
+      setDiscountInput('');
+      setDiscount({ type: 'percent', value: 0 });
+    } catch (e: any) {
+      const desc: string = e?.description ?? e?.message ?? 'Payment failed or cancelled.';
+      if (e?.code !== 'USER_CANCEL') {
+        showAlert('Payment Failed', desc);
+      }
+    } finally {
+      setPlacing(false);
+    }
+  };
+
   const confirmOrder = async () => {
     if (payMethod === 'split') {
       const splitTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitCard) || 0) + (parseFloat(splitUpi) || 0);
@@ -280,6 +397,12 @@ Thank you for dining with us! 🍽️`;
     }
     setShowPayModal(false);
     setPlacing(true);
+
+    // ── Razorpay checkout flow ────────────────────────────────────────────────
+    if (payMethod === 'razorpay') {
+      await handleRazorpayCheckout();
+      return;
+    }
     const isOrderParcel = ['swiggy', 'zomato', 'takeaway'].includes(orderSource);
     const getTableNumber = () => {
       if (orderSource === 'swiggy')   return 'Swiggy';
