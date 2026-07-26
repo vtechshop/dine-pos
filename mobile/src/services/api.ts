@@ -1898,6 +1898,43 @@ export const createGRN = (data: GRNInput): Promise<GRN> =>
 export const cancelGRN = (id: string, reason: string): Promise<GRN> =>
   fetchAPI<GRN>(`/grn/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) });
 
+// ── Vendor Payments & Ledger ──────────────────────────────────────────────────
+
+import type { VendorPayment, VendorLedgerEntry, VendorLedgerStatement, VendorPaymentMethod } from '../types';
+
+export interface VendorPaymentInput {
+  vendorId:         string;
+  paymentDate?:     string;
+  paymentMethod:    VendorPaymentMethod;
+  amount:           number;
+  referenceNumber?: string;
+  notes?:           string;
+}
+
+export const getVendorPayments = (params?: {
+  vendorId?: string; from?: string; to?: string;
+  method?: string; limit?: number;
+}): Promise<{ payments: VendorPayment[]; total: number }> =>
+  fetchAPI(`/vendor-payments${poQS(params as Record<string, string | number | undefined>)}`);
+
+export const createVendorPayment = (data: VendorPaymentInput): Promise<VendorPayment> =>
+  fetchAPI<VendorPayment>('/vendor-payments', { method: 'POST', body: JSON.stringify(data) });
+
+export const reverseVendorPayment = (id: string, reason: string): Promise<VendorPayment> =>
+  fetchAPI<VendorPayment>(`/vendor-payments/${id}/reverse`, { method: 'POST', body: JSON.stringify({ reason }) });
+
+export const getVendorLedger = (
+  vendorId: string,
+  params?: { from?: string; to?: string; limit?: number },
+): Promise<{ vendor: import('../types').Vendor; entries: VendorLedgerEntry[]; total: number; currentOutstanding: number }> =>
+  fetchAPI(`/vendor-ledger/${vendorId}${poQS(params as Record<string, string | number | undefined>)}`);
+
+export const getVendorStatement = (
+  vendorId: string,
+  params?: { from?: string; to?: string },
+): Promise<VendorLedgerStatement> =>
+  fetchAPI(`/vendor-ledger/${vendorId}/statement${poQS(params as Record<string, string | undefined>)}`);
+
 // ── SA Push Token Registration ────────────────────────────────────────────────
 
 export const registerSAPushToken = (

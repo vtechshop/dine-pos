@@ -700,6 +700,49 @@ export interface PurchaseOrder {
   updatedAt:            string;
 }
 
+// ── Vendor Payments & Ledger ──────────────────────────────────────────────────
+
+export type VendorPaymentMethod = 'cash' | 'upi' | 'bank_transfer' | 'cheque' | 'card';
+
+export type LedgerEntryType =
+  | 'purchase' | 'grn' | 'payment' | 'debit_note'
+  | 'credit_note' | 'opening_balance' | 'adjustment';
+
+export interface VendorPayment {
+  _id:             string;
+  paymentNumber:   string;
+  vendorId:        string;
+  vendorSnapshot:  { businessName: string; vendorCode: string; mobile: string };
+  paymentDate:     string;
+  paymentMethod:   VendorPaymentMethod;
+  amount:          number;
+  referenceNumber: string;
+  notes:           string;
+  isReversed:      boolean;
+  reversalReason:  string;
+  createdAt:       string;
+}
+
+export interface VendorLedgerEntry {
+  _id:             string;
+  vendorId:        string;
+  entryType:       LedgerEntryType;
+  referenceNumber: string;
+  debit:           number;
+  credit:          number;
+  runningBalance:  number;
+  description:     string;
+  createdAt:       string;
+}
+
+export interface VendorLedgerStatement {
+  vendor:             Vendor;
+  entries:            VendorLedgerEntry[];
+  totalDebit:         number;
+  totalCredit:        number;
+  currentOutstanding: number;
+}
+
 export type RootStackParamList = {
   Splash: undefined;
   RoleSelect: undefined;
@@ -744,6 +787,7 @@ export type RootStackParamList = {
   Vendors: undefined;
   PurchaseOrders: undefined;
   GoodsReceive:   undefined;
+  VendorLedger:   undefined;
 };
 
 export type TabParamList = {
