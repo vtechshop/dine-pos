@@ -13,14 +13,15 @@ import { io } from '../server';
 import { AggregatorService } from '../services/aggregator/AggregatorService';
 import type { AggregatorPlatform } from '../models/AggregatorIntegration';
 import { logAudit } from '../utils/audit';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
 // ── Legacy: simple shared-secret guard ────────────────────────────────────────
 const WEBHOOK_SECRET = process.env.AGGREGATOR_SECRET;
 if (!WEBHOOK_SECRET || WEBHOOK_SECRET === 'agg-secret-changeme') {
-  console.warn(
-    'WARNING: AGGREGATOR_SECRET is not set or is using the default value. ' +
+  logger.warn(
+    'AGGREGATOR_SECRET is not set or is using the default value. ' +
     'Set a strong secret in .env to prevent fake webhook orders.',
   );
 }

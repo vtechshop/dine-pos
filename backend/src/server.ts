@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import path from 'path';
 import { createServer } from 'http';
+import { randomUUID } from 'crypto';
 import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import mongoose from 'mongoose';
@@ -84,31 +85,31 @@ if (process.env.SENTRY_DSN) {
 // ── Validate required env vars at startup ─────────────────────────────────────
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET || JWT_SECRET === 'hotelbillingpos_secret_key_change_in_production') {
-  console.error('❌ FATAL: JWT_SECRET is not set or is using the default insecure value. Set a strong secret in .env');
+  logger.error('FATAL: JWT_SECRET is not set or is using the default insecure value. Set a strong secret in .env');
   process.exit(1);
 }
 
 const SUPER_ADMIN_PASS = process.env.SUPER_ADMIN_PASS;
 if (!SUPER_ADMIN_PASS) {
-  console.error('❌ FATAL: SUPER_ADMIN_PASS is not set. Add it to your .env file.');
+  logger.error('FATAL: SUPER_ADMIN_PASS is not set. Add it to your .env file.');
   process.exit(1);
 }
 
 if (!process.env.SUPER_ADMIN_ID) {
-  console.error('❌ FATAL: SUPER_ADMIN_ID is not set. Add it to your .env file.');
+  logger.error('FATAL: SUPER_ADMIN_ID is not set. Add it to your .env file.');
   process.exit(1);
 }
 
 if (!process.env.MONGODB_URI) {
-  console.error('❌ FATAL: MONGODB_URI is not set. Add it to your .env file.');
+  logger.error('FATAL: MONGODB_URI is not set. Add it to your .env file.');
   process.exit(1);
 }
 if (
   process.env.NODE_ENV !== 'production' &&
   process.env.MONGODB_URI.includes('.mongodb.net')
 ) {
-  console.error(
-    '❌ FATAL: MONGODB_URI points to a production Atlas cluster (*.mongodb.net) ' +
+  logger.error(
+    'FATAL: MONGODB_URI points to a production Atlas cluster (*.mongodb.net) ' +
     'but NODE_ENV is not "production". Set NODE_ENV=production or switch MONGODB_URI ' +
     'to a local/dev cluster to prevent dev traffic from hitting production data.',
   );
@@ -125,19 +126,19 @@ if (
   SUPER_ADMIN_JWT_SECRET.length < 32 ||
   SA_JWT_KNOWN_BAD.includes(SUPER_ADMIN_JWT_SECRET.toLowerCase())
 ) {
-  console.error(
-    '❌ FATAL: SUPER_ADMIN_JWT_SECRET is not set, is shorter than 32 characters, or is using a known-insecure value. ' +
+  logger.error(
+    'FATAL: SUPER_ADMIN_JWT_SECRET is not set, is shorter than 32 characters, or is using a known-insecure value. ' +
     'Generate a strong secret (e.g. openssl rand -hex 32) and set it in your .env file.',
   );
   process.exit(1);
 }
 
 if (!process.env.NODE_ENV) {
-  console.warn('⚠ NODE_ENV is not set. Running in development mode.');
+  logger.warn('NODE_ENV is not set — running in development mode');
 }
 
 if (process.env.NODE_ENV === 'production' && !process.env.ALLOWED_ORIGINS?.trim()) {
-  console.error('❌ FATAL: ALLOWED_ORIGINS must be set in production. Add comma-separated list of allowed origins to your environment.');
+  logger.error('FATAL: ALLOWED_ORIGINS must be set in production. Add comma-separated list of allowed origins to your environment.');
   process.exit(1);
 }
 
@@ -219,7 +220,18 @@ app.use(express.json({
     }
   },
 }));
-app.use(morgan('combined'));
+
+// Attach a UUID to every request for log correlation; echo it back to callers
+app.use((req, res, next) => {
+  (req as any).requestId = (req.headers['x-request-id'] as string) || randomUUID();
+  res.setHeader('X-Request-ID', (req as any).requestId);
+  next();
+});
+
+morgan.token('reqid', (req: any) => req.requestId || '-');
+app.use(morgan(':method :url :status :res[content-length] - :response-time ms reqid=:reqid', {
+  stream: { write: (msg) => logger.info(msg.trimEnd()) },
+}));
 
 // Serve customer digital menu PWA
 app.use('/menu', express.static(path.join(__dirname, '../public/menu')));
@@ -251,11 +263,7 @@ app.use('/api/remote-config', _rl(30, 60_000));
 // Session + guest writes — 60/min per IP (generous for any table-service flow)
 app.use('/api/sessions', _rl(60, 60_000));
 
-console.log(
-  process.env.NODE_ENV === 'test'
-    ? 'Rate limiter skipped (NODE_ENV=test)'
-    : 'Rate limiter enabled'
-);
+logger.info(process.env.NODE_ENV === 'test' ? 'Rate limiter skipped (NODE_ENV=test)' : 'Rate limiter enabled');
 
 // Routes
 app.use('/api/auth', authRoutes);
