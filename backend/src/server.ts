@@ -267,6 +267,10 @@ logger.info(process.env.NODE_ENV === 'test' ? 'Rate limiter skipped (NODE_ENV=te
 
 // Routes
 app.use('/api/auth', authRoutes);
+// Rate-limit public hotel-status lookups — unauthenticated endpoints that could
+// be used to enumerate registered phone numbers or discover suspension reasons.
+app.use('/api/hotels/status',       _rl(10, 60_000));
+app.use('/api/hotels/reset-status', _rl(10, 60_000));
 app.use('/api/hotels', hotelRoutes);
 app.use('/api/verify', verifyRoutes);
 app.use('/api/superadmin', superAdminRoutes);

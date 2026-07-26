@@ -74,6 +74,11 @@ router.post('/razorpay-order', async (req: Request, res: Response) => {
     const order = await Order.findOne({ _id: orderId, hotelId });
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
+    // Enforce amount matches order total — prevents underpayment via crafted requests
+    if (Math.round(amount * 100) !== Math.round((order.grandTotal || 0) * 100)) {
+      return res.status(400).json({ message: 'Amount does not match order total.' });
+    }
+
     const config = await PaymentGatewayConfig.findOne({
       hotelId:   new mongoose.Types.ObjectId(hotelId),
       isActive:  true,

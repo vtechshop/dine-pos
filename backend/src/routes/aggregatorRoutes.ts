@@ -165,8 +165,10 @@ async function processAggregatorWebhook(
     const connector = AggregatorService.getConnector(platform);
     const valid     = connector.verifyWebhookSignature(rawBody, headers, integration);
     if (!valid) return { error: 'Invalid webhook signature' };
-  } else if (!hotelId) {
-    // New-style webhook with no matching integration — check shared secret fallback
+  } else {
+    // No matching integration — always require the shared secret, even when hotelId
+    // is present in the body. Without this gate, an attacker who knows a hotel's
+    // MongoDB ObjectId can inject orders by sending a body with hotelId set.
     const sharedSecret = process.env.AGGREGATOR_SECRET;
     const incoming     = headers['x-webhook-secret'] || '';
     try {
@@ -174,6 +176,7 @@ async function processAggregatorWebhook(
       if (
         !sharedSecret ||
         !incoming ||
+        incoming.length !== sharedSecret.length ||
         !tse(Buffer.from(incoming), Buffer.from(sharedSecret))
       ) {
         return { error: 'No matching integration and invalid fallback secret' };
