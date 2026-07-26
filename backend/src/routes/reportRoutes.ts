@@ -45,7 +45,7 @@ router.get('/gst', authMiddleware, async (req: AuthRequest, res: Response) => {
         },
       },
       { $sort: { _id: 1 } },
-    ]);
+    ]).option({ maxTimeMS: 30_000 });
 
     const result = rows.map(r => ({
       taxPercent:   r._id as number,
@@ -154,13 +154,11 @@ router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response
       return res.status(400).json({ message: 'Date range cannot exceed 92 days for GSTR-1 export.' });
     }
 
-    const settings = await Settings.findOne({ hotelId: req.hotelId });
+    const settings = await Settings.findOne({ hotelId: req.hotelId }).maxTimeMS(10_000);
     const gstin    = (settings?.gstNumber || '').toUpperCase().trim();
     const stateCode = gstin.length >= 2 ? gstin.substring(0, 2) : '33';
     const fp = `${String(fromDate.getMonth() + 1).padStart(2, '0')}${fromDate.getFullYear()}`;
 
-    // M-9: stream aggregation entirely in MongoDB — never loads full order documents
-    // into heap. $unwind + $lookup + $facet returns only grouped totals.
     const [agg] = await Order.aggregate([
       {
         $match: {
@@ -215,7 +213,7 @@ router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response
           ],
         },
       },
-    ]) as [{ b2cs: any[]; hsn: any[] }];
+    ]).option({ maxTimeMS: 30_000 }) as [{ b2cs: any[]; hsn: any[] }];
 
     const b2cs = (agg?.b2cs ?? []).map((row: any) => ({
       camt:    +row.camt.toFixed(2),
@@ -305,7 +303,7 @@ router.get('/modifiers', async (req: AuthRequest, res: Response) => {
             orderCount:   1,
           },
         },
-      ]),
+      ]).option({ maxTimeMS: 30_000 }),
 
       // Revenue by modifier group
       Order.aggregate([
@@ -331,7 +329,7 @@ router.get('/modifiers', async (req: AuthRequest, res: Response) => {
             orderCount:   1,
           },
         },
-      ]),
+      ]).option({ maxTimeMS: 30_000 }),
     ]);
 
     const totalModifierRevenue = groupRevenue.reduce((s: number, r: any) => s + (r.totalRevenue || 0), 0);

@@ -93,11 +93,11 @@ router.get('/waste-analysis', async (req: AuthRequest, res: Response) => {
             { $sort: { _id: 1 } },
           ],
         } },
-      ]),
+      ]).option({ maxTimeMS: 30_000 }),
       Order.aggregate([
         { $match: { hotelId, status: { $ne: 'cancelled' }, createdAt: { $gte: start, $lte: end } } },
         { $group: { _id: null, revenue: { $sum: '$grandTotal' } } },
-      ]),
+      ]).option({ maxTimeMS: 30_000 }),
     ]);
 
     const waste   = wasteAgg[0] ?? {};
@@ -201,7 +201,7 @@ router.get('/cost-variance', async (req: AuthRequest, res: Response) => {
         },
       },
       { $sort: { variancePct: -1 } },
-    ]);
+    ]).option({ maxTimeMS: 30_000 });
 
     type VarianceRow = { trend: string; currentCost: number; avgPurchaseCost: number; lastPrice: number; variance: number; variancePct: number };
     const rounded = items.map((i: VarianceRow & Record<string, unknown>) => ({
@@ -308,7 +308,7 @@ router.get('/vendor-price-comparison', async (req: AuthRequest, res: Response) =
         },
       },
       { $sort: { ingredientName: 1 } },
-    ]);
+    ]).option({ maxTimeMS: 30_000 });
 
     type VendorRow = { avgPrice: number; minPrice: number; maxPrice: number; lastPrice: number; totalValue: number };
     return res.json(rows.map(r => ({
@@ -379,7 +379,7 @@ router.get('/inventory-value', async (req: AuthRequest, res: Response) => {
           ],
         },
       },
-    ]);
+    ]).option({ maxTimeMS: 30_000 });
 
     type StockItem = { value?: number; costPerUnit?: number; [k: string]: unknown };
     const fix = (arr: StockItem[]) => arr.map(i => ({ ...i, value: round2(Number(i.value ?? 0)), costPerUnit: round2(Number(i.costPerUnit ?? 0)) }));
@@ -438,8 +438,8 @@ router.get('/stock-movement', async (req: AuthRequest, res: Response) => {
           },
         },
         { $sort: { totalConsumed: -1 } },
-      ]),
-      Ingredient.find({ hotelId }).select('_id name unit currentStock costPerUnit').lean(),
+      ]).option({ maxTimeMS: 30_000 }),
+      Ingredient.find({ hotelId }).select('_id name unit currentStock costPerUnit').maxTimeMS(30_000).lean(),
     ]);
 
     const consumedIds = new Set(consumed.map((c: { _id: unknown }) => String(c._id)));
@@ -515,11 +515,11 @@ router.get('/stock-turnover', async (req: AuthRequest, res: Response) => {
         },
         { $addFields: { itemCOGS: { $multiply: ['$recipeCostPerUnit', '$qty'] } } },
         { $group: { _id: null, totalCOGS: { $sum: '$itemCOGS' } } },
-      ]),
+      ]).option({ maxTimeMS: 30_000 }),
       Ingredient.aggregate([
         { $match: { hotelId } },
         { $group: { _id: null, inventoryValue: { $sum: { $multiply: ['$currentStock', { $ifNull: ['$costPerUnit', 0] }] } } } },
-      ]),
+      ]).option({ maxTimeMS: 30_000 }),
     ]);
 
     const cogs           = cogsAgg[0]?.totalCOGS        ?? 0;
@@ -616,7 +616,7 @@ router.get('/purchase-intelligence', async (req: AuthRequest, res: Response) => 
           ],
         },
       },
-    ]);
+    ]).option({ maxTimeMS: 30_000 });
 
     const sm          = agg?.summary?.[0] ?? {};
     const totalSpend  = sm.totalSpend ?? 0;
