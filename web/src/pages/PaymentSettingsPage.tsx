@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   CreditCard, Settings, RefreshCw, CheckCircle, XCircle, AlertCircle,
   Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Wifi, Download,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Copy, Check,
 } from 'lucide-react';
 import {
   fetchGatewayConfigs, createGatewayConfig, updateGatewayConfig,
@@ -62,6 +62,31 @@ function Err({ msg }: { msg: string }) {
   return (
     <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
       <XCircle size={16} /> {msg}
+    </div>
+  );
+}
+
+function WebhookUrlRow({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function copy() {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="mt-3 flex items-center gap-2 rounded-lg border border-dashed border-border bg-mist/60 px-3 py-2">
+      <span className="text-xs font-semibold text-ink/50 shrink-0">Webhook URL</span>
+      <span className="flex-1 truncate font-mono text-xs text-ink/70">{url}</span>
+      <button
+        onClick={copy}
+        title="Copy webhook URL"
+        className="shrink-0 rounded p-1 text-ink/40 hover:bg-canvas hover:text-brand"
+      >
+        {copied ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
+      </button>
     </div>
   );
 }
@@ -353,6 +378,11 @@ function GatewaysTab() {
                 {testMsg[c._id].ok ? <CheckCircle size={12} className="mr-1 inline" /> : <XCircle size={12} className="mr-1 inline" />}
                 {testMsg[c._id].msg}
               </div>
+            )}
+            {c.hotelId && (
+              <WebhookUrlRow
+                url={`${import.meta.env.VITE_API_URL ?? 'http://localhost:5000/api'}/payment-webhooks/${c.gatewayType}/${c.hotelId}`}
+              />
             )}
           </div>
         ))}

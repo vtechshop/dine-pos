@@ -123,3 +123,64 @@ export const fetchPaymentReport = (from?: string, to?: string): Promise<PaymentR
   if (to)   p.set('to', to);
   return apiFetch<PaymentReport>(`${PM}/reports/summary?${p}`);
 };
+
+// ── Razorpay Checkout APIs ─────────────────────────────────────────────────────
+
+export interface CreatePaymentIntentResult {
+  payment: {
+    internalTransactionId: string;
+    gatewayType:           string;
+    amount:                number;   // rupees
+    currency:              string;
+    status:                PaymentStatus;
+  };
+  gatewayData: {
+    gatewayTransactionId: string;
+    gatewayOrderId:       string;
+    metadata: {
+      keyId:         string;
+      orderId:       string;
+      amount:        number;   // paise
+      currency:      string;
+      customerName:  string;
+      customerEmail: string;
+      customerPhone: string;
+      description:   string;
+    };
+  };
+  gatewayError:      string | null;
+  gatewayIntegrated: boolean;
+}
+
+export const createPaymentIntent = (
+  orderId: string,
+  amount:  number,
+  opts?: {
+    currency?:      string;
+    description?:   string;
+    customerName?:  string;
+    customerEmail?: string;
+    customerPhone?: string;
+  },
+): Promise<CreatePaymentIntentResult> =>
+  apiFetch<CreatePaymentIntentResult>(`${PM}/create`, {
+    method: 'POST',
+    body:   JSON.stringify({ orderId, amount, ...opts }),
+  });
+
+export interface VerifyPaymentIntentResult {
+  verified:           boolean;
+  gatewayIntegrated?: boolean;
+  message?:           string;
+  payment:            PaymentRecord;
+}
+
+export const verifyPaymentIntent = (
+  internalTransactionId: string,
+  gatewayTransactionId:  string,
+  signature?:            string,
+): Promise<VerifyPaymentIntentResult> =>
+  apiFetch<VerifyPaymentIntentResult>(`${PM}/verify`, {
+    method: 'POST',
+    body:   JSON.stringify({ internalTransactionId, gatewayTransactionId, signature }),
+  });
