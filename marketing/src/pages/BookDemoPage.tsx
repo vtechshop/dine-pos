@@ -147,10 +147,11 @@ export function BookDemoPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-500">
+                  <label htmlFor="demo-name" className="mb-1 block text-xs font-semibold text-gray-500">
                     Your name *
                   </label>
                   <input
+                    id="demo-name"
                     className={field}
                     value={form.name}
                     onChange={e => set('name', e.target.value)}
@@ -158,10 +159,11 @@ export function BookDemoPage() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-500">
+                  <label htmlFor="demo-email" className="mb-1 block text-xs font-semibold text-gray-500">
                     Email *
                   </label>
                   <input
+                    id="demo-email"
                     className={field}
                     type="email"
                     value={form.email}
@@ -173,22 +175,24 @@ export function BookDemoPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-500">
+                  <label htmlFor="demo-phone" className="mb-1 block text-xs font-semibold text-gray-500">
                     Phone / WhatsApp *
                   </label>
                   <input
+                    id="demo-phone"
                     className={field}
                     type="tel"
                     value={form.phone}
                     onChange={e => set('phone', e.target.value)}
-                    placeholder="+91 98765 43210"
+                    placeholder="+91 63813 56683"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-500">
+                  <label htmlFor="demo-restaurant" className="mb-1 block text-xs font-semibold text-gray-500">
                     Restaurant name
                   </label>
                   <input
+                    id="demo-restaurant"
                     className={field}
                     value={form.restaurant}
                     onChange={e => set('restaurant', e.target.value)}
@@ -198,10 +202,11 @@ export function BookDemoPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-500">
+                <label htmlFor="demo-outlets" className="mb-1 block text-xs font-semibold text-gray-500">
                   Number of outlets
                 </label>
                 <select
+                  id="demo-outlets"
                   className={field}
                   value={form.outlets}
                   onChange={e => set('outlets', e.target.value)}
@@ -214,10 +219,11 @@ export function BookDemoPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-500">
+                  <label htmlFor="demo-date" className="mb-1 block text-xs font-semibold text-gray-500">
                     Preferred date
                   </label>
                   <input
+                    id="demo-date"
                     className={field}
                     type="date"
                     value={form.preferredDate}
@@ -226,10 +232,11 @@ export function BookDemoPage() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-500">
+                  <label htmlFor="demo-time" className="mb-1 block text-xs font-semibold text-gray-500">
                     Preferred time (IST)
                   </label>
                   <select
+                    id="demo-time"
                     className={field}
                     value={form.preferredTime}
                     onChange={e => set('preferredTime', e.target.value)}
@@ -243,10 +250,11 @@ export function BookDemoPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-500">
+                <label htmlFor="demo-notes" className="mb-1 block text-xs font-semibold text-gray-500">
                   Anything specific you want to see?
                 </label>
                 <textarea
+                  id="demo-notes"
                   className={`${field} h-24 resize-none`}
                   value={form.notes}
                   onChange={e => set('notes', e.target.value)}

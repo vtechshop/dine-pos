@@ -137,10 +137,11 @@ export function ContactPage() {
               )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-500">
+                  <label htmlFor="contact-name" className="mb-1 block text-xs font-semibold text-gray-500">
                     Your name *
                   </label>
                   <input
+                    id="contact-name"
                     className={field}
                     value={form.name}
                     onChange={e => set('name', e.target.value)}
@@ -148,10 +149,11 @@ export function ContactPage() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-500">
+                  <label htmlFor="contact-email" className="mb-1 block text-xs font-semibold text-gray-500">
                     Email *
                   </label>
                   <input
+                    id="contact-email"
                     className={field}
                     type="email"
                     value={form.email}
@@ -162,10 +164,11 @@ export function ContactPage() {
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-500">
+                  <label htmlFor="contact-phone" className="mb-1 block text-xs font-semibold text-gray-500">
                     Phone
                   </label>
                   <input
+                    id="contact-phone"
                     className={field}
                     type="tel"
                     value={form.phone}
@@ -174,10 +177,11 @@ export function ContactPage() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-500">
+                  <label htmlFor="contact-restaurant" className="mb-1 block text-xs font-semibold text-gray-500">
                     Restaurant name
                   </label>
                   <input
+                    id="contact-restaurant"
                     className={field}
                     value={form.restaurant}
                     onChange={e => set('restaurant', e.target.value)}
@@ -186,10 +190,11 @@ export function ContactPage() {
                 </div>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-500">
+                <label htmlFor="contact-message" className="mb-1 block text-xs font-semibold text-gray-500">
                   Message *
                 </label>
                 <textarea
+                  id="contact-message"
                   className={`${field} h-28 resize-none`}
                   value={form.message}
                   onChange={e => set('message', e.target.value)}
