@@ -11,7 +11,8 @@ const AboutPage    = lazy(() => import('./pages/AboutPage').then(m => ({ default
 const ContactPage  = lazy(() => import('./pages/ContactPage').then(m => ({ default: m.ContactPage })));
 const BookDemoPage = lazy(() => import('./pages/BookDemoPage').then(m => ({ default: m.BookDemoPage })));
 const FAQPage      = lazy(() => import('./pages/FAQPage').then(m => ({ default: m.FAQPage })));
-const BlogPage     = lazy(() => import('./pages/BlogPage').then(m => ({ default: m.BlogPage })));
+const BlogPage       = lazy(() => import('./pages/BlogPage').then(m => ({ default: m.BlogPage })));
+const NotFoundPage   = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 
 function PageLoader() {
   return (
@@ -44,8 +45,7 @@ export function App() {
               <Route path="/book-demo" element={<BookDemoPage />} />
               <Route path="/faq"       element={<FAQPage />} />
               <Route path="/blog"      element={<BlogPage />} />
-              {/* Fallback */}
-              <Route path="*"          element={<HomePage />} />
+              <Route path="*"          element={<NotFoundPage />} />
             </Routes>
           </Suspense>
         </main>

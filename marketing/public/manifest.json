@@ -1,0 +1,22 @@
+{
+  "name": "Dine POS",
+  "short_name": "Dine POS",
+  "description": "The complete point-of-sale system built for modern restaurants.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#E8380D",
+  "icons": [
+    {
+      "src": "/branding/logo-128.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    },
+    {
+      "src": "/branding/android-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
