@@ -16,7 +16,7 @@ const BLANK: FormState = { name: '', email: '', phone: '', restaurant: '', messa
 export function ContactPage() {
   usePageSEO(
     'Contact — Dine POS',
-    'Get in touch with Dine POS. Call, email, or send a message — we reply within one business day. Chennai, Tamil Nadu, India.',
+    'Get in touch with Dine POS. Call, email, or send a message — we reply within one business day. Coimbatore, Tamil Nadu, India.',
   );
   const [form, setForm]       = useState<FormState>(BLANK);
   const [submitted, setSubmitted] = useState(false);
@@ -94,7 +94,7 @@ export function ContactPage() {
                 >
                   +91 63813 56683
                 </a>
-                <div className="mt-0.5 text-xs text-gray-400">Mon – Sat, 9 AM – 7 PM IST</div>
+                <div className="mt-0.5 text-xs text-gray-400">Mon – Sat, 9 AM – 6 PM IST</div>
               </div>
             </div>
 
@@ -104,7 +104,11 @@ export function ContactPage() {
               </div>
               <div>
                 <div className="text-sm font-semibold text-gray-700">Office</div>
-                <div className="text-sm text-gray-600">Chennai, Tamil Nadu, India</div>
+                <div className="text-sm text-gray-600">
+                  9/83 E, 4th Street, T.Balan Nagar,<br />
+                  Ganapathipudur, Coimbatore – 641006,<br />
+                  Tamil Nadu, India
+                </div>
               </div>
             </div>
           </div>
