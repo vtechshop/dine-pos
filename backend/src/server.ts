@@ -59,6 +59,9 @@ import vendorPaymentRoutes from './routes/vendorPaymentRoutes';
 import vendorLedgerRoutes from './routes/vendorLedgerRoutes';
 import financeRoutes from './routes/financeRoutes';
 import inventoryIntelligenceRoutes from './routes/inventoryIntelligenceRoutes';
+import paymentRoutes from './routes/paymentRoutes';
+import paymentGatewayConfigRoutes from './routes/paymentGatewayConfigRoutes';
+import paymentWebhookRoutes from './routes/paymentWebhookRoutes';
 import * as Sentry from '@sentry/node';
 import helmet from 'helmet';
 
@@ -204,7 +207,8 @@ app.use(compression()); // gzip responses — reduces JSON payload by ~85%
 app.use(express.json({
   limit: '1mb',
   verify: (req, _res, buf, encoding) => {
-    if ((req as express.Request).url?.startsWith('/api/aggregator')) {
+    const url = (req as express.Request).url ?? '';
+    if (url.startsWith('/api/aggregator') || url.startsWith('/api/payment-webhooks')) {
       (req as any).rawBody = buf.toString((encoding as BufferEncoding) || 'utf8');
     }
   },
@@ -290,6 +294,9 @@ app.use('/api/vendor-payments',   vendorPaymentRoutes);
 app.use('/api/vendor-ledger',     vendorLedgerRoutes);
 app.use('/api/finance',                    financeRoutes);
 app.use('/api/inventory-intelligence',     inventoryIntelligenceRoutes);
+app.use('/api/payments',                   paymentRoutes);
+app.use('/api/payment-gateway-configs',    paymentGatewayConfigRoutes);
+app.use('/api/payment-webhooks',           paymentWebhookRoutes);
 
 // Enhanced health check — covers MongoDB, Redis, memory, uptime, version
 app.get('/api/health', async (_req, res) => {
