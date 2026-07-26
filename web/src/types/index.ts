@@ -398,6 +398,64 @@ export interface POReport {
   }>;
 }
 
+// ── GRN ───────────────────────────────────────────────────────────────────────
+
+export type GRNStatus = 'pending' | 'partial' | 'completed' | 'cancelled';
+
+export interface GRNItem {
+  _id?:              string;
+  poItemIndex?:      number;
+  productId?:        string;
+  ingredientId?:     string;
+  productName:       string;
+  variantId?:        string;
+  variantName?:      string;
+  orderedQty:        number;
+  receivedQty:       number;
+  damagedQty:        number;
+  rejectedQty:       number;
+  pendingQty:        number;
+  unit:              string;
+  purchasePrice:     number;
+  batchNumber?:      string;
+  manufacturingDate?: string;
+  expiryDate?:       string;
+  warehouse?:        string;
+  notes?:            string;
+}
+
+export interface GRN {
+  _id:          string;
+  grnNumber:    string;
+  poId:         string;
+  poNumber:     string;
+  vendorId:     string;
+  vendorSnapshot: { businessName: string; vendorCode: string; mobile: string; gstNumber: string };
+  receiveDate:  string;
+  status:       GRNStatus;
+  items:        GRNItem[];
+  notes:        string;
+  receivedBy:   string;
+  cancelReason: string;
+  isDeleted:    boolean;
+  createdAt:    string;
+  updatedAt:    string;
+}
+
+export interface GRNReport {
+  totalGRNs:      number;
+  pendingCount:   number;
+  partialCount:   number;
+  completedCount: number;
+  cancelledCount: number;
+  totalReceived:  number;
+  totalDamaged:   number;
+  totalRejected:  number;
+  pendingPOs:     number;
+  byVendor: Array<{ _id: string; businessName: string; grnCount: number; totalReceived: number; totalDamaged: number }>;
+  byMonth:  Array<{ _id: string; grnCount: number; totalReceived: number }>;
+}
+
 // ── Expenses ──────────────────────────────────────────────────────────────────
 
 export interface Expense {
