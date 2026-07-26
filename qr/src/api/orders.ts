@@ -18,11 +18,15 @@ interface PlaceOrderResponse {
 }
 
 // Maps CartEntry → the shape /api/public/qr/orders expects.
-// The backend uses `product` (ObjectId) + `quantity`.
 function toApiItems(entries: CartEntry[]) {
   return entries.map((e) => ({
     product:  e.productId,
     quantity: e.quantity,
+    price:    e.price + e.modifierTotal,
+    selectedModifiers: (e.selectedModifiers ?? []).map(m => ({
+      ...m,
+      modifierTotal: m.modifierPrice * e.quantity,
+    })),
     notes:    e.notes || undefined,
   }));
 }

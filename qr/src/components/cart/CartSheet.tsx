@@ -36,7 +36,7 @@ export function CartSheet({ onClose, onConfirm }: CartSheetProps) {
 
         <div className="flex-1 overflow-y-auto px-5">
           {items.map((entry) => (
-            <CartItem key={entry.productId} entry={entry} />
+            <CartItem key={entry.cartLineId} entry={entry} />
           ))}
         </div>
 

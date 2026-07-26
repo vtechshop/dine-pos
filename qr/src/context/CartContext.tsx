@@ -5,7 +5,18 @@ import {
   useReducer,
   type ReactNode,
 } from 'react';
-import type { CartEntry } from '../types/qr.ts';
+import type { CartEntry, SelectedModifier } from '../types/qr.ts';
+
+// ── CartLineId dedup key ──────────────────────────────────────────────────────
+
+function buildCartLineId(productId: string, variantId?: string, mods?: SelectedModifier[]): string {
+  const base = `${productId}:${variantId || 'base'}`;
+  if (!mods?.length) return base;
+  const modKey = mods.map(m => m.modifierOptionId).sort().join('|');
+  return `${base}:${modKey}`;
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
 
 interface CartState {
   items:      CartEntry[];
@@ -13,27 +24,35 @@ interface CartState {
   totalPrice: number;
 }
 
+// Input for addItem — caller does not supply cartLineId (generated internally)
+export type CartEntryInput = Omit<CartEntry, 'quantity' | 'notes' | 'cartLineId'>;
+
 type CartAction =
-  | { type: 'ADD';    entry: Omit<CartEntry, 'quantity' | 'notes'>; quantity?: number; notes?: string }
-  | { type: 'REMOVE'; productId: string }
-  | { type: 'SET_QTY'; productId: string; quantity: number }
+  | { type: 'ADD';     entry: CartEntryInput; quantity?: number; notes?: string }
+  | { type: 'REMOVE';  cartLineId: string }
+  | { type: 'SET_QTY'; cartLineId: string; quantity: number }
   | { type: 'CLEAR' };
 
 function calcTotals(items: CartEntry[]) {
   return {
     totalItems: items.reduce((s, i) => s + i.quantity, 0),
-    totalPrice: items.reduce((s, i) => s + i.price * i.quantity, 0),
+    totalPrice: items.reduce((s, i) => s + (i.price + i.modifierTotal) * i.quantity, 0),
   };
 }
 
 function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
     case 'ADD': {
-      const existing = state.items.find((i) => i.productId === action.entry.productId);
+      const cartLineId = buildCartLineId(
+        action.entry.productId,
+        action.entry.variantId,
+        action.entry.selectedModifiers,
+      );
+      const existingIdx = state.items.findIndex(i => i.cartLineId === cartLineId);
       let next: CartEntry[];
-      if (existing) {
-        next = state.items.map((i) =>
-          i.productId === action.entry.productId
+      if (existingIdx >= 0) {
+        next = state.items.map((i, idx) =>
+          idx === existingIdx
             ? { ...i, quantity: i.quantity + (action.quantity ?? 1) }
             : i,
         );
@@ -42,6 +61,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
           ...state.items,
           {
             ...action.entry,
+            cartLineId,
             quantity: action.quantity ?? 1,
             notes:    action.notes ?? '',
           },
@@ -50,16 +70,16 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       return { items: next, ...calcTotals(next) };
     }
     case 'REMOVE': {
-      const next = state.items.filter((i) => i.productId !== action.productId);
+      const next = state.items.filter(i => i.cartLineId !== action.cartLineId);
       return { items: next, ...calcTotals(next) };
     }
     case 'SET_QTY': {
       let next: CartEntry[];
       if (action.quantity <= 0) {
-        next = state.items.filter((i) => i.productId !== action.productId);
+        next = state.items.filter(i => i.cartLineId !== action.cartLineId);
       } else {
-        next = state.items.map((i) =>
-          i.productId === action.productId ? { ...i, quantity: action.quantity } : i,
+        next = state.items.map(i =>
+          i.cartLineId === action.cartLineId ? { ...i, quantity: action.quantity } : i,
         );
       }
       return { items: next, ...calcTotals(next) };
@@ -71,12 +91,17 @@ function cartReducer(state: CartState, action: CartAction): CartState {
   }
 }
 
+// ── Context ───────────────────────────────────────────────────────────────────
+
 interface CartContextValue extends CartState {
-  addItem:    (entry: Omit<CartEntry, 'quantity' | 'notes'>, quantity?: number, notes?: string) => void;
-  removeItem: (productId: string) => void;
-  setQty:     (productId: string, quantity: number) => void;
+  addItem:    (entry: CartEntryInput, quantity?: number, notes?: string) => void;
+  removeItem: (cartLineId: string) => void;
+  setQty:     (cartLineId: string, quantity: number) => void;
   clearCart:  () => void;
+  // Sum of all quantities for a given productId (across all modifier configs)
   getQty:     (productId: string) => number;
+  // cartLineId for a simple product (no modifiers/variants) — shorthand
+  simpleLineId: (productId: string) => string;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -89,27 +114,35 @@ export function CartProvider({ children }: { children: ReactNode }) {
   });
 
   const addItem = useCallback(
-    (entry: Omit<CartEntry, 'quantity' | 'notes'>, quantity?: number, notes?: string) =>
+    (entry: CartEntryInput, quantity?: number, notes?: string) =>
       dispatch({ type: 'ADD', entry, quantity, notes }),
     [],
   );
   const removeItem = useCallback(
-    (productId: string) => dispatch({ type: 'REMOVE', productId }),
+    (cartLineId: string) => dispatch({ type: 'REMOVE', cartLineId }),
     [],
   );
   const setQty = useCallback(
-    (productId: string, quantity: number) => dispatch({ type: 'SET_QTY', productId, quantity }),
+    (cartLineId: string, quantity: number) => dispatch({ type: 'SET_QTY', cartLineId, quantity }),
     [],
   );
   const clearCart = useCallback(() => dispatch({ type: 'CLEAR' }), []);
+
   const getQty = useCallback(
     (productId: string) =>
-      state.items.find((i) => i.productId === productId)?.quantity ?? 0,
+      state.items
+        .filter(i => i.productId === productId)
+        .reduce((s, i) => s + i.quantity, 0),
     [state.items],
   );
 
+  const simpleLineId = useCallback(
+    (productId: string) => `${productId}:base`,
+    [],
+  );
+
   return (
-    <CartContext.Provider value={{ ...state, addItem, removeItem, setQty, clearCart, getQty }}>
+    <CartContext.Provider value={{ ...state, addItem, removeItem, setQty, clearCart, getQty, simpleLineId }}>
       {children}
     </CartContext.Provider>
   );

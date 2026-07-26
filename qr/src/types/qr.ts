@@ -1,13 +1,20 @@
 // QR-app-specific types — not shared with other apps.
+import type { SelectedModifier } from '@dinepos/shared/types';
+export type { SelectedModifier };
 
 // One item in the customer's in-memory cart
 export interface CartEntry {
-  productId: string;
-  name:      string;
-  price:     number;
-  quantity:  number;
-  isVeg:     boolean;
-  notes:     string;
+  cartLineId:         string;          // productId:variantId:optionIds — dedup key
+  productId:          string;
+  name:               string;
+  price:              number;          // effective unit price (variant/base)
+  modifierTotal:      number;          // sum of selected modifier prices per unit
+  quantity:           number;
+  isVeg:              boolean;
+  notes:              string;
+  variantId?:         string;
+  variantName?:       string;
+  selectedModifiers?: SelectedModifier[];
 }
 
 // Shape returned by POST /api/public/qr/session
@@ -23,12 +30,13 @@ export interface QrSessionConfig {
 
 // One item in an order returned by /bill
 export interface QrOrderLine {
-  productName: string;
-  quantity:    number;
-  price:       number;
-  taxPercent?: number;
-  taxAmount?:  number;
-  total:       number;
+  productName:         string;
+  quantity:            number;
+  price:               number;
+  taxPercent?:         number;
+  taxAmount?:          number;
+  total:               number;
+  selectedModifiers?:  SelectedModifier[];
 }
 
 // One order inside the bill response

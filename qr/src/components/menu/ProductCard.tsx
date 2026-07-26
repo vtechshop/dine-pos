@@ -9,7 +9,7 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, onClick }: ProductCardProps) {
-  const { addItem, removeItem, setQty, getQty } = useCart();
+  const { addItem, removeItem, setQty, getQty, simpleLineId } = useCart();
   const { hotel } = useMenu();
   const qty = getQty(product._id);
   const symbol = hotel?.currencySymbol ?? '₹';
@@ -19,14 +19,17 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
       ? product.isVeg
       : hotel?.businessType === 'veg';
 
+  const hasModifiers = (product.modifierGroups ?? []).length > 0;
+  const hasVariants  = (product.variants ?? []).length > 0;
+  const isComplex    = hasModifiers || hasVariants;
+
   function handleAdd(e: React.MouseEvent) {
     e.stopPropagation();
-    addItem({
-      productId: product._id,
-      name:      product.name,
-      price:     product.price,
-      isVeg,
-    });
+    if (isComplex) {
+      onClick(product);
+      return;
+    }
+    addItem({ productId: product._id, name: product.name, price: product.price, modifierTotal: 0, isVeg });
   }
 
   return (
@@ -44,19 +47,13 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
       )}
       <div className="p-3">
         <div className="flex items-start gap-2 mb-1">
-          {/* Veg/Non-veg indicator */}
           <span
             className={[
               'mt-0.5 w-3.5 h-3.5 border-2 rounded-sm flex-shrink-0 flex items-center justify-center',
               isVeg ? 'border-green-600' : 'border-red-600',
             ].join(' ')}
           >
-            <span
-              className={[
-                'w-1.5 h-1.5 rounded-full',
-                isVeg ? 'bg-green-600' : 'bg-red-600',
-              ].join(' ')}
-            />
+            <span className={['w-1.5 h-1.5 rounded-full', isVeg ? 'bg-green-600' : 'bg-red-600'].join(' ')} />
           </span>
           <p className="text-sm font-medium text-[#1C0800] leading-tight">{product.name}</p>
         </div>
@@ -74,15 +71,23 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
             >
               ADD
             </button>
+          ) : isComplex ? (
+            // For modifier products show qty badge; tapping opens detail sheet
+            <button
+              onClick={(e) => { e.stopPropagation(); onClick(product); }}
+              className="flex items-center gap-1.5 rounded-full border border-[#E8380D] px-3 py-1 text-xs font-semibold text-[#E8380D]"
+            >
+              {qty}× <span className="text-[10px]">Edit</span>
+            </button>
           ) : (
             <QuantityStepper
               quantity={qty}
               min={0}
               size="sm"
-              onIncrement={() => setQty(product._id, qty + 1)}
+              onIncrement={() => setQty(simpleLineId(product._id), qty + 1)}
               onDecrement={() => {
-                if (qty <= 1) removeItem(product._id);
-                else setQty(product._id, qty - 1);
+                if (qty <= 1) removeItem(simpleLineId(product._id));
+                else setQty(simpleLineId(product._id), qty - 1);
               }}
             />
           )}
