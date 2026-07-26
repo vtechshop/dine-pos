@@ -73,10 +73,10 @@ export function ContactPage() {
               <div>
                 <div className="text-sm font-semibold text-gray-700">Email</div>
                 <a
-                  href="mailto:support@dinepos.com"
+                  href="mailto:info@happya.in"
                   className="text-sm text-[#E8380D] hover:underline"
                 >
-                  support@dinepos.com
+                  info@happya.in
                 </a>
                 <div className="mt-0.5 text-xs text-gray-400">We reply within 24 hours</div>
               </div>
@@ -89,10 +89,10 @@ export function ContactPage() {
               <div>
                 <div className="text-sm font-semibold text-gray-700">Phone / WhatsApp</div>
                 <a
-                  href="tel:+919876543210"
+                  href="tel:+916381356683"
                   className="text-sm text-[#E8380D] hover:underline"
                 >
-                  +91 98765 43210
+                  +91 63813 56683
                 </a>
                 <div className="mt-0.5 text-xs text-gray-400">Mon – Sat, 9 AM – 7 PM IST</div>
               </div>
@@ -170,7 +170,7 @@ export function ContactPage() {
                     type="tel"
                     value={form.phone}
                     onChange={e => set('phone', e.target.value)}
-                    placeholder="+91 98765 43210"
+                    placeholder="+91 63813 56683"
                   />
                 </div>
                 <div>

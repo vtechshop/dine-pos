@@ -41,13 +41,13 @@ export function Footer() {
             <div className="space-y-2 text-sm text-gray-400">
               <div className="flex items-center gap-2">
                 <Mail size={14} className="text-[#E8380D]" />
-                <a href="mailto:support@dinepos.com" className="hover:text-white">
-                  support@dinepos.com
+                <a href="mailto:info@happya.in" className="hover:text-white">
+                  info@happya.in
                 </a>
               </div>
               <div className="flex items-center gap-2">
                 <Phone size={14} className="text-[#E8380D]" />
-                <span>+91 98765 43210</span>
+                <a href="tel:+916381356683" className="hover:text-white">+91 63813 56683</a>
               </div>
               <div className="flex items-center gap-2">
                 <MapPin size={14} className="text-[#E8380D]" />
