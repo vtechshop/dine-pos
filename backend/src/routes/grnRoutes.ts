@@ -4,6 +4,8 @@ import GRN from '../models/GRN';
 import PurchaseOrder from '../models/PurchaseOrder';
 import Ingredient from '../models/Ingredient';
 import DailyCounter from '../models/DailyCounter';
+import Vendor from '../models/Vendor';
+import VendorLedgerEntry from '../models/VendorLedgerEntry';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
@@ -252,8 +254,33 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       isDeleted:     false,
     });
 
-    // Fire inventory updates in parallel (non-blocking audit)
+    // Fire inventory updates in parallel
     await Promise.all(inventoryOps.map(fn => fn()));
+
+    // Vendor ledger: GRN increases outstanding (accepted qty × purchase price)
+    const grnValue = processedItems.reduce((sum, item) => {
+      const accepted = Math.max(0, (item.receivedQty as number) - (item.rejectedQty as number));
+      return sum + accepted * ((item.purchasePrice as number) || 0);
+    }, 0);
+
+    if (grnValue > 0) {
+      const updatedVendor = await Vendor.findByIdAndUpdate(
+        grn.vendorId,
+        { $inc: { currentOutstanding: grnValue } },
+        { new: true },
+      );
+      await VendorLedgerEntry.create({
+        hotelId:         req.hotelId,
+        vendorId:        grn.vendorId,
+        entryType:       'grn',
+        referenceId:     grn._id,
+        referenceNumber: grnNumber,
+        debit:           grnValue,
+        credit:          0,
+        runningBalance:  updatedVendor?.currentOutstanding ?? grnValue,
+        description:     `GRN ${grnNumber} received from ${po.vendorSnapshot.businessName}`,
+      });
+    }
 
     logAudit(req, 'grn.created', 'grn', String(grn._id), {
       grnNumber,
@@ -280,6 +307,29 @@ router.post('/:id/cancel', async (req: AuthRequest, res: Response) => {
     grn.status = 'cancelled';
     grn.cancelReason = String(req.body.reason || '');
     await grn.save();
+
+    // Reverse any ledger entry created for this GRN
+    const grnLedger = await VendorLedgerEntry.findOne({
+      hotelId: req.hotelId, referenceId: grn._id, entryType: 'grn',
+    });
+    if (grnLedger && grnLedger.debit > 0) {
+      const updatedVendor = await Vendor.findByIdAndUpdate(
+        grn.vendorId,
+        { $inc: { currentOutstanding: -grnLedger.debit } },
+        { new: true },
+      );
+      await VendorLedgerEntry.create({
+        hotelId:         req.hotelId,
+        vendorId:        grn.vendorId,
+        entryType:       'adjustment',
+        referenceId:     grn._id,
+        referenceNumber: grn.grnNumber,
+        debit:           0,
+        credit:          grnLedger.debit,
+        runningBalance:  updatedVendor?.currentOutstanding ?? 0,
+        description:     `GRN ${grn.grnNumber} cancelled`,
+      });
+    }
 
     logAudit(req, 'grn.cancelled', 'grn', String(grn._id), {
       grnNumber:    grn.grnNumber,

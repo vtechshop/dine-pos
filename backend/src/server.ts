@@ -55,6 +55,8 @@ import modifierRoutes from './routes/modifierRoutes';
 import vendorRoutes from './routes/vendorRoutes';
 import purchaseOrderRoutes from './routes/purchaseOrderRoutes';
 import grnRoutes from './routes/grnRoutes';
+import vendorPaymentRoutes from './routes/vendorPaymentRoutes';
+import vendorLedgerRoutes from './routes/vendorLedgerRoutes';
 import * as Sentry from '@sentry/node';
 import helmet from 'helmet';
 
@@ -279,9 +281,11 @@ app.use('/api/print-jobs', printRoutes);
 app.use('/api/inquiries', inquiryRoutes);
 app.use('/api/modifiers', _rl(60, 60_000));
 app.use('/api/modifiers', modifierRoutes);
-app.use('/api/vendors',          vendorRoutes);
-app.use('/api/purchase-orders',  purchaseOrderRoutes);
-app.use('/api/grn',              grnRoutes);
+app.use('/api/vendors',           vendorRoutes);
+app.use('/api/purchase-orders',   purchaseOrderRoutes);
+app.use('/api/grn',               grnRoutes);
+app.use('/api/vendor-payments',   vendorPaymentRoutes);
+app.use('/api/vendor-ledger',     vendorLedgerRoutes);
 
 // Enhanced health check — covers MongoDB, Redis, memory, uptime, version
 app.get('/api/health', async (_req, res) => {
