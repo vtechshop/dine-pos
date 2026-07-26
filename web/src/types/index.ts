@@ -456,6 +456,65 @@ export interface GRNReport {
   byMonth:  Array<{ _id: string; grnCount: number; totalReceived: number }>;
 }
 
+// ── Vendor Payments & Ledger ──────────────────────────────────────────────────
+
+export type VendorPaymentMethod = 'cash' | 'upi' | 'bank_transfer' | 'cheque' | 'card';
+export type LedgerEntryType =
+  | 'purchase' | 'grn' | 'payment' | 'debit_note'
+  | 'credit_note' | 'opening_balance' | 'adjustment';
+
+export interface VendorPayment {
+  _id:             string;
+  paymentNumber:   string;
+  vendorId:        string;
+  vendorSnapshot:  { businessName: string; vendorCode: string; mobile: string };
+  paymentDate:     string;
+  paymentMethod:   VendorPaymentMethod;
+  amount:          number;
+  referenceNumber: string;
+  notes:           string;
+  attachment:      string;
+  createdBy:       string;
+  approvedBy:      string;
+  isReversed:      boolean;
+  reversedBy:      string;
+  reversedAt:      string | null;
+  reversalReason:  string;
+  isDeleted:       boolean;
+  createdAt:       string;
+  updatedAt:       string;
+}
+
+export interface VendorLedgerEntry {
+  _id:             string;
+  hotelId:         string;
+  vendorId:        string;
+  entryType:       LedgerEntryType;
+  referenceId:     string | null;
+  referenceNumber: string;
+  debit:           number;
+  credit:          number;
+  runningBalance:  number;
+  description:     string;
+  createdAt:       string;
+  updatedAt:       string;
+}
+
+export interface VendorLedgerReport {
+  totalVendors:           number;
+  vendorsWithOutstanding: number;
+  totalOutstanding:       number;
+  paymentThisMonth:       number;
+  paymentCountThisMonth:  number;
+  outstandingVendors: Array<{
+    _id: string; businessName: string; vendorCode: string;
+    mobile: string; email: string; currentOutstanding: number;
+    creditLimit: number; paymentTerms: string;
+  }>;
+  recentPayments: VendorPayment[];
+  aging: { current: number; days31_60: number; days61_90: number; over90: number };
+}
+
 // ── Expenses ──────────────────────────────────────────────────────────────────
 
 export interface Expense {
