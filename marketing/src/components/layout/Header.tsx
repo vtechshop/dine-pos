@@ -42,6 +42,8 @@ export function Header() {
           <img
             src="/branding/logo-64.png"
             alt="Dine POS"
+            width={64}
+            height={64}
             className="h-9 w-9 rounded-xl object-contain"
           />
           <span className="text-base font-bold tracking-tight text-gray-900">

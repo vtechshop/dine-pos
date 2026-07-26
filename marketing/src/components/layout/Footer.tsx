@@ -28,6 +28,9 @@ export function Footer() {
               <img
                 src="/branding/logo-64.png"
                 alt="Dine POS"
+                width={64}
+                height={64}
+                loading="lazy"
                 className="h-9 w-9 rounded-xl object-contain"
               />
               <span className="text-lg font-bold text-white">
