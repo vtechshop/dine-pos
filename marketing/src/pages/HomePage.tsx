@@ -386,10 +386,12 @@ function ProductTour() {
         </div>
 
         {/* Tab buttons */}
-        <div className="mb-10 flex flex-wrap justify-center gap-2">
+        <div role="tablist" aria-label="Product tour" className="mb-10 flex flex-wrap justify-center gap-2">
           {TOURS.map((t, i) => (
             <button
               key={t.label}
+              role="tab"
+              aria-selected={active === i}
               onClick={() => setActive(i)}
               className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
                 active === i

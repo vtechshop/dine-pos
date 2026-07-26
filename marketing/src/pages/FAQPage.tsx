@@ -104,6 +104,7 @@ function Accordion({ items }: { items: FAQItem[] }) {
           <button
             className="flex w-full items-center justify-between gap-4 bg-white px-5 py-4 text-left text-sm font-semibold text-gray-800 hover:bg-gray-50"
             onClick={() => setOpen(open === i ? null : i)}
+            aria-expanded={open === i}
           >
             <span>{q}</span>
             <ChevronDown

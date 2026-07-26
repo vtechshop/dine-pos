@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
 const POS_LOGIN_URL = 'https://app.dinepos.com/login';
@@ -17,6 +17,7 @@ const NAV_LINKS = [
 export function Header() {
   const [scrolled, setScrolled]   = useState(false);
   const [menuOpen, setMenuOpen]   = useState(false);
+  const { pathname }              = useLocation();
 
   useEffect(() => {
     function onScroll() { setScrolled(window.scrollY > 16); }
@@ -25,7 +26,7 @@ export function Header() {
   }, []);
 
   // Close mobile menu on route change
-  useEffect(() => { setMenuOpen(false); }, []);
+  useEffect(() => { setMenuOpen(false); }, [pathname]);
 
   return (
     <header
@@ -89,6 +90,8 @@ export function Header() {
           className="ml-auto rounded-lg p-2 text-gray-600 hover:bg-gray-100 md:hidden"
           onClick={() => setMenuOpen(v => !v)}
           aria-label="Toggle menu"
+          aria-expanded={menuOpen}
+          aria-controls="mobile-menu"
         >
           {menuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
@@ -96,7 +99,7 @@ export function Header() {
 
       {/* Mobile menu */}
       {menuOpen && (
-        <div className="border-t border-gray-100 bg-white px-5 pb-4 md:hidden">
+        <div id="mobile-menu" className="border-t border-gray-100 bg-white px-5 pb-4 md:hidden">
           <nav className="flex flex-col gap-1 pt-2">
             {NAV_LINKS.map(({ to, label }) => (
               <NavLink
