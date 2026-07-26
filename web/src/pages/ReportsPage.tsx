@@ -10,6 +10,7 @@ import {
   Plus,
   Trash2,
   X,
+  Layers,
 } from 'lucide-react';
 import type {
   SalesReport,
@@ -18,6 +19,7 @@ import type {
   ExpensePnL,
   HourlyBucket,
   DatePreset,
+  ModifierReport,
 } from '../types/reports';
 import type { Expense } from '../types';
 import {
@@ -28,6 +30,7 @@ import {
   fetchGSTR1JSON,
   fetchExpensePnL,
   fetchOrdersForHourly,
+  fetchModifierReport,
 } from '../api/reports';
 import {
   fetchExpenses as apiFetchExpenses,
@@ -40,7 +43,7 @@ import { useSettings } from '../context/SettingsContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'products' | 'gst' | 'expenses';
+type Tab = 'overview' | 'products' | 'gst' | 'expenses' | 'modifiers';
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -331,6 +334,12 @@ export function ReportsPage() {
     notes:       '',
   });
 
+  // ── Modifiers state ─────────────────────────────────────────────────────────
+
+  const [modifiers, setModifiers]       = useState<ModifierReport | null>(null);
+  const [modLoading, setModLoading]     = useState(false);
+  const [modError, setModError]         = useState<string | null>(null);
+
   // ── Load overview ───────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -453,6 +462,28 @@ export function ReportsPage() {
     return () => { cancelled = true; };
   }, [tab, expenseDate]);
 
+  // ── Load modifiers ──────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (tab !== 'modifiers') return;
+    let cancelled = false;
+    setModLoading(true);
+    setModError(null);
+
+    void (async () => {
+      try {
+        const data = await fetchModifierReport(from, to);
+        if (!cancelled) setModifiers(data);
+      } catch (e) {
+        if (!cancelled) setModError(e instanceof Error ? e.message : 'Failed to load');
+      } finally {
+        if (!cancelled) setModLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [tab, from, to]);
+
   // ── Expense create / delete ─────────────────────────────────────────────────
 
   const reloadExpenses = useCallback(async (date: string) => {
@@ -556,6 +587,22 @@ export function ReportsPage() {
     );
   }, [pnl, expenseDate]);
 
+  const exportModifiersCSV = useCallback(() => {
+    if (!modifiers) return;
+    downloadCSV(`modifiers-${from}-${to}.csv`,
+      ['Modifier Option', 'Group', 'Qty Sold', 'Revenue', 'Orders'],
+      [modifiers.topModifiers.map(m => [
+        m.modifierOptionName,
+        modifiers.groupRevenue.find(g =>
+          modifiers.topModifiers.some(tm => tm.modifierOptionId === m.modifierOptionId)
+        )?.modifierGroupName ?? '',
+        m.totalQuantity,
+        m.totalRevenue,
+        m.orderCount,
+      ])],
+    );
+  }, [modifiers, from, to]);
+
   // ── Current tab CSV handler ─────────────────────────────────────────────────
 
   const handleCSV = () => {
@@ -563,6 +610,7 @@ export function ReportsPage() {
     if (tab === 'products')  exportProductsCSV();
     if (tab === 'gst')       exportGSTCSV();
     if (tab === 'expenses')  exportExpensesCSV();
+    if (tab === 'modifiers') exportModifiersCSV();
   };
 
   // ── Hourly chart data (trim to 7–22) ────────────────────────────────────────
@@ -577,10 +625,11 @@ export function ReportsPage() {
   // ── Tabs config ─────────────────────────────────────────────────────────────
 
   const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
-    { id: 'overview',  label: 'Overview',  icon: <BarChart2 size={12} />  },
-    { id: 'products',  label: 'Products',  icon: <Package size={12} />    },
-    { id: 'gst',       label: 'GST / Tax', icon: <FileText size={12} />   },
+    { id: 'overview',  label: 'Overview',  icon: <BarChart2 size={12} />    },
+    { id: 'products',  label: 'Products',  icon: <Package size={12} />      },
+    { id: 'gst',       label: 'GST / Tax', icon: <FileText size={12} />     },
     { id: 'expenses',  label: 'Expenses',  icon: <TrendingDown size={12} /> },
+    { id: 'modifiers', label: 'Modifiers', icon: <Layers size={12} />       },
   ];
 
   const PRESETS: Array<{ id: DatePreset; label: string }> = [
@@ -634,8 +683,8 @@ export function ReportsPage() {
           </div>
         </div>
 
-        {/* Date range bar — shown for overview and gst tabs */}
-        {(tab === 'overview' || tab === 'gst') && (
+        {/* Date range bar — shown for overview, gst, and modifiers tabs */}
+        {(tab === 'overview' || tab === 'gst' || tab === 'modifiers') && (
           <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5">
             {PRESETS.map(p => (
               <button
@@ -1192,6 +1241,139 @@ export function ReportsPage() {
                 ) : null}
               </>
             )}
+          </div>
+        )}
+
+        {/* ════════════════ MODIFIERS TAB ════════════════ */}
+        {tab === 'modifiers' && (
+          <div className="p-5 space-y-5">
+            {modError && (
+              <div className="rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
+                {modError}
+              </div>
+            )}
+
+            {modLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Spinner size="lg" />
+              </div>
+            ) : modifiers ? (
+              <>
+                {/* KPI row */}
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  <KPICard
+                    label="Modifier Revenue"
+                    value={fmtCur(modifiers.totalModifierRevenue, sym)}
+                    sub="From add-ons"
+                    accent
+                  />
+                  <KPICard
+                    label="Orders with Add-ons"
+                    value={String(modifiers.totalModifierOrders)}
+                    sub="Had modifiers"
+                  />
+                  <KPICard
+                    label="Top Modifier Groups"
+                    value={String(modifiers.groupRevenue.length)}
+                    sub="Active groups"
+                  />
+                  <KPICard
+                    label="Unique Add-ons"
+                    value={String(modifiers.topModifiers.length)}
+                    sub="Options ordered"
+                  />
+                </div>
+
+                {/* Top modifiers horizontal bar chart */}
+                {modifiers.topModifiers.length > 0 && (
+                  <Card>
+                    <SectionHead
+                      title="Top Modifier Options by Revenue"
+                      action={
+                        <button
+                          onClick={exportModifiersCSV}
+                          className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5"
+                        >
+                          <Download size={11} />
+                          CSV
+                        </button>
+                      }
+                    />
+                    <HorizBars
+                      sym={sym}
+                      data={modifiers.topModifiers.slice(0, 10).map(m => ({
+                        label: m.modifierOptionName,
+                        value: m.totalRevenue,
+                        sub:   `${m.totalQuantity} sold`,
+                      }))}
+                    />
+                  </Card>
+                )}
+
+                {/* Group revenue breakdown */}
+                {modifiers.groupRevenue.length > 0 && (
+                  <Card>
+                    <SectionHead title="Revenue by Modifier Group" />
+                    <HorizBars
+                      sym={sym}
+                      data={modifiers.groupRevenue.map(g => ({
+                        label: g.modifierGroupName,
+                        value: g.totalRevenue,
+                        sub:   `${g.totalQuantity} sold`,
+                      }))}
+                    />
+                  </Card>
+                )}
+
+                {/* Full modifier options table */}
+                {modifiers.topModifiers.length > 0 && (
+                  <Card className="overflow-hidden !p-0">
+                    <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                      <h3 className="text-sm font-semibold text-ink">
+                        Modifier Options — {isSingleDay ? fmtDisplayDate(from) : `${fmtDisplayDate(from)} – ${fmtDisplayDate(to)}`}
+                      </h3>
+                      <span className="text-xs text-ink/40">
+                        {modifiers.topModifiers.length} options
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-mist">
+                            <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">#</th>
+                            <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">Option</th>
+                            <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Qty</th>
+                            <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Orders</th>
+                            <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Revenue</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {modifiers.topModifiers.map((m, i) => (
+                            <tr key={m.modifierOptionId} className="hover:bg-mist">
+                              <td className="px-5 py-2.5 text-xs tabular-nums text-ink/30">{i + 1}</td>
+                              <td className="px-5 py-2.5 text-sm text-ink">{m.modifierOptionName}</td>
+                              <td className="px-5 py-2.5 text-right text-sm tabular-nums text-ink">{m.totalQuantity}</td>
+                              <td className="px-5 py-2.5 text-right text-sm tabular-nums text-ink/60">{m.orderCount}</td>
+                              <td className="px-5 py-2.5 text-right text-sm font-semibold tabular-nums text-ink">
+                                {fmtCur(m.totalRevenue, sym)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                )}
+
+                {modifiers.topModifiers.length === 0 && (
+                  <div className="flex h-48 flex-col items-center justify-center text-center">
+                    <Layers size={36} className="mb-3 text-ink/10" />
+                    <p className="text-sm text-ink/40">No modifier orders in this period</p>
+                    <p className="mt-1 text-xs text-ink/25">Try a wider date range.</p>
+                  </div>
+                )}
+              </>
+            ) : null}
           </div>
         )}
       </div>

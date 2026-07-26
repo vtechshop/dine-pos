@@ -5,6 +5,7 @@ import type {
   GSTReport,
   ExpensePnL,
   TallyReport,
+  ModifierReport,
 } from '../types/reports';
 
 function qs(params: Record<string, string>): string {
@@ -42,4 +43,8 @@ export async function fetchOrdersForHourly(
   date: string,
 ): Promise<{ orders: Array<{ grandTotal: number; createdAt: string }> }> {
   return apiFetch(`/orders?date=${date}&limit=200`);
+}
+
+export async function fetchModifierReport(from: string, to: string): Promise<ModifierReport> {
+  return apiFetch(`/reports/modifiers?${qs({ from, to })}`);
 }

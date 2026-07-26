@@ -87,6 +87,30 @@ export interface HourlyBucket {
   revenue: number;
 }
 
+export interface ModifierTopRow {
+  modifierOptionId:   string;
+  modifierOptionName: string;
+  totalQuantity:      number;
+  totalRevenue:       number;
+  orderCount:         number;
+}
+
+export interface ModifierGroupRow {
+  modifierGroupId:   string;
+  modifierGroupName: string;
+  totalRevenue:      number;
+  totalQuantity:     number;
+}
+
+export interface ModifierReport {
+  from:                 string;
+  to:                   string;
+  topModifiers:         ModifierTopRow[];
+  groupRevenue:         ModifierGroupRow[];
+  totalModifierRevenue: number;
+  totalModifierOrders:  number;
+}
+
 export type DatePreset =
   | 'today'
   | 'yesterday'
