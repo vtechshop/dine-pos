@@ -137,6 +137,16 @@ if (!process.env.NODE_ENV) {
   logger.warn('NODE_ENV is not set — running in development mode');
 }
 
+const PAYMENT_ENC_KEY = process.env.PAYMENT_ENCRYPTION_KEY;
+if (PAYMENT_ENC_KEY !== undefined && PAYMENT_ENC_KEY.length !== 64) {
+  logger.error('FATAL: PAYMENT_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes). Generate with: openssl rand -hex 32');
+  process.exit(1);
+}
+if (process.env.NODE_ENV === 'production' && !PAYMENT_ENC_KEY) {
+  logger.error('FATAL: PAYMENT_ENCRYPTION_KEY is not set in production. All payment gateway operations will fail at runtime. Generate with: openssl rand -hex 32');
+  process.exit(1);
+}
+
 if (process.env.NODE_ENV === 'production' && !process.env.ALLOWED_ORIGINS?.trim()) {
   logger.error('FATAL: ALLOWED_ORIGINS must be set in production. Add comma-separated list of allowed origins to your environment.');
   process.exit(1);

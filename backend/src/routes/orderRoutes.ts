@@ -393,8 +393,9 @@ router.get('/customers', requireAdmin, async (req: AuthRequest, res: Response) =
         firstOrderDate: { $min: '$createdAt' },
       }},
       { $sort: { lastOrderDate: -1 } },
+      { $limit: 500 },
       { $project: { _id: 0, phone: '$_id', customerName: 1, totalOrders: 1, totalSpent: 1, lastOrderDate: 1, firstOrderDate: 1 } },
-    ]);
+    ]).option({ maxTimeMS: 30_000 });
 
     res.json({ customers, total: customers.length });
   } catch (error) {

@@ -298,16 +298,20 @@ router.get('/:sessionId/bill', requireCashierOrAdmin, async (req: AuthRequest, r
 
     const guests = await Guest.find({ sessionId: session._id }).sort({ guestNumber: 1 });
 
-    // Fetch each guest's orders; queries are parallel for speed
-    const guestBills = await Promise.all(
-      guests.map(async (guest) => {
-        const orders = await Order.find({
-          guestId: guest._id,
-          hotelId: req.hotelId,
-        }).sort({ createdAt: 1 });
-        return { guest, orders };
-      })
-    );
+    // Single batched query replaces one Order.find() per guest (N+1 → 1)
+    const guestIds   = guests.map(g => g._id);
+    const allOrders  = await Order.find({ guestId: { $in: guestIds }, hotelId: req.hotelId })
+      .sort({ createdAt: 1 }).lean();
+    const ordersByGuest = new Map<string, typeof allOrders>();
+    for (const order of allOrders) {
+      const key = String(order.guestId);
+      if (!ordersByGuest.has(key)) ordersByGuest.set(key, []);
+      ordersByGuest.get(key)!.push(order);
+    }
+    const guestBills = guests.map(guest => ({
+      guest,
+      orders: ordersByGuest.get(String(guest._id)) ?? [],
+    }));
 
     // Grand total = sum of active (unbilled) guests only
     const grandTotal = guests
