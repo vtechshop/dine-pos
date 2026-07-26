@@ -7,37 +7,37 @@ const UPCOMING_POSTS = [
     title:   'How to reduce billing errors in your restaurant',
     excerpt: 'Manual billing causes 1 in 5 disputes at Indian restaurants. Here is how a digital POS eliminates them entirely.',
     tag:     'Tips & Tricks',
-    slug:    '#newsletter',
+    slug:    '/contact',
   },
   {
     title:   'GST on restaurant bills — what every owner needs to know',
     excerpt: 'CGST, SGST, dine-in vs takeaway — we break down exactly how GST applies to restaurant billing in India.',
     tag:     'Compliance',
-    slug:    '#newsletter',
+    slug:    '/contact',
   },
   {
     title:   'Kitchen printing 101: types, setup, and troubleshooting',
     excerpt: 'USB, Bluetooth, or LAN? 58mm or 80mm? Everything you need to know before buying a thermal printer.',
     tag:     'Hardware',
-    slug:    '#newsletter',
+    slug:    '/contact',
   },
   {
     title:   'Why your restaurant needs a loyalty program (and how to start one)',
     excerpt: 'Repeat customers spend 67% more than new ones. Here is how a simple points system can transform your revenue.',
     tag:     'Growth',
-    slug:    '#newsletter',
+    slug:    '/contact',
   },
   {
     title:   'How to train your staff on a new POS in one shift',
     excerpt: 'A structured 30-minute training plan that gets new waiters and cashiers confident on day one.',
     tag:     'Operations',
-    slug:    '#newsletter',
+    slug:    '/contact',
   },
   {
     title:   'Table management best practices for busy restaurants',
     excerpt: 'From table assignment to bill splitting — the habits that keep your floor moving during a rush.',
     tag:     'Operations',
-    slug:    '#newsletter',
+    slug:    '/contact',
   },
 ];
 
@@ -90,44 +90,30 @@ export function BlogPage() {
                 </div>
                 <h2 className="mb-2 font-bold text-gray-900 leading-snug">{title}</h2>
                 <p className="flex-1 text-sm leading-relaxed text-gray-500">{excerpt}</p>
-                <a
-                  href={slug}
+                <Link
+                  to={slug}
                   className="mt-4 inline-flex items-center text-sm font-semibold text-[#E8380D] hover:underline"
                 >
-                  Subscribe to read →
-                </a>
+                  Get in touch →
+                </Link>
               </div>
             </article>
           ))}
         </div>
       </section>
 
-      {/* Newsletter signup */}
-      <section id="newsletter" className="border-t border-gray-100 bg-[#FFF6EE] px-5 py-16 text-center">
-        <h2 className="mb-3 text-2xl font-bold text-gray-900">Get notified when we publish</h2>
-        <p className="mb-6 text-gray-500 text-sm">No spam. One email per article, unsubscribe any time.</p>
-        <form
-          className="mx-auto flex max-w-sm gap-2"
-          onSubmit={e => e.preventDefault()}
-        >
-          <input
-            type="email"
-            placeholder="your@email.com"
-            className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#E8380D] focus:ring-2 focus:ring-[#E8380D]/10"
-          />
-          <button
-            type="submit"
-            className="rounded-xl bg-[#E8380D] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#C93008]"
-          >
-            Notify me
-          </button>
-        </form>
-        <p className="mt-6 text-sm text-gray-500">
-          Meanwhile, have a question?{' '}
-          <Link to="/contact" className="font-semibold text-[#E8380D] hover:underline">
-            Contact us
-          </Link>.
+      {/* Contact CTA */}
+      <section className="border-t border-gray-100 bg-[#FFF6EE] px-5 py-16 text-center">
+        <h2 className="mb-3 text-2xl font-bold text-gray-900">Have a question or topic request?</h2>
+        <p className="mb-6 text-sm text-gray-500">
+          We'd love to hear from restaurant owners. Tell us what you want us to write about.
         </p>
+        <Link
+          to="/contact"
+          className="inline-block rounded-xl bg-[#E8380D] px-8 py-3 text-sm font-semibold text-white hover:bg-[#C93008] transition-colors"
+        >
+          Get in Touch
+        </Link>
       </section>
     </div>
   );
