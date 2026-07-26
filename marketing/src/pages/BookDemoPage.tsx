@@ -156,6 +156,9 @@ export function BookDemoPage() {
                     value={form.name}
                     onChange={e => set('name', e.target.value)}
                     placeholder="Rajesh Kumar"
+                    autoComplete="name"
+                    required
+                    aria-required="true"
                   />
                 </div>
                 <div>
@@ -169,6 +172,9 @@ export function BookDemoPage() {
                     value={form.email}
                     onChange={e => set('email', e.target.value)}
                     placeholder="you@restaurant.com"
+                    autoComplete="email"
+                    required
+                    aria-required="true"
                   />
                 </div>
               </div>
@@ -185,6 +191,9 @@ export function BookDemoPage() {
                     value={form.phone}
                     onChange={e => set('phone', e.target.value)}
                     placeholder="+91 63813 56683"
+                    autoComplete="tel"
+                    required
+                    aria-required="true"
                   />
                 </div>
                 <div>

@@ -6,7 +6,7 @@ import {
   ChevronRight, CheckCircle2, Star, Check,
   Utensils, Coffee, Cake, Flame, Truck, Wine,
   UtensilsCrossed, Building, ShoppingBag, IceCream, ChefHat,
-  Monitor, TrendingUp, Globe, Shield, Users, Clock,
+  Monitor, TrendingUp, Globe, Shield, Users,
   BarChart3, ArrowRight,
 } from 'lucide-react';
 
@@ -674,18 +674,21 @@ function ROICalculator() {
     label: string; value: number; min: number; max: number; step: number; unit: string;
     onChange: (v: number) => void;
   }) {
+    const id = `roi-${label.toLowerCase().replace(/\s+/g, '-')}`;
     return (
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="font-medium text-gray-700">{label}</span>
-          <span className="font-bold text-[#E8380D]">{unit}{value.toLocaleString('en-IN')}</span>
+          <label htmlFor={id} className="font-medium text-gray-700">{label}</label>
+          <span className="font-bold text-[#E8380D]" aria-live="polite">{unit}{value.toLocaleString('en-IN')}</span>
         </div>
         <input
+          id={id}
           type="range" min={min} max={max} step={step} value={value}
           onChange={e => onChange(Number(e.target.value))}
           className="w-full accent-[#E8380D]"
+          aria-label={label}
         />
-        <div className="flex justify-between text-xs text-gray-400">
+        <div className="flex justify-between text-xs text-gray-400" aria-hidden="true">
           <span>{unit}{min}</span><span>{unit}{max}</span>
         </div>
       </div>
