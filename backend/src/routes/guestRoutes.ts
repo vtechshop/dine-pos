@@ -255,9 +255,22 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         updateFields['splitDetails.card'] = splitDetails.card ?? 0;
       }
 
-      // [Phase 6] Loyalty redemption — atomically deduct points before saving bill.
-      // Guard against double-billing race: if points were already deducted in a prior
-      // concurrent request that lost the guest update race, skip redemption here.
+      // H-07: atomic guard runs FIRST — before any loyalty deduction.
+      // Two concurrent billing requests both pass the status:'active' pre-check above,
+      // but only one can win this findOneAndUpdate. The loser gets null and returns 409
+      // before touching loyalty points, eliminating the double-deduction race.
+      const updated = await Guest.findOneAndUpdate(
+        { _id: guest._id, status: 'active' },
+        { $set: updateFields },
+        { new: true, runValidators: true },
+      );
+      if (!updated) {
+        res.status(409).json({ message: 'Guest has already been billed. Refresh to see the latest status.' });
+        return;
+      }
+
+      // [Phase 6] Loyalty redemption — runs AFTER the atomic guard so only the
+      // request that won the findOneAndUpdate can deduct points.
       if (redeemPoints && typeof redeemPoints === 'number' && redeemPoints > 0 && guest.customerId && !guest.loyaltyPointsRedeemed) {
         try {
           const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
@@ -280,6 +293,13 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
               );
               updateFields.loyaltyPointsRedeemed = toRedeem;
               updateFields.loyaltyDiscountAmount  = discount;
+              // Persist loyalty fields back to the already-updated guest document
+              await Guest.findByIdAndUpdate(updated._id, {
+                $set: {
+                  loyaltyPointsRedeemed: toRedeem,
+                  loyaltyDiscountAmount:  discount,
+                },
+              });
             }
           }
         } catch (loyaltyErr: any) {
@@ -289,19 +309,6 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
             error: loyaltyErr?.message,
           });
         }
-      }
-
-      // H-07: atomic guard — the filter includes status:'active' so that two
-      // concurrent billing requests for the same guest can only produce one
-      // successful write. The second request gets null back and returns 409.
-      const updated = await Guest.findOneAndUpdate(
-        { _id: guest._id, status: 'active' },
-        { $set: updateFields },
-        { new: true, runValidators: true },
-      );
-      if (!updated) {
-        res.status(409).json({ message: 'Guest has already been billed. Refresh to see the latest status.' });
-        return;
       }
 
       // [Phase 4] fire-and-forget lifetimeSpend; [Phase 6] fire-and-forget earn points

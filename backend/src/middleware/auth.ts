@@ -74,7 +74,9 @@ export async function resolveHotelStatus(hotelId: string): Promise<StatusEntry> 
     .lean();
 
   if (!hotel) {
-    return { status: 'not_found', expiresAt: now + STATUS_TTL_MS, hotelName: '', expiredOn: null, subscriptionType: 'trial' };
+    const entry: StatusEntry = { status: 'not_found', expiresAt: now + STATUS_TTL_MS, hotelName: '', expiredOn: null, subscriptionType: 'trial' };
+    await setCachedStatus(hotelId, entry);
+    return entry;
   }
 
   const h = hotel as any;
