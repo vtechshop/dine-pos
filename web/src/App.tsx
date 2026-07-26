@@ -62,6 +62,7 @@ const OnlineOrdersPage = lazy(() => import('./pages/OnlineOrdersPage').then(m =>
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })));
 const MenuSyncPage          = lazy(() => import('./pages/MenuSyncPage').then(m => ({ default: m.MenuSyncPage })));
 const ModifierGroupsPage    = lazy(() => import('./pages/ModifierGroupsPage').then(m => ({ default: m.ModifierGroupsPage })));
+const VendorsPage           = lazy(() => import('./pages/VendorsPage').then(m => ({ default: m.VendorsPage })));
 
 function PageFallback() {
   return (
@@ -156,6 +157,7 @@ export function App() {
                     <Route path="/integrations"  element={<AdminOnly><Suspense fallback={<PageFallback />}><IntegrationsPage /></Suspense></AdminOnly>} />
                     <Route path="/menu-sync"     element={<AdminOnly><Suspense fallback={<PageFallback />}><MenuSyncPage /></Suspense></AdminOnly>} />
                     <Route path="/modifiers"     element={<AdminOnly><Suspense fallback={<PageFallback />}><ModifierGroupsPage /></Suspense></AdminOnly>} />
+                    <Route path="/vendors"       element={<AdminOnly><Suspense fallback={<PageFallback />}><VendorsPage /></Suspense></AdminOnly>} />
 
                     <Route path="/waiter"  element={<Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />

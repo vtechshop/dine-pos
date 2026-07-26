@@ -15,6 +15,7 @@ import {
   Link2,
   RefreshCw,
   Layers,
+  Store,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -45,6 +46,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/customers',    icon: Users,           label: 'Customers', hint: 'F4' },
       { to: '/products',     icon: Package,         label: 'Products' },
       { to: '/modifiers',    icon: Layers,          label: 'Modifiers' },
+      { to: '/vendors',      icon: Store,           label: 'Vendors' },
       { to: '/inventory',    icon: Archive,         label: 'Inventory' },
       { to: '/reports',      icon: BarChart2,       label: 'Reports' },
       { to: '/settings',     icon: Settings,        label: 'Settings' },
@@ -66,7 +68,7 @@ const NAV_GROUPS: NavGroup[] = [
 
 // Routes visible only to the admin role
 const ADMIN_ONLY_ROUTES = new Set([
-  '/orders', '/customers', '/products', '/modifiers', '/inventory',
+  '/orders', '/customers', '/products', '/modifiers', '/vendors', '/inventory',
   '/reports', '/settings', '/reservations',
   '/online-orders', '/integrations', '/menu-sync',
 ]);

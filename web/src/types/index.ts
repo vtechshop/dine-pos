@@ -269,6 +269,53 @@ export interface PrinterDeviceStatus {
   lastSeen: string | null;
 }
 
+// ── Vendors ───────────────────────────────────────────────────────────────────
+
+export type PaymentTerms = 'immediate' | 'net15' | 'net30' | 'net45' | 'net60' | 'custom';
+
+export interface Vendor {
+  _id:                string;
+  vendorCode:         string;
+  businessName:       string;
+  contactPerson:      string;
+  mobile:             string;
+  alternateMobile:    string;
+  email:              string;
+  gstNumber:          string;
+  pan:                string;
+  address:            string;
+  city:               string;
+  state:              string;
+  pincode:            string;
+  paymentTerms:       PaymentTerms;
+  creditLimit:        number;
+  openingBalance:     number;
+  currentOutstanding: number;
+  notes:              string;
+  isActive:           boolean;
+  isDeleted:          boolean;
+  createdBy:          string;
+  updatedBy:          string;
+  createdAt:          string;
+  updatedAt:          string;
+}
+
+export interface VendorReport {
+  totalVendors:     number;
+  activeVendors:    number;
+  inactiveVendors:  number;
+  totalOutstanding: number;
+  totalCreditLimit: number;
+  topVendors: Array<{
+    _id:                string;
+    businessName:       string;
+    vendorCode:         string;
+    currentOutstanding: number;
+    mobile:             string;
+    creditLimit:        number;
+  }>;
+}
+
 // ── Expenses ──────────────────────────────────────────────────────────────────
 
 export interface Expense {
