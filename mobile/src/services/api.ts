@@ -1777,6 +1777,82 @@ export const updateVendor = (id: string, data: Partial<VendorInput>): Promise<Ve
 export const deleteVendor = (id: string): Promise<void> =>
   fetchAPI(`/vendors/${id}`, { method: 'DELETE' });
 
+// ── Purchase Orders ───────────────────────────────────────────────────────────
+
+import type { PurchaseOrder } from '../types';
+
+export interface POItemInput {
+  productId?:   string;
+  productName:  string;
+  variantId?:   string;
+  variantName?: string;
+  orderedQty:   number;
+  receivedQty?: number;
+  unit:         string;
+  unitPrice:    number;
+  discount?:    number;
+  taxPercent?:  number;
+  notes?:       string;
+}
+
+export interface POInput {
+  vendorId:              string;
+  status?:               string;
+  orderDate?:            string;
+  expectedDeliveryDate?: string;
+  currency?:             string;
+  notes?:                string;
+  items:                 POItemInput[];
+  discount?:             number;
+  tax?:                  number;
+  shipping?:             number;
+}
+
+function poQS(params?: Record<string, string | number | undefined>): string {
+  if (!params) return '';
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') q.set(k, String(v));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+export const getPurchaseOrders = (params?: {
+  search?: string; status?: string; vendorId?: string;
+  from?: string; to?: string; limit?: number; skip?: number;
+}): Promise<{ purchaseOrders: PurchaseOrder[]; total: number }> =>
+  fetchAPI(`/purchase-orders${poQS(params as Record<string, string | number | undefined>)}`);
+
+export const getPurchaseOrder = (id: string): Promise<PurchaseOrder> =>
+  fetchAPI<PurchaseOrder>(`/purchase-orders/${id}`);
+
+export const createPurchaseOrder = (data: POInput): Promise<PurchaseOrder> =>
+  fetchAPI<PurchaseOrder>('/purchase-orders', { method: 'POST', body: JSON.stringify(data) });
+
+export const updatePurchaseOrder = (id: string, data: Partial<POInput>): Promise<PurchaseOrder> =>
+  fetchAPI<PurchaseOrder>(`/purchase-orders/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const deletePurchaseOrder = (id: string): Promise<void> =>
+  fetchAPI(`/purchase-orders/${id}`, { method: 'DELETE' });
+
+export const submitPurchaseOrder = (id: string): Promise<PurchaseOrder> =>
+  fetchAPI<PurchaseOrder>(`/purchase-orders/${id}/submit`, { method: 'POST' });
+
+export const approvePurchaseOrder = (id: string): Promise<PurchaseOrder> =>
+  fetchAPI<PurchaseOrder>(`/purchase-orders/${id}/approve`, { method: 'POST' });
+
+export const sendPurchaseOrder = (id: string): Promise<PurchaseOrder> =>
+  fetchAPI<PurchaseOrder>(`/purchase-orders/${id}/send`, { method: 'POST' });
+
+export const cancelPurchaseOrder = (id: string, reason: string): Promise<PurchaseOrder> =>
+  fetchAPI<PurchaseOrder>(`/purchase-orders/${id}/cancel`, {
+    method: 'POST', body: JSON.stringify({ reason }),
+  });
+
+export const duplicatePurchaseOrder = (id: string): Promise<PurchaseOrder> =>
+  fetchAPI<PurchaseOrder>(`/purchase-orders/${id}/duplicate`, { method: 'POST' });
+
 // ── SA Push Token Registration ────────────────────────────────────────────────
 
 export const registerSAPushToken = (

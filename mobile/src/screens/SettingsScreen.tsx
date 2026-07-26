@@ -1050,10 +1050,12 @@ const SettingsScreen: React.FC = () => {
           <Text style={styles.sectionHeader}>Restaurant Tools</Text>
           <View style={styles.section}>
             {[
-              { label: 'Table Layout', sub: 'Manage floor map & table status', icon: 'table-restaurant' as const, nav: 'TableLayout' as const },
-              { label: 'Reservations', sub: 'View & manage table bookings', icon: 'event-available' as const, nav: 'Reservations' as const },
-              { label: 'Expenses & P&L', sub: 'Track costs and profit/loss', icon: 'account-balance-wallet' as const, nav: 'Expenses' as const },
-              { label: 'QR Ordering Menu', sub: 'Generate QR codes for tables', icon: 'qr-code' as const, nav: 'QRMenu' as const },
+              { label: 'Table Layout',      sub: 'Manage floor map & table status',    icon: 'table-restaurant'      as const, nav: 'TableLayout'     as const },
+              { label: 'Reservations',      sub: 'View & manage table bookings',       icon: 'event-available'       as const, nav: 'Reservations'    as const },
+              { label: 'Expenses & P&L',    sub: 'Track costs and profit/loss',        icon: 'account-balance-wallet' as const, nav: 'Expenses'       as const },
+              { label: 'QR Ordering Menu',  sub: 'Generate QR codes for tables',       icon: 'qr-code'               as const, nav: 'QRMenu'          as const },
+              { label: 'Vendors',           sub: 'Manage suppliers & outstanding',     icon: 'store'                 as const, nav: 'Vendors'         as const },
+              { label: 'Purchase Orders',   sub: 'Create and track POs',              icon: 'shopping-bag'           as const, nav: 'PurchaseOrders'  as const },
             ].map((item) => (
               <TouchableOpacity
                 key={item.nav}

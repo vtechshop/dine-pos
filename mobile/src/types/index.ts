@@ -600,6 +600,63 @@ export interface Vendor {
   updatedAt:          string;
 }
 
+// Purchase Orders
+export type POStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'approved'
+  | 'sent'
+  | 'partially_received'
+  | 'received'
+  | 'cancelled';
+
+export interface POItem {
+  _id?:        string;
+  productId?:  string;
+  productName: string;
+  variantId?:  string;
+  variantName?: string;
+  orderedQty:  number;
+  receivedQty: number;
+  unit:        string;
+  unitPrice:   number;
+  discount:    number;
+  taxPercent:  number;
+  lineTotal:   number;
+  notes?:      string;
+}
+
+export interface PurchaseOrder {
+  _id:          string;
+  poNumber:     string;
+  vendorId:     string;
+  vendorSnapshot: {
+    businessName: string;
+    vendorCode:   string;
+    mobile:       string;
+    gstNumber:    string;
+  };
+  status:               POStatus;
+  orderDate:            string;
+  expectedDeliveryDate: string | null;
+  currency:             string;
+  notes:                string;
+  items:                POItem[];
+  subtotal:             number;
+  taxTotal:             number;
+  discount:             number;
+  tax:                  number;
+  shipping:             number;
+  total:                number;
+  createdBy:            string;
+  approvedBy:           string;
+  approvedAt:           string | null;
+  cancelReason:         string;
+  isDeleted:            boolean;
+  createdAt:            string;
+  updatedAt:            string;
+}
+
 export type RootStackParamList = {
   Splash: undefined;
   RoleSelect: undefined;
@@ -642,6 +699,7 @@ export type RootStackParamList = {
   Notifications: undefined;
   AggregatorConfig: undefined;
   Vendors: undefined;
+  PurchaseOrders: undefined;
 };
 
 export type TabParamList = {
