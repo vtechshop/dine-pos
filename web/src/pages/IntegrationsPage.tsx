@@ -574,6 +574,7 @@ export function IntegrationsPage() {
   }
 
   return (
+    <div className="h-full overflow-y-auto">
     <div className="mx-auto max-w-5xl space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -613,6 +614,7 @@ export function IntegrationsPage() {
       />
 
       <ToastList toasts={toasts} />
+    </div>
     </div>
   );
 }
