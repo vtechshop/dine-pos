@@ -21,6 +21,40 @@ export interface ProductVariant {
   price: number;
 }
 
+// Modifier option (e.g. Extra Cheese ₹40)
+export interface ModifierOption {
+  _id:          string;
+  name:         string;
+  price:        number;
+  sku?:         string;
+  isActive:     boolean;
+  displayOrder: number;
+}
+
+// Modifier group (e.g. Add-ons, Spice Level)
+export interface ModifierGroup {
+  _id:           string;
+  name:          string;
+  description?:  string;
+  isActive:      boolean;
+  displayOrder:  number;
+  isRequired:    boolean;
+  selectionType: 'single' | 'multi';
+  minSelections: number;
+  maxSelections: number;
+  options:       ModifierOption[];
+}
+
+// Selected modifier stored in cart and order
+export interface SelectedModifier {
+  modifierGroupId:    string;
+  modifierGroupName:  string;
+  modifierOptionId:   string;
+  modifierOptionName: string;
+  modifierPrice:      number;
+  modifierTotal:      number;
+}
+
 // Product
 export interface ChannelPrices {
   swiggy?: number;
@@ -45,6 +79,7 @@ export interface Product {
   recipe?: RecipeItem[];
   channelPrices?: ChannelPrices;
   variants?: ProductVariant[];
+  modifierGroups?: ModifierGroup[];
 }
 
 // Ingredient (raw material)
@@ -63,10 +98,12 @@ export interface CartItem {
   quantity: number;
   taxAmount: number;
   total: number;
-  effectivePrice: number;  // channel-aware / variant unit price
-  cartLineId: string;      // dedup key: productId:variantId or productId:base
+  effectivePrice: number;   // channel-aware / variant unit price (excludes modifiers)
+  modifierTotal: number;    // sum of all selected modifier prices (per unit)
+  cartLineId: string;       // dedup key: productId:variantId:modKey
   variantId?: string;
   variantName?: string;
+  selectedModifiers?: SelectedModifier[];
 }
 
 // Order Item (stored in DB)
@@ -75,6 +112,7 @@ export interface OrderItem {
   productName: string;
   variantId?: string;
   variantName?: string;
+  selectedModifiers?: SelectedModifier[];
   quantity: number;
   price: number;
   taxPercent: number;

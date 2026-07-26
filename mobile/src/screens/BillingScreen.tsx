@@ -14,6 +14,7 @@ import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
 import { Category, Product, Table } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, UPI_ID, UPI_NAME } from '../utils/constants';
+import { SelectedModifier, ModifierGroup } from '../types';
 import { enqueueOrder } from '../utils/offlineQueue';
 import { getLocalCategories, getLocalProducts, saveCategories, saveProducts } from '../database/localCacheDao';
 import { printKOT } from '../utils/receipt';
@@ -89,6 +90,65 @@ const BillingScreen: React.FC = () => {
   const [showTablePicker,     setShowTablePicker]    = useState(false);
   const [tableSearch,         setTableSearch]        = useState('');
   const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null);
+  const [modifierPicker, setModifierPicker] = useState<{ product: Product; effectivePrice: number; variantId?: string; variantName?: string } | null>(null);
+  const [modSelections, setModSelections] = useState<Record<string, string[]>>({});
+
+  const openModifiersOrAdd = (product: Product, effectivePrice: number, variantId?: string, variantName?: string) => {
+    const mgs = (product.modifierGroups || []).filter(g => g.isActive);
+    if (mgs.length > 0) {
+      const init: Record<string, string[]> = {};
+      mgs.forEach(g => { init[g._id] = []; });
+      setModSelections(init);
+      setModifierPicker({ product, effectivePrice, variantId, variantName });
+    } else {
+      addItem(product, effectivePrice, variantId, variantName);
+    }
+  };
+
+  const buildSelectedModifiers = (product: Product): SelectedModifier[] => {
+    const groups = (product.modifierGroups || []).filter(g => g.isActive);
+    const result: SelectedModifier[] = [];
+    groups.forEach(group => {
+      const chosen = modSelections[group._id] || [];
+      chosen.forEach(optId => {
+        const opt = group.options.find(o => o._id === optId);
+        if (opt) {
+          result.push({
+            modifierGroupId:    group._id,
+            modifierGroupName:  group.name,
+            modifierOptionId:   opt._id,
+            modifierOptionName: opt.name,
+            modifierPrice:      opt.price,
+            modifierTotal:      opt.price,
+          });
+        }
+      });
+    });
+    return result;
+  };
+
+  const validateModifiers = (product: Product): string | null => {
+    const groups = (product.modifierGroups || []).filter(g => g.isActive);
+    for (const group of groups) {
+      const chosen = (modSelections[group._id] || []).length;
+      if (group.isRequired && chosen < (group.minSelections || 1)) {
+        return `"${group.name}" requires at least ${group.minSelections || 1} selection(s).`;
+      }
+      if (group.selectionType === 'multi' && group.maxSelections > 0 && chosen > group.maxSelections) {
+        return `"${group.name}" allows at most ${group.maxSelections} selection(s).`;
+      }
+    }
+    return null;
+  };
+
+  const confirmModifiers = () => {
+    if (!modifierPicker) return;
+    const err = validateModifiers(modifierPicker.product);
+    if (err) { showAlert('Selection Required', err); return; }
+    const selectedModifiers = buildSelectedModifiers(modifierPicker.product);
+    addItem(modifierPicker.product, modifierPicker.effectivePrice, modifierPicker.variantId, modifierPicker.variantName, selectedModifiers);
+    setModifierPicker(null);
+  };
 
   const handleSourceChange = (src: OrderSource) => {
     setOrderSource(src);
@@ -229,15 +289,16 @@ Thank you for dining with us! 🍽️`;
     };
     const orderData = {
       items: cart.items.map(item => ({
-        product:     item.product._id,
-        productName: item.product.name,
-        variantId:   item.variantId   || '',
-        variantName: item.variantName || '',
-        quantity:    item.quantity,
-        price:       item.effectivePrice,
-        taxPercent:  item.product.taxPercent,
-        taxAmount:   item.taxAmount,
-        total:       item.total,
+        product:           item.product._id,
+        productName:       item.product.name,
+        variantId:         item.variantId   || '',
+        variantName:       item.variantName || '',
+        selectedModifiers: (item.selectedModifiers || []).map(m => ({ ...m, modifierTotal: m.modifierPrice * item.quantity })),
+        quantity:          item.quantity,
+        price:             item.effectivePrice + item.modifierTotal,
+        taxPercent:        item.product.taxPercent,
+        taxAmount:         item.taxAmount,
+        total:             item.total,
       })),
       subtotal:      cart.subtotal,
       taxTotal:      cart.taxTotal,
@@ -354,7 +415,7 @@ Thank you for dining with us! 🍽️`;
     const qty = cart.items.filter(i => i.product._id === item._id).reduce((sum, i) => sum + i.quantity, 0);
     const accentColor = item.isVeg ? Colors.veg : Colors.nonVeg;
     const hasVariants = (item.variants?.length ?? 0) > 0;
-    const openOrAdd = () => hasVariants ? setVariantPickerProduct(item) : addItem(item, getChannelPrice(item));
+    const openOrAdd = () => hasVariants ? setVariantPickerProduct(item) : openModifiersOrAdd(item, getChannelPrice(item));
     return (
       <TouchableOpacity
         style={[styles.prodTile, qty > 0 && styles.prodTileActive]}
@@ -396,7 +457,7 @@ Thank you for dining with us! 🍽️`;
                 <MaterialIcons name="remove" size={13} color={Colors.white} />
               </TouchableOpacity>
               <Text style={styles.prodTileQtyNum}>{qty}</Text>
-              <TouchableOpacity style={styles.prodTileQtyBtn} onPress={() => addItem(item, getChannelPrice(item))} hitSlop={{ top: 6, bottom: 6, left: 4, right: 8 }}>
+              <TouchableOpacity style={styles.prodTileQtyBtn} onPress={() => openModifiersOrAdd(item, getChannelPrice(item))} hitSlop={{ top: 6, bottom: 6, left: 4, right: 8 }}>
                 <MaterialIcons name="add" size={13} color={Colors.white} />
               </TouchableOpacity>
             </View>
@@ -423,11 +484,14 @@ Thank you for dining with us! 🍽️`;
           {!!item.variantName && (
             <Text style={styles.cartItemVariant} numberOfLines={1}>{item.variantName}</Text>
           )}
-          <Text style={styles.cartItemUnitPrice}>{cur}{item.effectivePrice.toFixed(0)} each</Text>
+          {(item.selectedModifiers || []).map((m, idx) => (
+            <Text key={idx} style={styles.cartItemVariant} numberOfLines={1}>+{m.modifierOptionName}{m.modifierPrice > 0 ? ` (${cur}${m.modifierPrice})` : ''}</Text>
+          ))}
+          <Text style={styles.cartItemUnitPrice}>{cur}{(item.effectivePrice + item.modifierTotal).toFixed(0)} each</Text>
         </View>
       </View>
       <View style={styles.cartItemRight}>
-        <Text style={styles.cartItemTotal}>{cur}{(item.effectivePrice * item.quantity).toFixed(0)}</Text>
+        <Text style={styles.cartItemTotal}>{cur}{((item.effectivePrice + item.modifierTotal) * item.quantity).toFixed(0)}</Text>
         <View style={styles.qtyRow}>
           <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item.cartLineId)}>
             <MaterialIcons name="remove" size={15} color={Colors.primary} />
@@ -905,8 +969,8 @@ Thank you for dining with us! 🍽️`;
                   key={variant._id}
                   style={styles.variantRow}
                   onPress={() => {
-                    addItem(variantPickerProduct, variant.price, variant._id, variant.name);
                     setVariantPickerProduct(null);
+                    openModifiersOrAdd(variantPickerProduct, variant.price, variant._id, variant.name);
                   }}
                   activeOpacity={0.75}
                 >
@@ -923,6 +987,97 @@ Thank you for dining with us! 🍽️`;
             <TouchableOpacity style={[styles.payCancel, { marginTop: Spacing.lg }]} onPress={() => setVariantPickerProduct(null)}>
               <Text style={styles.payCancelText}>Cancel</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Modifier Picker Modal ── */}
+      <Modal visible={!!modifierPicker} transparent animationType="slide" onRequestClose={() => setModifierPicker(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.payModal, { paddingBottom: 24 + bottom, maxHeight: '85%' }]}>
+            <View style={styles.payModalHandle} />
+            <Text style={styles.payModalTitle}>{modifierPicker?.product.name}</Text>
+            {modifierPicker && (() => {
+              const mgs: ModifierGroup[] = (modifierPicker.product.modifierGroups || []).filter((g: ModifierGroup) => g.isActive);
+              const modTotal = mgs.reduce((s, group) => {
+                const chosen = modSelections[group._id] || [];
+                return s + chosen.reduce((gs, optId) => {
+                  const opt = group.options.find(o => o._id === optId);
+                  return gs + (opt?.price || 0);
+                }, 0);
+              }, 0);
+              return (
+                <>
+                  <Text style={[styles.payModalAmount, { fontSize: FontSize.sm, marginBottom: Spacing.md }]}>
+                    {cur}{(modifierPicker.effectivePrice + modTotal).toFixed(0)}
+                  </Text>
+                  <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+                    {mgs.map(group => (
+                      <View key={group._id} style={{ marginBottom: Spacing.lg }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.sm }}>
+                          <Text style={{ fontSize: FontSize.sm, fontWeight: '700', color: Colors.text, flex: 1 }}>{group.name}</Text>
+                          {group.isRequired && (
+                            <View style={{ backgroundColor: Colors.danger + '18', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 }}>
+                              <Text style={{ fontSize: 10, color: Colors.danger, fontWeight: '600' }}>REQUIRED</Text>
+                            </View>
+                          )}
+                          {!group.isRequired && (
+                            <View style={{ backgroundColor: Colors.textMuted + '18', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 }}>
+                              <Text style={{ fontSize: 10, color: Colors.textMuted, fontWeight: '600' }}>OPTIONAL</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={{ fontSize: 11, color: Colors.textMuted, marginBottom: Spacing.sm }}>
+                          {group.selectionType === 'single' ? 'Choose one' : `Choose up to ${group.maxSelections}`}
+                        </Text>
+                        {group.options.filter(o => o.isActive).map(opt => {
+                          const chosen = (modSelections[group._id] || []).includes(opt._id);
+                          return (
+                            <TouchableOpacity
+                              key={opt._id}
+                              style={[styles.variantRow, chosen && { borderColor: Colors.primary, backgroundColor: Colors.primary + '10' }]}
+                              onPress={() => {
+                                setModSelections(prev => {
+                                  const cur2 = prev[group._id] || [];
+                                  if (group.selectionType === 'single') {
+                                    return { ...prev, [group._id]: chosen ? [] : [opt._id] };
+                                  }
+                                  if (chosen) {
+                                    return { ...prev, [group._id]: cur2.filter(id => id !== opt._id) };
+                                  }
+                                  if (group.maxSelections > 0 && cur2.length >= group.maxSelections) return prev;
+                                  return { ...prev, [group._id]: [...cur2, opt._id] };
+                                });
+                              }}
+                              activeOpacity={0.75}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={[styles.variantName, chosen && { color: Colors.primary }]}>{opt.name}</Text>
+                              </View>
+                              {opt.price > 0 && <Text style={[styles.variantPrice, chosen && { color: Colors.primary }]}>+{cur}{opt.price}</Text>}
+                              <View style={[styles.variantAddBtn, chosen && { backgroundColor: Colors.primary }]}>
+                                <MaterialIcons name={chosen ? 'check' : 'add'} size={16} color={Colors.white} />
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    ))}
+                  </ScrollView>
+                  <TouchableOpacity
+                    style={[styles.payConfirm, { marginTop: Spacing.md }]}
+                    onPress={confirmModifiers}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialIcons name="add-shopping-cart" size={18} color={Colors.white} />
+                    <Text style={styles.payConfirmText}>Add to Cart — {cur}{(modifierPicker.effectivePrice + modTotal).toFixed(0)}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.payCancel, { marginTop: Spacing.sm }]} onPress={() => setModifierPicker(null)}>
+                    <Text style={styles.payCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
           </View>
         </View>
       </Modal>

@@ -123,15 +123,16 @@ const CustomerCartScreen: React.FC = () => {
       source: 'dine-in' as const,
       orderSource: 'dine-in',
       items: cart.items.map(item => ({
-        product:     item.product._id,
-        productName: item.product.name,
-        variantId:   item.variantId   || '',
-        variantName: item.variantName || '',
-        quantity:    item.quantity,
-        price:       item.effectivePrice,
-        taxPercent:  item.product.taxPercent,
-        taxAmount:   item.taxAmount,
-        total:       item.total,
+        product:           item.product._id,
+        productName:       item.product.name,
+        variantId:         item.variantId   || '',
+        variantName:       item.variantName || '',
+        selectedModifiers: (item.selectedModifiers || []).map(m => ({ ...m, modifierTotal: m.modifierPrice * item.quantity })),
+        quantity:          item.quantity,
+        price:             item.effectivePrice + item.modifierTotal,
+        taxPercent:        item.product.taxPercent,
+        taxAmount:         item.taxAmount,
+        total:             item.total,
       })),
       tableNumber: cart.tableNumber,
       customerName: cart.customerName,
@@ -193,7 +194,10 @@ const CustomerCartScreen: React.FC = () => {
         _id: snapshot._id,
         orderNumber: snapshot.orderNumber,
         token: snapshot.token,
-        items: snapshot.items.map(i => ({ name: i.variantName ? `${i.product.name} (${i.variantName})` : i.product.name, quantity: i.quantity, total: i.total })),
+        items: snapshot.items.map(i => {
+          const mods = (i.selectedModifiers || []).map((m: any) => `+${m.modifierOptionName}`).join(', ');
+          return { name: [i.variantName ? `${i.product.name} (${i.variantName})` : i.product.name, mods].filter(Boolean).join(' '), quantity: i.quantity, total: i.total };
+        }),
         grandTotal: snapshot.grandTotal,
         tableNumber: snapshot.tableNumber,
         hotelId,
@@ -272,7 +276,12 @@ const CustomerCartScreen: React.FC = () => {
         {!!item.variantName && (
           <Text style={{ fontSize: FontSize.xs, color: Colors.primary, fontWeight: '600', marginTop: 1 }} numberOfLines={1}>{item.variantName}</Text>
         )}
-        <Text style={styles.itemPrice}>{cur}{(item.effectivePrice * item.quantity).toFixed(0)}</Text>
+        {(item.selectedModifiers || []).map((m, idx) => (
+          <Text key={idx} style={{ fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 1 }} numberOfLines={1}>
+            +{m.modifierOptionName}{m.modifierPrice > 0 ? ` (${cur}${m.modifierPrice})` : ''}
+          </Text>
+        ))}
+        <Text style={styles.itemPrice}>{cur}{((item.effectivePrice + item.modifierTotal) * item.quantity).toFixed(0)}</Text>
       </View>
       <View style={styles.qtyRow}>
         <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item.cartLineId)}>

@@ -9,7 +9,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import { getPublicMenu, getStoredHotelId, saveMenuCache, loadMenuCache } from '../services/api';
-import { Category, Product } from '../types';
+import { Category, Product, SelectedModifier, ModifierGroup } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -48,6 +48,8 @@ const CustomerMenuScreen: React.FC = () => {
   const [foodFilter,         setFoodFilter]          = useState<'all' | 'veg' | 'non-veg'>('all');
   const [detailProduct,      setDetailProduct]       = useState<Product | null>(null);
   const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null);
+  const [modifierPicker, setModifierPicker] = useState<{ product: Product; effectivePrice: number; variantId?: string; variantName?: string } | null>(null);
+  const [modSelections, setModSelections] = useState<Record<string, string[]>>({});
   const [isOffline,          setIsOffline]           = useState(false);
   const tapCount = useRef(0);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -119,6 +121,46 @@ const CustomerMenuScreen: React.FC = () => {
   const getQty = (id: string) => cart.items.filter(i => i.product._id === id).reduce((sum, i) => sum + i.quantity, 0);
   const cur = settings.currencySymbol || '₹';
   const isMaterialIcon = (name?: string) => !!name && /^[a-z0-9-_]+$/.test(name);
+
+  const openModifiersOrAdd = (product: Product, effectivePrice: number, variantId?: string, variantName?: string) => {
+    const mgs = (product.modifierGroups || []).filter((g: ModifierGroup) => g.isActive);
+    if (mgs.length > 0) {
+      const init: Record<string, string[]> = {};
+      mgs.forEach((g: ModifierGroup) => { init[g._id] = []; });
+      setModSelections(init);
+      setModifierPicker({ product, effectivePrice, variantId, variantName });
+    } else {
+      addItem(product, effectivePrice, variantId, variantName);
+    }
+  };
+
+  const buildSelectedModifiers = (product: Product): SelectedModifier[] => {
+    const groups = (product.modifierGroups || []).filter((g: ModifierGroup) => g.isActive);
+    const result: SelectedModifier[] = [];
+    groups.forEach((group: ModifierGroup) => {
+      const chosen = modSelections[group._id] || [];
+      chosen.forEach(optId => {
+        const opt = group.options.find(o => o._id === optId);
+        if (opt) result.push({ modifierGroupId: group._id, modifierGroupName: group.name, modifierOptionId: opt._id, modifierOptionName: opt.name, modifierPrice: opt.price, modifierTotal: opt.price });
+      });
+    });
+    return result;
+  };
+
+  const validateAndConfirmModifiers = () => {
+    if (!modifierPicker) return;
+    const groups = (modifierPicker.product.modifierGroups || []).filter((g: ModifierGroup) => g.isActive);
+    for (const group of groups as ModifierGroup[]) {
+      const chosen = (modSelections[group._id] || []).length;
+      if (group.isRequired && chosen < (group.minSelections || 1)) {
+        showAlert('Selection Required', `"${group.name}" requires at least ${group.minSelections || 1} selection(s).`);
+        return;
+      }
+    }
+    const selectedModifiers = buildSelectedModifiers(modifierPicker.product);
+    addItem(modifierPicker.product, modifierPicker.effectivePrice, modifierPicker.variantId, modifierPicker.variantName, selectedModifiers);
+    setModifierPicker(null);
+  };
 
   // ── Category chip ──────────────────────────────────────────────────────────
   const renderCatChip = (cat: Category | null) => {
@@ -195,7 +237,7 @@ const CustomerMenuScreen: React.FC = () => {
             ? (
               <TouchableOpacity
                 style={styles.addBtn}
-                onPress={() => (item.variants?.length ?? 0) > 0 ? setVariantPickerProduct(item) : addItem(item, qrPrice(item))}
+                onPress={() => (item.variants?.length ?? 0) > 0 ? setVariantPickerProduct(item) : openModifiersOrAdd(item, qrPrice(item))}
                 activeOpacity={0.8}
               >
                 <MaterialIcons name={(item.variants?.length ?? 0) > 0 ? 'expand-more' : 'add'} size={18} color={Colors.white} />
@@ -314,12 +356,11 @@ const CustomerMenuScreen: React.FC = () => {
                   <TouchableOpacity
                     style={styles.modalAddBtn}
                     onPress={() => {
+                      setDetailProduct(null);
                       if ((item.variants?.length ?? 0) > 0) {
-                        setDetailProduct(null);
                         setVariantPickerProduct(item);
                       } else {
-                        addItem(item, qrPrice(item));
-                        setDetailProduct(null);
+                        openModifiersOrAdd(item, qrPrice(item));
                       }
                     }}
                     activeOpacity={0.85}
@@ -509,8 +550,8 @@ const CustomerMenuScreen: React.FC = () => {
                       backgroundColor: Colors.surface, marginBottom: Spacing.sm,
                     }}
                     onPress={() => {
-                      addItem(variantPickerProduct, variant.price, variant._id, variant.name);
                       setVariantPickerProduct(null);
+                      openModifiersOrAdd(variantPickerProduct, variant.price, variant._id, variant.name);
                     }}
                     activeOpacity={0.75}
                   >
@@ -531,6 +572,95 @@ const CustomerMenuScreen: React.FC = () => {
                 <Text style={{ color: Colors.textSecondary, fontSize: FontSize.md, fontWeight: '600' }}>Cancel</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Modifier Picker Modal ── */}
+      <Modal visible={!!modifierPicker} transparent animationType="slide" onRequestClose={() => setModifierPicker(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { paddingBottom: bottom + 24, maxHeight: '85%' }]}>
+            <View style={styles.modalHandle} />
+            {modifierPicker && (() => {
+              const mgs: ModifierGroup[] = (modifierPicker.product.modifierGroups || []).filter((g: ModifierGroup) => g.isActive);
+              const modTotal = mgs.reduce((s, group) => {
+                return s + (modSelections[group._id] || []).reduce((gs, optId) => {
+                  const opt = group.options.find(o => o._id === optId);
+                  return gs + (opt?.price || 0);
+                }, 0);
+              }, 0);
+              return (
+                <View style={{ padding: Spacing.xl, paddingTop: Spacing.lg, flex: 1 }}>
+                  <Text style={{ fontSize: FontSize.xl, fontWeight: '900', color: Colors.text }}>{modifierPicker.product.name}</Text>
+                  <Text style={{ fontSize: FontSize.lg, fontWeight: '800', color: Colors.primary, marginBottom: Spacing.lg }}>
+                    {cur}{(modifierPicker.effectivePrice + modTotal).toFixed(0)}
+                  </Text>
+                  <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+                    {mgs.map(group => (
+                      <View key={group._id} style={{ marginBottom: Spacing.xl }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                          <Text style={{ fontSize: FontSize.md, fontWeight: '700', color: Colors.text, flex: 1 }}>{group.name}</Text>
+                          <View style={{ backgroundColor: group.isRequired ? Colors.danger + '18' : Colors.textMuted + '18', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 }}>
+                            <Text style={{ fontSize: 10, color: group.isRequired ? Colors.danger : Colors.textMuted, fontWeight: '600' }}>
+                              {group.isRequired ? 'REQUIRED' : 'OPTIONAL'}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: Spacing.sm }}>
+                          {group.selectionType === 'single' ? 'Choose one' : `Choose up to ${group.maxSelections}`}
+                        </Text>
+                        {group.options.filter(o => o.isActive).map(opt => {
+                          const chosen = (modSelections[group._id] || []).includes(opt._id);
+                          return (
+                            <TouchableOpacity
+                              key={opt._id}
+                              style={{
+                                flexDirection: 'row', alignItems: 'center',
+                                paddingVertical: 14, paddingHorizontal: Spacing.md,
+                                borderRadius: BorderRadius.lg, borderWidth: 1.5,
+                                borderColor: chosen ? Colors.primary : Colors.border,
+                                backgroundColor: chosen ? Colors.primary + '10' : Colors.surface,
+                                marginBottom: Spacing.sm,
+                              }}
+                              onPress={() => {
+                                setModSelections(prev => {
+                                  const cur2 = prev[group._id] || [];
+                                  if (group.selectionType === 'single') return { ...prev, [group._id]: chosen ? [] : [opt._id] };
+                                  if (chosen) return { ...prev, [group._id]: cur2.filter(id => id !== opt._id) };
+                                  if (group.maxSelections > 0 && cur2.length >= group.maxSelections) return prev;
+                                  return { ...prev, [group._id]: [...cur2, opt._id] };
+                                });
+                              }}
+                              activeOpacity={0.75}
+                            >
+                              <Text style={{ flex: 1, fontSize: FontSize.md, fontWeight: '700', color: chosen ? Colors.primary : Colors.text }}>{opt.name}</Text>
+                              {opt.price > 0 && <Text style={{ fontSize: FontSize.md, fontWeight: '800', color: chosen ? Colors.primary : Colors.textSecondary, marginRight: Spacing.md }}>+{cur}{opt.price}</Text>}
+                              <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: chosen ? Colors.primary : Colors.border, alignItems: 'center', justifyContent: 'center' }}>
+                                <MaterialIcons name={chosen ? 'check' : 'add'} size={16} color={Colors.white} />
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    ))}
+                  </ScrollView>
+                  <TouchableOpacity
+                    style={{ marginTop: Spacing.md, paddingVertical: 16, borderRadius: BorderRadius.xl, backgroundColor: Colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                    onPress={validateAndConfirmModifiers}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialIcons name="add-shopping-cart" size={18} color={Colors.white} />
+                    <Text style={{ color: Colors.white, fontSize: FontSize.md, fontWeight: '900' }}>Add to Cart — {cur}{(modifierPicker.effectivePrice + modTotal).toFixed(0)}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ marginTop: Spacing.sm, paddingVertical: 14, borderRadius: BorderRadius.xl, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center' }}
+                    onPress={() => setModifierPicker(null)}
+                  >
+                    <Text style={{ color: Colors.textSecondary, fontSize: FontSize.md, fontWeight: '600' }}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
           </View>
         </View>
       </Modal>
