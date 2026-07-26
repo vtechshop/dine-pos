@@ -1,2 +1,2 @@
-export type { FeatureFlags, Category, Product } from './menu.ts';
-export type { OrderStatus, PaymentMethod, OrderItem } from './orders.ts';
+export type { FeatureFlags, Category, Product, ProductVariant, ModifierOption, ModifierGroup } from './menu.ts';
+export type { OrderStatus, PaymentMethod, OrderItem, SelectedModifier } from './orders.ts';

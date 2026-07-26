@@ -7,6 +7,29 @@ export interface ProductVariant {
   price: number;
 }
 
+export interface ModifierOption {
+  _id:          string;
+  name:         string;
+  price:        number;
+  sku?:         string;
+  barcode?:     string;
+  isActive:     boolean;
+  displayOrder: number;
+}
+
+export interface ModifierGroup {
+  _id:           string;
+  name:          string;
+  description?:  string;
+  isActive:      boolean;
+  displayOrder:  number;
+  isRequired:    boolean;
+  selectionType: 'single' | 'multi';
+  minSelections: number;
+  maxSelections: number;
+  options:       ModifierOption[];
+}
+
 export interface FeatureFlags {
   payment?:                boolean;
   reservations?:           boolean;
@@ -42,20 +65,21 @@ export interface Category {
 }
 
 export interface Product {
-  _id:         string;
-  name:        string;
-  price:       number;
-  category:    { _id: string; name: string; color: string } | null;
-  taxPercent:  number;
-  hsnCode:     string;
-  image:       string;
-  isAvailable: boolean;
-  isVeg:       boolean;
-  shortCode:   string;
-  description: string;
-  stock:       number;  // -1 = unlimited
-  isDeleted:   boolean;
-  variants?:   ProductVariant[];
-  createdAt:   string;
-  updatedAt:   string;
+  _id:            string;
+  name:           string;
+  price:          number;
+  category:       { _id: string; name: string; color: string } | null;
+  taxPercent:     number;
+  hsnCode:        string;
+  image:          string;
+  isAvailable:    boolean;
+  isVeg:          boolean;
+  shortCode:      string;
+  description:    string;
+  stock:          number;  // -1 = unlimited
+  isDeleted:      boolean;
+  variants?:      ProductVariant[];
+  modifierGroups?: ModifierGroup[];
+  createdAt:      string;
+  updatedAt:      string;
 }
