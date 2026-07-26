@@ -828,6 +828,7 @@ export type RootStackParamList = {
   GoodsReceive:   undefined;
   VendorLedger:          undefined;
   InventoryIntelligence: undefined;
+  PaymentSettings: undefined;
 };
 
 export type TabParamList = {

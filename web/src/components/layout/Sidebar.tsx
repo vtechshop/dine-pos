@@ -56,6 +56,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/vendor-ledger',   icon: Wallet,        label: 'Vendor Ledger' },
       { to: '/inventory',              icon: Archive,     label: 'Inventory' },
       { to: '/inventory-intelligence', icon: TrendingUp,  label: 'Stock Intel' },
+      { to: '/payments',               icon: CreditCard,  label: 'Payments' },
       { to: '/reports',                icon: BarChart2,   label: 'Reports' },
       { to: '/settings',     icon: Settings,        label: 'Settings' },
       { to: '/reservations', icon: CalendarDays,    label: 'Reservations' },
@@ -77,7 +78,7 @@ const NAV_GROUPS: NavGroup[] = [
 // Routes visible only to the admin role
 const ADMIN_ONLY_ROUTES = new Set([
   '/orders', '/customers', '/products', '/modifiers', '/vendors', '/purchase-orders', '/grn',
-  '/vendor-ledger', '/inventory', '/inventory-intelligence',
+  '/vendor-ledger', '/inventory', '/inventory-intelligence', '/payments',
   '/reports', '/settings', '/reservations',
   '/online-orders', '/integrations', '/menu-sync',
 ]);

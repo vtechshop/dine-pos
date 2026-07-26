@@ -55,6 +55,7 @@ const OrdersPage       = lazy(() => import('./pages/OrdersPage').then(m => ({ de
 const ProductsPage     = lazy(() => import('./pages/ProductsPage').then(m => ({ default: m.ProductsPage })));
 const InventoryPage              = lazy(() => import('./pages/InventoryPage').then(m => ({ default: m.InventoryPage })));
 const InventoryIntelligencePage  = lazy(() => import('./pages/InventoryIntelligencePage').then(m => ({ default: m.InventoryIntelligencePage })));
+const PaymentSettingsPage        = lazy(() => import('./pages/PaymentSettingsPage').then(m => ({ default: m.PaymentSettingsPage })));
 const CustomersPage    = lazy(() => import('./pages/CustomersPage').then(m => ({ default: m.CustomersPage })));
 const ReportsPage      = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
 const SettingsPage     = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
@@ -155,6 +156,7 @@ export function App() {
                     <Route path="/products"    element={<AdminOnly><Suspense fallback={<PageFallback />}><ProductsPage /></Suspense></AdminOnly>} />
                     <Route path="/inventory"               element={<AdminOnly><Suspense fallback={<PageFallback />}><InventoryPage /></Suspense></AdminOnly>} />
                     <Route path="/inventory-intelligence"  element={<AdminOnly><Suspense fallback={<PageFallback />}><InventoryIntelligencePage /></Suspense></AdminOnly>} />
+                    <Route path="/payments"    element={<AdminOnly><Suspense fallback={<PageFallback />}><PaymentSettingsPage /></Suspense></AdminOnly>} />
                     <Route path="/reports"     element={<AdminOnly><Suspense fallback={<PageFallback />}><ReportsPage /></Suspense></AdminOnly>} />
                     <Route path="/settings"    element={<AdminOnly><Suspense fallback={<PageFallback />}><SettingsPage /></Suspense></AdminOnly>} />
                     <Route path="/reservations"   element={<AdminOnly><Suspense fallback={<PageFallback />}><ReservationsPage /></Suspense></AdminOnly>} />

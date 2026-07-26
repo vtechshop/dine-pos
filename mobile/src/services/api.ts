@@ -2001,6 +2001,61 @@ export const getPurchaseIntelligence = (params?: { from?: string; to?: string })
     monthlySpend:       { _id: string; totalSpend: number; grnCount: number }[];
   }>(`/inventory-intelligence/purchase-intelligence${poQS(params as Record<string, string | undefined>)}`);
 
+// ── Payment Gateway & Transactions ───────────────────────────────────────────
+
+export type MobileGatewayType = 'razorpay' | 'cashfree' | 'phonepe' | 'payu' | 'paytm' | 'bharatpe';
+export type MobilePaymentStatus = 'pending' | 'processing' | 'success' | 'failed' | 'cancelled' | 'refunded' | 'partial_refunded';
+
+export interface MobileGatewayConfig {
+  _id:          string;
+  gatewayType:  MobileGatewayType;
+  displayName:  string;
+  merchantId:   string;
+  apiKey:       string;
+  environment:  'sandbox' | 'live';
+  isActive:     boolean;
+  isIntegrated: boolean;
+  testResult?: { lastTestedAt?: string; success?: boolean; message?: string };
+  updatedAt: string;
+}
+
+export interface MobilePaymentRecord {
+  _id:                   string;
+  internalTransactionId: string;
+  gatewayTransactionId:  string;
+  gatewayType:           string;
+  status:                MobilePaymentStatus;
+  amount:                number;
+  currency:              string;
+  paymentMethod:         string;
+  refundStatus:          string;
+  refundedAmount:        number;
+  settlementStatus:      string;
+  failureReason:         string;
+  createdAt:             string;
+}
+
+export interface MobilePaymentReport {
+  summary: {
+    total: number; totalAmount: number; successAmount: number;
+    successCount: number; failedCount: number; refundedAmount: number; successRate: number;
+  };
+  byGateway:  { gatewayType: string; count: number; amount: number; successRate: number }[];
+  byMethod:   { method: string; count: number; amount: number }[];
+  dailyTrend: { date: string; count: number; amount: number }[];
+}
+
+export const getGatewayConfigs = (): Promise<MobileGatewayConfig[]> =>
+  fetchAPI('/payment-gateway-configs');
+
+export const getPayments = (params?: {
+  from?: string; to?: string; status?: string; gateway?: string; page?: number; limit?: number;
+}): Promise<{ payments: MobilePaymentRecord[]; total: number }> =>
+  fetchAPI(`/payments${poQS(params as Record<string, string | number | undefined>)}`);
+
+export const getPaymentStats = (params?: { from?: string; to?: string }): Promise<MobilePaymentReport> =>
+  fetchAPI(`/payments/reports/summary${poQS(params as Record<string, string | undefined>)}`);
+
 // ── SA Push Token Registration ────────────────────────────────────────────────
 
 export const registerSAPushToken = (
