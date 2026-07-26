@@ -1,7 +1,9 @@
 // Shared types — imported from @dinepos/shared so apps/qr and apps/admin
 // use the same definitions. All existing imports in this app are unchanged.
-export type { FeatureFlags, Category, Product, OrderItem, PaymentMethod }
-  from '@dinepos/shared/types';
+export type {
+  FeatureFlags, Category, Product, ProductVariant, ModifierOption, ModifierGroup,
+  OrderItem, PaymentMethod, SelectedModifier,
+} from '@dinepos/shared/types';
 
 // ── Hotel Settings ────────────────────────────────────────────────────────────
 

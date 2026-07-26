@@ -3,6 +3,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useAuth } from './AuthContext';
+import type { SelectedModifier } from '../types';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -29,13 +30,17 @@ export interface OrderPrefill {
 }
 
 export interface CartItem {
-  id: string;
+  id: string;             // cart line dedup key: productId:variantId:optionIds
   productId: string;
   productName: string;
-  price: number;
+  price: number;          // effective unit price (variant/channel/base)
+  modifierTotal: number;  // sum of selected modifier prices per unit
   quantity: number;
   taxPercent: number;
   notes: string;
+  variantId?: string;
+  variantName?: string;
+  selectedModifiers?: SelectedModifier[];
 }
 
 export interface ShiftState {
@@ -84,10 +89,17 @@ export interface DrawerMovement {
 
 // ── Cart math ─────────────────────────────────────────────────────────────────
 
+function buildCartLineId(productId: string, variantId?: string, mods?: SelectedModifier[]): string {
+  const base = `${productId}:${variantId || 'base'}`;
+  if (!mods?.length) return base;
+  const modKey = mods.map(m => m.modifierOptionId).sort().join('|');
+  return `${base}:${modKey}`;
+}
+
 export function calcCartTotals(items: CartItem[], discount = 0) {
-  const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
+  const subtotal = items.reduce((s, i) => s + (i.price + (i.modifierTotal ?? 0)) * i.quantity, 0);
   const taxTotal = items.reduce(
-    (s, i) => s + (i.price * i.quantity * i.taxPercent) / 100,
+    (s, i) => s + ((i.price + (i.modifierTotal ?? 0)) * i.quantity * i.taxPercent) / 100,
     0,
   );
   const grandTotal = Math.max(0, subtotal + taxTotal - discount);
@@ -195,17 +207,15 @@ export function CashierProvider({ children }: { children: ReactNode }) {
   const [orderPrefill, setOrderPrefill] = useState<OrderPrefill | null>(null);
 
   const addToCart = useCallback((item: Omit<CartItem, 'id'>) => {
-    const newId = `${item.productId}_${Date.now()}`;
+    const id = buildCartLineId(item.productId, item.variantId, item.selectedModifiers);
     setCart(prev => {
-      const existIdx = prev.findIndex(
-        i => i.productId === item.productId && i.notes === item.notes,
-      );
+      const existIdx = prev.findIndex(ci => ci.id === id);
       if (existIdx >= 0) {
-        return prev.map((i, idx) =>
-          idx === existIdx ? { ...i, quantity: i.quantity + item.quantity } : i,
+        return prev.map((ci, idx) =>
+          idx === existIdx ? { ...ci, quantity: ci.quantity + item.quantity } : ci,
         );
       }
-      return [...prev, { ...item, id: newId }];
+      return [...prev, { ...item, id }];
     });
   }, []);
 

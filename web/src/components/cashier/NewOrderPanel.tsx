@@ -5,7 +5,7 @@ import {
   AlertCircle, Check, Loader2, Star, ScanBarcode,
 } from 'lucide-react';
 import { useCashier, calcCartTotals, type CartItem, type HeldBill } from '../../context/CashierContext';
-import { ModifierDialog } from './ModifierDialog';
+import { ModifierDialog, type ModifierResult } from './ModifierDialog';
 import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
 import { fetchProducts, fetchCategories } from '../../api/products';
@@ -109,14 +109,23 @@ function CartRow({ item, onQty, onRemove, onNotes, sym }: {
 }) {
   const [editNotes, setEditNotes] = useState(false);
   const [draft, setDraft] = useState(item.notes);
-  const total = item.price * item.quantity;
+  const unitPrice = item.price + (item.modifierTotal ?? 0);
+  const total = unitPrice * item.quantity;
 
   return (
     <div className="border-b border-border/60 pb-2.5 pt-2.5 last:border-0 last:pb-0">
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium leading-tight text-ink truncate">{item.productName}</p>
-          <p className="text-[10px] text-ink/45">{fmtINR(sym, item.price)} each</p>
+          {item.variantName && (
+            <p className="text-[10px] text-ink/50">{item.variantName}</p>
+          )}
+          {(item.selectedModifiers ?? []).map(m => (
+            <p key={m.modifierOptionId} className="text-[10px] text-ink/45">
+              + {m.modifierOptionName}{m.modifierPrice > 0 ? ` (+${sym}${m.modifierPrice})` : ''}
+            </p>
+          ))}
+          <p className="text-[10px] text-ink/45">{fmtINR(sym, unitPrice)} each</p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <button
@@ -136,7 +145,7 @@ function CartRow({ item, onQty, onRemove, onNotes, sym }: {
           </button>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-xs font-semibold text-ink w-14 text-right">{fmtINR(sym, total)}</span>
+          <span className="text-xs font-semibold text-ink w-16 text-right">{fmtINR(sym, total)}</span>
           <button
             type="button"
             onClick={() => onRemove(item.id)}
@@ -479,20 +488,40 @@ export function NewOrderPanel() {
   const discountAmt = parseFloat(discount) || 0;
   const { subtotal, taxTotal, grandTotal } = calcCartTotals(cart, discountAmt);
 
-  // ── Add to cart (via modifier dialog) ─────────────────────────────────────
+  // ── Add to cart (via modifier dialog or direct) ────────────────────────────
   function handleAddProduct(p: Product) {
-    setModifierProduct(p);
+    const hasVariants = (p.variants ?? []).length > 0;
+    const hasModifiers = (p.modifierGroups ?? []).length > 0;
+    if (!hasVariants && !hasModifiers) {
+      addToCart({
+        productId: p._id,
+        productName: p.name,
+        price: p.price,
+        modifierTotal: 0,
+        quantity: 1,
+        taxPercent: p.taxPercent ?? 0,
+        notes: '',
+      });
+      addToRecent(p._id);
+    } else {
+      setModifierProduct(p);
+    }
   }
 
-  function handleModifierConfirm(result: { quantity: number; notes: string }) {
+  function handleModifierConfirm(result: ModifierResult) {
     if (!modifierProduct) return;
+    const modifierTotal = result.selectedModifiers.reduce((s, m) => s + m.modifierPrice, 0);
     addToCart({
       productId: modifierProduct._id,
       productName: modifierProduct.name,
-      price: modifierProduct.price,
+      price: result.effectivePrice,
+      modifierTotal,
       quantity: result.quantity,
       taxPercent: modifierProduct.taxPercent ?? 0,
       notes: result.notes,
+      selectedModifiers: result.selectedModifiers,
+      variantId: result.variantId,
+      variantName: result.variantName,
     });
     addToRecent(modifierProduct._id);
     setModifierProduct(null);
@@ -556,8 +585,12 @@ export function NewOrderPanel() {
         product: i.productId,
         productName: i.productName,
         quantity: i.quantity,
-        price: i.price,
+        price: i.price + (i.modifierTotal ?? 0),
         taxPercent: i.taxPercent,
+        selectedModifiers: (i.selectedModifiers ?? []).map(m => ({
+          ...m,
+          modifierTotal: m.modifierPrice * i.quantity,
+        })),
         ...(i.notes ? { notes: i.notes } : {}),
       }));
 
