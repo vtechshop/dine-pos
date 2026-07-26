@@ -313,32 +313,51 @@ app.use('/api/payments',                   paymentRoutes);
 app.use('/api/payment-gateway-configs',    paymentGatewayConfigRoutes);
 app.use('/api/payment-webhooks',           paymentWebhookRoutes);
 
-// Enhanced health check — covers MongoDB, Redis, memory, uptime, version
-app.get('/api/health', async (_req, res) => {
-  const mem = process.memoryUsage();
-  const toMB = (b: number) => +(b / 1024 / 1024).toFixed(1);
-  const mongoState = mongoose.connection.readyState; // 0=disconnected,1=connected,2=connecting
-  const mongoLabel = ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoState] ?? 'unknown';
-  const redisStatus = await redisHealthCheck();
+// Liveness probe — returns 200 immediately if the process is alive.
+// Load balancers and orchestrators use this; it must never check DB/Redis
+// (a slow dependency must not mark the process dead and trigger a restart loop).
+app.get('/api/health/live', (_req, res) => {
+  res.json({ status: 'OK', uptime: +process.uptime().toFixed(1) });
+});
 
-  const status = mongoState === 1 ? 'OK' : 'DEGRADED';
+// Readiness probe — returns 200 only when all required dependencies are healthy.
+// Traffic should not be routed to a pod/instance that fails this check.
+app.get('/api/health/ready', async (_req, res) => {
+  const mongoState  = mongoose.connection.readyState;
+  const mongoLabel  = ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoState] ?? 'unknown';
+  const redisStatus = await redisHealthCheck();
+  const ready       = mongoState === 1;
+  res.status(ready ? 200 : 503).json({
+    status:  ready ? 'OK' : 'DEGRADED',
+    mongodb: mongoLabel,
+    redis:   redisStatus,
+  });
+});
+
+// Full health — covers memory, uptime, version, connected Socket.IO clients
+app.get('/api/health', async (_req, res) => {
+  const mem         = process.memoryUsage();
+  const toMB        = (b: number) => +(b / 1024 / 1024).toFixed(1);
+  const mongoState  = mongoose.connection.readyState;
+  const mongoLabel  = ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoState] ?? 'unknown';
+  const redisStatus = await redisHealthCheck();
+  const socketClients = io.engine.clientsCount;
 
   res.status(mongoState === 1 ? 200 : 503).json({
-    status,
-    mongodb: mongoLabel,
-    redis: redisStatus,
-    uptime: +process.uptime().toFixed(1),
+    status:      mongoState === 1 ? 'OK' : 'DEGRADED',
+    mongodb:     mongoLabel,
+    redis:       redisStatus,
+    uptime:      +process.uptime().toFixed(1),
     memory: {
-      heapUsedMB: toMB(mem.heapUsed),
+      heapUsedMB:  toMB(mem.heapUsed),
       heapTotalMB: toMB(mem.heapTotal),
-      rssMB: toMB(mem.rss),
+      rssMB:       toMB(mem.rss),
     },
-    version: process.env.npm_package_version || '1.0.0',
+    socketClients,
+    version:     process.env.npm_package_version || '1.0.0',
     nodeVersion: process.version,
-    pid: process.pid,
     environment: process.env.NODE_ENV || 'development',
-    timestamp: new Date().toISOString(),
-    services: { mongodb: mongoLabel, redis: redisStatus },
+    timestamp:   new Date().toISOString(),
   });
 });
 
