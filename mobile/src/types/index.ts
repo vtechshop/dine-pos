@@ -826,7 +826,8 @@ export type RootStackParamList = {
   Vendors: undefined;
   PurchaseOrders: undefined;
   GoodsReceive:   undefined;
-  VendorLedger:   undefined;
+  VendorLedger:          undefined;
+  InventoryIntelligence: undefined;
 };
 
 export type TabParamList = {

@@ -19,6 +19,7 @@ import {
   ShoppingBag,
   ClipboardList,
   Wallet,
+  TrendingUp,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -53,8 +54,9 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/purchase-orders', icon: ShoppingBag,   label: 'Purchase Orders' },
       { to: '/grn',             icon: ClipboardList, label: 'Receive Goods' },
       { to: '/vendor-ledger',   icon: Wallet,        label: 'Vendor Ledger' },
-      { to: '/inventory',    icon: Archive,         label: 'Inventory' },
-      { to: '/reports',      icon: BarChart2,       label: 'Reports' },
+      { to: '/inventory',              icon: Archive,     label: 'Inventory' },
+      { to: '/inventory-intelligence', icon: TrendingUp,  label: 'Stock Intel' },
+      { to: '/reports',                icon: BarChart2,   label: 'Reports' },
       { to: '/settings',     icon: Settings,        label: 'Settings' },
       { to: '/reservations', icon: CalendarDays,    label: 'Reservations' },
       { to: '/kitchen',      icon: ChefHat,         label: 'Kitchen' },
@@ -75,7 +77,7 @@ const NAV_GROUPS: NavGroup[] = [
 // Routes visible only to the admin role
 const ADMIN_ONLY_ROUTES = new Set([
   '/orders', '/customers', '/products', '/modifiers', '/vendors', '/purchase-orders', '/grn',
-  '/vendor-ledger', '/inventory',
+  '/vendor-ledger', '/inventory', '/inventory-intelligence',
   '/reports', '/settings', '/reservations',
   '/online-orders', '/integrations', '/menu-sync',
 ]);

@@ -66,6 +66,7 @@ import VendorScreen from '../screens/VendorScreen';
 import PurchaseOrderScreen from '../screens/PurchaseOrderScreen';
 import GoodsReceiveScreen from '../screens/GoodsReceiveScreen';
 import VendorLedgerScreen from '../screens/VendorLedgerScreen';
+import InventoryIntelligenceScreen from '../screens/InventoryIntelligenceScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<TabParamList>();
@@ -290,7 +291,8 @@ const AppNavigator = () => {
             <Stack.Screen name="Vendors"            component={VendorScreen}              options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Vendors',         headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="PurchaseOrders"     component={PurchaseOrderScreen}       options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Purchase Orders',  headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="GoodsReceive"       component={GoodsReceiveScreen}        options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Receive Goods',     headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
-            <Stack.Screen name="VendorLedger"       component={VendorLedgerScreen}        options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Vendor Ledger',      headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="VendorLedger"             component={VendorLedgerScreen}             options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Vendor Ledger',          headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="InventoryIntelligence"    component={InventoryIntelligenceScreen}    options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Inventory Intelligence',   headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen
               name="AddProduct"
               component={AddProductScreen}

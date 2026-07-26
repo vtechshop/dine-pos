@@ -1954,6 +1954,53 @@ export const getCogsTrend = (
 ): Promise<Array<{ period: string; revenue: number; cogs: number; grossProfit: number; grossMarginPct: number; orders: number }>> =>
   fetchAPI(`/finance/cogs-trend${poQS(params as Record<string, string | undefined>)}`);
 
+// ── Inventory Intelligence ────────────────────────────────────────────────────
+
+export const getWasteAnalysis = (params?: { from?: string; to?: string }) =>
+  fetchAPI<{
+    period:  { from: string; to: string; days: number };
+    summary: { totalCost: number; itemCount: number; wastePct: number; avgDailyLoss: number };
+    byReason: { reason: string; totalLoss: number; count: number }[];
+    topItems: { productName: string; totalLoss: number; totalQty: number; count: number }[];
+    trend:    { date: string; totalLoss: number; count: number }[];
+  }>(`/inventory-intelligence/waste-analysis${poQS(params as Record<string, string | undefined>)}`);
+
+export const getInventoryIntelCostVariance = () =>
+  fetchAPI<{
+    items: {
+      ingredientId: string; name: string; unit: string;
+      currentCost: number; avgPurchaseCost: number; lastPrice: number;
+      variance: number; variancePct: number; trend: 'increased' | 'decreased' | 'stable'; purchaseCount: number;
+    }[];
+    summary: { increased: number; decreased: number; stable: number };
+  }>('/inventory-intelligence/cost-variance');
+
+export const getInventoryValue = () =>
+  fetchAPI<{
+    summary: { totalIngredients: number; currentStockValue: number; lowStockCount: number; lowStockValue: number; outOfStockCount: number; outOfStockValue: number };
+    topByValue:      { _id: string; name: string; unit: string; currentStock: number; costPerUnit: number; value: number; lowStockThreshold: number }[];
+    lowStockItems:   { _id: string; name: string; unit: string; currentStock: number; lowStockThreshold: number; costPerUnit: number; value: number }[];
+    outOfStockItems: { _id: string; name: string; unit: string; costPerUnit: number; value: number }[];
+  }>('/inventory-intelligence/inventory-value');
+
+export const getStockMovement = (params?: { from?: string; to?: string }) =>
+  fetchAPI<{
+    period:  { from: string; to: string; days: number };
+    summary: { fastMovingCount: number; slowMovingCount: number; deadStockCount: number; deadStockValue: number };
+    fastMoving: { ingredientId: string; name: string; unit: string; currentStock: number; totalConsumed: number; avgDailyConsumption: number; value: number }[];
+    slowMoving: { ingredientId: string; name: string; unit: string; currentStock: number; totalConsumed: number; avgDailyConsumption: number; value: number }[];
+    deadStock:  { ingredientId: string; name: string; unit: string; currentStock: number; value: number }[];
+  }>(`/inventory-intelligence/stock-movement${poQS(params as Record<string, string | undefined>)}`);
+
+export const getPurchaseIntelligence = (params?: { from?: string; to?: string }) =>
+  fetchAPI<{
+    period:  { from: string; to: string };
+    summary: { totalGRNs: number; totalSpend: number; uniqueVendors: number; uniqueIngredients: number };
+    topIngredients:     { _id: string; name: string; unit: string; totalQty: number; totalValue: number; grnCount: number; avgPrice: number }[];
+    vendorContribution: { _id: string; vendorName: string; vendorCode: string; totalSpend: number; grnCount: number; pct: number }[];
+    monthlySpend:       { _id: string; totalSpend: number; grnCount: number }[];
+  }>(`/inventory-intelligence/purchase-intelligence${poQS(params as Record<string, string | undefined>)}`);
+
 // ── SA Push Token Registration ────────────────────────────────────────────────
 
 export const registerSAPushToken = (

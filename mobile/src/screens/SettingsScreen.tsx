@@ -1057,7 +1057,8 @@ const SettingsScreen: React.FC = () => {
               { label: 'Vendors',           sub: 'Manage suppliers & outstanding',     icon: 'store'                 as const, nav: 'Vendors'         as const },
               { label: 'Purchase Orders',   sub: 'Create and track POs',              icon: 'shopping-bag'           as const, nav: 'PurchaseOrders'  as const },
               { label: 'Receive Goods',     sub: 'Record stock receipts & GRNs',      icon: 'inventory'               as const, nav: 'GoodsReceive'    as const },
-              { label: 'Vendor Ledger',     sub: 'Payments & outstanding balances',   icon: 'account-balance-wallet'  as const, nav: 'VendorLedger'    as const },
+              { label: 'Vendor Ledger',         sub: 'Payments & outstanding balances',   icon: 'account-balance-wallet'  as const, nav: 'VendorLedger'             as const },
+              { label: 'Stock Intelligence',    sub: 'Waste, costs, vendor & movement',   icon: 'analytics'               as const, nav: 'InventoryIntelligence'    as const },
             ].map((item) => (
               <TouchableOpacity
                 key={item.nav}
