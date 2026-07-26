@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Plus, Trash2 } from 'lucide-react';
 import type { Product, Category } from '../../types';
 import type { ProductInput } from '../../api/products';
 import { createProduct, updateProduct } from '../../api/products';
@@ -25,10 +25,13 @@ const BLANK: ProductInput = {
   stock: -1,
 };
 
+type VariantDraft = { _id?: string; name: string; price: number };
+
 export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
-  const [form, setForm]     = useState<ProductInput>(BLANK);
-  const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState<string | null>(null);
+  const [form, setForm]         = useState<ProductInput>(BLANK);
+  const [variants, setVariants] = useState<VariantDraft[]>([]);
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState<string | null>(null);
 
   useEffect(() => {
     if (product) {
@@ -49,8 +52,12 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
         description: product.description,
         stock:       product.stock,
       });
+      setVariants(
+        (product.variants ?? []).map(v => ({ _id: v._id, name: v.name, price: v.price })),
+      );
     } else {
       setForm(BLANK);
+      setVariants([]);
     }
     setError(null);
   }, [product]);
@@ -66,12 +73,17 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
       setError('Name, category and a price > 0 are required');
       return;
     }
+    for (const v of variants) {
+      if (!v.name.trim()) { setError('Variant names cannot be empty'); return; }
+      if (v.price < 0)    { setError('Variant prices must be ≥ 0'); return; }
+    }
     setSaving(true);
     setError(null);
     try {
+      const payload = { ...form, variants };
       const saved = product
-        ? await updateProduct(product._id, form)
-        : await createProduct(form);
+        ? await updateProduct(product._id, payload)
+        : await createProduct(payload);
       onSave(saved);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
@@ -308,6 +320,65 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
               placeholder="Optional description"
               maxLength={500}
             />
+          </div>
+
+          {/* Variants */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase tracking-wide text-ink/50">
+                Variants
+                <span className="ml-1 font-normal normal-case tracking-normal text-ink/30">
+                  (e.g. Small, Medium, Large)
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setVariants(prev => [...prev, { name: '', price: 0 }])}
+                className="flex items-center gap-1 rounded-md border border-brand/30 bg-brand/5 px-2 py-1 text-xs font-semibold text-brand hover:bg-brand/10"
+              >
+                <Plus size={12} />
+                Add
+              </button>
+            </div>
+            {variants.length === 0 && (
+              <p className="text-xs italic text-ink/30">No variants — product has a single price above.</p>
+            )}
+            <div className="space-y-2">
+              {variants.map((v, i) => (
+                <div key={v._id ?? `new-${i}`} className="flex items-center gap-2">
+                  <input
+                    className={`${field} flex-1`}
+                    placeholder="Name (e.g. Large)"
+                    value={v.name}
+                    onChange={e =>
+                      setVariants(prev =>
+                        prev.map((item, idx) => idx === i ? { ...item, name: e.target.value } : item),
+                      )
+                    }
+                  />
+                  <input
+                    className={`${field} w-24`}
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    placeholder="Price"
+                    value={v.price}
+                    onChange={e =>
+                      setVariants(prev =>
+                        prev.map((item, idx) => idx === i ? { ...item, price: parseFloat(e.target.value) || 0 } : item),
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setVariants(prev => prev.filter((_, idx) => idx !== i))}
+                    className="rounded-lg border border-red-100 p-2 text-red-400 hover:bg-red-50"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 

@@ -15,6 +15,7 @@ export interface IProduct extends Document {
   stock: number;
   isDeleted: boolean;
   recipe: { ingredient: mongoose.Types.ObjectId; quantity: number }[];
+  variants: { _id: mongoose.Types.ObjectId; name: string; price: number }[];
   // ── Channel-specific pricing ──────────────────────────────────────────────
   channelPrices: {
     swiggy?:  number | null;
@@ -93,6 +94,10 @@ const ProductSchema: Schema = new Schema(
     recipe: [{
       ingredient: { type: Schema.Types.ObjectId, ref: 'Ingredient' },
       quantity: { type: Number, required: true, min: 0 },
+    }],
+    variants: [{
+      name:  { type: String, required: true, trim: true },
+      price: { type: Number, required: true, min: 0 },
     }],
     // ── Channel-specific pricing — undefined means use base price ────────────
     channelPrices: {

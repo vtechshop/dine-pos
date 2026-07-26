@@ -20,10 +20,10 @@ interface CartState {
 }
 
 type CartAction =
-  | { type: 'ADD_ITEM';    payload: Product; defaultTax: number; effectivePrice: number }
-  | { type: 'INCREMENT';   payload: string;  defaultTax: number }
-  | { type: 'DECREMENT';   payload: string;  defaultTax: number }
-  | { type: 'REMOVE_ITEM'; payload: string }
+  | { type: 'ADD_ITEM';    payload: Product; defaultTax: number; effectivePrice: number; variantId?: string; variantName?: string }
+  | { type: 'INCREMENT';   payload: string;  defaultTax: number }  // payload = cartLineId
+  | { type: 'DECREMENT';   payload: string;  defaultTax: number }  // payload = cartLineId
+  | { type: 'REMOVE_ITEM'; payload: string }                       // payload = cartLineId
   | { type: 'SET_TABLE';   payload: string }
   | { type: 'SET_CUSTOMER';payload: string }
   | { type: 'SET_PHONE';   payload: string }
@@ -79,12 +79,15 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
       items: action.payload.items.map(item => ({
         ...item,
         effectivePrice: (item as any).effectivePrice ?? item.product.price,
+        // backward compat: old snapshots had no cartLineId or variantId
+        cartLineId: (item as any).cartLineId ?? `${item.product._id}:base`,
       })),
     };
 
     case 'ADD_ITEM': {
-      const { payload: product, defaultTax, effectivePrice } = action;
-      const existingIndex = state.items.findIndex((i) => i.product._id === product._id);
+      const { payload: product, defaultTax, effectivePrice, variantId, variantName } = action;
+      const cartLineId = `${product._id}:${variantId || 'base'}`;
+      const existingIndex = state.items.findIndex((i) => i.cartLineId === cartLineId);
       let newItems: CartItem[];
       if (existingIndex >= 0) {
         newItems = state.items.map((item, idx) => {
@@ -95,19 +98,22 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
         });
       } else {
         const taxAmount = calcItemTax(effectivePrice, 1, product.taxPercent, defaultTax);
-        newItems = [...state.items, { product, quantity: 1, taxAmount, total: effectivePrice + taxAmount, effectivePrice }];
+        newItems = [
+          ...state.items,
+          { product, quantity: 1, taxAmount, total: effectivePrice + taxAmount, effectivePrice, cartLineId, variantId, variantName },
+        ];
       }
       return { ...state, items: newItems, ...calculateTotals(newItems, state.discount) };
     }
 
     case 'REMOVE_ITEM': {
-      const newItems = state.items.filter((i) => i.product._id !== action.payload);
+      const newItems = state.items.filter((i) => i.cartLineId !== action.payload);
       return { ...state, items: newItems, ...calculateTotals(newItems, state.discount) };
     }
 
     case 'INCREMENT': {
       const newItems = state.items.map((item) => {
-        if (item.product._id !== action.payload) return item;
+        if (item.cartLineId !== action.payload) return item;
         const newQty = item.quantity + 1;
         const taxAmount = calcItemTax(item.effectivePrice, newQty, item.product.taxPercent, action.defaultTax);
         return { ...item, quantity: newQty, taxAmount, total: item.effectivePrice * newQty + taxAmount };
@@ -118,7 +124,7 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
     case 'DECREMENT': {
       const newItems = state.items
         .map((item) => {
-          if (item.product._id !== action.payload) return item;
+          if (item.cartLineId !== action.payload) return item;
           const newQty = item.quantity - 1;
           if (newQty <= 0) return null;
           const taxAmount = calcItemTax(item.effectivePrice, newQty, item.product.taxPercent, action.defaultTax);
@@ -145,10 +151,10 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
 
 interface CartContextType {
   cart: CartState;
-  addItem: (product: Product, effectivePrice?: number) => void;
-  removeItem: (productId: string) => void;
-  increment: (productId: string) => void;
-  decrement: (productId: string) => void;
+  addItem: (product: Product, effectivePrice?: number, variantId?: string, variantName?: string) => void;
+  removeItem: (cartLineId: string) => void;
+  increment: (cartLineId: string) => void;
+  decrement: (cartLineId: string) => void;
   setTable: (table: string) => void;
   setCustomer: (name: string) => void;
   setPhone: (phone: string) => void;
@@ -189,17 +195,18 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
   const value: CartContextType = useMemo(() => ({
     cart,
-    addItem:     (product, ep) => dispatch({ type: 'ADD_ITEM', payload: product, defaultTax, effectivePrice: ep ?? product.price }),
-    removeItem:  (id)      => dispatch({ type: 'REMOVE_ITEM', payload: id }),
-    increment:   (id)      => dispatch({ type: 'INCREMENT',   payload: id, defaultTax }),
-    decrement:   (id)      => dispatch({ type: 'DECREMENT',   payload: id, defaultTax }),
-    setTable:    (table)   => dispatch({ type: 'SET_TABLE',    payload: table }),
-    setCustomer: (name)    => dispatch({ type: 'SET_CUSTOMER', payload: name }),
-    setPhone:    (phone)   => dispatch({ type: 'SET_PHONE',    payload: phone }),
-    setNotes:    (notes)   => dispatch({ type: 'SET_NOTES',    payload: notes }),
-    setParcel:   (val)     => dispatch({ type: 'SET_PARCEL',   payload: val }),
-    setDiscount: (d)       => dispatch({ type: 'SET_DISCOUNT', payload: d }),
-    clearCart:   ()        => dispatch({ type: 'CLEAR_CART' }),
+    addItem: (product, ep, variantId, variantName) =>
+      dispatch({ type: 'ADD_ITEM', payload: product, defaultTax, effectivePrice: ep ?? product.price, variantId, variantName }),
+    removeItem: (cartLineId) => dispatch({ type: 'REMOVE_ITEM', payload: cartLineId }),
+    increment:  (cartLineId) => dispatch({ type: 'INCREMENT',   payload: cartLineId, defaultTax }),
+    decrement:  (cartLineId) => dispatch({ type: 'DECREMENT',   payload: cartLineId, defaultTax }),
+    setTable:    (table)  => dispatch({ type: 'SET_TABLE',    payload: table }),
+    setCustomer: (name)   => dispatch({ type: 'SET_CUSTOMER', payload: name }),
+    setPhone:    (phone)  => dispatch({ type: 'SET_PHONE',    payload: phone }),
+    setNotes:    (notes)  => dispatch({ type: 'SET_NOTES',    payload: notes }),
+    setParcel:   (val)    => dispatch({ type: 'SET_PARCEL',   payload: val }),
+    setDiscount: (d)      => dispatch({ type: 'SET_DISCOUNT', payload: d }),
+    clearCart:   ()       => dispatch({ type: 'CLEAR_CART' }),
     itemCount,
   }), [cart, defaultTax, itemCount]);
 

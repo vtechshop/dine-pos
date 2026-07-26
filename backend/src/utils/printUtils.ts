@@ -14,7 +14,7 @@ export interface KOTPayload {
   tableNumber:  string;
   guestLabel?:  string;
   orderSource:  string;
-  items:        { productName: string; quantity: number }[];
+  items:        { productName: string; quantity: number; variantName?: string }[];
   notes?:       string;
   createdAt:    string;
 }
@@ -31,7 +31,7 @@ export interface ReceiptPayload {
   tableNumber:           string;
   guestLabel?:           string;
   paymentMethod:         string;
-  items:                 { productName: string; quantity: number; price: number; total: number }[];
+  items:                 { productName: string; variantName?: string; quantity: number; price: number; total: number }[];
   subtotal:              number;
   taxTotal:              number;
   grandTotal:            number;
@@ -155,7 +155,7 @@ export async function scheduleKOTPrint(
     tableNumber:  order.tableNumber ?? '',
     guestLabel:   order.customerName || undefined,
     orderSource:  order.orderSource  ?? 'admin',
-    items:        order.items.map(i => ({ productName: i.productName, quantity: i.quantity })),
+    items:        order.items.map(i => ({ productName: i.productName, quantity: i.quantity, variantName: (i as any).variantName || undefined })),
     notes:        order.notes || undefined,
     createdAt:    order.createdAt instanceof Date
       ? order.createdAt.toISOString()
@@ -219,6 +219,7 @@ export async function scheduleReceiptPrint(
     for (const item of (o.items || [])) {
       items.push({
         productName: item.productName,
+        variantName: (item as any).variantName || undefined,
         quantity:    item.quantity,
         price:       item.price,
         total:       item.total,

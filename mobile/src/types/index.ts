@@ -14,6 +14,13 @@ export interface RecipeItem {
   quantity: number;
 }
 
+// Product variant (e.g. Small, Medium, Large with different prices)
+export interface ProductVariant {
+  _id:   string;
+  name:  string;
+  price: number;
+}
+
 // Product
 export interface ChannelPrices {
   swiggy?: number;
@@ -37,6 +44,7 @@ export interface Product {
   stock: number; // -1 = unlimited, 0 = out of stock, >0 = count
   recipe?: RecipeItem[];
   channelPrices?: ChannelPrices;
+  variants?: ProductVariant[];
 }
 
 // Ingredient (raw material)
@@ -55,13 +63,18 @@ export interface CartItem {
   quantity: number;
   taxAmount: number;
   total: number;
-  effectivePrice: number; // channel-aware unit price (may differ from product.price)
+  effectivePrice: number;  // channel-aware / variant unit price
+  cartLineId: string;      // dedup key: productId:variantId or productId:base
+  variantId?: string;
+  variantName?: string;
 }
 
 // Order Item (stored in DB)
 export interface OrderItem {
   product: string;
   productName: string;
+  variantId?: string;
+  variantName?: string;
   quantity: number;
   price: number;
   taxPercent: number;

@@ -1,6 +1,12 @@
 // Shared menu-domain types — returned by GET /api/public/menu
 // and used by both apps/web and apps/qr.
 
+export interface ProductVariant {
+  _id:   string;
+  name:  string;
+  price: number;
+}
+
 export interface FeatureFlags {
   payment?:                boolean;
   reservations?:           boolean;
@@ -49,6 +55,7 @@ export interface Product {
   description: string;
   stock:       number;  // -1 = unlimited
   isDeleted:   boolean;
+  variants?:   ProductVariant[];
   createdAt:   string;
   updatedAt:   string;
 }

@@ -123,13 +123,15 @@ const CustomerCartScreen: React.FC = () => {
       source: 'dine-in' as const,
       orderSource: 'dine-in',
       items: cart.items.map(item => ({
-        product: item.product._id,
+        product:     item.product._id,
         productName: item.product.name,
-        quantity: item.quantity,
-        price: item.product.price,
-        taxPercent: item.product.taxPercent,
-        taxAmount: item.taxAmount,
-        total: item.total,
+        variantId:   item.variantId   || '',
+        variantName: item.variantName || '',
+        quantity:    item.quantity,
+        price:       item.effectivePrice,
+        taxPercent:  item.product.taxPercent,
+        taxAmount:   item.taxAmount,
+        total:       item.total,
       })),
       tableNumber: cart.tableNumber,
       customerName: cart.customerName,
@@ -191,7 +193,7 @@ const CustomerCartScreen: React.FC = () => {
         _id: snapshot._id,
         orderNumber: snapshot.orderNumber,
         token: snapshot.token,
-        items: snapshot.items.map(i => ({ name: i.product.name, quantity: i.quantity, total: i.total })),
+        items: snapshot.items.map(i => ({ name: i.variantName ? `${i.product.name} (${i.variantName})` : i.product.name, quantity: i.quantity, total: i.total })),
         grandTotal: snapshot.grandTotal,
         tableNumber: snapshot.tableNumber,
         hotelId,
@@ -260,24 +262,27 @@ const CustomerCartScreen: React.FC = () => {
   };
 
   const renderItem = (item: CartItem) => (
-    <View key={item.product._id} style={styles.cartItem}>
+    <View key={item.cartLineId} style={styles.cartItem}>
       {item.product.image
         ? <Image source={{ uri: item.product.image }} style={styles.itemImg} />
         : <View style={[styles.itemImg, styles.itemImgPlaceholder]}><MaterialIcons name="restaurant" size={22} color={Colors.textMuted} /></View>
       }
       <View style={styles.itemInfo}>
         <Text style={styles.itemName} numberOfLines={1}>{item.product.name}</Text>
-        <Text style={styles.itemPrice}>{cur}{(item.product.price * item.quantity).toFixed(0)}</Text>
+        {!!item.variantName && (
+          <Text style={{ fontSize: FontSize.xs, color: Colors.primary, fontWeight: '600', marginTop: 1 }} numberOfLines={1}>{item.variantName}</Text>
+        )}
+        <Text style={styles.itemPrice}>{cur}{(item.effectivePrice * item.quantity).toFixed(0)}</Text>
       </View>
       <View style={styles.qtyRow}>
-        <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item.product._id)}>
+        <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item.cartLineId)}>
           <MaterialIcons name="remove" size={16} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.qtyNum}>{item.quantity}</Text>
-        <TouchableOpacity style={styles.qtyBtn} onPress={() => increment(item.product._id)}>
+        <TouchableOpacity style={styles.qtyBtn} onPress={() => increment(item.cartLineId)}>
           <MaterialIcons name="add" size={16} color={Colors.white} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => removeItem(item.product._id)} style={{ padding: 4 }}>
+        <TouchableOpacity onPress={() => removeItem(item.cartLineId)} style={{ padding: 4 }}>
           <MaterialIcons name="delete-outline" size={18} color={Colors.danger} />
         </TouchableOpacity>
       </View>
@@ -349,8 +354,10 @@ const CustomerCartScreen: React.FC = () => {
           <View style={styles.billSection}>
             <Text style={styles.billSectionTitle}>Order Summary</Text>
             {placedOrder.items.map(item => (
-              <View key={item.product._id} style={styles.billItemRow}>
-                <Text style={styles.billItemName} numberOfLines={1}>{item.product.name}</Text>
+              <View key={item.cartLineId} style={styles.billItemRow}>
+                <Text style={styles.billItemName} numberOfLines={1}>
+                  {item.variantName ? `${item.product.name} (${item.variantName})` : item.product.name}
+                </Text>
                 <Text style={styles.billItemQty}>x{item.quantity}</Text>
                 <Text style={styles.billItemAmt}>{cur}{item.total.toFixed(0)}</Text>
               </View>

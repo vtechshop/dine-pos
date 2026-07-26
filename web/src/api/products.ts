@@ -14,6 +14,7 @@ export interface ProductInput {
   shortCode?: string;
   description?: string;
   stock?: number;
+  variants?: Array<{ _id?: string; name: string; price: number }>;
 }
 
 export async function fetchProducts(params?: {
@@ -45,6 +46,35 @@ export async function updateProduct(id: string, data: Partial<ProductInput>): Pr
 
 export async function deleteProduct(id: string): Promise<void> {
   await apiFetch<{ message: string }>(`/products/${id}`, { method: 'DELETE' });
+}
+
+// ── Product Variants ──────────────────────────────────────────────────────────
+
+export async function addVariant(
+  productId: string,
+  data: { name: string; price: number },
+): Promise<Product> {
+  return apiFetch<Product>(`/products/${productId}/variants`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateVariant(
+  productId: string,
+  variantId: string,
+  data: { name?: string; price?: number },
+): Promise<Product> {
+  return apiFetch<Product>(`/products/${productId}/variants/${variantId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteVariant(productId: string, variantId: string): Promise<Product> {
+  return apiFetch<Product>(`/products/${productId}/variants/${variantId}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function fetchLowStockProducts(

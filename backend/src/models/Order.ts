@@ -4,6 +4,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IOrderItem {
   product: mongoose.Types.ObjectId;
   productName: string;
+  variantId: string;
+  variantName: string;
   quantity: number;
   price: number;
   taxPercent: number;
@@ -68,6 +70,8 @@ const OrderItemSchema: Schema = new Schema({
     type: String,
     required: true,
   },
+  variantId:   { type: String, default: '' },
+  variantName: { type: String, default: '' },
   quantity: {
     type: Number,
     required: true,

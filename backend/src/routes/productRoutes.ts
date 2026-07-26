@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import mongoose from 'mongoose';
 import Product from '../models/Product';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
@@ -72,7 +73,7 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
 // PUT update product — admin only
 router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const ALLOWED = ['name', 'description', 'price', 'taxPercent', 'category', 'isAvailable', 'isVeg', 'shortCode', 'image', 'stock'] as const;
+    const ALLOWED = ['name', 'description', 'price', 'taxPercent', 'category', 'isAvailable', 'isVeg', 'shortCode', 'image', 'stock', 'variants'] as const;
     const update: Record<string, unknown> = {};
     for (const key of ALLOWED) {
       if (req.body[key] !== undefined) update[key] = req.body[key];
@@ -103,6 +104,72 @@ router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     if (!product) return res.status(404).json({ message: 'Product not found' });
     logAudit(req, 'product.deleted', 'product', req.params.id, { name: (product as any).name });
     res.json({ message: 'Product deleted' });
+  } catch (error) {
+    sendError(res, 500, 'Server error', error);
+  }
+});
+
+// ── Variant sub-resource routes ───────────────────────────────────────────────
+
+// POST /products/:id/variants — add a variant
+router.post('/:id/variants', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, price } = req.body;
+    if (!name || typeof price !== 'number' || price < 0) {
+      return res.status(400).json({ message: 'name (string) and price (number ≥ 0) are required' });
+    }
+    const product = await Product.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId, isDeleted: false },
+      { $push: { variants: { name: String(name).trim(), price } } },
+      { new: true, runValidators: true }
+    ).populate('category', 'name color');
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    logAudit(req, 'product.variant.added', 'product', req.params.id, { variantName: name });
+    res.status(201).json(product);
+  } catch (error) {
+    sendError(res, 400, 'Invalid data', error);
+  }
+});
+
+// PUT /products/:id/variants/:variantId — update a variant
+router.put('/:id/variants/:variantId', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.variantId)) {
+      return res.status(400).json({ message: 'Invalid variantId' });
+    }
+    const setFields: Record<string, unknown> = {};
+    if (req.body.name  !== undefined) setFields['variants.$.name']  = String(req.body.name).trim();
+    if (req.body.price !== undefined) setFields['variants.$.price'] = Number(req.body.price);
+    if (Object.keys(setFields).length === 0) {
+      return res.status(400).json({ message: 'Provide name or price to update' });
+    }
+    const product = await Product.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId, 'variants._id': new mongoose.Types.ObjectId(req.params.variantId) },
+      { $set: setFields },
+      { new: true, runValidators: true }
+    ).populate('category', 'name color');
+    if (!product) return res.status(404).json({ message: 'Product or variant not found' });
+    logAudit(req, 'product.variant.updated', 'product', req.params.id, { variantId: req.params.variantId });
+    res.json(product);
+  } catch (error) {
+    sendError(res, 400, 'Invalid data', error);
+  }
+});
+
+// DELETE /products/:id/variants/:variantId — remove a variant
+router.delete('/:id/variants/:variantId', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.variantId)) {
+      return res.status(400).json({ message: 'Invalid variantId' });
+    }
+    const product = await Product.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId },
+      { $pull: { variants: { _id: new mongoose.Types.ObjectId(req.params.variantId) } } },
+      { new: true }
+    ).populate('category', 'name color');
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    logAudit(req, 'product.variant.deleted', 'product', req.params.id, { variantId: req.params.variantId });
+    res.json(product);
   } catch (error) {
     sendError(res, 500, 'Server error', error);
   }

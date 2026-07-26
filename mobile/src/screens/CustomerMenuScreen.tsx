@@ -39,15 +39,16 @@ const CustomerMenuScreen: React.FC = () => {
     return cp && cp > 0 ? cp : p.price;
   };
 
-  const [categories,    setCategories]   = useState<Category[]>([]);
-  const [products,      setProducts]     = useState<Product[]>([]);
-  const [filtered,      setFiltered]     = useState<Product[]>([]);
-  const [selectedCat,   setSelectedCat]  = useState<string | null>(null);
-  const [loading,       setLoading]      = useState(true);
-  const [search,        setSearch]       = useState('');
-  const [foodFilter,    setFoodFilter]   = useState<'all' | 'veg' | 'non-veg'>('all');
-  const [detailProduct, setDetailProduct]= useState<Product | null>(null);
-  const [isOffline,     setIsOffline]    = useState(false);
+  const [categories,         setCategories]          = useState<Category[]>([]);
+  const [products,           setProducts]            = useState<Product[]>([]);
+  const [filtered,           setFiltered]            = useState<Product[]>([]);
+  const [selectedCat,        setSelectedCat]         = useState<string | null>(null);
+  const [loading,            setLoading]             = useState(true);
+  const [search,             setSearch]              = useState('');
+  const [foodFilter,         setFoodFilter]          = useState<'all' | 'veg' | 'non-veg'>('all');
+  const [detailProduct,      setDetailProduct]       = useState<Product | null>(null);
+  const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null);
+  const [isOffline,          setIsOffline]           = useState(false);
   const tapCount = useRef(0);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSecretTap = () => {
@@ -115,7 +116,7 @@ const CustomerMenuScreen: React.FC = () => {
     setSelectedCat(id);
   }, []);
 
-  const getQty = (id: string) => cart.items.find(i => i.product._id === id)?.quantity || 0;
+  const getQty = (id: string) => cart.items.filter(i => i.product._id === id).reduce((sum, i) => sum + i.quantity, 0);
   const cur = settings.currencySymbol || '₹';
   const isMaterialIcon = (name?: string) => !!name && /^[a-z0-9-_]+$/.test(name);
 
@@ -190,26 +191,26 @@ const CustomerMenuScreen: React.FC = () => {
 
         {/* Add / Qty controls */}
         {!unavailable && (
-          qty === 0
+          qty === 0 || (item.variants?.length ?? 0) > 0
             ? (
               <TouchableOpacity
                 style={styles.addBtn}
-                onPress={() => addItem(item, qrPrice(item))}
+                onPress={() => (item.variants?.length ?? 0) > 0 ? setVariantPickerProduct(item) : addItem(item, qrPrice(item))}
                 activeOpacity={0.8}
               >
-                <MaterialIcons name="add" size={18} color={Colors.white} />
-                <Text style={styles.addBtnText}>ADD</Text>
+                <MaterialIcons name={(item.variants?.length ?? 0) > 0 ? 'expand-more' : 'add'} size={18} color={Colors.white} />
+                <Text style={styles.addBtnText}>{(item.variants?.length ?? 0) > 0 ? 'CHOOSE' : 'ADD'}</Text>
               </TouchableOpacity>
             )
             : (
               <View style={styles.qtyControls}>
-                <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item._id)}>
+                <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(`${item._id}:base`)}>
                   <MaterialIcons name="remove" size={18} color={Colors.white} />
                 </TouchableOpacity>
                 <Text style={styles.qtyNum}>{qty}</Text>
                 <TouchableOpacity style={styles.qtyBtn} onPress={() => {
                   if (item.stock > 0 && qty >= item.stock) { showAlert('Stock Limit', `Only ${item.stock} available`); return; }
-                  increment(item._id);
+                  increment(`${item._id}:base`);
                 }}>
                   <MaterialIcons name="add" size={18} color={Colors.white} />
                 </TouchableOpacity>
@@ -308,26 +309,34 @@ const CustomerMenuScreen: React.FC = () => {
               })()}
 
               {/* Add to cart controls */}
-              {qty === 0
+              {qty === 0 || (item.variants?.length ?? 0) > 0
                 ? (
                   <TouchableOpacity
                     style={styles.modalAddBtn}
-                    onPress={() => { addItem(item, qrPrice(item)); setDetailProduct(null); }}
+                    onPress={() => {
+                      if ((item.variants?.length ?? 0) > 0) {
+                        setDetailProduct(null);
+                        setVariantPickerProduct(item);
+                      } else {
+                        addItem(item, qrPrice(item));
+                        setDetailProduct(null);
+                      }
+                    }}
                     activeOpacity={0.85}
                   >
                     <MaterialIcons name="add-shopping-cart" size={18} color={Colors.white} />
-                    <Text style={styles.modalAddBtnText}>Add to Cart</Text>
+                    <Text style={styles.modalAddBtnText}>{(item.variants?.length ?? 0) > 0 ? 'Choose Variant' : 'Add to Cart'}</Text>
                   </TouchableOpacity>
                 )
                 : (
                   <View style={styles.modalQtyRow}>
-                    <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item._id)}>
+                    <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(`${item._id}:base`)}>
                       <MaterialIcons name="remove" size={18} color={Colors.white} />
                     </TouchableOpacity>
                     <Text style={styles.modalQtyNum}>{qty}</Text>
                     <TouchableOpacity style={styles.qtyBtn} onPress={() => {
                       if (item.stock > 0 && qty >= item.stock) { showAlert('Stock Limit', `Only ${item.stock} available`); return; }
-                      increment(item._id);
+                      increment(`${item._id}:base`);
                     }}>
                       <MaterialIcons name="add" size={18} color={Colors.white} />
                     </TouchableOpacity>
@@ -476,6 +485,55 @@ const CustomerMenuScreen: React.FC = () => {
 
       {/* ── Item detail modal ── */}
       {renderDetailModal()}
+
+      {/* ── Variant Picker Modal ── */}
+      <Modal visible={!!variantPickerProduct} transparent animationType="slide" onRequestClose={() => setVariantPickerProduct(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { paddingBottom: bottom + 24, maxHeight: '70%' }]}>
+            <View style={styles.modalHandle} />
+            <View style={{ padding: Spacing.xl, paddingTop: Spacing.lg }}>
+              <Text style={{ fontSize: FontSize.xl, fontWeight: '900', color: Colors.text, marginBottom: 4 }}>
+                {variantPickerProduct?.name}
+              </Text>
+              <Text style={{ fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.lg }}>
+                Choose a variant
+              </Text>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {variantPickerProduct?.variants?.map(variant => (
+                  <TouchableOpacity
+                    key={variant._id}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center',
+                      paddingVertical: 14, paddingHorizontal: Spacing.md,
+                      borderRadius: BorderRadius.lg, borderWidth: 1, borderColor: Colors.border,
+                      backgroundColor: Colors.surface, marginBottom: Spacing.sm,
+                    }}
+                    onPress={() => {
+                      addItem(variantPickerProduct, variant.price, variant._id, variant.name);
+                      setVariantPickerProduct(null);
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={{ flex: 1, fontSize: FontSize.md, fontWeight: '700', color: Colors.text }}>{variant.name}</Text>
+                    <Text style={{ fontSize: FontSize.md, fontWeight: '800', color: Colors.primary, marginRight: Spacing.md }}>
+                      {(settings.currencySymbol || '₹')}{variant.price.toFixed(0)}
+                    </Text>
+                    <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+                      <MaterialIcons name="add" size={16} color={Colors.white} />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <TouchableOpacity
+                style={{ marginTop: Spacing.md, paddingVertical: 14, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center' }}
+                onPress={() => setVariantPickerProduct(null)}
+              >
+                <Text style={{ color: Colors.textSecondary, fontSize: FontSize.md, fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

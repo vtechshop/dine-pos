@@ -86,8 +86,9 @@ const BillingScreen: React.FC = () => {
   const [orderSource,       setOrderSource]      = useState<OrderSource>('dine-in');
   const [printingKot,       setPrintingKot]      = useState(false);
   const [tables,            setTables]           = useState<Table[]>([]);
-  const [showTablePicker,   setShowTablePicker]  = useState(false);
-  const [tableSearch,       setTableSearch]      = useState('');
+  const [showTablePicker,     setShowTablePicker]    = useState(false);
+  const [tableSearch,         setTableSearch]        = useState('');
+  const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null);
 
   const handleSourceChange = (src: OrderSource) => {
     setOrderSource(src);
@@ -228,13 +229,15 @@ Thank you for dining with us! 🍽️`;
     };
     const orderData = {
       items: cart.items.map(item => ({
-        product: item.product._id,
+        product:     item.product._id,
         productName: item.product.name,
-        quantity: item.quantity,
-        price: item.effectivePrice,
-        taxPercent: item.product.taxPercent,
-        taxAmount: item.taxAmount,
-        total: item.total,
+        variantId:   item.variantId   || '',
+        variantName: item.variantName || '',
+        quantity:    item.quantity,
+        price:       item.effectivePrice,
+        taxPercent:  item.product.taxPercent,
+        taxAmount:   item.taxAmount,
+        total:       item.total,
       })),
       subtotal:      cart.subtotal,
       taxTotal:      cart.taxTotal,
@@ -258,14 +261,14 @@ Thank you for dining with us! 🍽️`;
     };
     // Snapshot cart before clearCart wipes it
     const cartSnapshot = {
-      items:          cart.items.map(i => ({ name: i.product.name, qty: i.quantity, price: i.effectivePrice })),
+      items:          cart.items.map(i => ({ name: i.variantName ? `${i.product.name} (${i.variantName})` : i.product.name, qty: i.quantity, price: i.effectivePrice })),
       subtotal:       cart.subtotal,
       taxTotal:       cart.taxTotal,
       discountAmount: cart.discountAmount,
       grandTotal:     cart.grandTotal,
     };
     const kotSnapshot: Omit<KOTOrderInput, 'orderNumber'> = {
-      items:       cart.items.map(i => ({ productName: i.product.name, quantity: i.quantity })),
+      items:       cart.items.map(i => ({ productName: i.variantName ? `${i.product.name} (${i.variantName})` : i.product.name, quantity: i.quantity })),
       tableNumber: getTableNumber(),
       notes:       cart.notes,
       createdAt:   new Date().toISOString(),
@@ -348,12 +351,14 @@ Thank you for dining with us! 🍽️`;
 
   // ── Product tile — card style with image ──────────────────────────────────
   const renderProduct = ({ item }: { item: Product }) => {
-    const qty = cart.items.find(i => i.product._id === item._id)?.quantity || 0;
+    const qty = cart.items.filter(i => i.product._id === item._id).reduce((sum, i) => sum + i.quantity, 0);
     const accentColor = item.isVeg ? Colors.veg : Colors.nonVeg;
+    const hasVariants = (item.variants?.length ?? 0) > 0;
+    const openOrAdd = () => hasVariants ? setVariantPickerProduct(item) : addItem(item, getChannelPrice(item));
     return (
       <TouchableOpacity
         style={[styles.prodTile, qty > 0 && styles.prodTileActive]}
-        onPress={() => addItem(item, getChannelPrice(item))}
+        onPress={openOrAdd}
         activeOpacity={0.75}
       >
         {/* Image / placeholder */}
@@ -385,9 +390,9 @@ Thank you for dining with us! 🍽️`;
             <Text style={styles.prodTilePrice}>{cur}{getChannelPrice(item).toFixed(0)}</Text>
             {item.taxPercent > 0 && <Text style={styles.prodTileTax}> +{item.taxPercent}%</Text>}
           </View>
-          {qty > 0 ? (
+          {qty > 0 && !hasVariants ? (
             <View style={styles.prodTileQtyRow}>
-              <TouchableOpacity style={styles.prodTileQtyBtn} onPress={() => decrement(item._id)} hitSlop={{ top: 6, bottom: 6, left: 8, right: 4 }}>
+              <TouchableOpacity style={styles.prodTileQtyBtn} onPress={() => decrement(`${item._id}:base`)} hitSlop={{ top: 6, bottom: 6, left: 8, right: 4 }}>
                 <MaterialIcons name="remove" size={13} color={Colors.white} />
               </TouchableOpacity>
               <Text style={styles.prodTileQtyNum}>{qty}</Text>
@@ -396,9 +401,9 @@ Thank you for dining with us! 🍽️`;
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity style={styles.prodTileAddRow} onPress={() => addItem(item, getChannelPrice(item))} activeOpacity={0.7}>
-              <MaterialIcons name="add" size={14} color={Colors.white} />
-              <Text style={styles.prodTileAddText}>ADD</Text>
+            <TouchableOpacity style={styles.prodTileAddRow} onPress={openOrAdd} activeOpacity={0.7}>
+              <MaterialIcons name={hasVariants ? 'expand-more' : 'add'} size={14} color={Colors.white} />
+              <Text style={styles.prodTileAddText}>{hasVariants ? 'CHOOSE' : 'ADD'}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -415,20 +420,23 @@ Thank you for dining with us! 🍽️`;
         </View>
         <View style={{ flex: 1, marginLeft: 8 }}>
           <Text style={styles.cartItemName} numberOfLines={1}>{item.product.name}</Text>
+          {!!item.variantName && (
+            <Text style={styles.cartItemVariant} numberOfLines={1}>{item.variantName}</Text>
+          )}
           <Text style={styles.cartItemUnitPrice}>{cur}{item.effectivePrice.toFixed(0)} each</Text>
         </View>
       </View>
       <View style={styles.cartItemRight}>
         <Text style={styles.cartItemTotal}>{cur}{(item.effectivePrice * item.quantity).toFixed(0)}</Text>
         <View style={styles.qtyRow}>
-          <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item.product._id)}>
+          <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item.cartLineId)}>
             <MaterialIcons name="remove" size={15} color={Colors.primary} />
           </TouchableOpacity>
           <Text style={styles.qtyNum}>{item.quantity}</Text>
-          <TouchableOpacity style={styles.qtyBtn} onPress={() => increment(item.product._id)}>
+          <TouchableOpacity style={styles.qtyBtn} onPress={() => increment(item.cartLineId)}>
             <MaterialIcons name="add" size={15} color={Colors.primary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.removeBtn} onPress={() => removeItem(item.product._id)}>
+          <TouchableOpacity style={styles.removeBtn} onPress={() => removeItem(item.cartLineId)}>
             <MaterialIcons name="close" size={14} color={Colors.danger} />
           </TouchableOpacity>
         </View>
@@ -590,7 +598,7 @@ Thank you for dining with us! 🍽️`;
             <FlatList
               data={cart.items}
               renderItem={renderCartItem}
-              keyExtractor={i => i.product._id}
+              keyExtractor={i => i.cartLineId}
               style={{ flex: 1 }}
               ListEmptyComponent={
                 <View style={styles.emptyCart}>
@@ -882,6 +890,43 @@ Thank you for dining with us! 🍽️`;
         </View>
       </Modal>
 
+      {/* ── Variant Picker Modal ── */}
+      <Modal visible={!!variantPickerProduct} transparent animationType="slide" onRequestClose={() => setVariantPickerProduct(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.payModal, { paddingBottom: 24 + bottom }]}>
+            <View style={styles.payModalHandle} />
+            <Text style={styles.payModalTitle}>{variantPickerProduct?.name}</Text>
+            <Text style={[styles.payModalAmount, { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.xl }]}>
+              Choose a variant to add
+            </Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {variantPickerProduct?.variants?.map(variant => (
+                <TouchableOpacity
+                  key={variant._id}
+                  style={styles.variantRow}
+                  onPress={() => {
+                    addItem(variantPickerProduct, variant.price, variant._id, variant.name);
+                    setVariantPickerProduct(null);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.variantName}>{variant.name}</Text>
+                  </View>
+                  <Text style={styles.variantPrice}>{cur}{variant.price.toFixed(0)}</Text>
+                  <View style={styles.variantAddBtn}>
+                    <MaterialIcons name="add" size={16} color={Colors.white} />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={[styles.payCancel, { marginTop: Spacing.lg }]} onPress={() => setVariantPickerProduct(null)}>
+              <Text style={styles.payCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Order Success / Token Modal ── */}
       <Modal visible={!!showSuccess} transparent animationType="fade" onRequestClose={() => setShowSuccess(null)}>
         <View style={styles.modalOverlay}>
@@ -1083,6 +1128,7 @@ const styles = StyleSheet.create({
   vegBoxTiny: { width: 11, height: 11, borderRadius: 2, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   vegDotTiny: { width: 5, height: 5, borderRadius: 2.5 },
   cartItemName: { color: Colors.text, fontSize: FontSize.sm, fontWeight: '600' },
+  cartItemVariant: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '600', marginTop: 1 },
   cartItemUnitPrice: { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 1 },
   cartItemRight: { alignItems: 'flex-end' },
   cartItemTotal: { color: Colors.primary, fontSize: FontSize.md, fontWeight: '700', marginBottom: 4 },
@@ -1162,6 +1208,20 @@ const styles = StyleSheet.create({
   tablePickerName: { fontSize: FontSize.md, fontWeight: '800', color: Colors.text },
   tablePickerStatus: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: BorderRadius.round },
   tablePickerStatusText: { fontSize: FontSize.xs, fontWeight: '700' },
+
+  // Variant picker
+  variantRow: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    paddingVertical: 14, paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.lg, borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.surface, marginBottom: Spacing.sm,
+  },
+  variantName: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
+  variantPrice: { fontSize: FontSize.md, fontWeight: '800', color: Colors.primary, minWidth: 60, textAlign: 'right' },
+  variantAddBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center',
+  },
 
   // Success modal
   successModal: {
