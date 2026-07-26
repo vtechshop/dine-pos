@@ -1,5 +1,6 @@
 import { CheckCircle2, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { usePageSEO } from '../hooks/usePageSEO';
 
 interface Plan {
   name:     string;
@@ -99,6 +100,10 @@ const FAQ_ITEMS = [
 ];
 
 export function PricingPage() {
+  usePageSEO(
+    'Pricing — Dine POS',
+    'Simple, honest pricing for Dine POS. Starter from ₹999/month, Pro from ₹1,999/month. No setup fees, no hidden charges. 14-day free trial on all plans.',
+  );
   return (
     <div>
       {/* Hero */}

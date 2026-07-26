@@ -21,6 +21,52 @@
     <meta name="twitter:title"       content="Dine POS — Restaurant POS System" />
     <meta name="twitter:description" content="The complete point-of-sale system built for modern restaurants. Streamline orders, billing, and inventory from one screen." />
     <meta name="twitter:image"       content="https://dinepos.com/branding/logo-128.png" />
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://dinepos.com/#organization",
+          "name": "Dine POS",
+          "url": "https://dinepos.com",
+          "logo": "https://dinepos.com/branding/logo-128.png",
+          "email": "info@happya.in",
+          "telephone": "+916381356683",
+          "address": {
+            "@type": "PostalAddress",
+            "addressLocality": "Chennai",
+            "addressRegion": "Tamil Nadu",
+            "addressCountry": "IN"
+          },
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "telephone": "+916381356683",
+            "contactType": "customer support",
+            "availableLanguage": "English",
+            "hoursAvailable": "Mo-Sa 09:00-19:00"
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://dinepos.com/#software",
+          "name": "Dine POS",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "Web Browser",
+          "url": "https://dinepos.com",
+          "description": "The complete point-of-sale system built for modern restaurants. Streamline orders, billing, and inventory from one screen.",
+          "offers": {
+            "@type": "Offer",
+            "price": "999",
+            "priceCurrency": "INR",
+            "priceValidUntil": "2026-12-31"
+          },
+          "publisher": { "@id": "https://dinepos.com/#organization" }
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>

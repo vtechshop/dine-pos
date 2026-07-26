@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { usePageSEO } from '../hooks/usePageSEO';
 import {
   Zap, LayoutGrid, Package, BarChart2, Printer, Smartphone,
   ChevronRight, CheckCircle2, Star, Check,
@@ -778,6 +779,10 @@ function CTABanner() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function HomePage() {
+  usePageSEO(
+    'Dine POS — Restaurant POS System',
+    'The complete point-of-sale system for modern restaurants. Streamline orders, billing, and inventory — all from one screen. Trusted by 500+ restaurants across India.',
+  );
   return (
     <>
       <Hero />

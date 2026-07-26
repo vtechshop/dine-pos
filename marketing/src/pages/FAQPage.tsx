@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { usePageSEO } from '../hooks/usePageSEO';
 
 interface FAQItem {
   q: string;
@@ -123,7 +124,31 @@ function Accordion({ items }: { items: FAQItem[] }) {
   );
 }
 
+const FAQ_SCHEMA = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: FAQ_GROUPS.flatMap(g =>
+    g.items.map(({ q, a }) => ({
+      '@type': 'Question',
+      name: q,
+      acceptedAnswer: { '@type': 'Answer', text: a },
+    })),
+  ),
+};
+
 export function FAQPage() {
+  usePageSEO(
+    'FAQ — Dine POS',
+    'Frequently asked questions about Dine POS: setup, features, pricing, kitchen printing, offline mode, GST billing and more.',
+  );
+  useEffect(() => {
+    const script   = document.createElement('script');
+    script.type    = 'application/ld+json';
+    script.id      = 'faq-schema';
+    script.text    = JSON.stringify(FAQ_SCHEMA);
+    document.head.appendChild(script);
+    return () => { document.getElementById('faq-schema')?.remove(); };
+  }, []);
   return (
     <div>
       {/* Hero */}

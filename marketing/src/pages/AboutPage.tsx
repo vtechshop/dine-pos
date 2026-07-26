@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Target, Heart, Zap } from 'lucide-react';
+import { usePageSEO } from '../hooks/usePageSEO';
 
 const VALUES = [
   {
@@ -27,6 +28,10 @@ const TIMELINE = [
 ];
 
 export function AboutPage() {
+  usePageSEO(
+    'About — Dine POS',
+    'Dine POS was built for Indian restaurant owners who needed faster billing, not another imported tool. Learn our story, values, and mission.',
+  );
   return (
     <div>
       {/* Hero */}

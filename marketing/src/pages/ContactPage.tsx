@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Mail, Phone, MapPin, CheckCircle2 } from 'lucide-react';
 import { submitContact } from '../api';
+import { usePageSEO } from '../hooks/usePageSEO';
 
 interface FormState {
   name: string;
@@ -13,6 +14,10 @@ interface FormState {
 const BLANK: FormState = { name: '', email: '', phone: '', restaurant: '', message: '' };
 
 export function ContactPage() {
+  usePageSEO(
+    'Contact — Dine POS',
+    'Get in touch with Dine POS. Call, email, or send a message — we reply within one business day. Chennai, Tamil Nadu, India.',
+  );
   const [form, setForm]       = useState<FormState>(BLANK);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError]     = useState('');

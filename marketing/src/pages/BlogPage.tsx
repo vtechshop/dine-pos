@@ -1,5 +1,6 @@
 import { Tag } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { usePageSEO } from '../hooks/usePageSEO';
 
 const UPCOMING_POSTS = [
   {
@@ -49,6 +50,10 @@ const TAG_COLORS: Record<string, string> = {
 };
 
 export function BlogPage() {
+  usePageSEO(
+    'Blog — Dine POS',
+    'Restaurant operations, technology, and growth tips — written for Indian restaurant owners by the team at Dine POS.',
+  );
   return (
     <div>
       {/* Hero */}

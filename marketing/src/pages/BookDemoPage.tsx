@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CheckCircle2, Clock, Monitor, Headphones } from 'lucide-react';
 import { submitDemo } from '../api';
+import { usePageSEO } from '../hooks/usePageSEO';
 
 interface FormState {
   name: string;
@@ -30,6 +31,10 @@ const PERKS = [
 ];
 
 export function BookDemoPage() {
+  usePageSEO(
+    'Book a Free Demo — Dine POS',
+    'Book a free 30-minute live demo of Dine POS. See real billing, kitchen display, inventory and reports in action. No slides — just the real product.',
+  );
   const [form, setForm]           = useState<FormState>(BLANK);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError]         = useState('');

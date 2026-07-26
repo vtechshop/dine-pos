@@ -4,6 +4,7 @@ import {
   CreditCard, Globe, Shield,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { usePageSEO } from '../hooks/usePageSEO';
 
 interface FeatureBlock {
   icon: React.ElementType;
@@ -157,6 +158,10 @@ const FEATURE_BLOCKS: FeatureBlock[] = [
 ];
 
 export function FeaturesPage() {
+  usePageSEO(
+    'Features — Dine POS',
+    'Explore every feature of Dine POS: billing, table management, kitchen printing, inventory, reports, loyalty, QR ordering and more. Built for Indian restaurants.',
+  );
   return (
     <div>
       {/* Hero */}
