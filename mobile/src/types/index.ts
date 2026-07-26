@@ -572,6 +572,34 @@ export interface SubscriptionInfo {
   hotelName: string;
 }
 
+// Vendor
+export type PaymentTerms = 'immediate' | 'net15' | 'net30' | 'net45' | 'net60' | 'custom';
+
+export interface Vendor {
+  _id:                string;
+  vendorCode:         string;
+  businessName:       string;
+  contactPerson:      string;
+  mobile:             string;
+  alternateMobile:    string;
+  email:              string;
+  gstNumber:          string;
+  pan:                string;
+  address:            string;
+  city:               string;
+  state:              string;
+  pincode:            string;
+  paymentTerms:       PaymentTerms;
+  creditLimit:        number;
+  openingBalance:     number;
+  currentOutstanding: number;
+  notes:              string;
+  isActive:           boolean;
+  isDeleted:          boolean;
+  createdAt:          string;
+  updatedAt:          string;
+}
+
 export type RootStackParamList = {
   Splash: undefined;
   RoleSelect: undefined;
@@ -613,6 +641,7 @@ export type RootStackParamList = {
   HotelRegisterSuccess: undefined;
   Notifications: undefined;
   AggregatorConfig: undefined;
+  Vendors: undefined;
 };
 
 export type TabParamList = {

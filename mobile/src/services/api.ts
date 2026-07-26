@@ -1733,6 +1733,50 @@ export const flushCustomerOrderQueue = async (): Promise<void> => {
   await AsyncStorage.setItem(CUSTOMER_ORDER_QUEUE_KEY, JSON.stringify(remaining));
 };
 
+// ── Vendors ───────────────────────────────────────────────────────────────────
+
+import type { Vendor } from '../types';
+
+export interface VendorInput {
+  businessName:       string;
+  contactPerson?:     string;
+  mobile:             string;
+  alternateMobile?:   string;
+  email?:             string;
+  gstNumber?:         string;
+  pan?:               string;
+  address?:           string;
+  city?:              string;
+  state?:             string;
+  pincode?:           string;
+  paymentTerms?:      string;
+  creditLimit?:       number;
+  openingBalance?:    number;
+  notes?:             string;
+  isActive?:          boolean;
+}
+
+export const getVendors = (params?: { search?: string; active?: string; limit?: number }): Promise<{ vendors: Vendor[]; total: number }> => {
+  const q = new URLSearchParams();
+  if (params?.search) q.set('search', params.search);
+  if (params?.active !== undefined) q.set('active', params.active);
+  q.set('limit', String(params?.limit ?? 100));
+  const qs = q.toString();
+  return fetchAPI(`/vendors${qs ? `?${qs}` : ''}`);
+};
+
+export const getVendor = (id: string): Promise<Vendor> =>
+  fetchAPI<Vendor>(`/vendors/${id}`);
+
+export const createVendor = (data: VendorInput): Promise<Vendor> =>
+  fetchAPI<Vendor>('/vendors', { method: 'POST', body: JSON.stringify(data) });
+
+export const updateVendor = (id: string, data: Partial<VendorInput>): Promise<Vendor> =>
+  fetchAPI<Vendor>(`/vendors/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const deleteVendor = (id: string): Promise<void> =>
+  fetchAPI(`/vendors/${id}`, { method: 'DELETE' });
+
 // ── SA Push Token Registration ────────────────────────────────────────────────
 
 export const registerSAPushToken = (
