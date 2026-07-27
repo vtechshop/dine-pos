@@ -5,7 +5,10 @@ import HourlyMetrics, { IItemMetric } from '../models/HourlyMetrics';
 import DailySnapshot from '../models/DailySnapshot';
 import JobRegistry from '../models/JobRegistry';
 import Hotel from '../models/Hotel';
+import { acquireSchedulerLock, releaseSchedulerLock } from '../utils/schedulerLock';
 import { logger } from '../utils/logger';
+
+const DAILY_BATCH_SIZE = 10;
 
 // ─── Thundering herd mitigation ───────────────────────────────────────────────
 // Distributes hotels across a 240-minute window (UTC 0:00–3:59).
@@ -207,8 +210,14 @@ export async function buildDailySnapshot(
 // Called every minute during UTC 0:00–3:59 (minuteOfDay 0–239)
 
 export async function dispatchDailySnapshots(minuteOfDay: number): Promise<void> {
-  const jobStart = Date.now();
-  const jobName  = 'daily-snapshot';
+  const jobStart  = Date.now();
+  const jobName   = 'daily-snapshot';
+  // Per-minute lock: each minute's slot is independent, so different minutes
+  // can run on different instances without blocking each other.
+  const lockName  = `daily-snapshot-m${minuteOfDay}`;
+
+  const acquired = await acquireSchedulerLock(lockName, 5 * 60);
+  if (!acquired) return;
 
   // Yesterday UTC — the day whose data is now complete
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -224,48 +233,54 @@ export async function dispatchDailySnapshots(minuteOfDay: number): Promise<void>
     { _id: 1 },
   ).lean();
 
-  // Only process hotels whose stagger slot lands in this minute
   const due = hotels.filter((h) => hotelStaggerSlot(h._id.toString()) === minuteOfDay);
 
-  if (due.length === 0) {
-    // No hotels due this minute — update registry to reflect the no-op run
+  try {
+    if (due.length === 0) {
+      await JobRegistry.findOneAndUpdate(
+        { jobName },
+        { $set: { lastRunStatus: 'success', hotelsProcessed: 0, hotelsFailed: 0, durationMs: Date.now() - jobStart } },
+      );
+      return;
+    }
+
+    logger.info(`[dailySnapshot] minute=${minuteOfDay} dispatching ${due.length} hotel(s) for ${yesterday}`);
+
+    let processed              = 0;
+    let failed                 = 0;
+    let lastError: string | null = null;
+
+    for (let i = 0; i < due.length; i += DAILY_BATCH_SIZE) {
+      const batch   = due.slice(i, i + DAILY_BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((h) => buildDailySnapshot(h._id as mongoose.Types.ObjectId, yesterday)),
+      );
+      for (let j = 0; j < results.length; j++) {
+        const r   = results[j];
+        const hid = batch[j]?._id?.toString() ?? 'unknown';
+        if (r.status === 'fulfilled') {
+          processed++;
+        } else {
+          failed++;
+          lastError = `hotel:${hid} — ${String(r.reason)}`;
+          logger.error('[dailySnapshot] hotel failed', { reason: r.reason });
+        }
+      }
+    }
+
     await JobRegistry.findOneAndUpdate(
       { jobName },
-      { $set: { lastRunStatus: 'success', hotelsProcessed: 0, hotelsFailed: 0, durationMs: Date.now() - jobStart } },
-    );
-    return;
-  }
-
-  logger.info(`[dailySnapshot] minute=${minuteOfDay} dispatching ${due.length} hotel(s) for ${yesterday}`);
-
-  const results = await Promise.allSettled(
-    due.map((h) => buildDailySnapshot(h._id as mongoose.Types.ObjectId, yesterday)),
-  );
-
-  let processed = 0;
-  let failed    = 0;
-  let lastError: string | null = null;
-
-  for (const r of results) {
-    if (r.status === 'fulfilled') {
-      processed++;
-    } else {
-      failed++;
-      lastError = String(r.reason);
-      logger.error('[dailySnapshot] hotel failed', { reason: r.reason });
-    }
-  }
-
-  await JobRegistry.findOneAndUpdate(
-    { jobName },
-    {
-      $set: {
-        lastRunStatus:   failed > 0 && processed === 0 ? 'failure' : 'success',
-        hotelsProcessed: processed,
-        hotelsFailed:    failed,
-        durationMs:      Date.now() - jobStart,
-        lastError,
+      {
+        $set: {
+          lastRunStatus:   failed === 0 ? 'success' : 'failure',
+          hotelsProcessed: processed,
+          hotelsFailed:    failed,
+          durationMs:      Date.now() - jobStart,
+          lastError,
+        },
       },
-    },
-  );
+    );
+  } finally {
+    await releaseSchedulerLock(lockName);
+  }
 }

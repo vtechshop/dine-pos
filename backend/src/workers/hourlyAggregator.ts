@@ -4,6 +4,7 @@ import HourlyMetrics, { IItemMetric, IPaymentBreakdown, ISourceBreakdown } from 
 import JobRegistry from '../models/JobRegistry';
 import Hotel from '../models/Hotel';
 import { setHotMetrics, upsertLeaderboard } from '../utils/aiMetricsCache';
+import { acquireSchedulerLock, releaseSchedulerLock } from '../utils/schedulerLock';
 import { logger } from '../utils/logger';
 
 const BATCH_SIZE = 20;
@@ -125,44 +126,50 @@ export async function aggregateHotelHour(
 }
 
 // ─── Update Redis hot metrics + leaderboard for a hotel from today's HourlyMetrics ──
+// Single $facet pipeline: halves MongoDB round-trips vs two separate aggregations.
 
 async function refreshRedisForHotel(hotelId: mongoose.Types.ObjectId, today: string): Promise<void> {
-  // Today's cumulative revenue + orders from already-aggregated hourly data
-  const [todayTotals] = await HourlyMetrics.aggregate([
+  const [result] = await HourlyMetrics.aggregate([
     { $match: { hotelId, date: today } },
     {
-      $group: {
-        _id:     null,
-        revenue: { $sum: '$revenue' },
-        orders:  { $sum: '$orderCount' },
+      $facet: {
+        totals: [
+          {
+            $group: {
+              _id:     null,
+              revenue: { $sum: '$revenue' },
+              orders:  { $sum: '$orderCount' },
+            },
+          },
+        ],
+        items: [
+          { $unwind: '$topItems' },
+          {
+            $group: {
+              _id:         '$topItems.productId',
+              productName: { $first: '$topItems.productName' },
+              qty:         { $sum: '$topItems.qty' },
+              revenue:     { $sum: '$topItems.revenue' },
+            },
+          },
+          { $sort: { revenue: -1 } },
+          { $limit: 20 },
+        ],
       },
     },
   ]);
-  if (todayTotals) {
-    await setHotMetrics(hotelId.toString(), todayTotals.revenue, todayTotals.orders);
+
+  const totals = result?.totals?.[0];
+  if (totals) {
+    await setHotMetrics(hotelId.toString(), totals.revenue, totals.orders);
   }
 
-  // Today's running leaderboard: accumulate topItems across all hours (approximation)
-  const itemAccum = await HourlyMetrics.aggregate([
-    { $match: { hotelId, date: today } },
-    { $unwind: '$topItems' },
-    {
-      $group: {
-        _id:         '$topItems.productId',
-        productName: { $first: '$topItems.productName' },
-        qty:         { $sum: '$topItems.qty' },
-        revenue:     { $sum: '$topItems.revenue' },
-      },
-    },
-    { $sort: { revenue: -1 } },
-    { $limit: 20 },
-  ]);
-
-  const leaderboardItems: IItemMetric[] = itemAccum.map((r) => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const leaderboardItems: IItemMetric[] = (result?.items ?? []).map((r: any) => ({
     productId:   r._id as mongoose.Types.ObjectId,
     productName: String(r.productName ?? ''),
     qty:         Number(r.qty ?? 0),
-    revenue:     +(r.revenue ?? 0).toFixed(2),
+    revenue:     +(Number(r.revenue ?? 0)).toFixed(2),
   }));
 
   if (leaderboardItems.length > 0) {
@@ -179,18 +186,21 @@ export async function runHourlyAggregation(
   const jobStart = Date.now();
   const jobName  = 'hourly-aggregation';
 
-  // Default: the just-completed UTC hour (1h ago)
-  const prevHour   = new Date(Date.now() - 60 * 60 * 1000);
-  const date       = targetDate ?? prevHour.toISOString().slice(0, 10);
-  const hour       = targetHour ?? prevHour.getUTCHours();
-  const today      = new Date().toISOString().slice(0, 10);
+  // Distributed lock — skip if another instance is already running this job.
+  // TTL: 55 min, giving headroom before the next scheduled run at :05.
+  const acquired = await acquireSchedulerLock(jobName, 55 * 60);
+  if (!acquired) return;
 
+  // Default: the just-completed UTC hour (1h ago)
+  const prevHour    = new Date(Date.now() - 60 * 60 * 1000);
+  const date        = targetDate ?? prevHour.toISOString().slice(0, 10);
+  const hour        = targetHour ?? prevHour.getUTCHours();
+  const today       = new Date().toISOString().slice(0, 10);
   const startOfHour = new Date(`${date}T${String(hour).padStart(2, '0')}:00:00.000Z`);
   const endOfHour   = new Date(`${date}T${String(hour).padStart(2, '0')}:59:59.999Z`);
 
   logger.info(`[hourlyAggregator] running for ${date} hour=${hour}`);
 
-  // Mark job as running
   await JobRegistry.findOneAndUpdate(
     { jobName },
     { $set: { lastRunAt: new Date(), lastRunStatus: 'running', lastError: null } },
@@ -202,46 +212,52 @@ export async function runHourlyAggregation(
     { _id: 1 },
   ).lean();
 
-  let processed = 0;
-  let failed    = 0;
+  let processed    = 0;
+  let failed       = 0;
+  const errors: string[] = [];
 
-  // Process in batches to avoid overwhelming MongoDB
-  for (let i = 0; i < hotels.length; i += BATCH_SIZE) {
-    const batch  = hotels.slice(i, i + BATCH_SIZE);
-    const results = await Promise.allSettled(
-      batch.map(async (h) => {
-        const hotelId = h._id as mongoose.Types.ObjectId;
-        await aggregateHotelHour(hotelId, startOfHour, endOfHour);
-        // Only update Redis for today's hours (not backfill runs)
-        if (date === today) {
-          await refreshRedisForHotel(hotelId, today);
+  try {
+    for (let i = 0; i < hotels.length; i += BATCH_SIZE) {
+      const batch   = hotels.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(async (h) => {
+          const hotelId = h._id as mongoose.Types.ObjectId;
+          await aggregateHotelHour(hotelId, startOfHour, endOfHour);
+          if (date === today) {
+            await refreshRedisForHotel(hotelId, today);
+          }
+        }),
+      );
+      for (let j = 0; j < results.length; j++) {
+        const r   = results[j];
+        const hid = batch[j]?._id?.toString() ?? 'unknown';
+        if (r.status === 'fulfilled') {
+          processed++;
+        } else {
+          failed++;
+          errors.push(`hotel:${hid} — ${String(r.reason)}`);
+          logger.error('[hourlyAggregator] hotel failed', { hotelId: hid, reason: r.reason });
         }
-      }),
-    );
-    for (const r of results) {
-      if (r.status === 'fulfilled') {
-        processed++;
-      } else {
-        failed++;
-        logger.error('[hourlyAggregator] hotel failed', { reason: r.reason });
       }
     }
-  }
 
-  const durationMs  = Date.now() - jobStart;
-  const finalStatus = failed > 0 && processed === 0 ? 'failure' : 'success';
+    const durationMs = Date.now() - jobStart;
 
-  await JobRegistry.findOneAndUpdate(
-    { jobName },
-    {
-      $set: {
-        lastRunStatus:   finalStatus,
-        hotelsProcessed: processed,
-        hotelsFailed:    failed,
-        durationMs,
+    await JobRegistry.findOneAndUpdate(
+      { jobName },
+      {
+        $set: {
+          lastRunStatus:   failed === 0 ? 'success' : 'failure',
+          hotelsProcessed: processed,
+          hotelsFailed:    failed,
+          durationMs,
+          lastError:       errors.length > 0 ? errors.slice(0, 3).join(' | ') : null,
+        },
       },
-    },
-  );
+    );
 
-  logger.info(`[hourlyAggregator] done — processed=${processed} failed=${failed} duration=${durationMs}ms`);
+    logger.info(`[hourlyAggregator] done — processed=${processed} failed=${failed} duration=${durationMs}ms`);
+  } finally {
+    await releaseSchedulerLock(jobName);
+  }
 }
