@@ -109,6 +109,18 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
 
         </Animated.View>
 
+        {/* ── Platform Admin link ──────────────────────────────────────── */}
+        <Pressable
+          style={styles.saLink}
+          onPress={() => navigation.navigate('SuperAdminLogin')}
+          accessibilityRole="link"
+          accessibilityLabel="Platform Admin login"
+        >
+          <MaterialIcons name="shield" size={14} color={Colors.textMuted} />
+          <Text style={styles.saLinkText}>Platform Admin</Text>
+          <MaterialIcons name="chevron-right" size={14} color={Colors.textMuted} />
+        </Pressable>
+
       </View>
     </View>
   );
@@ -269,6 +281,21 @@ const styles = StyleSheet.create({
     fontSize:   FontSize.sm,
     color:      Colors.textSecondary,
     lineHeight: 17,
+  },
+
+  // ── Platform Admin link ───────────────────────────────────────────────────
+  saLink: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    gap:             Spacing.xs,
+    paddingVertical: Spacing.sm,
+  },
+  saLinkText: {
+    fontSize:      FontSize.sm,
+    color:         Colors.textMuted,
+    fontWeight:    '500',
+    letterSpacing: 0.2,
   },
 
   // ── Full-width action button ───────────────────────────────────────────────
