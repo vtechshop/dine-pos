@@ -66,6 +66,7 @@ import paymentWebhookRoutes from './routes/paymentWebhookRoutes';
 import publicPaymentRoutes from './routes/publicPaymentRoutes';
 import aiMenuRoutes from './routes/aiMenuRoutes';
 import aiMetricsRoutes from './routes/aiMetricsRoutes';
+import aiReportRoutes from './routes/aiReportRoutes';
 import { startScheduler, stopScheduler } from './services/scheduler';
 import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
 import GatewayFactory from './services/payment/GatewayFactory';
@@ -337,6 +338,9 @@ app.use('/api/ai-menu', _rl(10, 60_000));
 app.use('/api/ai-menu', aiMenuRoutes);
 // AI BI metrics — today's hot cache + daily snapshots + job registry
 app.use('/api/ai', aiMetricsRoutes);
+// AI BI Phase 2 — daily report (Gemini narrative, cached) + executive dashboard
+app.use('/api/ai/report', _rl(20, 60_000)); // Gemini calls are expensive — 20 req/min
+app.use('/api/ai', aiReportRoutes);
 
 // Liveness probe — returns 200 immediately if the process is alive.
 // Load balancers and orchestrators use this; it must never check DB/Redis
