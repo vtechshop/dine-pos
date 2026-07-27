@@ -68,6 +68,7 @@ import aiMenuRoutes from './routes/aiMenuRoutes';
 import aiMetricsRoutes from './routes/aiMetricsRoutes';
 import aiReportRoutes from './routes/aiReportRoutes';
 import aiAlertsRoutes from './routes/aiAlertsRoutes';
+import aiForecastRoutes from './routes/aiForecastRoutes';
 import { startScheduler, stopScheduler } from './services/scheduler';
 import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
 import GatewayFactory from './services/payment/GatewayFactory';
@@ -345,6 +346,9 @@ app.use('/api/ai', aiReportRoutes);
 // AI BI Phase 3 — smart alerts + recommendation engine (Gemini insight cached)
 app.use('/api/ai/recommendations', _rl(20, 60_000)); // Gemini insight endpoint
 app.use('/api/ai', aiAlertsRoutes);
+// AI BI Phase 4 — statistical forecast + inventory prediction (Gemini brief cached)
+app.use('/api/ai/forecast', _rl(20, 60_000)); // Gemini narrative endpoint
+app.use('/api/ai', aiForecastRoutes);
 
 // Liveness probe — returns 200 immediately if the process is alive.
 // Load balancers and orchestrators use this; it must never check DB/Redis

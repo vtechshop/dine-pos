@@ -1,0 +1,67 @@
+import { Router, Response } from 'express';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { buildForecast } from '../services/forecastEngine';
+import { buildInventoryPrediction } from '../services/inventoryPredictor';
+import {
+  getCachedForecast,
+  setCachedForecast,
+  getCachedInventory,
+  setCachedInventory,
+} from '../utils/forecastCache';
+import { sendError } from '../utils/sendError';
+
+const router = Router();
+router.use(authMiddleware);
+
+// ─── GET /api/ai/forecast ─────────────────────────────────────────────────────
+// Full forecast dashboard: revenue (7d + 30d), orders (7d + 30d), peak hours,
+// item demand, table utilization, Gemini executive brief.
+// Cached 6h in Redis.
+
+router.get('/forecast', async (req: AuthRequest, res: Response) => {
+  try {
+    const hotelId = req.hotelId!;
+
+    const cached = await getCachedForecast(hotelId);
+    if (cached) return res.json(cached);
+
+    const result = await buildForecast(hotelId);
+    if (!result) {
+      return res.status(404).json({
+        message: 'Insufficient historical data. At least 3 days of snapshots are required to generate a forecast.',
+      });
+    }
+
+    await setCachedForecast(hotelId, result);
+    return res.json(result);
+  } catch (err) {
+    sendError(res, 500, 'Failed to build forecast', err);
+  }
+});
+
+// ─── GET /api/ai/forecast/inventory ──────────────────────────────────────────
+// Inventory prediction: stock levels, days remaining, reorder suggestions,
+// overstock flags. Cached 4h in Redis.
+
+router.get('/forecast/inventory', async (req: AuthRequest, res: Response) => {
+  try {
+    const hotelId = req.hotelId!;
+
+    const cached = await getCachedInventory(hotelId);
+    if (cached) return res.json(cached);
+
+    const result = await buildInventoryPrediction(hotelId);
+    if (!result) {
+      return res.status(404).json({
+        message: 'No ingredients found. Add ingredients in inventory management to enable prediction.',
+      });
+    }
+
+    await setCachedInventory(hotelId, result);
+    return res.json(result);
+  } catch (err) {
+    sendError(res, 500, 'Failed to build inventory forecast', err);
+  }
+});
+
+export default router;
