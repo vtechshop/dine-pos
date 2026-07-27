@@ -65,6 +65,8 @@ import paymentGatewayConfigRoutes from './routes/paymentGatewayConfigRoutes';
 import paymentWebhookRoutes from './routes/paymentWebhookRoutes';
 import publicPaymentRoutes from './routes/publicPaymentRoutes';
 import aiMenuRoutes from './routes/aiMenuRoutes';
+import aiMetricsRoutes from './routes/aiMetricsRoutes';
+import { startScheduler, stopScheduler } from './services/scheduler';
 import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
 import GatewayFactory from './services/payment/GatewayFactory';
 import * as Sentry from '@sentry/node';
@@ -333,6 +335,8 @@ app.use('/api/payment-webhooks',           paymentWebhookRoutes);
 // AI Menu Import — rate-limited to 10 req/min (Gemini calls are expensive)
 app.use('/api/ai-menu', _rl(10, 60_000));
 app.use('/api/ai-menu', aiMenuRoutes);
+// AI BI metrics — today's hot cache + daily snapshots + job registry
+app.use('/api/ai', aiMetricsRoutes);
 
 // Liveness probe — returns 200 immediately if the process is alive.
 // Load balancers and orchestrators use this; it must never check DB/Redis
@@ -738,7 +742,9 @@ const shutdown = () => {
     try {
       // 1. Close Socket.IO (gracefully disconnects all clients)
       await new Promise<void>(resolve => io.close(() => resolve()));
-      // 2. Close Redis
+      // 2. Stop background schedulers (before Redis closes)
+      stopScheduler();
+      // 3. Close Redis
       await closeRedis();
       // 3. Close MongoDB
       await mongoose.connection.close();
@@ -779,6 +785,9 @@ process.on('SIGINT', shutdown);
     } else {
       logger.info('Socket.IO using in-memory adapter (set REDIS_URL to enable clustering)');
     }
+
+    // Start background jobs (requires Redis to be available first)
+    startScheduler();
 
     httpServer.listen(Number(PORT), '0.0.0.0', () => {
       logger.info(`Server running on http://localhost:${PORT}`);
