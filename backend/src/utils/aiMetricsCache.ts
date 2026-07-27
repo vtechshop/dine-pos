@@ -29,13 +29,15 @@ export async function setHotMetrics(
   const redis = getRedisClient();
   if (!redis) return;
 
-  const key = hotKey(hotelId);
-  await redis.hset(key, {
+  const key      = hotKey(hotelId);
+  const pipeline = redis.pipeline();
+  pipeline.hset(key, {
     revenue:   revenue.toFixed(2),
     orders:    String(orders),
     updatedAt: new Date().toISOString(),
   });
-  await redis.expire(key, TTL_SECONDS);
+  pipeline.expire(key, TTL_SECONDS);
+  await pipeline.exec();
 }
 
 export async function getHotMetrics(hotelId: string): Promise<HotMetrics | null> {
@@ -62,17 +64,17 @@ export async function upsertLeaderboard(
   const redis = getRedisClient();
   if (!redis || items.length === 0) return;
 
-  const key      = leaderboardKey(hotelId, date);
-  const pipeline = redis.pipeline();
+  const key   = leaderboardKey(hotelId, date);
+  const multi = redis.multi();
 
-  pipeline.del(key);
+  multi.del(key);
   for (const item of items) {
     const member = `${item.productId.toString()}|${item.productName}`;
-    pipeline.zadd(key, item.revenue, member);
+    multi.zadd(key, item.revenue, member);
   }
-  pipeline.expire(key, TTL_SECONDS);
+  multi.expire(key, TTL_SECONDS);
 
-  await pipeline.exec();
+  await multi.exec();
 }
 
 export interface LeaderboardEntry {
