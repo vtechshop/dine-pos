@@ -70,7 +70,9 @@ import aiReportRoutes from './routes/aiReportRoutes';
 import aiAlertsRoutes from './routes/aiAlertsRoutes';
 import aiForecastRoutes from './routes/aiForecastRoutes';
 import aiChatRoutes from './routes/aiChatRoutes';
+import aiOcrRoutes from './routes/aiOcrRoutes';
 import { startScheduler, stopScheduler } from './services/scheduler';
+import { startOcrWorker, stopOcrWorker } from './workers/ocrWorker';
 import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
 import GatewayFactory from './services/payment/GatewayFactory';
 import * as Sentry from '@sentry/node';
@@ -354,6 +356,10 @@ app.use('/api/ai', aiForecastRoutes);
 // 30 req/min: conversational flow needs more headroom than one-shot report endpoints
 app.use('/api/ai/chat', _rl(30, 60_000));
 app.use('/api/ai', aiChatRoutes);
+// AI BI Phase 6 — Supplier invoice OCR + purchase import pipeline
+// 10 uploads/min per IP (OCR is expensive + async; upload just queues the job)
+app.use('/api/ai/ocr/upload', _rl(10, 60_000));
+app.use('/api/ai', aiOcrRoutes);
 
 // Liveness probe — returns 200 immediately if the process is alive.
 // Load balancers and orchestrators use this; it must never check DB/Redis
@@ -761,6 +767,7 @@ const shutdown = () => {
       await new Promise<void>(resolve => io.close(() => resolve()));
       // 2. Stop background schedulers (before Redis closes)
       stopScheduler();
+      stopOcrWorker();
       // 3. Close Redis
       await closeRedis();
       // 3. Close MongoDB
@@ -805,6 +812,7 @@ process.on('SIGINT', shutdown);
 
     // Start background jobs (requires Redis to be available first)
     startScheduler();
+    startOcrWorker();
 
     httpServer.listen(Number(PORT), '0.0.0.0', () => {
       logger.info(`Server running on http://localhost:${PORT}`);
