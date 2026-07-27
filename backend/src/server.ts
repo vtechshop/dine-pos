@@ -64,6 +64,7 @@ import paymentRoutes from './routes/paymentRoutes';
 import paymentGatewayConfigRoutes from './routes/paymentGatewayConfigRoutes';
 import paymentWebhookRoutes from './routes/paymentWebhookRoutes';
 import publicPaymentRoutes from './routes/publicPaymentRoutes';
+import aiMenuRoutes from './routes/aiMenuRoutes';
 import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
 import GatewayFactory from './services/payment/GatewayFactory';
 import * as Sentry from '@sentry/node';
@@ -326,6 +327,9 @@ app.use('/api/inventory-intelligence',     inventoryIntelligenceRoutes);
 app.use('/api/payments',                   paymentRoutes);
 app.use('/api/payment-gateway-configs',    paymentGatewayConfigRoutes);
 app.use('/api/payment-webhooks',           paymentWebhookRoutes);
+// AI Menu Import — rate-limited to 10 req/min (Gemini calls are expensive)
+app.use('/api/ai-menu', _rl(10, 60_000));
+app.use('/api/ai-menu', aiMenuRoutes);
 
 // Liveness probe — returns 200 immediately if the process is alive.
 // Load balancers and orchestrators use this; it must never check DB/Redis
