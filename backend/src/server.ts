@@ -71,6 +71,7 @@ import aiAlertsRoutes from './routes/aiAlertsRoutes';
 import aiForecastRoutes from './routes/aiForecastRoutes';
 import aiChatRoutes from './routes/aiChatRoutes';
 import aiOcrRoutes from './routes/aiOcrRoutes';
+import aiAnalyticsRoutes from './routes/aiAnalyticsRoutes';
 import { startScheduler, stopScheduler } from './services/scheduler';
 import { startOcrWorker, stopOcrWorker } from './workers/ocrWorker';
 import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
@@ -360,6 +361,10 @@ app.use('/api/ai', aiChatRoutes);
 // 10 uploads/min per IP (OCR is expensive + async; upload just queues the job)
 app.use('/api/ai/ocr/upload', _rl(10, 60_000));
 app.use('/api/ai', aiOcrRoutes);
+// AI BI Phase 7 — Fraud & anomaly detection, staff analytics, kitchen analytics
+// 20 req/min (compute-heavy aggregations + optional Gemini narrative)
+app.use('/api/ai/analytics', _rl(20, 60_000));
+app.use('/api/ai', aiAnalyticsRoutes);
 
 // Liveness probe — returns 200 immediately if the process is alive.
 // Load balancers and orchestrators use this; it must never check DB/Redis
