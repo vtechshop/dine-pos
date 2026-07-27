@@ -1,7 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm --filter marketing build",
-  "outputDirectory": "marketing/dist"
+  "installCommand": "npx --yes pnpm@9.15.9 install --no-frozen-lockfile"
 }
