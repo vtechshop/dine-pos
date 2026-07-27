@@ -6,6 +6,7 @@ import { useMenu } from '../context/MenuContext.tsx';
 import { fetchBill } from '../api/bill.ts';
 import { useOrderSocket } from '../hooks/useOrderSocket.ts';
 import { OrderStatusCard } from '../components/order/OrderStatusCard.tsx';
+import { BottomNav } from '../components/layout/BottomNav.tsx';
 import type { QrBill } from '../types/qr.ts';
 
 const POLL_INTERVAL_MS = 15_000;
@@ -38,14 +39,12 @@ export function OrderStatusPage({ hotelId, tableNumber }: OrderStatusPageProps) 
     }
   }, [hotelId, guestToken, tableSessions]);
 
-  // Initial load + polling
   useEffect(() => {
     void loadBill();
     const timer = setInterval(() => void loadBill(), POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [loadBill]);
 
-  // Socket for optional server-push refresh
   useOrderSocket({
     hotelId,
     tableNumber,
@@ -91,7 +90,7 @@ export function OrderStatusPage({ hotelId, tableNumber }: OrderStatusPageProps) 
   const activeOrders = bill?.orders.filter((o) => o.status !== 'cancelled') ?? [];
 
   return (
-    <div className="min-h-screen bg-[#FFF6EE] pb-6">
+    <div className="min-h-screen bg-[#FFF6EE] pb-20">
       <header className="bg-white border-b border-[#E8D5C0] px-4 py-3 flex items-center justify-between">
         <div>
           <h1 className="font-bold text-[#1C0800]">Your orders</h1>
@@ -111,7 +110,7 @@ export function OrderStatusPage({ hotelId, tableNumber }: OrderStatusPageProps) 
       </div>
 
       {bill && !bill.isBilled && activeOrders.length > 0 && (
-        <div className="fixed bottom-0 inset-x-0 p-4 bg-[#FFF6EE] border-t border-[#E8D5C0]">
+        <div className="px-4 pb-4">
           <Link
             to="/bill"
             className="block w-full py-3 text-center bg-[#1C0800] text-white rounded-xl font-semibold"
@@ -120,6 +119,8 @@ export function OrderStatusPage({ hotelId, tableNumber }: OrderStatusPageProps) 
           </Link>
         </div>
       )}
+
+      <BottomNav />
     </div>
   );
 }

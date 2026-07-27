@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Bell, Search, Leaf, X } from 'lucide-react';
 import { Spinner } from '@dinepos/shared/components';
 import { useMenu } from '../context/MenuContext.tsx';
 import { useCart } from '../context/CartContext.tsx';
 import { useGuest } from '../context/GuestContext.tsx';
 import { placeOrder } from '../api/orders.ts';
 import { fetchSessionConfig } from '../api/session.ts';
+import { callWaiter } from '../api/waiter.ts';
 import { CategoryTabs } from '../components/menu/CategoryTabs.tsx';
 import { ProductGrid } from '../components/menu/ProductGrid.tsx';
 import { CartBar } from '../components/cart/CartBar.tsx';
 import { CartSheet } from '../components/cart/CartSheet.tsx';
 import { GuestNamePrompt } from '../components/order/GuestNamePrompt.tsx';
+import { BottomNav } from '../components/layout/BottomNav.tsx';
 import type { GuestInfo, QrOrder } from '../types/qr.ts';
 
 interface MenuPageProps {
@@ -18,7 +21,15 @@ interface MenuPageProps {
   tableNumber: string;
 }
 
-type ModalState = 'none' | 'cart' | 'guest-prompt' | 'placing';
+type ModalState = 'none' | 'cart' | 'guest-prompt' | 'placing' | 'waiter';
+
+const WAITER_PRESETS = [
+  '[Waiter Request] Need assistance please',
+  '[Waiter Request] Need water please',
+  '[Waiter Request] Need extra napkins / cutlery',
+  '[Waiter Request] Ready to order more',
+  '[Waiter Request] Ready to pay',
+];
 
 export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
   const navigate = useNavigate();
@@ -26,16 +37,20 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
   const { items, clearCart } = useCart();
   const { guestToken, guestInfo, setGuestToken, setGuestInfo, addPlacedOrder } = useGuest();
 
-  const [modal, setModal]       = useState<ModalState>('none');
+  const [modal, setModal]         = useState<ModalState>('none');
   const [placeError, setPlaceError] = useState<string | null>(null);
+  const [search, setSearch]       = useState('');
+  const [vegOnly, setVegOnly]     = useState(false);
+  const [waiterSent, setWaiterSent] = useState(false);
 
   const tableSessions = features?.tableSessions ?? false;
+  const businessType  = hotel?.businessType ?? 'both';
+  const showVegToggle = businessType === 'both';
 
   async function doPlaceOrder(info?: GuestInfo) {
     setModal('placing');
     setPlaceError(null);
     try {
-      // For tableSessions flow, check if we need a guest prompt first
       let sessionToken = guestToken;
       if (tableSessions && !sessionToken) {
         const config = await fetchSessionConfig(hotelId, null);
@@ -76,7 +91,6 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
   }
 
   function handleCartConfirm() {
-    // If tableSessions and no guestInfo, and name is required
     if (tableSessions && !guestInfo) {
       setModal('guest-prompt');
     } else {
@@ -87,6 +101,17 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
   function handleGuestSubmit(info: GuestInfo) {
     setGuestInfo(info);
     void doPlaceOrder(info);
+  }
+
+  async function handleWaiterPreset(msg: string) {
+    setModal('none');
+    try {
+      await callWaiter(hotelId, tableNumber, msg);
+    } catch {
+      // Fire-and-forget; a failed call still shows the toast to avoid confusing the guest
+    }
+    setWaiterSent(true);
+    setTimeout(() => setWaiterSent(false), 3000);
   }
 
   if (loading) {
@@ -107,14 +132,48 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFF6EE] pb-28">
+    <div className="min-h-screen bg-[#FFF6EE] pb-36">
+      {/* Header */}
       <header className="bg-white border-b border-[#E8D5C0] px-4 py-3">
         <h1 className="font-bold text-[#1C0800]">{hotel?.name ?? 'Menu'}</h1>
         <p className="text-xs text-[#1C0800]/50">Table {tableNumber}</p>
       </header>
 
+      {/* Search + veg filter row */}
+      <div className="bg-white border-b border-[#E8D5C0] px-4 py-2 flex items-center gap-2">
+        <div className="flex-1 flex items-center gap-2 bg-[#FFF6EE] rounded-lg px-3 py-2">
+          <Search size={14} className="text-[#1C0800]/40 flex-shrink-0" />
+          <input
+            type="search"
+            placeholder="Search menu…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 bg-transparent text-sm text-[#1C0800] placeholder:text-[#1C0800]/40 outline-none"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="text-[#1C0800]/40">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        {showVegToggle && (
+          <button
+            onClick={() => setVegOnly((v) => !v)}
+            className={[
+              'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors flex-shrink-0',
+              vegOnly
+                ? 'bg-green-600 text-white'
+                : 'bg-[#FFF6EE] text-green-700 border border-green-200',
+            ].join(' ')}
+          >
+            <Leaf size={13} />
+            Veg
+          </button>
+        )}
+      </div>
+
       <CategoryTabs />
-      <ProductGrid />
+      <ProductGrid searchQuery={search} vegOnly={vegOnly} />
 
       {placeError && (
         <div className="fixed top-4 inset-x-4 z-50 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl shadow">
@@ -122,22 +181,68 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
         </div>
       )}
 
-      <CartBar onOpen={() => setModal('cart')} />
+      {waiterSent && (
+        <div className="fixed top-4 inset-x-4 z-50 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl shadow text-center">
+          Staff has been notified — someone will be with you shortly.
+        </div>
+      )}
 
+      {/* Call waiter FAB — above CartBar */}
+      <button
+        onClick={() => setModal('waiter')}
+        className="fixed bottom-[72px] right-4 z-40 w-12 h-12 bg-white border border-[#E8D5C0] rounded-full shadow-md flex items-center justify-center text-[#1C0800]/60 hover:text-[#1C0800] transition-colors"
+        aria-label="Call waiter"
+      >
+        <Bell size={20} />
+      </button>
+
+      {/* CartBar — sits above BottomNav */}
+      <CartBar onOpen={() => setModal('cart')} bottomClass="bottom-14" />
+
+      {/* BottomNav */}
+      <BottomNav />
+
+      {/* Cart sheet */}
       {modal === 'cart' && (
         <CartSheet onClose={() => setModal('none')} onConfirm={handleCartConfirm} />
       )}
+
+      {/* Guest info prompt */}
       {modal === 'guest-prompt' && (
         <GuestNamePrompt
           requiresPhone={features?.customerIdentification === 'name_mobile'}
           onSubmit={handleGuestSubmit}
         />
       )}
+
+      {/* Placing overlay */}
       {modal === 'placing' && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
           <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-3">
             <Spinner size="lg" />
             <p className="text-sm text-[#1C0800]">Placing order…</p>
+          </div>
+        </div>
+      )}
+
+      {/* Call waiter bottom sheet */}
+      {modal === 'waiter' && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setModal('none')} />
+          <div className="relative bg-white rounded-t-2xl pt-4 pb-8 px-4 safe-bottom">
+            <div className="w-10 h-1 bg-[#1C0800]/20 rounded-full mx-auto mb-4" />
+            <h2 className="text-base font-bold text-[#1C0800] mb-3">Call waiter</h2>
+            <div className="space-y-2">
+              {WAITER_PRESETS.map((msg) => (
+                <button
+                  key={msg}
+                  onClick={() => void handleWaiterPreset(msg)}
+                  className="w-full text-left px-4 py-3 rounded-xl bg-[#FFF6EE] text-sm text-[#1C0800] font-medium border border-[#E8D5C0] active:bg-[#E8D5C0] transition-colors"
+                >
+                  {msg.replace('[Waiter Request] ', '')}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}

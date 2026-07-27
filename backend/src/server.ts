@@ -244,8 +244,11 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms re
   stream: { write: (msg) => logger.info(msg.trimEnd()) },
 }));
 
-// Serve customer digital menu PWA
-app.use('/menu', express.static(path.join(__dirname, '../public/menu')));
+// Serve customer digital menu — redirect to React QR SPA when QR_APP_URL is set,
+// otherwise serve the legacy vanilla JS PWA from public/menu/.
+if (!process.env.QR_APP_URL) {
+  app.use('/menu', express.static(path.join(__dirname, '../public/menu')));
+}
 
 // Serve uploaded product images
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -455,10 +458,18 @@ app.get('/privacy-policy', (_req, res) => {
 </html>`);
 });
 
-// Fallback: /menu/* → index.html
-app.get('/menu/*', (_req, res) => {
-  res.sendFile(path.join(__dirname, '../public/menu/index.html'));
-});
+// /menu redirect → React QR SPA, or SPA catch-all for legacy PWA
+if (process.env.QR_APP_URL) {
+  const qrAppUrl = process.env.QR_APP_URL;
+  app.get(['/menu', '/menu/*'], (req, res) => {
+    const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(301, `${qrAppUrl}/${qs}`);
+  });
+} else {
+  app.get('/menu/*', (_req, res) => {
+    res.sendFile(path.join(__dirname, '../public/menu/index.html'));
+  });
+}
 
 // ── Global 404 handler ────────────────────────────────────────────────────────
 app.use((_req, res) => {

@@ -1,12 +1,12 @@
-import { ShoppingCart } from 'lucide-react';
 import { useCart } from '../../context/CartContext.tsx';
 import { useMenu } from '../../context/MenuContext.tsx';
 
 interface CartBarProps {
-  onOpen: () => void;
+  onOpen:       () => void;
+  bottomClass?: string;
 }
 
-export function CartBar({ onOpen }: CartBarProps) {
+export function CartBar({ onOpen, bottomClass = 'bottom-0' }: CartBarProps) {
   const { totalItems, totalPrice } = useCart();
   const { hotel } = useMenu();
   const symbol = hotel?.currencySymbol ?? '₹';
@@ -14,7 +14,7 @@ export function CartBar({ onOpen }: CartBarProps) {
   if (totalItems === 0) return null;
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-40 p-4 bg-gradient-to-t from-[#FFF6EE] to-transparent pointer-events-none">
+    <div className={`fixed ${bottomClass} inset-x-0 z-40 p-4 bg-gradient-to-t from-[#FFF6EE] to-transparent pointer-events-none`}>
       <button
         onClick={onOpen}
         className="w-full pointer-events-auto flex items-center justify-between bg-[#E8380D] text-white px-4 py-3 rounded-xl shadow-lg"

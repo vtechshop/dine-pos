@@ -29,6 +29,7 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import Product from '../models/Product';
 import Hotel from '../models/Hotel';
+import ChatMessage from '../models/ChatMessage';
 import type { CustomerIdentificationMode } from '../models/Hotel';
 import Table from '../models/Table';
 import TableSession from '../models/TableSession';
@@ -674,6 +675,66 @@ router.get('/bill', qrReadLimiter, async (req: Request, res: Response): Promise<
     });
   } catch (err: any) {
     sendError(res, 500, 'Failed to fetch bill', err);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// POST /api/public/qr/waiter-call
+// Guest requests waiter assistance. Creates a ChatMessage and notifies the admin
+// room via socket. Public endpoint — no auth token required.
+// ────────────────────────────────────────────────────────────────────────────────
+router.post('/waiter-call', qrWriteLimiter, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { hotelId, tableNumber, message } = req.body as {
+      hotelId?:     string;
+      tableNumber?: string;
+      message?:     string;
+    };
+
+    if (!hotelId || !mongoose.isValidObjectId(hotelId)) {
+      res.status(400).json({ message: 'hotelId is required' });
+      return;
+    }
+    if (!tableNumber || typeof tableNumber !== 'string' || !tableNumber.trim()) {
+      res.status(400).json({ message: 'tableNumber is required' });
+      return;
+    }
+
+    const entry = await resolveHotelStatus(hotelId);
+    if (!['trial', 'active'].includes(entry.status)) {
+      res.status(403).json({ message: 'This hotel is not currently accepting requests' });
+      return;
+    }
+
+    const cleanMessage = String(message ?? '').trim().slice(0, 500) || '[Waiter Request]';
+    const cleanTable   = tableNumber.trim();
+
+    const chat = await ChatMessage.create({
+      hotelId,
+      tableNumber: cleanTable,
+      sender:      'customer',
+      message:     cleanMessage,
+    });
+
+    const payload = {
+      _id:         chat._id.toString(),
+      hotelId,
+      tableNumber: cleanTable,
+      sender:      chat.sender,
+      message:     chat.message,
+      createdAt:   (chat as any).createdAt,
+    };
+
+    try {
+      io.to(cleanTable).emit('new_message', payload);
+      io.to(`admin_${hotelId}`).emit('new_message', payload);
+    } catch (emitErr: any) {
+      logger.warn('Waiter call socket emit failed', { hotelId, tableNumber: cleanTable, error: emitErr?.message });
+    }
+
+    res.json({ ok: true });
+  } catch (err: any) {
+    sendError(res, 500, 'Failed to send waiter request', err);
   }
 });
 

@@ -4,15 +4,17 @@ import { useCart } from '../../context/CartContext.tsx';
 import { useMenu } from '../../context/MenuContext.tsx';
 
 interface ProductCardProps {
-  product:  Product;
-  onClick:  (product: Product) => void;
+  product: Product;
+  onClick: (product: Product) => void;
 }
 
 export function ProductCard({ product, onClick }: ProductCardProps) {
   const { addItem, removeItem, setQty, getQty, simpleLineId } = useCart();
   const { hotel } = useMenu();
-  const qty = getQty(product._id);
+  const qty    = getQty(product._id);
   const symbol = hotel?.currencySymbol ?? '₹';
+
+  const isSoldOut = product.isAvailable === false;
 
   const isVeg =
     product.isVeg !== undefined
@@ -25,6 +27,7 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
 
   function handleAdd(e: React.MouseEvent) {
     e.stopPropagation();
+    if (isSoldOut) return;
     if (isComplex) {
       onClick(product);
       return;
@@ -34,8 +37,8 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
 
   return (
     <div
-      className="bg-white rounded-xl border border-[#E8D5C0] overflow-hidden active:scale-[0.98] transition-transform cursor-pointer"
-      onClick={() => onClick(product)}
+      className="relative bg-white rounded-xl border border-[#E8D5C0] overflow-hidden active:scale-[0.98] transition-transform cursor-pointer"
+      onClick={() => !isSoldOut && onClick(product)}
     >
       {product.image && (
         <img
@@ -45,6 +48,15 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
           loading="lazy"
         />
       )}
+
+      {isSoldOut && (
+        <div className="absolute inset-0 bg-white/75 z-10 flex items-center justify-center">
+          <span className="bg-[#1C0800]/10 text-[#1C0800]/60 text-[10px] font-bold px-2.5 py-1 rounded-full tracking-wide">
+            SOLD OUT
+          </span>
+        </div>
+      )}
+
       <div className="p-3">
         <div className="flex items-start gap-2 mb-1">
           <span
@@ -64,7 +76,9 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
           <span className="text-sm font-semibold text-[#1C0800]">
             {symbol}{product.price.toFixed(2)}
           </span>
-          {qty === 0 ? (
+          {isSoldOut ? (
+            <span className="text-xs text-[#1C0800]/30 font-medium">Unavailable</span>
+          ) : qty === 0 ? (
             <button
               onClick={handleAdd}
               className="text-xs px-3 py-1 bg-[#E8380D] text-white rounded-full font-medium"
@@ -72,7 +86,6 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
               ADD
             </button>
           ) : isComplex ? (
-            // For modifier products show qty badge; tapping opens detail sheet
             <button
               onClick={(e) => { e.stopPropagation(); onClick(product); }}
               className="flex items-center gap-1.5 rounded-full border border-[#E8380D] px-3 py-1 text-xs font-semibold text-[#E8380D]"

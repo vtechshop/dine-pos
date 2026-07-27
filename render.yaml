@@ -187,3 +187,20 @@ services:
 
       - key: LOGTAIL_SOURCE_TOKEN
         sync: false
+
+      # ── QR App redirect (optional) ────────────────────────────────────────
+      # When set, GET /menu redirects to this URL preserving query params.
+      # Leave unset during rollout to keep serving the legacy menu PWA.
+      - key: QR_APP_URL
+        value: https://qr.dinepos.com
+
+  # ── QR Ordering SPA ─────────────────────────────────────────────────────────
+  - type: web
+    name: dine-pos-qr
+    runtime: static
+    buildCommand: npx --yes pnpm@9.15.9 install --no-frozen-lockfile && pnpm --filter qr build
+    staticPublishPath: ./qr/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

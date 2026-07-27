@@ -5,6 +5,7 @@ import { useGuest } from '../context/GuestContext.tsx';
 import { useMenu } from '../context/MenuContext.tsx';
 import { fetchBill } from '../api/bill.ts';
 import { BillView } from '../components/order/BillView.tsx';
+import { BottomNav } from '../components/layout/BottomNav.tsx';
 import type { QrBill } from '../types/qr.ts';
 
 const POLL_INTERVAL_MS = 20_000;
@@ -73,21 +74,25 @@ export function BillPage({ hotelId }: BillPageProps) {
   if (!bill) return null;
 
   return (
-    <div className="min-h-screen bg-[#FFF6EE]">
-      <header className="bg-white border-b border-[#E8D5C0] px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-[#FFF6EE] pb-20">
+      <header className="bg-white border-b border-[#E8D5C0] px-4 py-3">
         <h1 className="font-bold text-[#1C0800]">Bill</h1>
-        <Link to="/orders" className="text-xs text-[#E8380D] font-medium">← Back</Link>
+        {bill.tableNumber && (
+          <p className="text-xs text-[#1C0800]/50">Table {bill.tableNumber}</p>
+        )}
       </header>
 
       <BillView bill={bill} currencySymbol={symbol} />
 
       {!bill.isBilled && (
-        <div className="px-4 pb-6">
+        <div className="px-4 pb-4">
           <p className="text-xs text-center text-[#1C0800]/50">
             Please call a staff member or wait — your bill will be brought to you shortly.
           </p>
         </div>
       )}
+
+      <BottomNav />
     </div>
   );
 }

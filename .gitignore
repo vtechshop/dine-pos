@@ -11,6 +11,7 @@ automation/.env.test
 # Vite bakes VITE_API_URL/VITE_SOCKET_URL into the JS bundle at build time;
 # without this file committed, production builds fall back to localhost URLs.
 !web/.env.production
+!qr/.env.production
 
 # Automation runtime artifacts (generated per-run, contain tokens/secrets)
 automation/.test-state.json

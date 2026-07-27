@@ -19,8 +19,7 @@ import { PremiumGate } from '../components/PremiumGate';
 import { getStoredHotelId } from '../services/api';
 import { useNavigation } from '@react-navigation/native';
 
-// Derive the menu base URL from the API URL: strip /api → /menu
-const DEFAULT_MENU_BASE = API_BASE_URL.replace(/\/api\/?$/, '/menu');
+const DEFAULT_MENU_BASE = 'https://qr.dinepos.com';
 
 const TABLE_COUNT_KEY = 'qr_table_count';
 const CUSTOM_URL_KEY  = 'qr_custom_menu_base';
