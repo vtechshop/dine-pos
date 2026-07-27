@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Wallet,
   TrendingUp,
+  Sparkles,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -73,6 +74,12 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/menu-sync',     icon: RefreshCw, label: 'Menu Sync' },
     ],
   },
+  {
+    heading: 'Restaurant Tools',
+    items: [
+      { to: '/ai-menu-import', icon: Sparkles, label: 'AI Menu Import' },
+    ],
+  },
 ];
 
 // Routes visible only to the admin role
@@ -81,6 +88,7 @@ const ADMIN_ONLY_ROUTES = new Set([
   '/vendor-ledger', '/inventory', '/inventory-intelligence', '/payments',
   '/reports', '/settings', '/reservations',
   '/online-orders', '/integrations', '/menu-sync',
+  '/ai-menu-import',
 ]);
 
 // Routes visible only to the cashier role
