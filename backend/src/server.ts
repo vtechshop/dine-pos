@@ -69,6 +69,7 @@ import aiMetricsRoutes from './routes/aiMetricsRoutes';
 import aiReportRoutes from './routes/aiReportRoutes';
 import aiAlertsRoutes from './routes/aiAlertsRoutes';
 import aiForecastRoutes from './routes/aiForecastRoutes';
+import aiChatRoutes from './routes/aiChatRoutes';
 import { startScheduler, stopScheduler } from './services/scheduler';
 import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
 import GatewayFactory from './services/payment/GatewayFactory';
@@ -349,6 +350,10 @@ app.use('/api/ai', aiAlertsRoutes);
 // AI BI Phase 4 — statistical forecast + inventory prediction (Gemini brief cached)
 app.use('/api/ai/forecast', _rl(20, 60_000)); // Gemini narrative endpoint
 app.use('/api/ai', aiForecastRoutes);
+// AI BI Phase 5 — AI business assistant chat (Gemini, context-grounded)
+// 30 req/min: conversational flow needs more headroom than one-shot report endpoints
+app.use('/api/ai/chat', _rl(30, 60_000));
+app.use('/api/ai', aiChatRoutes);
 
 // Liveness probe — returns 200 immediately if the process is alive.
 // Load balancers and orchestrators use this; it must never check DB/Redis
