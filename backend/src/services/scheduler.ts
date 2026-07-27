@@ -55,6 +55,10 @@ function scheduleDailyDispatch(): void {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export function startScheduler(): void {
+  if (hourlyTimer !== null || hourlyTick !== null || dailyTick !== null) {
+    logger.warn('[scheduler] already running — ignoring duplicate startScheduler() call');
+    return;
+  }
   logger.info('[scheduler] starting');
   scheduleHourly();
   scheduleDailyDispatch();
