@@ -1,20 +1,18 @@
-import { brand } from '../../packages/shared/tokens/brand.ts';
-
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
     './index.html',
     './src/**/*.{js,ts,jsx,tsx}',
-    '../../packages/shared/**/*.{js,ts,jsx,tsx}',
+    '../packages/shared/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     extend: {
       colors: {
         brand: {
-          accent: brand.accent,
-          dark:   brand.dark,
-          cream:  brand.cream,
-          border: brand.border,
+          accent: '#E8380D',
+          dark:   '#1C0800',
+          cream:  '#FFF6EE',
+          border: '#E8D5C0',
         },
       },
     },
