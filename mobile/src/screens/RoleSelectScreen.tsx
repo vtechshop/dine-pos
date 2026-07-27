@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, StatusBar,
+  View, Text, Pressable, StyleSheet, StatusBar,
   Animated, Easing, Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,33 +20,19 @@ export const ROLE_IMG_KEYS = {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoleSelect'>;
 
-const pad = (n: number) => String(n).padStart(2, '0');
-const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
 const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
   const { settings } = useSettings();
   const { clearCart } = useCart();
   const { top, bottom } = useSafeAreaInsets();
 
-  const [time, setTime] = useState(() => {
-    const n = new Date();
-    return `${pad(n.getHours())}:${pad(n.getMinutes())}`;
-  });
-  const [dateStr, setDateStr] = useState(() => {
-    const n = new Date();
-    return `${DAYS[n.getDay()]}, ${n.getDate()} ${MONTHS[n.getMonth()]}`;
-  });
-
   const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const slideAnim = useRef(new Animated.Value(24)).current;
 
   const [roleImgs, setRoleImgs] = useState<{ customer: string; admin: string; staff: string }>({
     customer: '', admin: '', staff: '',
   });
 
   useEffect(() => {
-    // AsyncStorage = fast local load; server settings = cross-device fallback
     AsyncStorage.multiGet([ROLE_IMG_KEYS.customer, ROLE_IMG_KEYS.admin, ROLE_IMG_KEYS.staff])
       .then(([[, c], [, a], [, s]]) => {
         const merged = {
@@ -55,7 +41,6 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
           staff:    s || settings.roleImageStaff    || '',
         };
         setRoleImgs(merged);
-        // Cache server URLs locally so next load is instant
         if (!c && merged.customer) AsyncStorage.setItem(ROLE_IMG_KEYS.customer, merged.customer).catch(() => {});
         if (!a && merged.admin)    AsyncStorage.setItem(ROLE_IMG_KEYS.admin,    merged.admin).catch(() => {});
         if (!s && merged.staff)    AsyncStorage.setItem(ROLE_IMG_KEYS.staff,    merged.staff).catch(() => {});
@@ -65,60 +50,50 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim,  { toValue: 1, duration: 400, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 380, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 380, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
     ]).start();
-
-    const id = setInterval(() => {
-      const n = new Date();
-      setTime(`${pad(n.getHours())}:${pad(n.getMinutes())}`);
-      setDateStr(`${DAYS[n.getDay()]}, ${n.getDate()} ${MONTHS[n.getMonth()]}`);
-    }, 60_000);
-    return () => clearInterval(id);
   }, []);
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} translucent={false} />
+    <View style={[styles.root, { paddingTop: top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} translucent={false} />
 
-      {/* ── Orange banner ───────────────────────────────────────────────── */}
-      <View style={[styles.banner, { paddingTop: top + Spacing.md }]}>
-        <View style={styles.bannerLeft}>
-          <Text style={styles.bannerEmoji}>🍽️</Text>
-          <View>
-            <Text style={styles.bannerHotel} numberOfLines={1}>
+      <View style={[styles.body, { paddingBottom: bottom + Spacing.xl }]}>
+
+        {/* ── Hotel identity card ──────────────────────────────────────── */}
+        <View style={styles.hotelCard}>
+          <View style={styles.hotelIconBox}>
+            <Text style={styles.hotelIconEmoji}>🏨</Text>
+          </View>
+          <View style={styles.hotelInfo}>
+            <Text style={styles.hotelName} numberOfLines={1}>
               {settings.hotelName || 'Dine POS'}
             </Text>
-            <Text style={styles.bannerSub}>Point of Sale</Text>
+            <Text style={styles.hotelSub}>Select your role to continue</Text>
           </View>
         </View>
-        <View style={styles.bannerRight}>
-          <Text style={styles.bannerClock}>{time}</Text>
-          <Text style={styles.bannerDate}>{dateStr}</Text>
-        </View>
-      </View>
 
-      {/* ── Body ────────────────────────────────────────────────────────── */}
-      <View style={[styles.body, { paddingBottom: bottom }]}>
-        <Text style={styles.sectionTitle}>Select Your Role</Text>
-
+        {/* ── Role cards ───────────────────────────────────────────────── */}
         <Animated.View style={[styles.cards, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
 
           <RoleCard
             accentColor={Colors.primary}
-            emoji="👤"
+            emoji="🛒"
             imageUri={roleImgs.customer}
             role="Customer"
-            desc="Browse Menu & Place Orders"
+            desc="Browse menu & place order from your table"
+            buttonLabel="Order Now"
             onPress={() => { clearCart(); navigation.replace('CustomerTabs'); }}
           />
 
           <RoleCard
             accentColor={Colors.info}
-            emoji="👨‍💼"
+            emoji="💼"
             imageUri={roleImgs.admin}
             role="Business Admin"
-            desc="Manage Products, Orders, Reports & Settings"
+            desc="POS billing, manage orders & reports"
+            buttonLabel="Admin Login"
             onPress={() => navigation.replace('AdminLogin')}
           />
 
@@ -128,12 +103,13 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
             imageUri={roleImgs.staff}
             role="Staff Login"
             desc="Cashier · Kitchen · Waiter"
+            buttonLabel="Staff Login"
             onPress={() => navigation.navigate('StaffRole')}
           />
 
         </Animated.View>
-      </View>
 
+      </View>
     </View>
   );
 };
@@ -141,28 +117,34 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
 // ── Role card ─────────────────────────────────────────────────────────────────
 interface RoleCardProps {
   accentColor: string;
-  emoji: string;
-  imageUri?: string;
-  role: string;
-  desc: string;
-  onPress: () => void;
+  emoji:       string;
+  imageUri?:   string;
+  role:        string;
+  desc:        string;
+  buttonLabel: string;
+  onPress:     () => void;
 }
 
-const RoleCard: React.FC<RoleCardProps> = ({ accentColor, emoji, imageUri, role, desc, onPress }) => {
+const RoleCard: React.FC<RoleCardProps> = ({
+  accentColor, emoji, imageUri, role, desc, buttonLabel, onPress,
+}) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const onPressIn  = () => Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
-  const onPressOut = () => Animated.spring(scaleAnim, { toValue: 1,    useNativeDriver: true, speed: 50, bounciness: 0 }).start();
+  const pressIn   = () => Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
+  const pressOut  = () => Animated.spring(scaleAnim, { toValue: 1,    useNativeDriver: true, speed: 50, bounciness: 0 }).start();
 
   return (
     <Animated.View style={[styles.cardOuter, { transform: [{ scale: scaleAnim }] }]}>
-      <TouchableOpacity
+      <Pressable
         style={styles.card}
         onPress={onPress}
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
-        activeOpacity={1}
+        onPressIn={pressIn}
+        onPressOut={pressOut}
+        android_ripple={{ color: accentColor + '28', borderless: false }}
+        accessibilityRole="button"
+        accessibilityLabel={`${role}. ${desc}. Tap to ${buttonLabel}.`}
       >
-        <View style={[styles.cardHero, { backgroundColor: accentColor + '18' }]}>
+        {/* ── Tinted hero: icon centred on accent wash ── */}
+        <View style={[styles.cardHero, { backgroundColor: accentColor + '15' }]}>
           <View style={[styles.iconCircle, { backgroundColor: accentColor + '28' }]}>
             {imageUri ? (
               <Image source={{ uri: imageUri }} style={styles.roleImage} resizeMode="cover" />
@@ -171,51 +153,78 @@ const RoleCard: React.FC<RoleCardProps> = ({ accentColor, emoji, imageUri, role,
             )}
           </View>
         </View>
+
+        {/* ── Body: title + description + full-width button ── */}
         <View style={[styles.cardBody, { borderTopColor: accentColor }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardRole}>{role}</Text>
-            <Text style={styles.cardDesc} numberOfLines={1}>{desc}</Text>
-          </View>
-          <View style={[styles.cardChip, { backgroundColor: accentColor + '18' }]}>
-            <MaterialIcons name="arrow-forward" size={20} color={accentColor} />
+          <Text style={styles.cardRole}>{role}</Text>
+          <Text style={styles.cardDesc} numberOfLines={1}>{desc}</Text>
+
+          {/* Full-width action button — visual affordance; card is the touchable */}
+          <View style={[styles.cardBtn, { backgroundColor: accentColor }]}>
+            <Text style={styles.cardBtnText}>{buttonLabel}</Text>
+            <MaterialIcons name="arrow-forward" size={16} color={Colors.white} />
           </View>
         </View>
-      </TouchableOpacity>
+      </Pressable>
     </Animated.View>
   );
 };
 
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
 
-  // Banner
-  banner: {
-    backgroundColor: Colors.primary,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
+  root: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+
+  body: {
+    flex: 1,
     paddingHorizontal: Spacing.xl,
-    paddingTop: 40,
-    paddingBottom: Spacing.md,
-  },
-  bannerLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, flex: 1 },
-  bannerEmoji: { fontSize: 30 },
-  bannerHotel: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.white, letterSpacing: -0.3, maxWidth: 160 },
-  bannerSub: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)', fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 },
-  bannerRight: { alignItems: 'flex-end', justifyContent: 'flex-end' },
-  bannerClock: { fontSize: FontSize.xxl, fontWeight: '300', color: Colors.white, letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
-  bannerDate: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.75)', fontWeight: '500', marginTop: 2 },
-
-  // Body
-  body: { flex: 1, paddingHorizontal: Spacing.xl, paddingTop: Spacing.xl },
-  sectionTitle: {
-    fontSize: FontSize.sm, fontWeight: '700', color: Colors.textMuted,
-    letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: Spacing.lg,
+    paddingTop: Spacing.lg,
+    gap: Spacing.lg,
   },
 
-  // Cards
+  // ── Hotel identity card ───────────────────────────────────────────────────
+  hotelCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.xl,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    ...Shadows.sm,
+  },
+  hotelIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.primaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hotelIconEmoji: { fontSize: 22 },
+  hotelInfo: { flex: 1 },
+  hotelName: {
+    fontSize: FontSize.lg,
+    fontWeight: '800',
+    color: Colors.text,
+    letterSpacing: -0.3,
+  },
+  hotelSub: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+
+  // ── Cards container ───────────────────────────────────────────────────────
   cards: { flex: 1, gap: Spacing.lg },
+
   cardOuter: { flex: 1 },
+
   card: {
     flex: 1,
     backgroundColor: Colors.surface,
@@ -223,32 +232,60 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.border,
     overflow: 'hidden',
-    ...Shadows.sm,
+    ...Shadows.md,
   },
+
+  // ── Hero ──────────────────────────────────────────────────────────────────
   cardHero: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconCircle: {
-    width: 96, height: 96, borderRadius: 48,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  iconEmoji: { fontSize: 44 },
-  roleImage: { width: 96, height: 96, borderRadius: 48 },
-  cardBody: {
-    flexDirection: 'row',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderTopWidth: 3,
-    gap: Spacing.md,
+    justifyContent: 'center',
   },
-  cardRole: { fontSize: FontSize.lg, fontWeight: '900', color: Colors.text, marginBottom: 2 },
-  cardDesc: { fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 18 },
-  cardChip: {
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  iconEmoji: { fontSize: 42 },
+  roleImage: { width: 88, height: 88, borderRadius: 44 },
+
+  // ── Body ──────────────────────────────────────────────────────────────────
+  cardBody: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop:        Spacing.md,
+    paddingBottom:     Spacing.lg,
+    borderTopWidth:    3,
+    gap:               Spacing.xs,
+  },
+  cardRole: {
+    fontSize:      FontSize.lg,
+    fontWeight:    '900',
+    color:         Colors.text,
+    letterSpacing: -0.2,
+  },
+  cardDesc: {
+    fontSize:   FontSize.sm,
+    color:      Colors.textSecondary,
+    lineHeight: 17,
+  },
+
+  // ── Full-width action button ───────────────────────────────────────────────
+  cardBtn: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    borderRadius:    BorderRadius.lg,
+    paddingVertical: Spacing.md,
+    gap:             Spacing.xs,
+    marginTop:       Spacing.sm,
+  },
+  cardBtnText: {
+    fontSize:      FontSize.md,
+    fontWeight:    '700',
+    color:         Colors.white,
+    letterSpacing: 0.2,
   },
 
 });
