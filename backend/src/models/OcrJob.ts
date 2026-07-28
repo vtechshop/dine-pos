@@ -73,6 +73,9 @@ export interface IOcrJob extends Document {
   // Failure detail
   errorMessage:  string | null;
 
+  // Set when worker claims a job; used to detect stuck-processing after crashes
+  processingStartedAt: Date | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -148,15 +151,29 @@ const OcrJobSchema = new Schema<IOcrJob>(
     approvedBy:    { type: String, default: null },
     approvedAt:    { type: Date, default: null },
 
-    errorMessage:  { type: String, default: null },
+    errorMessage:        { type: String, default: null },
+    processingStartedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );
 
-// Hotel + status index for worker polling
+// Hotel + status index for worker polling and list queries
 OcrJobSchema.index({ hotelId: 1, status: 1, createdAt: -1 });
 
-// Auto-expire completed/approved/failed/rejected jobs after 30 days
-OcrJobSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+// Dedicated index for the worker's poll query (status asc, createdAt asc = FIFO)
+OcrJobSchema.index({ status: 1, createdAt: 1 });
+
+// Sparse index for efficient duplicate-detection by invoice number
+OcrJobSchema.index({ hotelId: 1, 'extractedData.invoiceNumber': 1 }, { sparse: true });
+
+// Auto-expire only terminal non-approved jobs after 30 days.
+// Approved jobs are permanent records (they have live PO/GRN references).
+OcrJobSchema.index(
+  { updatedAt: 1 },
+  {
+    expireAfterSeconds: 30 * 24 * 60 * 60,
+    partialFilterExpression: { status: { $in: ['failed', 'rejected'] } },
+  },
+);
 
 export default mongoose.model<IOcrJob>('OcrJob', OcrJobSchema);
