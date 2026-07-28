@@ -7,6 +7,13 @@ import Order from '../models/Order';
 import { generateNarrative } from '../utils/geminiNarrative';
 import { logger } from '../utils/logger';
 
+// ─── Prompt sanitization ─────────────────────────────────────────────────────
+// cashierId originates from Order.cashierId — a string set by the POS client.
+// Strip any characters that could be used to inject instructions into the prompt.
+function sanitize(s: string): string {
+  return String(s).replace(/[<>{}\[\]\\|`]/g, '').slice(0, 60).trim();
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface StaffMemberStats {
@@ -142,7 +149,7 @@ export async function buildStaffAnalytics(hotelId: string): Promise<StaffAnalyti
 
   // ── Gemini narrative ─────────────────────────────────────────────────────
   const topStaff = ranked.slice(0, 3).map((s) =>
-    `${s.cashierId}: ${s.completedOrders} orders, ₹${s.totalRevenue.toFixed(0)} revenue, ${s.cancelRate * 100 < 1 ? '<1' : (s.cancelRate * 100).toFixed(1)}% cancel rate`,
+    `${sanitize(s.cashierId)}: ${s.completedOrders} orders, ₹${s.totalRevenue.toFixed(0)} revenue, ${s.cancelRate * 100 < 1 ? '<1' : (s.cancelRate * 100).toFixed(1)}% cancel rate`,
   ).join('; ');
 
   const prompt = `You are a restaurant operations analyst. Here is staff performance data for the last ${windowDays} days:

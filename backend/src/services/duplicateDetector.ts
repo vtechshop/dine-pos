@@ -32,17 +32,21 @@ export async function detectDuplicate(
   const normInv  = normalizeInvoiceNumber(invoiceNumber);
 
   // ── Check 1: existing approved OcrJob with same invoice number ────────────
+  // Use the sparse compound index { hotelId, extractedData.invoiceNumber } to
+  // avoid loading all completed/approved jobs for this hotel into memory.
+  // The normalized form is compared in JS because the index stores the raw value.
   if (normInv) {
-    const existingJobs = await OcrJob.find(
+    const candidates = await OcrJob.find(
       {
         hotelId: hotelOId,
         status:  { $in: ['completed', 'approved'] },
+        'extractedData.invoiceNumber': { $exists: true, $ne: '' },
         ...(excludeJobId ? { _id: { $ne: new mongoose.Types.ObjectId(excludeJobId) } } : {}),
       },
-      { extractedData: 1, reviewedData: 1, status: 1, createdPoId: 1 },
-    ).lean();
+      { 'extractedData.invoiceNumber': 1, 'reviewedData.invoiceNumber': 1, status: 1, createdPoId: 1 },
+    ).sort({ createdAt: -1 }).limit(500).lean();
 
-    for (const job of existingJobs) {
+    for (const job of candidates) {
       const data = (job.reviewedData ?? job.extractedData) as any;
       if (!data?.invoiceNumber) continue;
       const existingNorm = normalizeInvoiceNumber(String(data.invoiceNumber));

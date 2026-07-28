@@ -7,6 +7,13 @@ import Order from '../models/Order';
 import { generateNarrative } from '../utils/geminiNarrative';
 import { logger } from '../utils/logger';
 
+// ─── Prompt sanitization ─────────────────────────────────────────────────────
+// productName originates from the product catalog — user-created strings.
+// Strip characters that could be used to inject instructions into a Gemini prompt.
+function sanitize(s: string): string {
+  return String(s).replace(/[<>{}\[\]\\|`]/g, '').slice(0, 80).trim();
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface HourlyKitchenStats {
@@ -175,7 +182,7 @@ export async function buildKitchenAnalytics(hotelId: string): Promise<KitchenAna
   const fastHourStr  = fastestHour !== null ? `${fastestHour}:00 UTC` : 'N/A';
   const slowHourStr  = slowestHour !== null ? `${slowestHour}:00 UTC` : 'N/A';
   const peakHourStr  = peakLoadHour !== null ? `${peakLoadHour}:00 UTC` : 'N/A';
-  const topItemNames = topItems.slice(0, 5).map((i) => i.productName).join(', ');
+  const topItemNames = topItems.slice(0, 5).map((i) => sanitize(i.productName)).join(', ');
 
   const prompt = `You are a kitchen operations analyst for a restaurant. Summarize the following kitchen performance data (last ${windowDays} days):
 

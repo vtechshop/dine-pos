@@ -44,6 +44,13 @@ function isInventory(v: unknown): v is CachedInventory {
   return typeof v === 'object' && v !== null && 'coverageSummary' in v;
 }
 
+// ─── Prompt sanitization ─────────────────────────────────────────────────────
+// Product names and inventory item names are user-created strings — strip
+// characters that could be used to inject instructions into a Gemini prompt.
+function sanitize(s: string): string {
+  return String(s).replace(/[<>{}\[\]\\|`]/g, '').slice(0, 80).trim();
+}
+
 // ─── Profit estimation ────────────────────────────────────────────────────────
 // No BOM (Bill-of-Materials) link between menu items and ingredients exists in
 // the current data model. We use a conservative 20% net margin heuristic,
@@ -163,10 +170,10 @@ export async function buildMorningBrief(
   const forecastMethod  = fc?.revenueForecastMeta?.method ?? 'unavailable';
 
   // ── Gemini: executive summary + recommendations + opportunity + warning ───
-  const topItemStr     = topItem ? `${topItem.productName} (₹${topItem.revenue.toFixed(0)}, ${topItem.qty} sold)` : 'N/A';
-  const critStr        = criticalNames.length ? criticalNames.join(', ') : 'None';
-  const warnStr        = warningNames.length  ? warningNames.join(', ')  : 'None';
-  const slowStr        = slowMovers.length    ? slowMovers.join(', ')    : 'None';
+  const topItemStr     = topItem ? `${sanitize(topItem.productName)} (₹${topItem.revenue.toFixed(0)}, ${topItem.qty} sold)` : 'N/A';
+  const critStr        = criticalNames.length ? criticalNames.map(sanitize).join(', ') : 'None';
+  const warnStr        = warningNames.length  ? warningNames.map(sanitize).join(', ')  : 'None';
+  const slowStr        = slowMovers.length    ? slowMovers.map(sanitize).join(', ')    : 'None';
   const forecastRevStr = `₹${(typeof expectedRevenue === 'number' ? expectedRevenue : 0).toFixed(0)}`;
 
   const prompt = `You are a business intelligence analyst for a restaurant/hotel POS system.

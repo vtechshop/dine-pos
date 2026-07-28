@@ -115,18 +115,40 @@ export async function matchVendors(
 ): Promise<IVendorMatch[]> {
   if (!extractedName.trim() && !extractedGST.trim()) return [];
 
-  const hotelOId = new mongoose.Types.ObjectId(hotelId);
-  const vendors  = await Vendor.find(
+  const hotelOId  = new mongoose.Types.ObjectId(hotelId);
+  const normGST   = normalizeGST(extractedGST);
+
+  // ── Fast path: exact GST match (O(1) indexed lookup) ─────────────────────
+  // A valid Indian GSTIN is 15 characters; skip if too short to be real.
+  if (normGST.length >= 15) {
+    const exactMatch = await Vendor.findOne(
+      { hotelId: hotelOId, isDeleted: false, isActive: true, gstNumber: normGST },
+      { businessName: 1, gstNumber: 1 },
+    ).lean();
+
+    if (exactMatch) {
+      return [{
+        vendorId:     exactMatch._id.toString(),
+        businessName: (exactMatch as any).businessName,
+        gstNumber:    (exactMatch as any).gstNumber ?? '',
+        confidence:   1.000,
+      }];
+    }
+  }
+
+  // ── Fuzzy path: name similarity against up to 100 active vendors ──────────
+  // Limit prevents loading an unbounded vendor catalog into application memory.
+  const vendors = await Vendor.find(
     { hotelId: hotelOId, isDeleted: false, isActive: true },
     { businessName: 1, gstNumber: 1 },
-  ).lean();
+  ).limit(100).lean();
 
   const scored = vendors
     .map((v) => ({
       vendorId:     v._id.toString(),
-      businessName: v.businessName,
-      gstNumber:    v.gstNumber ?? '',
-      confidence:   computeConfidence(v.businessName, v.gstNumber ?? '', extractedName, extractedGST),
+      businessName: (v as any).businessName,
+      gstNumber:    (v as any).gstNumber ?? '',
+      confidence:   computeConfidence((v as any).businessName, (v as any).gstNumber ?? '', extractedName, extractedGST),
     }))
     .filter((m) => m.confidence >= 0.4) // discard very weak matches
     .sort((a, b) => b.confidence - a.confidence)
