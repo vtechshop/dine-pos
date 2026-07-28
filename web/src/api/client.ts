@@ -71,11 +71,12 @@ export async function apiFetch<T>(path: string, init: ExtendedInit = {}): Promis
   const { _isRetry = false, ...fetchInit } = init;
   const token = localStorage.getItem('pos_token');
 
+  const isFormData = fetchInit.body instanceof FormData;
   const res = await fetch(`${API_BASE}${path}`, {
     ...fetchInit,
     signal: fetchInit.signal ?? AbortSignal.timeout(15_000),
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(fetchInit.headers as Record<string, string> | undefined),
     },
