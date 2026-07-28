@@ -121,7 +121,10 @@ export async function buildInventoryPrediction(hotelId: string): Promise<Invento
 
   // Parallel fetch: ingredients + GRN usage map
   const [ingredients, grnUsage] = await Promise.all([
-    Ingredient.find({ hotelId: hotelOId }).lean(),
+    Ingredient.find(
+      { hotelId: hotelOId },
+      { _id: 1, name: 1, unit: 1, currentStock: 1, lowStockThreshold: 1, costPerUnit: 1 },
+    ).lean(),
     buildGRNUsageMap(hotelOId),
   ]);
 

@@ -239,5 +239,14 @@ OrderSchema.index({ sessionId: 1, guestId: 1 }, { sparse: true });
 OrderSchema.index({ hotelId: 1, tableNumber: 1, createdAt: -1 });
 // ── Aggregator / delivery index ───────────────────────────────────────────
 OrderSchema.index({ platformOrderId: 1 }, { sparse: true });
+// ── AI analytics indexes ──────────────────────────────────────────────────
+// Kitchen analytics: filters by status IN ['completed','served'] + completedAt != null.
+// Without completedAt in the index, MongoDB must fetch every doc in the date window
+// to apply the completedAt predicate after the status filter.
+OrderSchema.index({ hotelId: 1, status: 1, createdAt: -1, completedAt: 1 });
+// Staff analytics: filters by cashierId != null across the 30-day window.
+// The existing { hotelId:1, status:1, createdAt:-1 } covers status but not cashierId,
+// leaving the cashierId predicate as an in-memory post-scan filter.
+OrderSchema.index({ hotelId: 1, cashierId: 1, createdAt: -1 }, { sparse: true });
 
 export default mongoose.model<IOrder>('Order', OrderSchema);

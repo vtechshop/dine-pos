@@ -78,19 +78,39 @@ interface SnapshotRow {
 
 async function loadSnapshots(hotelId: string, limit: number): Promise<SnapshotRow[]> {
   const hotelOId = new mongoose.Types.ObjectId(hotelId);
-  const docs = await DailySnapshot.find(
-    { hotelId: hotelOId },
-    {
-      date: 1, totalRevenue: 1, totalOrders: 1, avgOrderValue: 1,
-      uniqueTables: 1, hourlyRevenue: 1, hourlyOrders: 1, allItems: 1,
-    },
-  )
-    .sort({ date: -1 })
-    .limit(limit)
-    .lean();
+
+  // allItems is only consumed by buildItemDemandForecast which uses the last 21
+  // snapshots. Loading it for all 90 transfers thousands of sub-documents that
+  // are immediately discarded — split into two targeted queries instead.
+  const ITEM_DEMAND_WINDOW = 21;
+  const itemsLimit = Math.min(limit, ITEM_DEMAND_WINDOW);
+
+  const [withoutItems, withItems] = await Promise.all([
+    DailySnapshot.find(
+      { hotelId: hotelOId },
+      { date: 1, totalRevenue: 1, totalOrders: 1, avgOrderValue: 1,
+        uniqueTables: 1, hourlyRevenue: 1, hourlyOrders: 1 },
+    ).sort({ date: -1 }).limit(limit).lean(),
+
+    DailySnapshot.find(
+      { hotelId: hotelOId },
+      { date: 1, allItems: 1 },
+    ).sort({ date: -1 }).limit(itemsLimit).lean(),
+  ]);
+
+  // Merge: index withItems by date for O(1) lookup
+  const itemMap = new Map<string, unknown[]>();
+  for (const s of withItems) {
+    itemMap.set((s as any).date, (s as any).allItems ?? []);
+  }
+
+  const merged = withoutItems.map((s) => ({
+    ...s,
+    allItems: itemMap.get((s as any).date) ?? [],
+  }));
 
   // Return in ascending order (oldest first) for time-series algorithms
-  return docs.reverse() as unknown as SnapshotRow[];
+  return merged.reverse() as unknown as SnapshotRow[];
 }
 
 // ─── Peak hour distribution ───────────────────────────────────────────────────
