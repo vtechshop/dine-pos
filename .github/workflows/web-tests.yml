@@ -33,11 +33,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install and start backend
         working-directory: backend
@@ -52,17 +57,19 @@ jobs:
           npm ci
           npm run build
           npm start &
-          timeout 30 bash -c 'until curl -s http://localhost:5000/health 2>/dev/null; do sleep 2; done'
+          timeout 30 bash -c 'until curl -sf http://localhost:5000/api/health 2>/dev/null; do sleep 2; done'
 
-      - name: Install and build web app
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and serve web app
         working-directory: web
-        run: |
-          npm ci
-          npm run build
-          npx vite preview --port 3000 &
-          timeout 30 bash -c 'until curl -s http://localhost:3000 2>/dev/null; do sleep 2; done'
         env:
-          VITE_API_URL: http://localhost:5000
+          VITE_API_URL: http://localhost:5000/api
+        run: |
+          pnpm run build
+          pnpm exec vite preview --port 3000 &
+          timeout 30 bash -c 'until curl -sf http://localhost:3000 2>/dev/null; do sleep 2; done'
 
       - name: Install Playwright
         working-directory: automation
