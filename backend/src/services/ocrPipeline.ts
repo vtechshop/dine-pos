@@ -15,9 +15,24 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const API_KEY = process.env.GEMINI_API_KEY || '';
 const MODEL   = process.env.GEMINI_MODEL   || 'gemini-2.5-flash';
 
+// 60-second timeout for multimodal calls — PDFs can be large.
+const OCR_TIMEOUT_MS = 60_000;
+
 function getClient(): GoogleGenerativeAI | null {
   if (!API_KEY) return null;
   return new GoogleGenerativeAI(API_KEY);
+}
+
+function ocrTimeout<T>(promise: Promise<T>): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Gemini OCR timeout after ${OCR_TIMEOUT_MS}ms`)),
+        OCR_TIMEOUT_MS,
+      ),
+    ),
+  ]);
 }
 
 // ─── File type validation (magic bytes) ──────────────────────────────────────
@@ -169,7 +184,7 @@ export async function extractInvoiceData(
 
   try {
     const model  = client.getGenerativeModel({ model: MODEL });
-    const result = await model.generateContent({
+    const result = await ocrTimeout(model.generateContent({
       contents: [{
         role: 'user',
         parts: [
@@ -177,7 +192,7 @@ export async function extractInvoiceData(
           { text: EXTRACTION_PROMPT },
         ],
       }],
-    });
+    }));
 
     const text = result.response.text();
     if (!text) {
