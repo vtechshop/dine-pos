@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   TrendingUp, Package, AlertTriangle, Clock, Sparkles,
-  ArrowUp, ArrowDown, Minus,
+  ArrowUp, ArrowDown, Minus, RefreshCw,
 } from 'lucide-react';
 import {
   fetchSalesForecast,
@@ -42,10 +42,16 @@ function Skel() {
   );
 }
 
-function ErrBox({ msg }: { msg: string }) {
+function ErrBox({ msg, onRetry }: { msg: string; onRetry?: () => void }) {
   return (
     <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
-      <AlertTriangle size={14} />{msg}
+      <AlertTriangle size={14} className="shrink-0" />
+      <span className="flex-1">{msg}</span>
+      {onRetry && (
+        <button onClick={onRetry} className="shrink-0 rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700">
+          Retry
+        </button>
+      )}
     </div>
   );
 }
@@ -279,24 +285,38 @@ export function ForecastPage() {
   const [invLoading,   setInvLoading]   = useState(true);
   const [salesErr,     setSalesErr]     = useState<string | null>(null);
   const [invErr,       setInvErr]       = useState<string | null>(null);
+  const [refreshKey,   setRefreshKey]   = useState(0);
+
+  const refresh = useCallback(() => setRefreshKey(k => k + 1), []);
 
   useEffect(() => {
+    let cancelled = false;
+    setSalesLoading(true);
+    setInvLoading(true);
+    setSalesErr(null);
+    setInvErr(null);
+    setSales(null);
+    setInv(null);
+
     Promise.allSettled([fetchSalesForecast(), fetchInventoryForecast()]).then(([sr, ir]) => {
+      if (cancelled) return;
       if (sr.status === 'fulfilled') {
         setSales(sr.value);
       } else {
-        setSalesErr((sr.reason as Error).message ?? 'Failed to load sales forecast');
+        setSalesErr(sr.reason instanceof Error ? sr.reason.message : 'Failed to load sales forecast');
       }
       setSalesLoading(false);
 
       if (ir.status === 'fulfilled') {
         setInv(ir.value);
       } else {
-        setInvErr((ir.reason as Error).message ?? 'Failed to load inventory forecast');
+        setInvErr(ir.reason instanceof Error ? ir.reason.message : 'Failed to load inventory forecast');
       }
       setInvLoading(false);
     });
-  }, []);
+
+    return () => { cancelled = true; };
+  }, [refreshKey]);
 
   const tabCls = (t: Tab) =>
     tab === t
@@ -310,8 +330,20 @@ export function ForecastPage() {
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
       <div className="shrink-0 border-b border-border bg-canvas px-5 py-3">
-        <h1 className="font-bold text-ink">AI Forecast</h1>
-        <p className="text-xs text-ink/50 mt-0.5">Predictive analytics for sales and inventory</p>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h1 className="font-bold text-ink">AI Forecast</h1>
+            <p className="text-xs text-ink/50 mt-0.5">Predictive analytics for sales and inventory</p>
+          </div>
+          <button
+            onClick={refresh}
+            disabled={salesLoading || invLoading}
+            aria-label="Refresh forecast"
+            className="rounded-lg p-1.5 text-ink/40 hover:bg-ink/5 hover:text-ink/70 disabled:opacity-30"
+          >
+            <RefreshCw size={13} className={salesLoading || invLoading ? 'animate-spin' : ''} />
+          </button>
+        </div>
         {/* Tabs */}
         <div className="flex gap-6 mt-3">
           <button
@@ -337,7 +369,7 @@ export function ForecastPage() {
             {!salesLoading && salesErr && (
               isSalesInsufficient
                 ? <p className="text-sm text-ink/50">Need at least 3 days of sales history to generate forecasts.</p>
-                : <ErrBox msg={salesErr} />
+                : <ErrBox msg={salesErr} onRetry={refresh} />
             )}
             {!salesLoading && !salesErr && sales && <SalesTab data={sales} />}
           </>
@@ -349,7 +381,7 @@ export function ForecastPage() {
             {!invLoading && invErr && (
               isInvEmpty
                 ? <p className="text-sm text-ink/50">No ingredients found. Add ingredients in inventory management.</p>
-                : <ErrBox msg={invErr} />
+                : <ErrBox msg={invErr} onRetry={refresh} />
             )}
             {!invLoading && !invErr && inv && <InventoryTab data={inv} />}
           </>
