@@ -160,8 +160,11 @@ export async function buildMorningBrief(
 
   // ── Forecast summary ──────────────────────────────────────────────────────
   const fc = isForecast(forecast) ? forecast : null;
+  // Parentheses are required: `??` (prec 5) binds before `!=` (prec 11) then `?:`
+  // (prec 4). Without them: `(value ?? bool) ? weekRev/7 : revenue` — so when
+  // revenueNext7d[0].value is defined, the ternary still fired and discarded it.
   const expectedRevenue = fc?.revenueNext7d?.[0]?.value
-    ?? fc?.forecastWeekRevenue != null ? (fc!.forecastWeekRevenue! / 7) : revenue;
+    ?? (fc?.forecastWeekRevenue != null ? fc.forecastWeekRevenue / 7 : revenue);
   const expectedOrders  = fc?.forecastWeekOrders != null
     ? Math.round(fc.forecastWeekOrders / 7) : orders;
   const expectedAov     = fc?.avgForecastAOV ?? avgBill;
