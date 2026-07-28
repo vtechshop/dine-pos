@@ -4,23 +4,30 @@ const SA_BASE = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/superadmin`
   : 'http://localhost:5000/api/superadmin';
 
-async function saFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+interface SAFetchInit extends RequestInit {
+  noRedirect?: boolean;
+}
+
+async function saFetch<T>(path: string, init: SAFetchInit = {}): Promise<T> {
+  const { noRedirect = false, ...fetchInit } = init;
   const token = localStorage.getItem('pos_token');
   const res = await fetch(`${SA_BASE}${path}`, {
-    ...init,
-    signal: (init as any).signal ?? AbortSignal.timeout(15_000),
+    ...fetchInit,
+    signal: (fetchInit as any).signal ?? AbortSignal.timeout(15_000),
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.headers as Record<string, string> | undefined),
+      ...(fetchInit.headers as Record<string, string> | undefined),
     },
   });
 
   if (!res.ok) {
     if (res.status === 401 && token) {
-      localStorage.removeItem('pos_token');
-      localStorage.removeItem('pos_role');
-      window.location.replace('/super-admin/login');
+      if (!noRedirect) {
+        localStorage.removeItem('pos_token');
+        localStorage.removeItem('pos_role');
+        window.location.replace('/super-admin/login');
+      }
       throw new Error('Session expired');
     }
     const body = (await res.json().catch(() => ({}))) as { message?: string };
@@ -193,8 +200,8 @@ export function getHealth(): Promise<HealthData> {
   return saFetch<HealthData>('/health');
 }
 
-export function getDashboard(): Promise<DashboardData> {
-  return saFetch<DashboardData>('/dashboard');
+export function getDashboard(opts?: { noRedirect?: boolean }): Promise<DashboardData> {
+  return saFetch<DashboardData>('/dashboard', { noRedirect: opts?.noRedirect });
 }
 
 export function suspendHotel(id: string): Promise<SimpleHotelAction> {
@@ -365,8 +372,8 @@ export interface CreateNotificationResponse {
   notification: SANotification;
 }
 
-export function getNotifications(): Promise<SANotification[]> {
-  return saFetch<SANotification[]>('/notifications');
+export function getNotifications(opts?: { noRedirect?: boolean }): Promise<SANotification[]> {
+  return saFetch<SANotification[]>('/notifications', { noRedirect: opts?.noRedirect });
 }
 
 export function createNotification(payload: CreateNotificationPayload): Promise<CreateNotificationResponse> {

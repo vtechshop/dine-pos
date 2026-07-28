@@ -63,8 +63,8 @@ export function SANotificationsProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     const [notifRes, dashRes] = await Promise.allSettled([
-      getNotifications(),
-      getDashboard(),
+      getNotifications({ noRedirect: true }),
+      getDashboard({ noRedirect: true }),
     ]);
 
     if (notifRes.status === 'fulfilled') {
