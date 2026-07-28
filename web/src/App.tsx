@@ -69,6 +69,15 @@ const PurchaseOrdersPage    = lazy(() => import('./pages/PurchaseOrdersPage').th
 const GRNPage               = lazy(() => import('./pages/GRNPage').then(m => ({ default: m.GRNPage })));
 const VendorLedgerPage      = lazy(() => import('./pages/VendorLedgerPage').then(m => ({ default: m.VendorLedgerPage })));
 const AIMenuImportPage      = lazy(() => import('./pages/AIMenuImportPage').then(m => ({ default: m.AIMenuImportPage })));
+// AI Platform pages — admin only, code-split
+const AIDashboardPage       = lazy(() => import('./pages/ai/AIDashboardPage').then(m => ({ default: m.AIDashboardPage })));
+const MorningBriefPage      = lazy(() => import('./pages/ai/MorningBriefPage').then(m => ({ default: m.MorningBriefPage })));
+const AIReportsPage         = lazy(() => import('./pages/ai/AIReportsPage').then(m => ({ default: m.AIReportsPage })));
+const AIChatPage            = lazy(() => import('./pages/ai/AIChatPage').then(m => ({ default: m.AIChatPage })));
+const ForecastPage          = lazy(() => import('./pages/ai/ForecastPage').then(m => ({ default: m.ForecastPage })));
+const AlertsPage            = lazy(() => import('./pages/ai/AlertsPage').then(m => ({ default: m.AlertsPage })));
+const RecommendationsPage   = lazy(() => import('./pages/ai/RecommendationsPage').then(m => ({ default: m.RecommendationsPage })));
+const PurchaseAssistantPage = lazy(() => import('./pages/ai/PurchaseAssistantPage').then(m => ({ default: m.PurchaseAssistantPage })));
 
 function PageFallback() {
   return (
@@ -170,6 +179,14 @@ export function App() {
                     <Route path="/grn"             element={<AdminOnly><Suspense fallback={<PageFallback />}><GRNPage /></Suspense></AdminOnly>} />
                     <Route path="/vendor-ledger"   element={<AdminOnly><Suspense fallback={<PageFallback />}><VendorLedgerPage /></Suspense></AdminOnly>} />
                     <Route path="/ai-menu-import"  element={<AdminOnly><Suspense fallback={<PageFallback />}><AIMenuImportPage /></Suspense></AdminOnly>} />
+                    <Route path="/ai"              element={<AdminOnly><Suspense fallback={<PageFallback />}><AIDashboardPage /></Suspense></AdminOnly>} />
+                    <Route path="/ai/brief"        element={<AdminOnly><Suspense fallback={<PageFallback />}><MorningBriefPage /></Suspense></AdminOnly>} />
+                    <Route path="/ai/reports"      element={<AdminOnly><Suspense fallback={<PageFallback />}><AIReportsPage /></Suspense></AdminOnly>} />
+                    <Route path="/ai/chat"         element={<AdminOnly><Suspense fallback={<PageFallback />}><AIChatPage /></Suspense></AdminOnly>} />
+                    <Route path="/ai/forecast"     element={<AdminOnly><Suspense fallback={<PageFallback />}><ForecastPage /></Suspense></AdminOnly>} />
+                    <Route path="/ai/alerts"       element={<AdminOnly><Suspense fallback={<PageFallback />}><AlertsPage /></Suspense></AdminOnly>} />
+                    <Route path="/ai/recommendations" element={<AdminOnly><Suspense fallback={<PageFallback />}><RecommendationsPage /></Suspense></AdminOnly>} />
+                    <Route path="/ai/purchase"     element={<AdminOnly><Suspense fallback={<PageFallback />}><PurchaseAssistantPage /></Suspense></AdminOnly>} />
 
                     <Route path="/waiter"  element={<Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />

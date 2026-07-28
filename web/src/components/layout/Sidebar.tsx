@@ -22,6 +22,13 @@ import {
   TrendingUp,
   Sparkles,
   X,
+  Bot,
+  Sunrise,
+  FileBarChart,
+  MessageSquare,
+  Bell,
+  Lightbulb,
+  ScanLine,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -80,6 +87,19 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/ai-menu-import', icon: Sparkles, label: 'AI Menu Import' },
     ],
   },
+  {
+    heading: 'AI Platform',
+    items: [
+      { to: '/ai',              icon: Bot,         label: 'AI Dashboard'   },
+      { to: '/ai/brief',        icon: Sunrise,      label: 'Morning Brief'  },
+      { to: '/ai/reports',      icon: FileBarChart, label: 'AI Reports'     },
+      { to: '/ai/chat',         icon: MessageSquare,label: 'AI Chat'        },
+      { to: '/ai/forecast',     icon: TrendingUp,   label: 'Forecast'       },
+      { to: '/ai/alerts',       icon: Bell,         label: 'Alerts'         },
+      { to: '/ai/recommendations', icon: Lightbulb, label: 'Recommendations'},
+      { to: '/ai/purchase',     icon: ScanLine,     label: 'Purchase AI'    },
+    ],
+  },
 ];
 
 // Routes visible only to the admin role
@@ -89,6 +109,8 @@ const ADMIN_ONLY_ROUTES = new Set([
   '/reports', '/settings', '/reservations',
   '/online-orders', '/integrations', '/menu-sync',
   '/ai-menu-import',
+  '/ai', '/ai/brief', '/ai/reports', '/ai/chat', '/ai/forecast',
+  '/ai/alerts', '/ai/recommendations', '/ai/purchase',
 ]);
 
 // Routes visible only to the cashier role
