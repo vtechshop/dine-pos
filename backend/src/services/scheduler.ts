@@ -1,5 +1,6 @@
 import { runHourlyAggregation } from '../workers/hourlyAggregator';
 import { dispatchDailySnapshots } from '../workers/dailySnapshotBuilder';
+import { dispatchMorningBriefs } from '../workers/morningBriefWorker';
 import { logger } from '../utils/logger';
 
 let hourlyTimer:  ReturnType<typeof setTimeout>  | null = null;
@@ -36,19 +37,28 @@ function scheduleHourly(): void {
   }, delay);
 }
 
-// ─── Daily snapshot dispatch ──────────────────────────────────────────────────
-// Runs every UTC minute between 00:00–03:59 (minuteOfDay 0–239).
-// Outside that window the tick fires but exits immediately (near-zero cost).
+// ─── Daily snapshot + morning brief dispatch ──────────────────────────────────
+// UTC 00:00–03:59 (minuteOfDay 0–239):   daily snapshot generation
+// UTC 04:00–05:59 (minuteOfDay 240–359): morning brief generation
+// Outside both windows the tick fires but exits immediately (near-zero cost).
 
 function scheduleDailyDispatch(): void {
   dailyTick = setInterval(() => {
-    const now          = new Date();
-    const minuteOfDay  = now.getUTCHours() * 60 + now.getUTCMinutes();
-    if (minuteOfDay >= 240) return; // outside dispatch window
+    const now         = new Date();
+    const minuteOfDay = now.getUTCHours() * 60 + now.getUTCMinutes();
 
-    void dispatchDailySnapshots(minuteOfDay).catch((err) =>
-      logger.error('[scheduler] daily snapshot error', { err: String(err) }),
-    );
+    if (minuteOfDay < 240) {
+      // Daily snapshot window
+      void dispatchDailySnapshots(minuteOfDay).catch((err) =>
+        logger.error('[scheduler] daily snapshot error', { err: String(err) }),
+      );
+    } else if (minuteOfDay < 360) {
+      // Morning brief window — runs after all snapshots are finalized
+      void dispatchMorningBriefs(minuteOfDay).catch((err) =>
+        logger.error('[scheduler] morning brief error', { err: String(err) }),
+      );
+    }
+    // minuteOfDay ≥ 360: outside both windows — do nothing
   }, 60 * 1000);
 }
 
