@@ -50,6 +50,7 @@ const CustomerCartScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const [placing, setPlacing] = useState(false);
   const [nameError, setNameError] = useState(false);
+  const [phoneError, setPhoneError] = useState(false);
   const [activeGateway, setActiveGateway] = useState<PublicGatewayInfo | null>(null);
   const [razorpayBusy, setRazorpayBusy] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
@@ -130,6 +131,7 @@ const CustomerCartScreen: React.FC = () => {
   const handleRazorpayPayment = async () => {
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items from the menu first.'); return; }
     if (!cart.customerName.trim()) { setNameError(true); return; }
+    if (cart.customerPhone.replace(/\D/g, '').length < 10) { setPhoneError(true); return; }
 
     const hotelId = await getStoredHotelId();
     if (!hotelId) { showAlert('Error', 'Hotel not found. Scan the QR code again.'); return; }
@@ -154,6 +156,7 @@ const CustomerCartScreen: React.FC = () => {
       })),
       tableNumber:   cart.tableNumber,
       customerName:  cart.customerName,
+      customerPhone: cart.customerPhone,
       notes:         cart.notes,
       isParcel:      cart.isParcel,
       subtotal:      cart.subtotal,
@@ -188,7 +191,8 @@ const CustomerCartScreen: React.FC = () => {
         description: `Order ${order.orderNumber}`,
         order_id:    rzpOrder.razorpayOrderId,
         prefill: {
-          name: cart.customerName || undefined,
+          name:    cart.customerName || undefined,
+          contact: cart.customerPhone.replace(/\D/g, '') || undefined,
         },
         theme: { color: '#528FF0' },
       });
@@ -223,6 +227,7 @@ const CustomerCartScreen: React.FC = () => {
   const handlePlaceOrder = async () => {
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items from the menu first.'); return; }
     if (!cart.customerName.trim()) { setNameError(true); return; }
+    if (cart.customerPhone.replace(/\D/g, '').length < 10) { setPhoneError(true); return; }
 
     const hotelId = await getStoredHotelId();
     if (!hotelId) { showAlert('Error', 'Hotel not found. Please scan the QR code again.'); return; }
@@ -245,15 +250,16 @@ const CustomerCartScreen: React.FC = () => {
         taxAmount:         item.taxAmount,
         total:             item.total,
       })),
-      tableNumber: cart.tableNumber,
-      customerName: cart.customerName,
-      notes: cart.notes,
-      isParcel: cart.isParcel,
-      subtotal: cart.subtotal,
-      taxTotal: cart.taxTotal,
-      grandTotal: cart.grandTotal,
+      tableNumber:   cart.tableNumber,
+      customerName:  cart.customerName,
+      customerPhone: cart.customerPhone,
+      notes:         cart.notes,
+      isParcel:      cart.isParcel,
+      subtotal:      cart.subtotal,
+      taxTotal:      cart.taxTotal,
+      grandTotal:    cart.grandTotal,
       paymentMethod: 'cash',
-      status: 'pending',
+      status:        'pending',
     };
 
     // If offline — queue immediately, no API call needed
@@ -625,18 +631,26 @@ const CustomerCartScreen: React.FC = () => {
                 <Text style={styles.nameErrorText}>Please enter your name to place the order</Text>
               )}
 
-              {/* Phone — optional */}
-              <View style={styles.inputWrap}>
-                <MaterialIcons name="phone" size={18} color={Colors.textMuted} />
+              {/* Phone — required for loyalty */}
+              <View style={styles.fieldLabelRow}>
+                <Text style={styles.fieldLabel}>Phone Number</Text>
+                <Text style={styles.fieldRequired}> * required</Text>
+              </View>
+              <View style={[styles.inputWrap, phoneError && styles.inputWrapError]}>
+                <MaterialIcons name="phone" size={18} color={phoneError ? Colors.danger : Colors.textMuted} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Phone number (optional)"
-                  placeholderTextColor={Colors.textMuted}
+                  placeholder="10-digit mobile number"
+                  placeholderTextColor={phoneError ? Colors.danger + '99' : Colors.textMuted}
                   value={cart.customerPhone}
-                  onChangeText={setPhone}
+                  onChangeText={v => { setPhone(v); if (v.replace(/\D/g, '').length >= 10) setPhoneError(false); }}
                   keyboardType="phone-pad"
+                  maxLength={15}
                 />
               </View>
+              {phoneError && (
+                <Text style={styles.phoneErrorText}>Enter a valid 10-digit mobile number</Text>
+              )}
 
               {/* Table — optional */}
               <View style={styles.inputWrap}>
@@ -808,7 +822,8 @@ const styles = StyleSheet.create({
   fieldLabelRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 6, marginLeft: 2 },
   fieldLabel: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary },
   fieldRequired: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.danger },
-  nameErrorText: { color: Colors.danger, fontSize: FontSize.sm, fontWeight: '600', marginBottom: Spacing.sm, marginLeft: 4 },
+  nameErrorText:  { color: Colors.danger, fontSize: FontSize.sm, fontWeight: '600', marginBottom: Spacing.sm, marginLeft: 4 },
+  phoneErrorText: { color: Colors.danger, fontSize: FontSize.sm, fontWeight: '600', marginBottom: Spacing.sm, marginLeft: 4 },
 
   // Bill summary (pre-order)
   billRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },

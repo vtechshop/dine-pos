@@ -530,6 +530,7 @@ export const createPublicOrder = async (data: {
   }>;
   tableNumber?: string;
   customerName?: string;
+  customerPhone?: string;
   notes?: string;
   isParcel?: boolean;
   // Required by legacy backend handler which trusts client totals;
