@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, TextInput,
-  ActivityIndicator, StatusBar, KeyboardAvoidingView, Platform, ScrollView,
+  ActivityIndicator, StatusBar, KeyboardAvoidingView, Platform,
+  ScrollView, Animated, Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -15,13 +16,28 @@ export const WAITER_PROFILE_KEY = '@hotel_pos_waiter_profile';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WaiterLogin'>;
 
+const DARK_BG  = '#160B00';
+const ACCENT   = Colors.accent;
+const ACCENT20 = Colors.accent + '20';
+const ACCENT55 = Colors.accent + '55';
+
 const WaiterLoginScreen: React.FC<Props> = ({ navigation }) => {
   const { top, bottom } = useSafeAreaInsets();
   const [employeeCode, setEmployeeCode] = useState('');
-  const [pin, setPin] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [pin, setPin]                   = useState('');
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState('');
   const pinRef = useRef<TextInput>(null);
+
+  const sheetAnim = useRef(new Animated.Value(48)).current;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 400, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+      Animated.timing(sheetAnim, { toValue: 0, duration: 420, delay: 80, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+    ]).start();
+  }, []);
 
   const handleLogin = async () => {
     if (!employeeCode.trim()) { setError('Enter your employee code'); return; }
@@ -30,10 +46,7 @@ const WaiterLoginScreen: React.FC<Props> = ({ navigation }) => {
     setLoading(true);
     try {
       const hotelId = await getStoredHotelId();
-      if (!hotelId) {
-        setError('Hotel not found. Ask admin to set up the device first.');
-        return;
-      }
+      if (!hotelId) { setError('Hotel not found. Ask admin to set up this device.'); return; }
       const { token, waiter } = await waiterLogin(hotelId, employeeCode.trim().toUpperCase(), pin);
       await saveWaiterToken(token);
       await AsyncStorage.setItem(WAITER_PROFILE_KEY, JSON.stringify(waiter));
@@ -45,37 +58,45 @@ const WaiterLoginScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const canSubmit = employeeCode.trim().length > 0 && pin.length >= 4;
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: top, paddingBottom: bottom + Spacing.xl }]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
+      <View style={[styles.root, { backgroundColor: DARK_BG }]}>
+        <StatusBar barStyle="light-content" backgroundColor={DARK_BG} />
 
-        {/* Back */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+        {/* ── Dark header ───────────────────────────────────────────────── */}
+        <View style={[styles.header, { paddingTop: top + Spacing.md }]}>
+          <View style={styles.orb} />
+
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+            <MaterialIcons name="arrow-back" size={20} color="rgba(255,255,255,0.85)" />
           </TouchableOpacity>
+
+          <Animated.View style={[styles.headerContent, { opacity: fadeAnim }]}>
+            <View style={[styles.iconRing, { borderColor: ACCENT55, backgroundColor: ACCENT20 }]}>
+              <MaterialIcons name="room-service" size={34} color={ACCENT} />
+            </View>
+            <Text style={styles.headerTitle}>Waiter Login</Text>
+            <Text style={styles.headerSub}>Enter your credentials to continue</Text>
+          </Animated.View>
         </View>
 
-        <View style={styles.body}>
-          <View style={styles.iconWrap}>
-            <Text style={{ fontSize: 52 }}>🛎️</Text>
-          </View>
+        {/* ── White sheet ───────────────────────────────────────────────── */}
+        <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetAnim }] }]}>
+          <View style={styles.sheetHandle} />
 
-          <Text style={styles.title}>Waiter Login</Text>
-          <Text style={styles.subtitle}>Enter your employee code and PIN</Text>
-
-          <View style={styles.inputCard}>
-            {/* Employee Code */}
-            <View style={[styles.inputWrap, error && !pin ? styles.inputError : null]}>
+          <ScrollView
+            contentContainerStyle={[styles.formScroll, { paddingBottom: bottom + Spacing.xl }]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.fieldLabel}>EMPLOYEE CODE</Text>
+            <View style={[styles.inputRow, { marginBottom: Spacing.md }]}>
               <MaterialIcons name="badge" size={20} color={Colors.textMuted} />
               <TextInput
                 style={styles.input}
-                placeholder="Employee Code (e.g. W001)"
+                placeholder="e.g. W001"
                 placeholderTextColor={Colors.textMuted}
                 value={employeeCode}
                 onChangeText={v => { setEmployeeCode(v.toUpperCase()); setError(''); }}
@@ -86,13 +107,13 @@ const WaiterLoginScreen: React.FC<Props> = ({ navigation }) => {
               />
             </View>
 
-            {/* PIN */}
-            <View style={[styles.inputWrap, { marginTop: Spacing.md }, error && pin.length < 4 ? styles.inputError : null]}>
+            <Text style={styles.fieldLabel}>PIN</Text>
+            <View style={[styles.inputRow, { marginBottom: Spacing.sm }]}>
               <MaterialIcons name="lock-outline" size={20} color={Colors.textMuted} />
               <TextInput
                 ref={pinRef}
-                style={[styles.input, { letterSpacing: 4 }]}
-                placeholder="PIN"
+                style={[styles.input, { letterSpacing: 6 }]}
+                placeholder="• • • •"
                 placeholderTextColor={Colors.textMuted}
                 value={pin}
                 onChangeText={v => { setPin(v.replace(/\D/g, '').slice(0, 6)); setError(''); }}
@@ -101,6 +122,11 @@ const WaiterLoginScreen: React.FC<Props> = ({ navigation }) => {
                 maxLength={6}
                 onSubmitEditing={handleLogin}
               />
+              {pin.length > 0 && (
+                <TouchableOpacity onPress={() => { setPin(''); setError(''); }}>
+                  <MaterialIcons name="close" size={18} color={Colors.textMuted} />
+                </TouchableOpacity>
+              )}
             </View>
 
             {!!error && (
@@ -109,66 +135,163 @@ const WaiterLoginScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
-          </View>
 
-          <TouchableOpacity
-            style={[styles.loginBtn, (loading || !employeeCode.trim() || pin.length < 4) && styles.loginBtnDisabled]}
-            onPress={handleLogin}
-            disabled={loading || !employeeCode.trim() || pin.length < 4}
-            activeOpacity={0.88}
-          >
-            {loading
-              ? <ActivityIndicator size="small" color={Colors.white} />
-              : <>
+            <TouchableOpacity
+              style={[styles.loginBtn, { backgroundColor: ACCENT }, (!canSubmit || loading) && styles.loginBtnDisabled]}
+              onPress={handleLogin}
+              disabled={!canSubmit || loading}
+              activeOpacity={0.88}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <>
                   <MaterialIcons name="room-service" size={20} color={Colors.white} />
                   <Text style={styles.loginBtnText}>Open Waiter Screen</Text>
                 </>
-            }
-          </TouchableOpacity>
+              )}
+            </TouchableOpacity>
 
-          <Text style={styles.hint}>
-            Ask your admin to create your waiter account{'\n'}in Settings → Manage Waiters
-          </Text>
-        </View>
-      </ScrollView>
+            <Text style={styles.hint}>
+              Ask your admin to create your waiter account{'\n'}in Settings → Manage Waiters
+            </Text>
+          </ScrollView>
+        </Animated.View>
+      </View>
     </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, backgroundColor: Colors.background },
-  header: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md },
+  root: { flex: 1 },
+
+  header: {
+    flex: 1,
+    overflow: 'hidden',
+    paddingBottom: Spacing.xxl,
+  },
+  orb: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: Colors.accent + '14',
+    top: -70,
+    right: -50,
+  },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: Colors.border,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
-  body: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.xl, paddingBottom: 40 },
-  iconWrap: {
-    width: 100, height: 100, borderRadius: 28,
-    backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: Colors.border, marginBottom: Spacing.xl, ...Shadows.sm,
+  headerContent: {
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
-  title:    { fontSize: FontSize.xxxl, fontWeight: '900', color: Colors.text, marginBottom: Spacing.sm },
-  subtitle: { fontSize: FontSize.md, color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.xxl },
-  inputCard: { width: '100%', marginBottom: Spacing.xl },
-  inputWrap: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    backgroundColor: Colors.surface, borderRadius: BorderRadius.xl,
-    paddingHorizontal: Spacing.lg, borderWidth: 1.5, borderColor: Colors.border, ...Shadows.sm,
+  iconRing: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
   },
-  inputError: { borderColor: Colors.danger },
-  input: { flex: 1, paddingVertical: 16, fontSize: FontSize.xl, color: Colors.text, fontWeight: '700' },
-  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, paddingLeft: 4 },
+  headerTitle: {
+    fontSize: FontSize.xxxl,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+  },
+  headerSub: {
+    fontSize: FontSize.xs,
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+
+  sheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: BorderRadius.xxxl,
+    borderTopRightRadius: BorderRadius.xxxl,
+    paddingTop: Spacing.md,
+    ...Shadows.lg,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: 'center',
+    marginBottom: Spacing.xl,
+  },
+  formScroll: {
+    paddingHorizontal: Spacing.xl,
+  },
+  fieldLabel: {
+    fontSize: FontSize.xs,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    letterSpacing: 1.2,
+    marginBottom: Spacing.sm,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.lg,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 16,
+    fontSize: FontSize.lg,
+    color: Colors.text,
+    fontWeight: '600',
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: Spacing.md,
+  },
   errorText: { color: Colors.danger, fontSize: FontSize.sm },
   loginBtn: {
-    width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: Spacing.sm, backgroundColor: Colors.primary, borderRadius: BorderRadius.xl,
-    paddingVertical: 16, ...Shadows.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    borderRadius: BorderRadius.lg,
+    paddingVertical: 16,
+    marginTop: Spacing.md,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.30,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  loginBtnDisabled: { opacity: 0.5 },
-  loginBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '800' },
-  hint: { marginTop: Spacing.xl, fontSize: FontSize.sm, color: Colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  loginBtnDisabled: { opacity: 0.4 },
+  loginBtnText: {
+    color: Colors.white,
+    fontSize: FontSize.lg,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  hint: {
+    marginTop: Spacing.xl,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
 });
 
 export default WaiterLoginScreen;

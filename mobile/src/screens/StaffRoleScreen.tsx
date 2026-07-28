@@ -1,6 +1,7 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, StatusBar, Animated,
+  View, Text, Pressable, StyleSheet, StatusBar,
+  Animated, Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -10,166 +11,289 @@ import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/const
 
 type Props = NativeStackScreenProps<RootStackParamList, 'StaffRole'>;
 
+const DARK_BG = '#160A02';
+
+const ROLES = [
+  {
+    key:      'cashier',
+    icon:     'point-of-sale' as keyof typeof MaterialIcons.glyphMap,
+    label:    'Cashier',
+    desc:     'Billing & payment collection',
+    accent:   Colors.info,
+    accentBg: Colors.infoBg,
+  },
+  {
+    key:      'kitchen',
+    icon:     'restaurant' as keyof typeof MaterialIcons.glyphMap,
+    label:    'Kitchen',
+    desc:     'Kitchen Display System',
+    accent:   Colors.success,
+    accentBg: Colors.successBg,
+  },
+  {
+    key:      'waiter',
+    icon:     'room-service' as keyof typeof MaterialIcons.glyphMap,
+    label:    'Waiter',
+    desc:     'Serve orders & table operations',
+    accent:   Colors.accent,
+    accentBg: Colors.accentBg,
+  },
+] as const;
+
 const StaffRoleScreen: React.FC<Props> = ({ navigation }) => {
   const { top, bottom } = useSafeAreaInsets();
 
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const sheetAnim  = useRef(new Animated.Value(56)).current;
+  const rowAnims   = useRef(ROLES.map(() => new Animated.Value(0))).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(headerAnim, { toValue: 1, duration: 420, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+      Animated.timing(sheetAnim,  { toValue: 0, duration: 420, delay: 100, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+      ...rowAnims.map((anim, i) =>
+        Animated.timing(anim, { toValue: 1, duration: 320, delay: 240 + i * 80, useNativeDriver: true, easing: Easing.out(Easing.cubic) })
+      ),
+    ]).start();
+  }, []);
+
+  const headerTranslateY = headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] });
+
+  const handlePress = (key: string) => {
+    if (key === 'cashier') navigation.navigate('CashierLogin');
+    else if (key === 'kitchen') navigation.navigate('KitchenLogin');
+    else navigation.navigate('WaiterLogin');
+  };
+
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} translucent={false} />
+    <View style={[styles.root, { backgroundColor: DARK_BG }]}>
+      <StatusBar barStyle="light-content" backgroundColor={DARK_BG} />
 
-      {/* ── Orange banner ───────────────────────────────────────────────── */}
-      <View style={[styles.banner, { paddingTop: top + Spacing.md }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
-          <MaterialIcons name="arrow-back" size={22} color={Colors.white} />
-        </TouchableOpacity>
-        <View>
-          <Text style={styles.bannerSub}>Staff Login</Text>
-          <Text style={styles.bannerTitle}>Select Your Role</Text>
-        </View>
+      {/* ── Dark header ─────────────────────────────────────────────────── */}
+      <View style={[styles.header, { paddingTop: top + Spacing.md }]}>
+        <View style={styles.orb1} />
+        <View style={styles.orb2} />
+
+        <Pressable
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <MaterialIcons name="arrow-back" size={20} color="rgba(255,255,255,0.85)" />
+        </Pressable>
+
+        <Animated.View style={[styles.headerContent, { opacity: headerAnim, transform: [{ translateY: headerTranslateY }] }]}>
+          <View style={styles.brandRing}>
+            <MaterialIcons name="people" size={32} color={Colors.primary} />
+          </View>
+          <Text style={styles.brandName}>Staff Portal</Text>
+          <Text style={styles.brandTagline}>Select your station to continue</Text>
+        </Animated.View>
       </View>
 
-      {/* ── Body ────────────────────────────────────────────────────────── */}
-      <View style={[styles.body, { paddingBottom: bottom + Spacing.xl }]}>
-        <Text style={styles.sectionTitle}>Choose your work role</Text>
+      {/* ── White sheet ─────────────────────────────────────────────────── */}
+      <Animated.View style={[styles.sheet, { paddingBottom: bottom + Spacing.lg, transform: [{ translateY: sheetAnim }] }]}>
+        <View style={styles.sheetHandle} />
+        <Text style={styles.sheetLabel}>CHOOSE STATION</Text>
 
-        <View style={styles.cards}>
-
-          <RoleCard
-            accentColor={Colors.info}
-            emoji="💰"
-            role="Cashier"
-            desc="Billing & Payments"
-            onPress={() => navigation.navigate('CashierLogin')}
-          />
-
-          <RoleCard
-            accentColor={Colors.success}
-            emoji="👨‍🍳"
-            role="Kitchen"
-            desc="Kitchen Display System"
-            onPress={() => navigation.navigate('KitchenLogin')}
-          />
-
-          <RoleCard
-            accentColor={Colors.accent}
-            emoji="🍽️"
-            role="Waiter"
-            desc="Serve Orders & Table Operations"
-            onPress={() => navigation.navigate('WaiterLogin')}
-          />
-
+        <View style={styles.roleList}>
+          {ROLES.map(({ key, icon, label, desc, accent, accentBg }, i) => {
+            const rowTranslateX = rowAnims[i].interpolate({ inputRange: [0, 1], outputRange: [24, 0] });
+            return (
+              <Animated.View
+                key={key}
+                style={{ opacity: rowAnims[i], transform: [{ translateX: rowTranslateX }] }}
+              >
+                <RoleRow
+                  icon={icon}
+                  label={label}
+                  desc={desc}
+                  accent={accent}
+                  accentBg={accentBg}
+                  isLast={i === ROLES.length - 1}
+                  onPress={() => handlePress(key)}
+                />
+              </Animated.View>
+            );
+          })}
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 };
 
-// ── Role card ─────────────────────────────────────────────────────────────────
-interface RoleCardProps {
-  accentColor: string;
-  emoji: string;
-  role: string;
-  desc: string;
-  onPress: () => void;
+// ── Role row ──────────────────────────────────────────────────────────────────
+interface RoleRowProps {
+  icon:     keyof typeof MaterialIcons.glyphMap;
+  label:    string;
+  desc:     string;
+  accent:   string;
+  accentBg: string;
+  isLast:   boolean;
+  onPress:  () => void;
 }
 
-const RoleCard: React.FC<RoleCardProps> = ({ accentColor, emoji, role, desc, onPress }) => {
+const RoleRow: React.FC<RoleRowProps> = ({ icon, label, desc, accent, accentBg, isLast, onPress }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const onPressIn  = () => Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
-  const onPressOut = () => Animated.spring(scaleAnim, { toValue: 1,    useNativeDriver: true, speed: 50, bounciness: 0 }).start();
+  const pressIn  = () => Animated.spring(scaleAnim, { toValue: 0.975, useNativeDriver: true, speed: 60, bounciness: 0 }).start();
+  const pressOut = () => Animated.spring(scaleAnim, { toValue: 1,     useNativeDriver: true, speed: 60, bounciness: 0 }).start();
 
   return (
-    <Animated.View style={[styles.cardOuter, { transform: [{ scale: scaleAnim }] }]}>
-      <TouchableOpacity
-        style={styles.card}
-        onPress={onPress}
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
-        activeOpacity={1}
-      >
-        <View style={[styles.cardHero, { backgroundColor: accentColor + '18' }]}>
-          <View style={[styles.iconCircle, { backgroundColor: accentColor + '28' }]}>
-            <Text style={styles.iconEmoji}>{emoji}</Text>
+    <>
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <Pressable
+          style={styles.roleRow}
+          onPress={onPress}
+          onPressIn={pressIn}
+          onPressOut={pressOut}
+          android_ripple={{ color: accent + '18', borderless: false }}
+          accessibilityRole="button"
+          accessibilityLabel={`${label}. ${desc}`}
+        >
+          <View style={[styles.roleIconBox, { backgroundColor: accentBg }]}>
+            <MaterialIcons name={icon} size={26} color={accent} />
           </View>
-        </View>
-        <View style={[styles.cardBody, { borderTopColor: accentColor }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardRole}>{role}</Text>
-            <Text style={styles.cardDesc}>{desc}</Text>
+          <View style={styles.roleText}>
+            <Text style={styles.roleLabel}>{label}</Text>
+            <Text style={styles.roleDesc} numberOfLines={1}>{desc}</Text>
           </View>
-          <View style={[styles.cardChip, { backgroundColor: accentColor + '18' }]}>
-            <MaterialIcons name="arrow-forward" size={20} color={accentColor} />
+          <View style={[styles.roleArrow, { backgroundColor: accentBg }]}>
+            <MaterialIcons name="arrow-forward-ios" size={13} color={accent} />
           </View>
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
+        </Pressable>
+      </Animated.View>
+      {!isLast && <View style={styles.divider} />}
+    </>
   );
 };
 
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+  root: { flex: 1 },
 
-  // Banner
-  banner: {
-    backgroundColor: Colors.primary,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: 40,
-    paddingBottom: Spacing.md,
+  header: {
+    flex: 1,
+    overflow: 'hidden',
+    paddingBottom: Spacing.xxxl,
+  },
+  orb1: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: Colors.primary + '16',
+    top: -60,
+    right: -50,
+  },
+  orb2: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: Colors.accent + '0C',
+    bottom: 10,
+    left: -40,
   },
   backBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
-  bannerSub: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)', fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
-  bannerTitle: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.white, letterSpacing: -0.3 },
-
-  // Body
-  body: { flex: 1, paddingHorizontal: Spacing.xl, paddingTop: Spacing.xl },
-  sectionTitle: {
-    fontSize: FontSize.sm, fontWeight: '700', color: Colors.textMuted,
-    letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: Spacing.lg,
+  headerContent: {
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
-
-  // Cards
-  cards: { flex: 1, gap: Spacing.lg },
-  cardOuter: { flex: 1 },
-  card: {
-    flex: 1,
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.xl,
+  brandRing: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: Colors.primary + '20',
     borderWidth: 1.5,
-    borderColor: Colors.border,
-    overflow: 'hidden',
-    ...Shadows.sm,
+    borderColor: Colors.primary + '55',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
   },
-  cardHero: {
-    flex: 1,
+  brandName: {
+    fontSize: FontSize.xxxl,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+  },
+  brandTagline: {
+    fontSize: FontSize.xs,
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+
+  sheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: BorderRadius.xxxl,
+    borderTopRightRadius: BorderRadius.xxxl,
+    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    ...Shadows.lg,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: 'center',
+    marginBottom: Spacing.xl,
+  },
+  sheetLabel: {
+    fontSize: FontSize.xs,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    letterSpacing: 1.4,
+    marginBottom: Spacing.sm,
+  },
+
+  roleList:   { gap: 0 },
+  roleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.lg,
+    gap: Spacing.lg,
+  },
+  roleIconBox: {
+    width: 54,
+    height: 54,
+    borderRadius: BorderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconCircle: {
-    width: 96, height: 96, borderRadius: 48,
-    alignItems: 'center', justifyContent: 'center',
+  roleText:  { flex: 1 },
+  roleLabel: {
+    fontSize: FontSize.lg,
+    fontWeight: '700',
+    color: Colors.text,
+    letterSpacing: -0.2,
   },
-  iconEmoji: { fontSize: 44 },
-  cardBody: {
-    flexDirection: 'row',
+  roleDesc: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  roleArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.sm,
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderTopWidth: 3,
-    gap: Spacing.md,
+    justifyContent: 'center',
   },
-  cardRole: { fontSize: FontSize.lg, fontWeight: '900', color: Colors.text, marginBottom: 2 },
-  cardDesc: { fontSize: FontSize.sm, color: Colors.textSecondary, lineHeight: 18 },
-  cardChip: {
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Colors.border,
+    marginLeft: 54 + Spacing.lg,
   },
 });
 
