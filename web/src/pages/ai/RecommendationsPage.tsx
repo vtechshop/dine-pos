@@ -6,6 +6,7 @@ import {
   type RecommendationSet,
   type MenuItemScore,
 } from '../../api/aiAlerts';
+import { ApiError } from '../../api/client';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -108,8 +109,7 @@ export function RecommendationsPage() {
         : await fetchRecommendationsByDate(d);
       setData(result);
     } catch (err: unknown) {
-      const status = (err as { status?: number }).status;
-      if (status === 404) {
+      if (err instanceof ApiError && err.status === 404) {
         setNotFound(true);
       } else {
         setError(err instanceof Error ? err.message : 'Failed to load recommendations.');

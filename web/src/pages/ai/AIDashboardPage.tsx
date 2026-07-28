@@ -120,14 +120,13 @@ export function AIDashboardPage() {
     setAnomaliesInsufficient(false);
     try {
       const data = await fetchAnomalies();
-      setAnomalies(data);
-    } catch (err: unknown) {
-      // 202 = insufficient data (need 7+ days)
-      if (err instanceof Error && err.message.includes('202')) {
+      if (!data || data.allClear === undefined || !Array.isArray(data.anomalies)) {
         setAnomaliesInsufficient(true);
       } else {
-        setAnomaliesError('Failed to load anomaly data.');
+        setAnomalies(data);
       }
+    } catch {
+      setAnomaliesError('Failed to load anomaly data.');
     } finally {
       setAnomaliesLoading(false);
     }

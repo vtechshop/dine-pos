@@ -7,7 +7,7 @@ import { ApiError } from '../../api/client';
 
 // ── Constants & helpers ────────────────────────────────────────────────────────
 
-const TODAY = new Date().toISOString().slice(0, 10);
+function getToday() { return new Date().toISOString().slice(0, 10); }
 
 const SEVERITY_ORDER: Record<AlertItem['severity'], number> = {
   critical: 0,
@@ -99,7 +99,7 @@ function AlertCard({ alert }: { alert: AlertItem }) {
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export function AlertsPage() {
-  const [selectedDate, setSelectedDate] = useState<string>(TODAY);
+  const [selectedDate, setSelectedDate] = useState<string>(getToday());
   const [isToday, setIsToday] = useState(true);
   const [result, setResult] = useState<AlertResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -132,9 +132,9 @@ export function AlertsPage() {
 
   function handleTodayClick() {
     if (isToday) {
-      load(TODAY, true);
+      load(getToday(), true);
     } else {
-      setSelectedDate(TODAY);
+      setSelectedDate(getToday());
       setIsToday(true);
     }
   }
@@ -143,7 +143,7 @@ export function AlertsPage() {
     const d = e.target.value;
     if (!d) return;
     setSelectedDate(d);
-    setIsToday(d === TODAY);
+    setIsToday(d === getToday());
   }
 
   const sorted = result
@@ -202,7 +202,7 @@ export function AlertsPage() {
             <input
               type="date"
               value={selectedDate}
-              max={TODAY}
+              max={getToday()}
               onChange={handleDateChange}
               className="rounded-lg border border-border bg-canvas px-2 py-1.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand"
             />
