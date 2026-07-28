@@ -71,16 +71,19 @@ export async function apiFetch<T>(path: string, init: ExtendedInit = {}): Promis
   const { _isRetry = false, ...fetchInit } = init;
   const token = localStorage.getItem('pos_token');
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20_000);
+
   const isFormData = fetchInit.body instanceof FormData;
   const res = await fetch(`${API_BASE}${path}`, {
     ...fetchInit,
-    signal: fetchInit.signal ?? AbortSignal.timeout(15_000),
+    signal: fetchInit.signal ?? controller.signal,
     headers: {
       ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(fetchInit.headers as Record<string, string> | undefined),
     },
-  });
+  }).finally(() => clearTimeout(timeoutId));
 
   if (!res.ok) {
     // ── H-03: 401 interception — attempt silent refresh then retry once ─────

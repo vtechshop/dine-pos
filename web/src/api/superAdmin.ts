@@ -11,30 +11,38 @@ interface SAFetchInit extends RequestInit {
 async function saFetch<T>(path: string, init: SAFetchInit = {}): Promise<T> {
   const { noRedirect = false, ...fetchInit } = init;
   const token = localStorage.getItem('pos_token');
-  const res = await fetch(`${SA_BASE}${path}`, {
-    ...fetchInit,
-    signal: (fetchInit as any).signal ?? AbortSignal.timeout(15_000),
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(fetchInit.headers as Record<string, string> | undefined),
-    },
-  });
 
-  if (!res.ok) {
-    if (res.status === 401 && token) {
-      if (!noRedirect) {
-        localStorage.removeItem('pos_token');
-        localStorage.removeItem('pos_role');
-        window.location.replace('/super-admin/login');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20_000);
+
+  try {
+    const res = await fetch(`${SA_BASE}${path}`, {
+      ...fetchInit,
+      signal: (fetchInit as any).signal ?? controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(fetchInit.headers as Record<string, string> | undefined),
+      },
+    });
+
+    if (!res.ok) {
+      if (res.status === 401 && token) {
+        if (!noRedirect) {
+          localStorage.removeItem('pos_token');
+          localStorage.removeItem('pos_role');
+          window.location.replace('/super-admin/login');
+        }
+        throw new Error('Session expired');
       }
-      throw new Error('Session expired');
+      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new Error(body.message ?? `HTTP ${res.status}`);
     }
-    const body = (await res.json().catch(() => ({}))) as { message?: string };
-    throw new Error(body.message ?? `HTTP ${res.status}`);
-  }
 
-  return res.json() as Promise<T>;
+    return res.json() as Promise<T>;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export interface SALoginResponse {
