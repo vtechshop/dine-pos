@@ -89,10 +89,7 @@ interface MorningBriefCardProps {
 export function MorningBriefCard({ brief, loading = false }: MorningBriefCardProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const { business: b, inventory: inv, forecast: fc, menu: m } = brief;
-  const currency = '₹';
-
-  if (loading) {
+  if (loading || !brief) {
     return (
       <div className="animate-pulse border-b border-border bg-canvas px-5 py-4">
         <div className="mb-3 h-4 w-48 rounded bg-border" />
@@ -104,6 +101,9 @@ export function MorningBriefCard({ brief, loading = false }: MorningBriefCardPro
       </div>
     );
   }
+
+  const { business: b, inventory: inv, forecast: fc, menu: m } = brief;
+  const currency = '₹';
 
   return (
     <div className="border-b border-border bg-canvas">
