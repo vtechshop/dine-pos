@@ -829,6 +829,15 @@ export type RootStackParamList = {
   VendorLedger:          undefined;
   InventoryIntelligence: undefined;
   PaymentSettings: undefined;
+  AIHome: undefined;
+  MorningBrief: undefined;
+  AIReports: undefined;
+  AIChat: undefined;
+  AIForecast: undefined;
+  AIAlerts: undefined;
+  AIRecommendations: undefined;
+  StaffKitchen: undefined;
+  PurchaseAssistant: undefined;
 };
 
 export type TabParamList = {
@@ -844,3 +853,453 @@ export type CustomerTabParamList = {
   Cart: undefined;
   OrderStatus: undefined;
 };
+
+// ── AI Platform Types ─────────────────────────────────────────────────────────
+
+export interface AIAlertItem {
+  type:      string;
+  severity:  'critical' | 'warning' | 'info';
+  title:     string;
+  message:   string;
+  value:     number;
+  baseline:  number;
+  changePct: number;
+}
+
+export interface AIAlertResult {
+  date:       string;
+  dataSource: 'realtime' | 'snapshot';
+  checkedAt:  string;
+  alerts:     AIAlertItem[];
+}
+
+export interface AIMenuItemScore {
+  productId:      string;
+  productName:    string;
+  qty:            number;
+  revenue:        number;
+  revenuePerUnit: number;
+  quadrant:       'star' | 'plow_horse' | 'puzzle' | 'dog';
+}
+
+export interface AIUpsellTarget {
+  productName:    string;
+  revenuePerUnit: number;
+  currentOrders:  number;
+  reason:         string;
+}
+
+export interface AICrossSell {
+  triggerItem: string;
+  suggestItem: string;
+  reason:      string;
+}
+
+export interface AICombo {
+  items:  string[];
+  reason: string;
+}
+
+export interface AISlowMover {
+  productName: string;
+  qty:         number;
+  revenue:     number;
+  suggestion:  string;
+}
+
+export interface AIRecommendationSet {
+  date:            string;
+  generatedAt:     string;
+  insightSource:   'cache' | 'gemini' | 'unavailable';
+  insight:         string | null;
+  menuEngineering: AIMenuItemScore[];
+  stars:           AIMenuItemScore[];
+  plowHorses:      AIMenuItemScore[];
+  puzzles:         AIMenuItemScore[];
+  dogs:            AIMenuItemScore[];
+  upsellTargets:   AIUpsellTarget[];
+  crossSell:       AICrossSell[];
+  combos:          AICombo[];
+  slowMovers:      AISlowMover[];
+  highMarginItems: AIMenuItemScore[];
+}
+
+export interface ForecastPoint {
+  date:  string;
+  value: number;
+}
+
+export interface ForecastMeta {
+  method:     string;
+  confidence: number;
+  mape:       number;
+}
+
+export interface PeakHourPoint {
+  hour:          number;
+  avgRevShare:   number;
+  avgOrderShare: number;
+}
+
+export interface ItemDemandForecast {
+  productId:   string;
+  productName: string;
+  forecastQty: number;
+  avgQty7d:    number;
+  trend:       'rising' | 'falling' | 'stable';
+}
+
+export interface SalesForecast {
+  generatedAt:          string;
+  dataPoints:           number;
+  revenueNext7d:        ForecastPoint[];
+  revenueNext30d:       ForecastPoint[];
+  revenueForecastMeta:  ForecastMeta;
+  ordersNext7d:         ForecastPoint[];
+  ordersNext30d:        ForecastPoint[];
+  ordersForecastMeta:   ForecastMeta;
+  forecastWeekRevenue:  number;
+  forecastWeekOrders:   number;
+  avgForecastAOV:       number;
+  peakHourDistribution: PeakHourPoint[];
+  topPeakHours:         number[];
+  itemDemand:           ItemDemandForecast[];
+  tableUtilNext7d:      ForecastPoint[];
+  narrative:            string | null;
+  narrativeSource:      'cache' | 'gemini' | 'unavailable';
+}
+
+export interface IngredientPrediction {
+  ingredientId:        string;
+  name:                string;
+  unit:                string;
+  currentStock:        number;
+  lowStockThreshold:   number;
+  costPerUnit:         number;
+  estimatedDailyUsage: number;
+  daysRemaining:       number;
+  status:              'critical' | 'warning' | 'ok' | 'overstock';
+  reorderQty:          number;
+  reorderCost:         number;
+  usageSource:         'grn' | 'heuristic';
+}
+
+export interface InventoryCoverage {
+  criticalCount:  number;
+  warningCount:   number;
+  okCount:        number;
+  overstockCount: number;
+}
+
+export interface InventoryForecast {
+  generatedAt:      string;
+  totalIngredients: number;
+  totalReorderCost: number;
+  coverageSummary:  InventoryCoverage;
+  criticalItems:    IngredientPrediction[];
+  warningItems:     IngredientPrediction[];
+  healthyItems:     IngredientPrediction[];
+  overstockItems:   IngredientPrediction[];
+  topReorderItems:  IngredientPrediction[];
+}
+
+export interface AIChatMessage {
+  role:      'user' | 'assistant';
+  content:   string;
+  timestamp: string;
+}
+
+export interface AIChatResponse {
+  sessionId:    string;
+  reply:        string;
+  timestamp:    string;
+  isNewSession: boolean;
+  contextAge:   'cache' | 'fresh';
+}
+
+export interface AIChatHistoryResponse {
+  sessionId: string;
+  messages:  AIChatMessage[];
+}
+
+export interface AIHealthScore {
+  score: number;
+  grade: string;
+}
+
+export interface AIDailyReportSnapshot {
+  totalRevenue:            number;
+  totalOrders:             number;
+  avgOrderValue:           number;
+  cancelledOrders:         number;
+  cancelledRevenue:        number;
+  paymentBreakdown:        { cash: number; upi: number; card: number; split: number };
+  sourceBreakdown:         { dineIn: number; takeaway: number; qr: number; swiggy: number; zomato: number; other: number };
+  topItems:                Array<{ productName: string; qty: number; revenue: number }>;
+  peakHour:                number;
+  peakHourRevenue:         number;
+  hourlyRevenue:           number[];
+  hourlyOrders:            number[];
+  uniqueTables:            number;
+  revenueVs7DayAvgPct:     number | null;
+  ordersVs7DayAvgPct:      number | null;
+  revenueVsSameWeekdayPct: number | null;
+}
+
+export interface AIDailyReport {
+  date:            string;
+  hotelId:         string;
+  snapshot:        AIDailyReportSnapshot;
+  health:          AIHealthScore;
+  narrative:       string | null;
+  narrativeSource: 'cache' | 'gemini' | 'unavailable';
+  generatedAt:     string;
+}
+
+export interface AIDashboardTrend {
+  date:         string;
+  totalRevenue: number;
+  totalOrders:  number;
+  healthScore:  number;
+}
+
+export interface AIWeekComparison {
+  thisWeekRevenue: number;
+  lastWeekRevenue: number;
+  changePct:       number | null;
+}
+
+export interface ExecutiveDashboard {
+  today: {
+    revenue:   number;
+    orders:    number;
+    updatedAt: string;
+    topItems:  Array<{ productId: string; productName: string; revenue: number }>;
+    source:    'cache' | 'mongodb';
+  };
+  trend:             AIDashboardTrend[];
+  weekComparison:    AIWeekComparison;
+  latestHealthScore: { date: string; score: number; grade: string } | null;
+}
+
+export interface AIStaffHotelAvg {
+  ordersPerStaff:  number;
+  revenuePerStaff: number;
+  aov:             number;
+  cancelRate:      number;
+  discountPct:     number;
+}
+
+export interface AIStaffMemberStats {
+  cashierId:        string;
+  totalOrders:      number;
+  completedOrders:  number;
+  cancelledOrders:  number;
+  cancelRate:       number;
+  totalRevenue:     number;
+  avgOrderValue:    number;
+  totalDiscount:    number;
+  avgDiscountPct:   number;
+  revenueShare:     number;
+  performanceScore: number;
+  rank:             number;
+}
+
+export interface AIStaffAnalyticsReport {
+  hotelId:      string;
+  windowDays:   number;
+  generatedAt:  string;
+  hotelAvg:     AIStaffHotelAvg;
+  staff:        AIStaffMemberStats[];
+  totalRevenue: number;
+  totalOrders:  number;
+  activeStaff:  number;
+  topPerformer: string | null;
+  summary:      string;
+}
+
+export interface AIHourlyKitchenStats {
+  hour:              number;
+  orderCount:        number;
+  avgFulfillmentMin: number;
+  minFulfillmentMin: number;
+  maxFulfillmentMin: number;
+  p90FulfillmentMin: number;
+}
+
+export interface AIItemThroughputStats {
+  productName: string;
+  orderCount:  number;
+  share:       number;
+}
+
+export interface AIKitchenAnalyticsReport {
+  hotelId:              string;
+  windowDays:           number;
+  generatedAt:          string;
+  totalOrdersAnalyzed:  number;
+  avgFulfillmentMin:    number;
+  medianFulfillmentMin: number;
+  p90FulfillmentMin:    number;
+  fastestHour:          number | null;
+  slowestHour:          number | null;
+  peakLoadHour:         number | null;
+  hourly:               AIHourlyKitchenStats[];
+  topItems:             AIItemThroughputStats[];
+  slaBreachPct:         number;
+  slaDurationMin:       number;
+  summary:              string;
+}
+
+export type OcrJobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'rejected';
+
+export interface OcrVendorMatch {
+  vendorId:     string;
+  businessName: string;
+  gstNumber:    string;
+  confidence:   number;
+}
+
+export interface OcrDuplicateWarning {
+  isDuplicate:  boolean;
+  reason:       string;
+  matchedJobId: string | null;
+  matchedPoId:  string | null;
+}
+
+export interface OcrExtractedInvoice {
+  invoiceNumber?: string;
+  invoiceDate?:   string;
+  vendorName?:    string;
+  vendorGST?:     string;
+  totalAmount?:   number;
+  taxAmount?:     number;
+  lineItems?:     Array<{
+    description: string;
+    qty:         number;
+    unit?:       string;
+    unitPrice:   number;
+    total:       number;
+  }>;
+}
+
+export interface OcrJob {
+  _id:               string;
+  hotelId:           string;
+  status:            OcrJobStatus;
+  fileName:          string;
+  fileType:          string;
+  fileSizeBytes:     number;
+  fileMimeType:      string;
+  createdAt:         string;
+  updatedAt:         string;
+  extractedData?:    OcrExtractedInvoice;
+  reviewedData?:     OcrExtractedInvoice;
+  vendorMatches?:    OcrVendorMatch[];
+  duplicateWarning?: OcrDuplicateWarning;
+  createdPoId?:      string | null;
+  errorMessage?:     string;
+}
+
+export interface OcrJobsResponse {
+  jobs:  OcrJob[];
+  total: number;
+  limit: number;
+  skip:  number;
+}
+
+export interface OcrReviewScreen {
+  jobId:              string;
+  status:             OcrJobStatus;
+  fileName:           string;
+  extractedData:      OcrExtractedInvoice;
+  reviewedData:       OcrExtractedInvoice | null;
+  vendorMatches:      OcrVendorMatch[];
+  duplicateWarning:   OcrDuplicateWarning | null;
+  purchaseSuggestion: unknown;
+}
+
+export interface MorningBriefBusiness {
+  revenue:                  number;
+  orders:                   number;
+  estimatedProfit:          number;
+  estimatedProfitMarginPct: number;
+  avgBill:                  number;
+  healthScore:              number;
+  healthGrade:              'A' | 'B' | 'C' | 'D' | 'F';
+  topSellingItem:           string | null;
+  topSellingItemRevenue:    number;
+  topSellingItemQty:        number;
+  peakHour:                 number;
+  topPaymentMethod:         string;
+  revenueVs7DayAvgPct:     number | null;
+  ordersVs7DayAvgPct:      number | null;
+  cancelledOrders:          number;
+  cancelRate:               number;
+}
+
+export interface MorningBriefMenuItem {
+  name:    string;
+  revenue: number;
+  qty:     number;
+}
+
+export interface MorningBriefMenu {
+  topMenuItems: MorningBriefMenuItem[];
+  slowMovers:   string[];
+}
+
+export interface MorningBriefInventory {
+  criticalItems:        string[];
+  warningItems:         string[];
+  overstockItems:       string[];
+  reorderRequiredNames: string[];
+  totalReorderCost:     number;
+  criticalCount:        number;
+  warningCount:         number;
+}
+
+export interface MorningBriefForecast {
+  expectedRevenue:    number;
+  expectedOrders:     number;
+  expectedAov:        number;
+  topBusyHours:       number[];
+  forecastConfidence: number;
+  method:             string;
+}
+
+export interface MorningBrief {
+  _id:              string;
+  date:             string;
+  generatedAt:      string;
+  business:         MorningBriefBusiness;
+  menu:             MorningBriefMenu;
+  inventory:        MorningBriefInventory;
+  forecast:         MorningBriefForecast;
+  executiveSummary: string;
+  recommendations:  string[];
+  opportunity:      string;
+  warning:          string | null;
+}
+
+export interface BriefHistoryItem {
+  _id:             string;
+  date:            string;
+  generatedAt:     string;
+  business: {
+    revenue:         number;
+    orders:          number;
+    healthScore:     number;
+    healthGrade:     string;
+    topSellingItem:  string | null;
+  };
+  executiveSummary: string;
+  warning:          string | null;
+}
+
+export interface BriefHistoryResponse {
+  briefs: BriefHistoryItem[];
+  total:  number;
+  limit:  number;
+  skip:   number;
+}

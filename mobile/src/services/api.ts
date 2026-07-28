@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL } from '../utils/constants';
-import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport, GSTR1Json, RemoteConfig, Device, AppNotification, FeatureFlags, LoyaltyConfig, LoyaltyCustomer, LoyaltyTransaction, AggregatorIntegration, AggregatorSyncStatus, WebhookLog } from '../types';
+import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport, GSTR1Json, RemoteConfig, Device, AppNotification, FeatureFlags, LoyaltyConfig, LoyaltyCustomer, LoyaltyTransaction, AggregatorIntegration, AggregatorSyncStatus, WebhookLog, ExecutiveDashboard, MorningBrief, BriefHistoryResponse, AIDailyReport, SalesForecast, InventoryForecast, AIAlertResult, AIRecommendationSet, AIStaffAnalyticsReport, AIKitchenAnalyticsReport, AIChatResponse, AIChatHistoryResponse, OcrJobsResponse, OcrReviewScreen } from '../types';
 import { navigateGlobal } from '../utils/navigationRef';
 import { emitSessionExpired } from '../utils/authEvents';
 
@@ -2140,3 +2140,65 @@ export const registerSAPushToken = (
     method: 'POST',
     body: JSON.stringify({ pushToken, platform }),
   });
+
+// ── AI Platform ───────────────────────────────────────────────────────────────
+
+export const getAIDashboard = (): Promise<ExecutiveDashboard> =>
+  fetchAPI('/ai/dashboard');
+
+export const getLatestMorningBrief = (): Promise<MorningBrief> =>
+  fetchAPI('/ai/morning-brief');
+
+export const getMorningBriefByDate = (date: string): Promise<MorningBrief> =>
+  fetchAPI(`/ai/morning-brief/${date}`);
+
+export const getMorningBriefHistory = (limit = 30): Promise<BriefHistoryResponse> =>
+  fetchAPI(`/ai/morning-brief-history?limit=${limit}`);
+
+export const getAIReport = (date: string): Promise<AIDailyReport> =>
+  fetchAPI(`/ai/report/${date}`);
+
+export const getAISalesForecast = (): Promise<SalesForecast> =>
+  fetchAPI('/ai/forecast');
+
+export const getAIInventoryForecast = (): Promise<InventoryForecast> =>
+  fetchAPI('/ai/forecast/inventory');
+
+export const getAIAlerts = (): Promise<AIAlertResult> =>
+  fetchAPI('/ai/alerts');
+
+export const getAIAlertsByDate = (date: string): Promise<AIAlertResult> =>
+  fetchAPI(`/ai/alerts/${date}`);
+
+export const getAIRecommendations = (): Promise<AIRecommendationSet> =>
+  fetchAPI('/ai/recommendations');
+
+export const getAIRecommendationsByDate = (date: string): Promise<AIRecommendationSet> =>
+  fetchAPI(`/ai/recommendations/${date}`);
+
+export const getAIStaffAnalytics = (): Promise<AIStaffAnalyticsReport> =>
+  fetchAPI('/ai/analytics/staff');
+
+export const getAIKitchenAnalytics = (): Promise<AIKitchenAnalyticsReport> =>
+  fetchAPI('/ai/analytics/kitchen');
+
+export const sendAIChatMessage = (message: string): Promise<AIChatResponse> =>
+  fetchAPI('/ai/chat', { method: 'POST', body: JSON.stringify({ message }) });
+
+export const getAIChatHistory = (): Promise<AIChatHistoryResponse> =>
+  fetchAPI('/ai/chat/history');
+
+export const clearAIChatHistory = (): Promise<{ message: string }> =>
+  fetchAPI('/ai/chat/history', { method: 'DELETE' });
+
+export const getAIOcrJobs = (limit = 20): Promise<OcrJobsResponse> =>
+  fetchAPI(`/ai/ocr/jobs?limit=${limit}`);
+
+export const getAIOcrJobReview = (jobId: string): Promise<OcrReviewScreen> =>
+  fetchAPI(`/ai/ocr/job/${jobId}/review`);
+
+export const approveAIOcrJob = (jobId: string, vendorId?: string): Promise<{ message: string }> =>
+  fetchAPI(`/ai/ocr/job/${jobId}/approve`, { method: 'POST', body: JSON.stringify({ vendorId }) });
+
+export const rejectAIOcrJob = (jobId: string): Promise<{ message: string }> =>
+  fetchAPI(`/ai/ocr/job/${jobId}/reject`, { method: 'POST' });

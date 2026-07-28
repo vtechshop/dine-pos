@@ -68,6 +68,15 @@ import GoodsReceiveScreen from '../screens/GoodsReceiveScreen';
 import VendorLedgerScreen from '../screens/VendorLedgerScreen';
 import InventoryIntelligenceScreen from '../screens/InventoryIntelligenceScreen';
 import PaymentSettingsScreen from '../screens/PaymentSettingsScreen';
+import AIHomeScreen from '../screens/ai/AIHomeScreen';
+import MorningBriefScreen from '../screens/ai/MorningBriefScreen';
+import AIReportsScreen from '../screens/ai/AIReportsScreen';
+import AIChatScreen from '../screens/ai/AIChatScreen';
+import ForecastScreen from '../screens/ai/ForecastScreen';
+import AlertsScreen from '../screens/ai/AlertsScreen';
+import RecommendationsScreen from '../screens/ai/RecommendationsScreen';
+import StaffKitchenScreen from '../screens/ai/StaffKitchenScreen';
+import PurchaseAssistantScreen from '../screens/ai/PurchaseAssistantScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<TabParamList>();
@@ -295,6 +304,15 @@ const AppNavigator = () => {
             <Stack.Screen name="VendorLedger"             component={VendorLedgerScreen}             options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Vendor Ledger',          headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="InventoryIntelligence"    component={InventoryIntelligenceScreen}    options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Inventory Intelligence',   headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="PaymentSettings"          component={PaymentSettingsScreen}          options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Payment Settings',          headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="AIHome"            component={AIHomeScreen}            options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'AI Intelligence',        headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="MorningBrief"      component={MorningBriefScreen}      options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="AIReports"         component={AIReportsScreen}         options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="AIChat"            component={AIChatScreen}            options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="AIForecast"        component={ForecastScreen}          options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="AIAlerts"          component={AlertsScreen}            options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="AIRecommendations" component={RecommendationsScreen}   options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="StaffKitchen"      component={StaffKitchenScreen}      options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="PurchaseAssistant" component={PurchaseAssistantScreen} options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen
               name="AddProduct"
               component={AddProductScreen}
