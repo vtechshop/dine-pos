@@ -47,6 +47,7 @@ export function PurchaseAssistantPage() {
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
   const [submitting, setSubmitting]             = useState(false);
   const [approved, setApproved]                 = useState(false);
+  const [submitError, setSubmitError]           = useState<string | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -87,7 +88,7 @@ export function PurchaseAssistantPage() {
 
   // Load review when selection changes
   useEffect(() => {
-    setSelectedVendorId(null); setApproved(false); setReview(null);
+    setSelectedVendorId(null); setApproved(false); setReview(null); setSubmitError(null);
     if (!selectedJobId) return;
     const job = jobs.find(j => j._id === selectedJobId);
     if (job?.status === 'completed') {
@@ -124,21 +125,27 @@ export function PurchaseAssistantPage() {
   async function handleApprove() {
     if (!selectedJobId || !selectedVendorId) return;
     setSubmitting(true);
+    setSubmitError(null);
     try {
       await approveOcrJob(selectedJobId, selectedVendorId);
       setApproved(true);
       await loadJobs();
-    } catch { /* silent */ } finally { setSubmitting(false); }
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Approval failed. Please try again.');
+    } finally { setSubmitting(false); }
   }
 
   async function handleReject() {
     if (!selectedJobId) return;
     setSubmitting(true);
+    setSubmitError(null);
     try {
       await rejectOcrJob(selectedJobId);
       await loadJobs();
       setSelectedJobId(null);
-    } catch { /* silent */ } finally { setSubmitting(false); }
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Rejection failed. Please try again.');
+    } finally { setSubmitting(false); }
   }
 
   const selectedJob  = jobs.find(j => j._id === selectedJobId);
@@ -163,8 +170,8 @@ export function PurchaseAssistantPage() {
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* Left panel — job list */}
-        <div className="flex w-full flex-col border-r border-border bg-canvas lg:w-80 lg:shrink-0">
+        {/* Left panel — job list (hidden on mobile when a job is selected) */}
+        <div className={`flex-col border-r border-border bg-canvas lg:w-80 lg:shrink-0 ${selectedJobId ? 'hidden lg:flex' : 'flex w-full'}`}>
           <div className="shrink-0 border-b border-border p-4">
             <input
               ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png"
@@ -220,8 +227,17 @@ export function PurchaseAssistantPage() {
           </div>
         </div>
 
-        {/* Right panel — detail */}
-        <div className="hidden flex-1 flex-col overflow-hidden lg:flex">
+        {/* Right panel — detail (visible on mobile when a job is selected) */}
+        <div className={`flex-col overflow-hidden ${selectedJobId ? 'flex flex-1' : 'hidden lg:flex lg:flex-1'}`}>
+          {/* Mobile back button */}
+          {selectedJobId && (
+            <button
+              onClick={() => setSelectedJobId(null)}
+              className="flex shrink-0 items-center gap-1.5 border-b border-border px-4 py-2.5 text-xs font-medium text-ink/60 hover:text-ink lg:hidden"
+            >
+              ← Back to invoices
+            </button>
+          )}
           {!selectedJobId ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand/10">
@@ -393,6 +409,9 @@ export function PurchaseAssistantPage() {
                   Reject
                 </button>
               </div>
+              {submitError && (
+                <p className="text-center text-xs text-red-600 pb-2">{submitError}</p>
+              )}
             </div>
           ) : null}
         </div>
