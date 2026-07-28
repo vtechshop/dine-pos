@@ -43,12 +43,21 @@ Core rules (non-negotiable):
 5. Always cite the specific number you're referencing.
 6. For operational questions outside the data (recipes, staff schedules, etc.), decline politely and redirect to the business data you do have.`;
 
+// Hard caps — gemini-2.5-flash supports 1M context but we cap well below
+// to keep latency and cost predictable. Context is the biggest variable.
+const MAX_CONTEXT_CHARS   = 3_500; // ~875 tokens
+const MAX_HISTORY_MSG_CHARS = 400; // per message, prevents one large reply from dominating
+
 function buildPrompt(
   context:    string,
   history:    StoredMessage[],
   userMessage: string,
 ): string {
-  const parts: string[] = [context, '', SYSTEM_INSTRUCTIONS];
+  const truncatedContext = context.length > MAX_CONTEXT_CHARS
+    ? context.slice(0, MAX_CONTEXT_CHARS) + '\n[context truncated]'
+    : context;
+
+  const parts: string[] = [truncatedContext, '', SYSTEM_INSTRUCTIONS];
 
   if (history.length > 0) {
     parts.push('', '--- CONVERSATION HISTORY ---');
@@ -56,7 +65,10 @@ function buildPrompt(
     const recent = history.slice(-10);
     for (const msg of recent) {
       const label = msg.role === 'user' ? 'User' : 'DinePOS AI';
-      parts.push(`${label}: ${msg.content}`);
+      const content = msg.content.length > MAX_HISTORY_MSG_CHARS
+        ? msg.content.slice(0, MAX_HISTORY_MSG_CHARS) + '...'
+        : msg.content;
+      parts.push(`${label}: ${content}`);
     }
     parts.push('--- END OF HISTORY ---');
   }

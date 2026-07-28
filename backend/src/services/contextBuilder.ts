@@ -123,21 +123,27 @@ export async function buildBusinessContext(hotelId: string): Promise<string> {
   // ── Recent performance ────────────────────────────────────────────────────
   if (snap) {
     const s = snap as any;
-    const cancPct = s.totalOrders > 0
-      ? ((s.cancelledOrders / (s.totalOrders + s.cancelledOrders)) * 100).toFixed(1)
+    // Guard all numeric fields — an older document or partial write can leave
+    // these as null/undefined, and calling .toFixed() on null throws a 500.
+    const revenue        = Number(s.totalRevenue   ?? 0);
+    const orders         = Number(s.totalOrders    ?? 0);
+    const aov            = Number(s.avgOrderValue  ?? 0);
+    const cancelled      = Number(s.cancelledOrders ?? 0);
+    const cancPct        = orders > 0
+      ? ((cancelled / (orders + cancelled)) * 100).toFixed(1)
       : '0.0';
     const revTrend = s.revenueVs7DayAvgPct != null
-      ? ` (${s.revenueVs7DayAvgPct > 0 ? '+' : ''}${s.revenueVs7DayAvgPct.toFixed(1)}% vs 7d avg)`
+      ? ` (${s.revenueVs7DayAvgPct > 0 ? '+' : ''}${Number(s.revenueVs7DayAvgPct).toFixed(1)}% vs 7d avg)`
       : '';
     const ordTrend = s.ordersVs7DayAvgPct != null
-      ? ` (${s.ordersVs7DayAvgPct > 0 ? '+' : ''}${s.ordersVs7DayAvgPct.toFixed(1)}% vs 7d avg)`
+      ? ` (${s.ordersVs7DayAvgPct > 0 ? '+' : ''}${Number(s.ordersVs7DayAvgPct).toFixed(1)}% vs 7d avg)`
       : '';
 
     lines.push(`RECENT PERFORMANCE (${s.date}):`);
-    lines.push(`- Revenue: ₹${s.totalRevenue.toFixed(0)}${revTrend}`);
-    lines.push(`- Orders: ${s.totalOrders}${ordTrend}`);
-    lines.push(`- AOV: ₹${s.avgOrderValue.toFixed(0)}`);
-    lines.push(`- Cancellations: ${s.cancelledOrders} (${cancPct}%)`);
+    lines.push(`- Revenue: ₹${revenue.toFixed(0)}${revTrend}`);
+    lines.push(`- Orders: ${orders}${ordTrend}`);
+    lines.push(`- AOV: ₹${aov.toFixed(0)}`);
+    lines.push(`- Cancellations: ${cancelled} (${cancPct}%)`);
     lines.push('');
   }
 
@@ -162,7 +168,7 @@ export async function buildBusinessContext(hotelId: string): Promise<string> {
     const conf = Math.round(f.revenueForecastMeta.confidence * 100);
     const tom  = f.revenueNext7d[0];
     lines.push('REVENUE FORECAST:');
-    lines.push(`- Method: ${f.revenueForecastMeta.method.replace('_', ' ')} | Confidence: ${conf}% | Based on ${f.dataPoints} days`);
+    lines.push(`- Method: ${f.revenueForecastMeta.method.replace(/_/g, ' ')} | Confidence: ${conf}% | Based on ${f.dataPoints} days`);
     if (tom) lines.push(`- Tomorrow: ₹${tom.value.toFixed(0)}`);
     lines.push(`- Next 7 days total: ₹${f.forecastWeekRevenue.toFixed(0)}`);
     lines.push(`- Next 7 days orders: ${Math.round(f.forecastWeekOrders)}`);
