@@ -1,4 +1,7 @@
 {
+  "installCommand": "cd .. && npx --yes pnpm@9.15.9 install --no-frozen-lockfile",
+  "buildCommand": "cd .. && npx --yes pnpm@9.15.9 --filter web build",
+  "outputDirectory": "dist",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
