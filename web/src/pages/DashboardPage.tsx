@@ -175,9 +175,9 @@ export function DashboardPage() {
 
   // Periodic refresh every 2 minutes
   useEffect(() => {
-    const id = setInterval(() => { void load(); void loadReport(); }, 120_000);
+    const id = setInterval(() => { void load(); void loadReport(); void loadBrief(); }, 120_000);
     return () => clearInterval(id);
-  }, [load, loadReport]);
+  }, [load, loadReport, loadBrief]);
 
   // ── Socket: targeted badge update — does NOT rebuild table list ─────────────
 
@@ -299,6 +299,7 @@ export function DashboardPage() {
         <div className="flex items-center gap-2">
           {/* Search — F1 focuses this */}
           <div className="relative">
+            <label htmlFor="table-search" className="sr-only">Search table</label>
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/30" />
             <input
               id="table-search"
@@ -326,7 +327,7 @@ export function DashboardPage() {
           ))}
 
           <button
-            onClick={() => void load()}
+            onClick={() => { void load(); void loadReport(); void loadBrief(); }}
             disabled={loading}
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-ink/40 transition-colors hover:bg-ink/5 hover:text-ink/70 disabled:opacity-40"
           >
@@ -482,6 +483,14 @@ export function DashboardPage() {
                   className="mt-2 text-xs text-brand hover:underline"
                 >
                   Clear search
+                </button>
+              )}
+              {filter !== 'all' && (
+                <button
+                  onClick={() => setFilter('all')}
+                  className="mt-2 text-xs text-brand hover:underline"
+                >
+                  Clear filter
                 </button>
               )}
             </div>

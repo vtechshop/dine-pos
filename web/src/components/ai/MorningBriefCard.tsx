@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
-  Sunrise, ChevronDown, ChevronUp, TrendingUp, TrendingDown,
-  Package, Zap, AlertTriangle, CheckCircle, Star, Clock,
+  Sunrise, ChevronDown, ChevronUp, ChevronRight, TrendingUp, TrendingDown,
+  Package, Zap, AlertTriangle, Star, Clock,
 } from 'lucide-react';
 import type { MorningBrief } from '../../api/morningBrief';
 
@@ -70,6 +70,15 @@ function PillList({ items, color }: { items: string[]; color: string }) {
   );
 }
 
+// ── UTC hour → browser local time ────────────────────────────────────────────
+// peakHour and topBusyHours are stored as UTC integers (0-23).
+// Construct a Date at that UTC hour and format in the device's local timezone.
+function utcHourToLocal(h: number): string {
+  const d = new Date();
+  d.setUTCHours(h % 24, 0, 0, 0);
+  return d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface MorningBriefCardProps {
@@ -80,7 +89,7 @@ interface MorningBriefCardProps {
 export function MorningBriefCard({ brief, loading = false }: MorningBriefCardProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const { business: b, inventory: inv, forecast: fc } = brief;
+  const { business: b, inventory: inv, forecast: fc, menu: m } = brief;
   const currency = '₹';
 
   if (loading) {
@@ -129,19 +138,19 @@ export function MorningBriefCard({ brief, loading = false }: MorningBriefCardPro
           )}
         </div>
 
-        {/* Collapsed KPI strip */}
+        {/* Collapsed KPI strip — revenue always visible, orders/avg hidden on mobile */}
         {!expanded && (
-          <div className="hidden items-center gap-5 sm:flex">
+          <div className="flex items-center gap-3 sm:gap-5">
             <span className="text-xs">
               <span className="font-semibold text-ink">{currency}{Math.round(b.revenue).toLocaleString('en-IN')}</span>
-              <span className="ml-1 text-ink/40">rev</span>
+              <span className="ml-1 hidden text-ink/40 sm:inline">rev</span>
               <TrendBadge pct={b.revenueVs7DayAvgPct} />
             </span>
-            <span className="text-xs">
+            <span className="hidden text-xs sm:inline">
               <span className="font-semibold text-ink">{b.orders}</span>
               <span className="ml-1 text-ink/40">orders</span>
             </span>
-            <span className="text-xs">
+            <span className="hidden text-xs sm:inline">
               <span className="font-semibold text-ink">{currency}{Math.round(b.avgBill)}</span>
               <span className="ml-1 text-ink/40">avg</span>
             </span>
@@ -175,7 +184,12 @@ export function MorningBriefCard({ brief, loading = false }: MorningBriefCardPro
             <div className="rounded-xl border border-border bg-mist p-3.5">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">Orders</p>
               <p className="mt-1 text-xl font-bold tabular-nums text-ink">{b.orders}</p>
-              <TrendBadge pct={b.ordersVs7DayAvgPct} />
+              <div className="flex items-center gap-2">
+                <TrendBadge pct={b.ordersVs7DayAvgPct} />
+                {b.cancelledOrders > 0 && (
+                  <span className="text-[10px] text-ink/35">{b.cancelledOrders} cancelled</span>
+                )}
+              </div>
             </div>
             <div className="rounded-xl border border-border bg-mist p-3.5">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">Est. Profit</p>
@@ -205,8 +219,8 @@ export function MorningBriefCard({ brief, loading = false }: MorningBriefCardPro
               <Clock size={14} className="shrink-0 text-blue-500" />
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">Peak Hour</p>
-                <p className="text-sm font-semibold text-ink">{b.peakHour}:00 – {b.peakHour + 1}:00 UTC</p>
-                <p className="text-[10px] text-ink/40">{b.cancelledOrders} cancelled ({(b.cancelRate * 100).toFixed(1)}%)</p>
+                <p className="text-sm font-semibold text-ink">{utcHourToLocal(b.peakHour)} – {utcHourToLocal(b.peakHour + 1)}</p>
+                <p className="text-[10px] text-ink/40">highest revenue window</p>
               </div>
             </div>
           </div>
@@ -241,6 +255,15 @@ export function MorningBriefCard({ brief, loading = false }: MorningBriefCardPro
             </div>
           )}
 
+          {/* Slow movers */}
+          {m.slowMovers.length > 0 && (
+            <div>
+              <SectionHead>Slow Movers</SectionHead>
+              <p className="mb-2 text-[10px] text-ink/40">Low-frequency items from yesterday — consider promotion or removal</p>
+              <PillList items={m.slowMovers} color="border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400" />
+            </div>
+          )}
+
           {/* Forecast */}
           <div>
             <SectionHead><Zap size={10} className="inline mr-1" />Today's Forecast</SectionHead>
@@ -260,7 +283,7 @@ export function MorningBriefCard({ brief, loading = false }: MorningBriefCardPro
             </div>
             {fc.topBusyHours.length > 0 && (
               <p className="mt-2 text-xs text-ink/50">
-                Busy hours: <span className="font-medium text-ink">{fc.topBusyHours.slice(0, 3).map(h => `${h}:00`).join(', ')} UTC</span>
+                Busy hours: <span className="font-medium text-ink">{fc.topBusyHours.slice(0, 3).map(utcHourToLocal).join(', ')}</span>
                 {fc.forecastConfidence > 0 && (
                   <span className="ml-2 text-ink/35">· {(fc.forecastConfidence * 100).toFixed(0)}% confidence ({fc.method})</span>
                 )}
@@ -275,7 +298,7 @@ export function MorningBriefCard({ brief, loading = false }: MorningBriefCardPro
               <ul className="space-y-2">
                 {brief.recommendations.map((rec, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-ink">
-                    <CheckCircle size={13} className="mt-0.5 shrink-0 text-green-500" />
+                    <ChevronRight size={13} className="mt-0.5 shrink-0 text-brand" />
                     {rec}
                   </li>
                 ))}
