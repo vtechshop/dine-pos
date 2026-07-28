@@ -8,6 +8,7 @@ import {
   getCachedInventory,
   setCachedInventory,
 } from '../utils/forecastCache';
+import { singleFlight } from '../utils/singleFlight';
 import { sendError } from '../utils/sendError';
 
 const router = Router();
@@ -25,7 +26,7 @@ router.get('/forecast', async (req: AuthRequest, res: Response) => {
     const cached = await getCachedForecast(hotelId);
     if (cached) return res.json(cached);
 
-    const result = await buildForecast(hotelId);
+    const result = await singleFlight(`forecast:${hotelId}`, () => buildForecast(hotelId));
     if (!result) {
       return res.status(404).json({
         message: 'Insufficient historical data. At least 3 days of snapshots are required to generate a forecast.',
@@ -50,7 +51,7 @@ router.get('/forecast/inventory', async (req: AuthRequest, res: Response) => {
     const cached = await getCachedInventory(hotelId);
     if (cached) return res.json(cached);
 
-    const result = await buildInventoryPrediction(hotelId);
+    const result = await singleFlight(`inventory:${hotelId}`, () => buildInventoryPrediction(hotelId));
     if (!result) {
       return res.status(404).json({
         message: 'No ingredients found. Add ingredients in inventory management to enable prediction.',

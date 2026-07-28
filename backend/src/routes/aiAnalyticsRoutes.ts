@@ -8,6 +8,7 @@ import {
   getCachedStaff,   setCachedStaff,
   getCachedKitchen, setCachedKitchen,
 } from '../utils/analyticsCache';
+import { singleFlight } from '../utils/singleFlight';
 import { sendError } from '../utils/sendError';
 
 const router = Router();
@@ -27,7 +28,7 @@ router.get('/analytics/anomalies', async (req: AuthRequest, res: Response) => {
     const cached = await getCachedAnomaly(hotelId);
     if (cached) return res.json(cached);
 
-    const report = await buildAnomalyReport(hotelId);
+    const report = await singleFlight(`anomaly:${hotelId}`, () => buildAnomalyReport(hotelId));
     if (!report) {
       return res.status(202).json({
         message: 'Insufficient historical data for anomaly detection. At least 7 days of snapshots required.',
@@ -53,7 +54,7 @@ router.get('/analytics/staff', async (req: AuthRequest, res: Response) => {
     const cached = await getCachedStaff(hotelId);
     if (cached) return res.json(cached);
 
-    const report = await buildStaffAnalytics(hotelId);
+    const report = await singleFlight(`staff:${hotelId}`, () => buildStaffAnalytics(hotelId));
     if (!report) {
       return res.status(202).json({
         message: 'No staff order data found for the last 30 days.',
@@ -79,7 +80,7 @@ router.get('/analytics/kitchen', async (req: AuthRequest, res: Response) => {
     const cached = await getCachedKitchen(hotelId);
     if (cached) return res.json(cached);
 
-    const report = await buildKitchenAnalytics(hotelId);
+    const report = await singleFlight(`kitchen:${hotelId}`, () => buildKitchenAnalytics(hotelId));
     if (!report) {
       return res.status(202).json({
         message: 'No completed order fulfillment data found for the last 30 days.',

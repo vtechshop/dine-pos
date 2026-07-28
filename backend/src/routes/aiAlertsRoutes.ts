@@ -8,6 +8,7 @@ import {
   getCachedRecommendations,
   setCachedRecommendations,
 } from '../utils/alertCache';
+import { singleFlight } from '../utils/singleFlight';
 import { sendError } from '../utils/sendError';
 
 const router = Router();
@@ -37,7 +38,7 @@ router.get('/alerts', async (req: AuthRequest, res: Response) => {
     const cached = await getCachedAlerts(hotelId, date);
     if (cached) return res.json(cached);
 
-    const result = await computeAlerts(hotelId, date);
+    const result = await singleFlight(`alerts:${hotelId}:${date}`, () => computeAlerts(hotelId, date));
     if (!result) {
       return res.status(404).json({ message: 'No metrics data available for today yet.' });
     }
@@ -64,7 +65,7 @@ router.get('/alerts/:date', async (req: AuthRequest, res: Response) => {
     const cached = await getCachedAlerts(hotelId, date);
     if (cached) return res.json(cached);
 
-    const result = await computeAlerts(hotelId, date);
+    const result = await singleFlight(`alerts:${hotelId}:${date}`, () => computeAlerts(hotelId, date));
     if (!result) {
       return res.status(404).json({ message: `No snapshot data found for ${date}.` });
     }
@@ -90,7 +91,7 @@ router.get('/recommendations', async (req: AuthRequest, res: Response) => {
     const cached = await getCachedRecommendations(hotelId, date);
     if (cached) return res.json(cached);
 
-    const result = await buildRecommendations(hotelId, date);
+    const result = await singleFlight(`recs:${hotelId}:${date}`, () => buildRecommendations(hotelId, date));
     if (!result) {
       return res.status(404).json({
         message: 'No daily snapshot available for today. Recommendations require a completed snapshot.',
@@ -119,7 +120,7 @@ router.get('/recommendations/:date', async (req: AuthRequest, res: Response) => 
     const cached = await getCachedRecommendations(hotelId, date);
     if (cached) return res.json(cached);
 
-    const result = await buildRecommendations(hotelId, date);
+    const result = await singleFlight(`recs:${hotelId}:${date}`, () => buildRecommendations(hotelId, date));
     if (!result) {
       return res.status(404).json({ message: `No snapshot data found for ${date}.` });
     }
