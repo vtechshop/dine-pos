@@ -14,6 +14,9 @@ import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { useLiveOrders } from '../context/LiveOrdersContext';
 import { useShortcut } from '../hooks/useShortcut';
+import { MorningBriefCard } from '../components/ai/MorningBriefCard';
+import { fetchLatestBrief } from '../api/morningBrief';
+import type { MorningBrief } from '../api/morningBrief';
 
 // ── New-order badge state ──────────────────────────────────────────────────────
 // Tracked separately so socket events do NOT re-render the full table grid.
@@ -110,6 +113,8 @@ export function DashboardPage() {
   const [loading,       setLoading]       = useState(true);
   const [reportLoading, setReportLoading] = useState(true);
   const [error,         setError]         = useState<string | null>(null);
+  const [morningBrief,  setMorningBrief]  = useState<MorningBrief | null>(null);
+  const [briefLoading,  setBriefLoading]  = useState(true);
   const [filter,        setFilter]        = useState<Filter>('all');
   const [search,        setSearch]        = useState('');
   const [billingSessionId, setBillingSessionId] = useState<string | null>(null);
@@ -146,11 +151,27 @@ export function DashboardPage() {
     }
   }, []);
 
+  // ── Data loading — morning brief (admin only, non-critical) ─────────────────
+
+  const loadBrief = useCallback(async () => {
+    if (role !== 'admin') { setBriefLoading(false); return; }
+    setBriefLoading(true);
+    try {
+      setMorningBrief(await fetchLatestBrief());
+    } catch {
+      // Brief may not exist yet — silently hide the card
+      setMorningBrief(null);
+    } finally {
+      setBriefLoading(false);
+    }
+  }, [role]);
+
   // Initial load + refresh after socket reconnect
   useEffect(() => {
     void load();
     void loadReport();
-  }, [load, loadReport, reconnectCount]);
+    void loadBrief();
+  }, [load, loadReport, loadBrief, reconnectCount]);
 
   // Periodic refresh every 2 minutes
   useEffect(() => {
@@ -317,6 +338,13 @@ export function DashboardPage() {
 
       {/* ── Scrollable body ──────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
+
+        {/* ── Morning Brief (admin only, first card) ───────────────────────────── */}
+        {role === 'admin' && (briefLoading || morningBrief) && (
+          morningBrief
+            ? <MorningBriefCard brief={morningBrief} />
+            : <MorningBriefCard brief={null as any} loading />
+        )}
 
         {/* ── KPI Strip ──────────────────────────────────────────────────────── */}
         <div className="border-b border-border bg-mist px-5 py-4">
