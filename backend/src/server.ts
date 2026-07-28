@@ -72,6 +72,7 @@ import aiForecastRoutes from './routes/aiForecastRoutes';
 import aiChatRoutes from './routes/aiChatRoutes';
 import aiOcrRoutes from './routes/aiOcrRoutes';
 import aiAnalyticsRoutes from './routes/aiAnalyticsRoutes';
+import morningBriefRoutes from './routes/morningBriefRoutes';
 import { startScheduler, stopScheduler } from './services/scheduler';
 import { startOcrWorker, stopOcrWorker } from './workers/ocrWorker';
 import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
@@ -365,6 +366,9 @@ app.use('/api/ai', aiOcrRoutes);
 // 20 req/min (compute-heavy aggregations + optional Gemini narrative)
 app.use('/api/ai/analytics', _rl(20, 60_000));
 app.use('/api/ai', aiAnalyticsRoutes);
+// AI BI Phase 8 — Morning Brief (pre-generated, admin only)
+app.use('/api/ai/morning-brief', _rl(30, 60_000));
+app.use('/api/ai', morningBriefRoutes);
 
 // Liveness probe — returns 200 immediately if the process is alive.
 // Load balancers and orchestrators use this; it must never check DB/Redis
