@@ -6,7 +6,7 @@ import {
   ChevronRight, CheckCircle2, Star, Check,
   Utensils, Coffee, Cake, Flame, Truck, Wine,
   UtensilsCrossed, Building, ShoppingBag, IceCream, ChefHat,
-  Monitor, TrendingUp, Globe, Shield, Users,
+  Monitor, TrendingUp, Globe, Users,
   BarChart3, ArrowRight,
 } from 'lucide-react';
 
@@ -445,7 +445,7 @@ const WHY = [
   { icon: TrendingUp, title: 'More Table Turns',       desc: 'Kitchen display + captain app eliminate delays. Faster service means more covers per shift.' },
   { icon: BarChart3,  title: 'Reports in Seconds',     desc: 'Daily sales, top sellers, shift summaries and GST reports — one tap. No spreadsheets.' },
   { icon: Globe,    title: 'Multi-Branch Control',     desc: 'Manage every outlet from one dashboard. Live sales, staff and inventory across locations.' },
-  { icon: Shield,   title: 'Works Offline',            desc: 'Internet goes down? Billing continues. Orders sync automatically when connectivity returns.' },
+  { icon: Users,    title: 'Free Setup & Training',     desc: 'Our team installs, configures, and trains your staff — at no extra cost. Most restaurants go live the same day.' },
 ];
 
 function WhyDinePOS() {
@@ -483,7 +483,7 @@ const ALL_FEATURES = [
   'Owner App', 'Customer Display', 'CRM & Loyalty', 'GST Billing',
   'Reports & Analytics', 'Multi-Branch', 'Cloud Backup', 'Loyalty Points',
   'Coupons & Offers', 'Expense Tracking', 'Staff Management', 'Role Permissions',
-  'Audit Logs', 'Integrations', 'Offline Mode', 'Reservations',
+  'Audit Logs', 'Integrations', 'Aggregator Orders', 'Reservations',
 ];
 
 function FeatureGrid() {

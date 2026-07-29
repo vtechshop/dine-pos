@@ -68,11 +68,11 @@ const FAQ_GROUPS: { heading: string; items: FAQItem[] }[] = [
       },
       {
         q: 'Can I change my plan?',
-        a: 'Yes. Upgrade or downgrade at any time. Changes take effect at the start of your next billing cycle.',
+        a: 'Yes. You can upgrade to Enterprise at any time. Plan changes take effect at the start of your next annual renewal.',
       },
       {
         q: 'Is there a setup fee or contract?',
-        a: 'No setup fee. No annual contract. Pay month to month and cancel any time.',
+        a: 'No setup fee. Dine POS is billed annually at ₹12,000/year per outlet. You can cancel before your next renewal — no lock-in beyond the current year.',
       },
     ],
   },
