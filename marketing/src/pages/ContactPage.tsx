@@ -18,9 +18,10 @@ export function ContactPage() {
     'Contact — Dine POS',
     'Get in touch with Dine POS. Call, email, or send a message — we reply within one business day. Coimbatore, Tamil Nadu, India.',
   );
-  const [form, setForm]       = useState<FormState>(BLANK);
+  const [form, setForm]           = useState<FormState>(BLANK);
   const [submitted, setSubmitted] = useState(false);
-  const [error, setError]     = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError]         = useState('');
 
   function set(key: keyof FormState, value: string) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -34,6 +35,7 @@ export function ContactPage() {
       return;
     }
     setError('');
+    setSubmitting(true);
     try {
       await submitContact({
         name:       form.name.trim(),
@@ -45,6 +47,8 @@ export function ContactPage() {
       setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Submission failed. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -121,13 +125,9 @@ export function ContactPage() {
           {submitted ? (
             <div className="flex flex-col items-center rounded-2xl border border-green-100 bg-green-50 px-6 py-12 text-center">
               <CheckCircle2 size={40} className="mb-4 text-green-500" />
-              <h3 className="mb-2 font-bold text-gray-900">Email client opened!</h3>
+              <h3 className="mb-2 font-bold text-gray-900">Message sent!</h3>
               <p className="text-sm text-gray-500">
-                Your message is pre-filled — just hit Send in your email client.
-                If it didn't open, email us directly at{' '}
-                <a href="mailto:info@happya.in" className="font-semibold text-[#E8380D] hover:underline">
-                  info@happya.in
-                </a>.
+                We've received your message and will get back to you within one business day.
               </p>
               <button
                 type="button"
@@ -221,9 +221,10 @@ export function ContactPage() {
               </div>
               <button
                 type="submit"
-                className="w-full rounded-xl bg-[#E8380D] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#C93008]"
+                disabled={submitting}
+                className="w-full rounded-xl bg-[#E8380D] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#C93008] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Send Message
+                {submitting ? 'Sending…' : 'Send Message'}
               </button>
             </form>
           )}

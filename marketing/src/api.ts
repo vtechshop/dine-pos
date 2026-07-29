@@ -1,5 +1,9 @@
-const WA_NUMBER = '916381356683';
-const EMAIL     = 'info@happya.in';
+import emailjs from '@emailjs/browser';
+
+const WA_NUMBER   = '916381356683';
+const SERVICE_ID  = import.meta.env.VITE_EMAILJS_SERVICE_ID as string;
+const TEMPLATE_ID = import.meta.env.VITE_EMAILJS_CONTACT_TEMPLATE_ID as string;
+const PUBLIC_KEY  = import.meta.env.VITE_EMAILJS_PUBLIC_KEY as string;
 
 export interface InquiryResponse {
   message: string;
@@ -45,18 +49,26 @@ export const submitContact = async (body: {
   restaurant?: string;
   message: string;
 }): Promise<InquiryResponse> => {
-  const subject = `Message from ${body.name} — Dine POS`;
-  const text = [
-    `Name: ${body.name}`,
-    `Email: ${body.email}`,
-    body.phone      ? `Phone: ${body.phone}` : null,
-    body.restaurant ? `Restaurant: ${body.restaurant}` : null,
-    '',
-    body.message,
-  ].filter((l): l is string => l !== null).join('\n');
+  if (!SERVICE_ID || !TEMPLATE_ID || !PUBLIC_KEY) {
+    throw new Error('Email service is not configured. Please reach us at info@happya.in');
+  }
 
-  window.location.href =
-    `mailto:${EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+  const result = await emailjs.send(
+    SERVICE_ID,
+    TEMPLATE_ID,
+    {
+      from_name:  body.name,
+      from_email: body.email,
+      from_phone: body.phone ?? '',
+      restaurant: body.restaurant ?? '',
+      message:    body.message,
+    },
+    { publicKey: PUBLIC_KEY },
+  );
 
-  return { message: 'Email client opened', id: Date.now().toString() };
+  if (result.status !== 200) {
+    throw new Error('Failed to send message. Please try again or email us at info@happya.in');
+  }
+
+  return { message: 'Message sent', id: result.text };
 };
