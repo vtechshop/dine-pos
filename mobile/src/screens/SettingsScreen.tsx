@@ -117,6 +117,7 @@ const SettingsScreen: React.FC = () => {
   const [btDevices, setBtDevices] = useState<BluetoothDevice[]>([]);
   const [connectedPrinter, setConnectedPrinter] = useState<string>('');
   const [scanningBt, setScanningBt] = useState(false);
+  const [selectingRole, setSelectingRole] = useState<'cashier' | 'kitchen' | null>(null);
 
   // Pre-fill form from context settings
   useEffect(() => {
@@ -199,6 +200,28 @@ const SettingsScreen: React.FC = () => {
       setConnectedPrinter(device.name + ' (' + device.address + ')');
       setBtDevices([]);
       showAlert('Connected', device.name + ' is ready to print');
+    } catch (e: any) {
+      showAlert('Connection Failed', e.message || 'Could not connect to printer');
+    }
+  };
+
+  const handleScanForRole = async (role: 'cashier' | 'kitchen') => {
+    setSelectingRole(role);
+    setBtDevices([]);
+    await handleScanPrinters();
+  };
+
+  const handleConnectForRole = async (device: BluetoothDevice, role: 'cashier' | 'kitchen') => {
+    try {
+      await connectPrinter(device.address);
+      if (role === 'cashier') {
+        setCashierPrinterAddress(device.address);
+      } else {
+        setKitchenPrinterAddress(device.address);
+      }
+      setBtDevices([]);
+      setSelectingRole(null);
+      showAlert('Connected', `${device.name} set as ${role === 'cashier' ? 'cashier' : 'kitchen'} printer`);
     } catch (e: any) {
       showAlert('Connection Failed', e.message || 'Could not connect to printer');
     }
@@ -678,32 +701,58 @@ const SettingsScreen: React.FC = () => {
 
           {printerMode === 'dual' && (
             <>
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Cashier Printer IP / Address</Text>
-                <TextInput
-                  style={styles.input}
-                  value={cashierPrinterAddress}
-                  onChangeText={setCashierPrinterAddress}
-                  placeholder="e.g. 192.168.1.101"
-                  placeholderTextColor={Colors.textMuted}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="default"
-                />
-              </View>
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Kitchen Printer IP / Address</Text>
-                <TextInput
-                  style={styles.input}
-                  value={kitchenPrinterAddress}
-                  onChangeText={setKitchenPrinterAddress}
-                  placeholder="e.g. 192.168.1.102"
-                  placeholderTextColor={Colors.textMuted}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="default"
-                />
-              </View>
+              {(['cashier', 'kitchen'] as const).map(role => {
+                const addr = role === 'cashier' ? cashierPrinterAddress : kitchenPrinterAddress;
+                const isScanning = scanningBt && selectingRole === role;
+                const label = role === 'cashier' ? 'Cashier Printer (Receipt)' : 'Kitchen Printer (KOT)';
+                const btnLabel = addr
+                  ? (role === 'cashier' ? 'Change Cashier Printer' : 'Change Kitchen Printer')
+                  : (role === 'cashier' ? 'Select Cashier Printer' : 'Select Kitchen Printer');
+                return (
+                  <View key={role} style={styles.fieldGroup}>
+                    <Text style={styles.label}>{label}</Text>
+                    {addr ? (
+                      <Text style={{ color: Colors.success, fontSize: FontSize.sm, marginBottom: Spacing.sm }}>
+                        {addr}
+                      </Text>
+                    ) : null}
+                    <TouchableOpacity
+                      style={styles.platformBtn}
+                      onPress={() => handleScanForRole(role)}
+                      disabled={scanningBt}
+                      activeOpacity={0.7}
+                    >
+                      {isScanning ? (
+                        <ActivityIndicator color={Colors.white} size="small" />
+                      ) : (
+                        <>
+                          <MaterialIcons name="bluetooth-searching" size={20} color={Colors.white} />
+                          <Text style={styles.platformBtnText}>{btnLabel}</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                    {btDevices.length > 0 && selectingRole === role && (
+                      <View style={{ marginTop: Spacing.sm }}>
+                        {btDevices.map(device => (
+                          <TouchableOpacity
+                            key={device.address}
+                            style={styles.printerItem}
+                            onPress={() => handleConnectForRole(device, role)}
+                            activeOpacity={0.7}
+                          >
+                            <MaterialIcons name="print" size={20} color={Colors.primary} />
+                            <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                              <Text style={{ color: Colors.text, fontSize: FontSize.md, fontWeight: '600' }}>{device.name}</Text>
+                              <Text style={{ color: Colors.textMuted, fontSize: FontSize.sm }}>{device.address}</Text>
+                            </View>
+                            <MaterialIcons name="chevron-right" size={20} color={Colors.textSecondary} />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
             </>
           )}
 
@@ -738,9 +787,9 @@ const SettingsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Bluetooth Printer Section */}
-        <Text style={styles.sectionHeader}>Bluetooth Printer</Text>
-        <View style={styles.section}>
+        {/* Bluetooth Printer Section — single mode only; dual mode uses inline selectors above */}
+        {printerMode === 'single' && <Text style={styles.sectionHeader}>Bluetooth Printer</Text>}
+        {printerMode === 'single' && <View style={styles.section}>
           {connectedPrinter ? (
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Connected Printer</Text>
@@ -784,7 +833,7 @@ const SettingsScreen: React.FC = () => {
               ))}
             </View>
           )}
-        </View>
+        </View>}
 
         {/* Kitchen PIN Section */}
         <Text style={styles.sectionHeader}>Kitchen Display</Text>

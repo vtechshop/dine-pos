@@ -258,7 +258,12 @@ export const printReceipt = async (
     return;
   }
 
-  // Bluetooth printer paired → reconnect + print via ESC/POS
+  // Dual mode: receipt → cashier printer; single mode: use paired BT printer
+  if (settings.printerMode === 'dual' && settings.cashierPrinterAddress) {
+    await connectPrinter(settings.cashierPrinterAddress);
+    await printReceiptBluetooth(order, settings);
+    return;
+  }
   const savedPrinter = await AsyncStorage.getItem(BT_PRINTER_KEY);
   if (savedPrinter) {
     const savedAddress = await AsyncStorage.getItem(BT_PRINTER_ADDRESS_KEY);
@@ -367,6 +372,12 @@ export const printKOT = async (
     return;
   }
 
+  // Dual mode: KOT → kitchen printer; single mode: use paired BT printer
+  if (settings.printerMode === 'dual' && settings.kitchenPrinterAddress) {
+    await connectPrinter(settings.kitchenPrinterAddress);
+    await printKOTBluetooth(order, settings);
+    return;
+  }
   const savedPrinter = await AsyncStorage.getItem(BT_PRINTER_KEY);
   if (savedPrinter) {
     const savedAddress = await AsyncStorage.getItem(BT_PRINTER_ADDRESS_KEY);
