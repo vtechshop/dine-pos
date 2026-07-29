@@ -94,7 +94,7 @@ export function BlogPage() {
                   to={slug}
                   className="mt-4 inline-flex items-center text-sm font-semibold text-[#E8380D] hover:underline"
                 >
-                  Get in touch →
+                  Notify me →
                 </Link>
               </div>
             </article>

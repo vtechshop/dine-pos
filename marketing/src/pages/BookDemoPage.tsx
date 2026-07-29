@@ -126,11 +126,13 @@ export function BookDemoPage() {
           {submitted ? (
             <div className="flex flex-col items-center rounded-2xl border border-green-100 bg-green-50 px-6 py-14 text-center">
               <CheckCircle2 size={44} className="mb-4 text-green-500" />
-              <h3 className="mb-2 text-lg font-bold text-gray-900">Demo booked!</h3>
+              <h3 className="mb-2 text-lg font-bold text-gray-900">WhatsApp is ready!</h3>
               <p className="text-sm text-gray-500">
-                We'll confirm your slot via email or WhatsApp within a few hours.
+                Your details are pre-filled in WhatsApp — just tap Send to confirm your demo slot.
+                We'll reply within a few hours.
               </p>
               <button
+                type="button"
                 onClick={() => { setForm(BLANK); setSubmitted(false); }}
                 className="mt-6 text-sm font-semibold text-[#E8380D] hover:underline"
               >
@@ -278,7 +280,7 @@ export function BookDemoPage() {
                 Book My Free Demo
               </button>
               <p className="text-center text-xs text-gray-400">
-                We'll confirm via WhatsApp or email within a few hours.
+                WhatsApp will open with your details — tap Send to confirm.
               </p>
             </form>
           )}

@@ -121,11 +121,16 @@ export function ContactPage() {
           {submitted ? (
             <div className="flex flex-col items-center rounded-2xl border border-green-100 bg-green-50 px-6 py-12 text-center">
               <CheckCircle2 size={40} className="mb-4 text-green-500" />
-              <h3 className="mb-2 font-bold text-gray-900">Message sent!</h3>
+              <h3 className="mb-2 font-bold text-gray-900">Email client opened!</h3>
               <p className="text-sm text-gray-500">
-                We'll get back to you within one business day.
+                Your message is pre-filled — just hit Send in your email client.
+                If it didn't open, email us directly at{' '}
+                <a href="mailto:info@happya.in" className="font-semibold text-[#E8380D] hover:underline">
+                  info@happya.in
+                </a>.
               </p>
               <button
+                type="button"
                 onClick={() => { setForm(BLANK); setSubmitted(false); }}
                 className="mt-6 text-sm font-semibold text-[#E8380D] hover:underline"
               >

@@ -102,6 +102,7 @@ function Accordion({ items }: { items: FAQItem[] }) {
       {items.map(({ q, a }, i) => (
         <div key={q} className="overflow-hidden rounded-xl border border-gray-200">
           <button
+            type="button"
             className="flex w-full items-center justify-between gap-4 bg-white px-5 py-4 text-left text-sm font-semibold text-gray-800 hover:bg-gray-50"
             onClick={() => setOpen(open === i ? null : i)}
             aria-expanded={open === i}
