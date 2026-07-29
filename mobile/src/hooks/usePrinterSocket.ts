@@ -112,8 +112,14 @@ export function usePrinterSocket(
         }
       };
 
-      socket.on('print_job', async (event: PrintJobEvent) => {
-        await executePrintJob(event, settingsRef.current, wrappedReport);
+      // Serial queue — each job waits for the previous to finish before
+      // starting. Bluetooth printers can only handle one connection at a time;
+      // concurrent executePrintJob calls cause collisions and print failures.
+      let printQueue = Promise.resolve();
+      socket.on('print_job', (event: PrintJobEvent) => {
+        printQueue = printQueue.then(() =>
+          executePrintJob(event, settingsRef.current, wrappedReport),
+        );
       });
 
       // Heartbeat every 30 s — server marks device offline if > 60 s stale

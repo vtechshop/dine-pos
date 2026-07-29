@@ -692,10 +692,15 @@ io.on('connection', (socket) => {
       // in the order they were originally queued.
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const pendingJobs = await PrintJob.find({
-        hotelId:       new mongoose.Types.ObjectId(hotelId),
+        hotelId:      new mongoose.Types.ObjectId(hotelId),
         printerTarget: data.printerRole,
-        status:        'pending',
-        createdAt:     { $gte: since },
+        // Also retry recently-failed jobs (e.g. Bluetooth was off last attempt)
+        // but cap at 3 total attempts to avoid infinite retry loops.
+        $or: [
+          { status: 'pending' },
+          { status: 'failed', attemptCount: { $lt: 3 } },
+        ],
+        createdAt:    { $gte: since },
       }).sort({ createdAt: 1 }).lean();
 
       if (pendingJobs.length > 0) {

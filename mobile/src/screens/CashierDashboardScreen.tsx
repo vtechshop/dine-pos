@@ -192,6 +192,13 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         }
         loadOrders();
       });
+
+      socket.on('print_job_queued', (data: { jobId: string; jobType: string; printerTarget: string }) => {
+        if (!mountedRef.current) return;
+        if (data.jobType === 'receipt') {
+          showToast({ icon: 'print-disabled', severity: 'warning', title: 'Printer Offline', body: 'Receipt queued — will print automatically when printer reconnects.' }, 6000);
+        }
+      });
     })();
 
     return () => {

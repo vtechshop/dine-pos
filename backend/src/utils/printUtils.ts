@@ -120,6 +120,16 @@ async function dispatchPrintJob(
       printerTarget,
       printerAddress: printerAddress || '(none)',
     });
+    // Notify devices in the hotel room so the operator gets immediate feedback
+    // that the print was deferred (printer offline). Only when autoEmit was
+    // requested — KOT jobs with kotAutoPrint=false are intentionally silent.
+    if (autoEmit && !isOnline) {
+      io.to(`hotel_${hotelId}`).emit('print_job_queued', {
+        jobId:         String(job._id),
+        jobType,
+        printerTarget,
+      });
+    }
   }
 }
 
@@ -211,6 +221,9 @@ export async function scheduleOrderReceiptPrint(
   const mode           = s?.printerMode           ?? 'single';
   const kitchenAddr    = s?.kitchenPrinterAddress ?? '';
   const cashierAddr    = s?.cashierPrinterAddress ?? '';
+  // In single mode the only registered PrinterDevice is 'kitchen' — target it.
+  // In dual mode the dedicated cashier device handles receipts.
+  const printerTarget: 'kitchen' | 'cashier' = mode === 'dual' ? 'cashier' : 'kitchen';
   const printerAddress = mode === 'dual' ? cashierAddr : kitchenAddr;
 
   const payload: ReceiptPayload = {
@@ -252,7 +265,7 @@ export async function scheduleOrderReceiptPrint(
   await dispatchPrintJob(
     hotelId,
     'receipt',
-    'cashier',
+    printerTarget,
     printerAddress,
     mode,
     true,

@@ -156,6 +156,13 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
           ));
         }
       });
+
+      socket.on('print_job_queued', (data: { jobId: string; jobType: string; printerTarget: string }) => {
+        if (!mountedRef.current) return;
+        if (data.jobType === 'kot') {
+          showToast({ icon: 'print-disabled', severity: 'warning', title: 'Printer Offline', body: 'KOT queued — will print automatically when printer reconnects.' }, 6000);
+        }
+      });
     })();
 
     return () => {
