@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { usePageSEO } from '../hooks/usePageSEO';
 import {
-  Zap, LayoutGrid, Package, BarChart2, Printer, Smartphone,
+  Zap, LayoutGrid, Package, Printer, Smartphone, Sparkles,
   ChevronRight, CheckCircle2, Star, Check,
   Utensils, Coffee, Cake, Flame, Truck, Wine,
   UtensilsCrossed, Building, ShoppingBag, IceCream, ChefHat,
@@ -127,7 +127,7 @@ const FEATURES = [
   { icon: Zap,        title: 'Instant Order Entry',     desc: 'Take orders table-by-table or guest-by-guest with a keyboard-first interface. Zero training needed.' },
   { icon: LayoutGrid, title: 'Smart Table Management',  desc: 'Visual table grid shows live status, occupied guests, and running totals at a glance.' },
   { icon: Package,    title: 'Menu & Inventory',        desc: 'Manage products, categories, and ingredient stock. Get low-stock alerts before you run out.' },
-  { icon: BarChart2,  title: 'Daily Reports',           desc: 'Revenue by payment method, order source, and category — exportable to CSV.' },
+  { icon: Sparkles,   title: 'AI Intelligence',          desc: 'Morning briefings, sales forecasts, smart recommendations, and a purchase assistant — powered by AI.' },
   { icon: Printer,    title: 'Kitchen Printing',        desc: 'Auto-print KOTs to your kitchen printer the moment an order is placed.' },
   { icon: Smartphone, title: 'Works on Any Device',     desc: 'Web-based POS runs on desktop, tablet, and mobile. No app installation needed.' },
 ];
@@ -484,6 +484,8 @@ const ALL_FEATURES = [
   'Reports & Analytics', 'Multi-Branch', 'Cloud Backup', 'Loyalty Points',
   'Coupons & Offers', 'Expense Tracking', 'Staff Management', 'Role Permissions',
   'Audit Logs', 'Integrations', 'Aggregator Orders', 'Reservations',
+  'AI Morning Brief', 'AI Forecasting', 'AI Recommendations', 'Purchase Assistant',
+  'Vendor Management', 'Purchase Orders', 'GRN & Receiving', 'Modifier Groups',
 ];
 
 function FeatureGrid() {
@@ -493,7 +495,7 @@ function FeatureGrid() {
         <div className="mb-12 text-center">
           <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#E8380D]">Features</p>
           <h2 className="text-3xl font-bold text-gray-900">Everything included, no extras</h2>
-          <p className="mt-3 text-gray-500">24 modules. One subscription. Nothing hidden.</p>
+          <p className="mt-3 text-gray-500">32 modules. One subscription. Nothing hidden.</p>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {ALL_FEATURES.map(f => (

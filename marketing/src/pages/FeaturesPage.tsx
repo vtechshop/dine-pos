@@ -1,7 +1,7 @@
 import {
   ShoppingCart, LayoutGrid, Package, Archive,
   BarChart2, Printer, Users, Settings, Zap,
-  CreditCard, Globe, Shield,
+  CreditCard, Globe, Shield, Sparkles, Truck, Sliders,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePageSEO } from '../hooks/usePageSEO';
@@ -118,7 +118,7 @@ const FEATURE_BLOCKS: FeatureBlock[] = [
       'Separate data per outlet',
       'Central super-admin dashboard',
       'Outlet-specific menus and pricing',
-      'Consolidated reporting (coming soon)',
+      'Consolidated reporting across outlets',
     ],
   },
   {
@@ -155,12 +155,49 @@ const FEATURE_BLOCKS: FeatureBlock[] = [
       'Table status sync across sessions',
     ],
   },
+  {
+    icon: Sparkles,
+    title: 'AI Intelligence',
+    desc: 'Daily briefings, forecasts, and smart recommendations — powered by AI.',
+    bullets: [
+      'Morning brief: yesterday\'s performance at a glance',
+      'Sales forecast for the day ahead',
+      'AI-generated menu and pricing recommendations',
+      'Inventory purchase assistant',
+      'Smart alerts for anomalies and low stock',
+      'AI-powered reports and trend analysis',
+    ],
+  },
+  {
+    icon: Truck,
+    title: 'Vendor Management',
+    desc: 'Full procurement workflow from order to shelf.',
+    bullets: [
+      'Vendor profiles and contact management',
+      'Purchase orders with line items and due dates',
+      'Goods Receive Note (GRN) to confirm deliveries',
+      'Vendor ledger with payment tracking',
+      'Cost-per-unit history per vendor',
+    ],
+  },
+  {
+    icon: Sliders,
+    title: 'Modifier Groups',
+    desc: 'Add-ons, variants, and combos — build any menu customisation.',
+    bullets: [
+      'Add-on groups (extras, toppings, sauces)',
+      'Choice modifiers (size, spice level, cooking style)',
+      'Mandatory and optional modifier groups',
+      'Per-modifier pricing',
+      'Attach modifier groups to any menu item',
+    ],
+  },
 ];
 
 export function FeaturesPage() {
   usePageSEO(
     'Features — Dine POS',
-    'Explore every feature of Dine POS: billing, table management, kitchen printing, inventory, reports, loyalty, QR ordering and more. Built for Indian restaurants.',
+    'Explore every feature of Dine POS: AI intelligence, billing, table management, kitchen printing, inventory, vendor management, modifier groups, reports, loyalty, QR ordering and more. Built for Indian restaurants.',
   );
   return (
     <div>
