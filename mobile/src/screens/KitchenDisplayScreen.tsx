@@ -15,6 +15,7 @@ import {
   KitchenOrder,
 } from '../services/api';
 import { setupNotifications, notifyNewKitchenOrder } from '../utils/notifications';
+import { usePrinterSocket } from '../hooks/usePrinterSocket';
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import UnreadBadge from '../components/UnreadBadge';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
@@ -31,6 +32,8 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const mountedRef = useRef(true);
   const { count: kitchenBadge, increment: incKitchenBadge, reset: resetKitchenBadge } = useBadgeCount(BADGE_KEYS.kitchenOrders);
   const seenOrderIds = useRef<Set<string>>(new Set());
+
+  usePrinterSocket('kitchen');
 
   // Counter instead of boolean — ensures every new order triggers a re-render
   // even if the popup is already visible (boolean setTrue on true = no re-render)

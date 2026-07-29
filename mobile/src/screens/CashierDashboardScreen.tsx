@@ -15,7 +15,8 @@ import {
   getCashierToken, getStoredHotelId, getSocketUrl, getSettings, CashierOrder,
 } from '../services/api';
 import { CASHIER_PROFILE_KEY } from './CashierLoginScreen';
-import { setupNotifications } from '../utils/notifications';
+import { setupNotifications, notifyOrderReady } from '../utils/notifications';
+import { usePrinterSocket } from '../hooks/usePrinterSocket';
 import * as Notifications from 'expo-notifications';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
@@ -44,8 +45,11 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const socketRef = useRef<Socket | null>(null);
   const mountedRef    = useRef(true);
   const submittingRef = useRef(false);
+  const ordersRef     = useRef<CashierOrder[]>([]);
   const [tick, setTick] = useState(0);
   const { count: cashierBadge, increment: incCashierBadge, reset: resetCashierBadge } = useBadgeCount(BADGE_KEYS.cashierPending);
+
+  usePrinterSocket('cashier');
 
   // Counter instead of boolean — every new order triggers a re-render
   const [newOrderCount, setNewOrderCount] = useState(0);
@@ -82,7 +86,10 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const loadOrders = useCallback(async () => {
     try {
       const data = await getCashierOrders();
-      if (mountedRef.current) setOrders(data);
+      if (mountedRef.current) {
+        ordersRef.current = data;
+        setOrders(data);
+      }
       return true;
     } catch {
       return false;
@@ -169,8 +176,15 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         incCashierBadge();
         loadOrders();
       });
-      socket.on('order_status_update', () => {
-        if (mountedRef.current) loadOrders();
+      socket.on('order_status_update', (data: { orderId: string; status: string }) => {
+        if (!mountedRef.current) return;
+        if (data.status === 'ready') {
+          Vibration.vibrate([0, 300, 150, 300]);
+          const found = ordersRef.current.find(o => o._id === data.orderId);
+          notifyOrderReady(found?.tableNumber || '', found?.orderNumber || '').catch(() => {});
+          incCashierBadge();
+        }
+        loadOrders();
       });
     })();
 

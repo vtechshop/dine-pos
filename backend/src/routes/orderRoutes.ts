@@ -304,13 +304,19 @@ router.get('/waiter', requireWaiterOrAdmin, async (req: AuthRequest, res: Respon
   }
 });
 
-// GET /api/orders/cashier — served orders awaiting payment completion
+// GET /api/orders/cashier — all active orders + today's completed orders
 router.get('/cashier', requireCashierOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
     const orders = await Order.find(
       {
         hotelId: req.hotelId,
-        status: 'served',
+        $or: [
+          { status: { $in: ['pending', 'preparing', 'ready', 'served'] } },
+          { status: 'completed', completedAt: { $gte: startOfDay } },
+        ],
       },
       {
         orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1,
