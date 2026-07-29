@@ -824,7 +824,6 @@ router.patch('/:guestId/transfer', requireCashierOrAdmin, async (req: AuthReques
 // PATCH /api/sessions/:sessionId/guests/:guestId/reopen
 // Admin-only: reopen a billed guest (e.g. disputed charge, additional orders).
 // Generates a fresh QR token and sets status back to active.
-// Note: loyalty reversal is deferred to Phase 5 (Loyalty Engine).
 // RBAC: admin only
 // ────────────────────────────────────────────────────────────────────────────────
 router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
@@ -851,60 +850,61 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
       return;
     }
 
-    // Reverse loyalty transactions before clearing the guest's billing fields
+    // Reverse loyalty transactions before clearing the guest's billing fields.
+    // Runs regardless of whether the loyalty feature is currently enabled —
+    // points were earned/redeemed when the feature was on, so the reversal must happen.
     if (guest.customerId) {
       try {
-        const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
-        if (loyaltyCfg.enabled) {
-          const hotelObjId = new mongoose.Types.ObjectId(req.hotelId!);
+        const hotelObjId = new mongoose.Types.ObjectId(req.hotelId!);
+        const adminId    = (req as any).userId ?? (req as any).adminId ?? req.hotelId;
+        const createdBy  = `admin:${adminId}`;
 
-          // 1. Restore redeemed points
-          const redeemed = (guest as any).loyaltyPointsRedeemed as number | undefined;
-          if (redeemed && redeemed > 0) {
-            const afterRestore = await CustomerProfile.findByIdAndUpdate(
-              guest.customerId,
-              { $inc: { loyaltyBalance: redeemed } },
-              { new: true },
-            );
-            if (afterRestore) {
-              await LoyaltyTransaction.create({
-                customerId:      guest.customerId,
-                hotelId:         hotelObjId,
-                guestId:         guest._id,
-                transactionType: 'adjust',
-                points:          redeemed,
-                balanceAfter:    afterRestore.loyaltyBalance,
-                createdBy:       `admin:${req.hotelId}`,
-                remarks:         `Reversal: guest reopened — restored ${redeemed} redeemed points`,
-              });
-            }
+        // 1. Restore redeemed points
+        const redeemed = (guest as any).loyaltyPointsRedeemed as number | undefined;
+        if (redeemed && redeemed > 0) {
+          const afterRestore = await CustomerProfile.findByIdAndUpdate(
+            guest.customerId,
+            { $inc: { loyaltyBalance: redeemed } },
+            { new: true },
+          );
+          if (afterRestore) {
+            await LoyaltyTransaction.create({
+              customerId:      guest.customerId,
+              hotelId:         hotelObjId,
+              guestId:         guest._id,
+              transactionType: 'adjust',
+              points:          redeemed,
+              balanceAfter:    afterRestore.loyaltyBalance,
+              createdBy,
+              remarks:         `Reversal: guest reopened — restored ${redeemed} redeemed points`,
+            });
           }
+        }
 
-          // 2. Reverse earned points (find most recent earn transaction for this guest)
-          const earnTx = await LoyaltyTransaction.findOne({
-            guestId:         guest._id,
-            hotelId:         hotelObjId,
-            transactionType: 'earn',
-          }).sort({ createdAt: -1 });
+        // 2. Reverse earned points (find most recent earn transaction for this guest)
+        const earnTx = await LoyaltyTransaction.findOne({
+          guestId:         guest._id,
+          hotelId:         hotelObjId,
+          transactionType: 'earn',
+        }).sort({ createdAt: -1 });
 
-          if (earnTx && earnTx.points > 0) {
-            const afterDeduct = await CustomerProfile.findOneAndUpdate(
-              { _id: guest.customerId, loyaltyBalance: { $gte: earnTx.points } },
-              { $inc: { loyaltyBalance: -earnTx.points } },
-              { new: true },
-            );
-            if (afterDeduct) {
-              await LoyaltyTransaction.create({
-                customerId:      guest.customerId,
-                hotelId:         hotelObjId,
-                guestId:         guest._id,
-                transactionType: 'adjust',
-                points:          -earnTx.points,
-                balanceAfter:    afterDeduct.loyaltyBalance,
-                createdBy:       `admin:${req.hotelId}`,
-                remarks:         `Reversal: guest reopened — reversed ${earnTx.points} earned points`,
-              });
-            }
+        if (earnTx && earnTx.points > 0) {
+          const afterDeduct = await CustomerProfile.findOneAndUpdate(
+            { _id: guest.customerId, loyaltyBalance: { $gte: earnTx.points } },
+            { $inc: { loyaltyBalance: -earnTx.points } },
+            { new: true },
+          );
+          if (afterDeduct) {
+            await LoyaltyTransaction.create({
+              customerId:      guest.customerId,
+              hotelId:         hotelObjId,
+              guestId:         guest._id,
+              transactionType: 'adjust',
+              points:          -earnTx.points,
+              balanceAfter:    afterDeduct.loyaltyBalance,
+              createdBy,
+              remarks:         `Reversal: guest reopened — reversed ${earnTx.points} earned points`,
+            });
           }
         }
       } catch (loyaltyErr: any) {

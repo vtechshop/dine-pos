@@ -57,6 +57,11 @@ const LoyaltyProgramScreen: React.FC = () => {
   const [adjRemarks, setAdjRemarks]   = useState('');
   const [adjusting, setAdjusting]     = useState(false);
 
+  // Enroll customer modal
+  const [showEnroll, setShowEnroll]       = useState(false);
+  const [enrollSaving, setEnrollSaving]   = useState(false);
+  const [enrollForm, setEnrollForm]       = useState({ name: '', phone: '' });
+
   // Edit config modal
   const [showEditConfig, setShowEditConfig] = useState(false);
   const [editConfigSaving, setEditConfigSaving] = useState(false);
@@ -177,6 +182,27 @@ const LoyaltyProgramScreen: React.FC = () => {
     }
   };
 
+  const handleEnroll = async () => {
+    if (!enrollForm.name.trim()) { Alert.alert('Error', 'Name is required'); return; }
+    if (!enrollForm.phone.trim()) { Alert.alert('Error', 'Mobile number is required'); return; }
+    setEnrollSaving(true);
+    try {
+      const { customer } = await api.createLoyaltyCustomer({
+        name:  enrollForm.name.trim(),
+        phone: enrollForm.phone.trim(),
+      });
+      setCustomers(prev => [customer, ...prev]);
+      setTotal(prev => prev + 1);
+      setShowEnroll(false);
+      setEnrollForm({ name: '', phone: '' });
+      Alert.alert('Enrolled', `${customer.name} has been added to the loyalty program`);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Enrollment failed');
+    } finally {
+      setEnrollSaving(false);
+    }
+  };
+
   const renderCustomer = ({ item }: { item: LoyaltyCustomer }) => (
     <TouchableOpacity style={styles.custCard} onPress={() => openDetail(item)} activeOpacity={0.82}>
       <View style={styles.custAvatar}>
@@ -226,26 +252,34 @@ const LoyaltyProgramScreen: React.FC = () => {
           <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Loyalty Program</Text>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => {
-            if (config) {
-              setEditConfigForm({
-                rewardName: config.rewardName,
-                pointsPerHundredRupees: String(config.pointsPerHundredRupees),
-                minimumRedeemPoints: String(config.minimumRedeemPoints),
-                maximumRedeemPercent: String(config.maximumRedeemPercent),
-                pointValueInPaisa: String((config.pointValueInPaisa / 100).toFixed(2)),
-                expiryDays: config.expiryDays != null ? String(config.expiryDays) : '',
-                roundingRule: config.roundingRule,
-                calculationBase: config.calculationBase,
-              });
-            }
-            setShowEditConfig(true);
-          }}
-        >
-          <MaterialIcons name="settings" size={22} color={Colors.primary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row' }}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => { setEnrollForm({ name: '', phone: '' }); setShowEnroll(true); }}
+          >
+            <MaterialIcons name="person-add" size={22} color={Colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => {
+              if (config) {
+                setEditConfigForm({
+                  rewardName: config.rewardName,
+                  pointsPerHundredRupees: String(config.pointsPerHundredRupees),
+                  minimumRedeemPoints: String(config.minimumRedeemPoints),
+                  maximumRedeemPercent: String(config.maximumRedeemPercent),
+                  pointValueInPaisa: String((config.pointValueInPaisa / 100).toFixed(2)),
+                  expiryDays: config.expiryDays != null ? String(config.expiryDays) : '',
+                  roundingRule: config.roundingRule,
+                  calculationBase: config.calculationBase,
+                });
+              }
+              setShowEditConfig(true);
+            }}
+          >
+            <MaterialIcons name="settings" size={22} color={Colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Config strip */}
@@ -467,6 +501,53 @@ const LoyaltyProgramScreen: React.FC = () => {
                 {editConfigSaving
                   ? <ActivityIndicator size="small" color={Colors.white} />
                   : <Text style={styles.adjConfirmText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Enroll Customer Modal */}
+      <Modal visible={showEnroll} transparent animationType="fade" onRequestClose={() => setShowEnroll(false)}>
+        <View style={styles.adjOverlay}>
+          <View style={styles.adjSheet}>
+            <Text style={styles.adjTitle}>Enroll Customer</Text>
+            <Text style={styles.adjSub}>Add a new member to the loyalty program</Text>
+
+            <Text style={styles.adjLabel}>Full Name *</Text>
+            <TextInput
+              style={styles.adjInput}
+              value={enrollForm.name}
+              onChangeText={v => setEnrollForm(p => ({ ...p, name: v }))}
+              placeholder="Customer name"
+              placeholderTextColor={Colors.textMuted}
+              autoCapitalize="words"
+              autoFocus
+            />
+
+            <Text style={styles.adjLabel}>Mobile Number *</Text>
+            <TextInput
+              style={styles.adjInput}
+              value={enrollForm.phone}
+              onChangeText={v => setEnrollForm(p => ({ ...p, phone: v.replace(/[^0-9+]/g, '') }))}
+              keyboardType="phone-pad"
+              placeholder="10-digit mobile number"
+              placeholderTextColor={Colors.textMuted}
+              maxLength={13}
+            />
+
+            <View style={styles.adjActions}>
+              <TouchableOpacity style={styles.adjCancel} onPress={() => setShowEnroll(false)}>
+                <Text style={styles.adjCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.adjConfirm, enrollSaving && { opacity: 0.6 }]}
+                onPress={handleEnroll}
+                disabled={enrollSaving}
+              >
+                {enrollSaving
+                  ? <ActivityIndicator size="small" color={Colors.white} />
+                  : <Text style={styles.adjConfirmText}>Enroll</Text>}
               </TouchableOpacity>
             </View>
           </View>

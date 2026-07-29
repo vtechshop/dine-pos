@@ -259,7 +259,7 @@ export interface LoyaltyConfig {
   minimumRedeemPoints: number;
   maximumRedeemPercent: number;
   pointValueInPaisa: number;
-  expiryDays: number | null;
+  expiryDays: number;
   roundingRule: 'floor' | 'ceil' | 'round';
   calculationBase: 'before_gst' | 'after_gst';
 }

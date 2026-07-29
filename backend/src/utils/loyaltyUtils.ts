@@ -1,5 +1,5 @@
 /**
- * loyaltyUtils.ts — Loyalty Engine core logic (Phase 6)
+ * loyaltyUtils.ts — Loyalty Engine core logic
  *
  * All monetary values are in rupees (₹).
  * Point arithmetic always uses Math integers to avoid floating-point drift.
@@ -7,10 +7,8 @@
  * Earn rate: pointsPerHundredRupees (e.g. 10 → earn 10 pts per ₹100 spent)
  * Redeem rate: pointValueInPaisa (e.g. 100 → 1 pt = ₹1; 25 → 1 pt = ₹0.25)
  *
- * Note on calculationBase: guests only carry totalAmount (post-GST grandTotal).
- * The pre-GST subtotal is not denormalized on Guest. Phase 6 uses grandTotal
- * for both 'before_gst' and 'after_gst' modes. A later phase can resolve this
- * by summing order.subtotal per guest when exactness is required.
+ * calculationBase 'before_gst': callers aggregate Order.subtotal per guest.
+ * calculationBase 'after_gst':  callers use guest.totalAmount (grandTotal).
  */
 
 import mongoose from 'mongoose';

@@ -113,8 +113,12 @@ router.put('/config', requireAdmin, async (req: AuthRequest, res: Response): Pro
       { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true },
     );
 
-    res.json({ loyaltySettings: settings?.loyaltySettings });
-  } catch (err) {
+    res.json({ config: settings?.loyaltySettings });
+  } catch (err: any) {
+    if (err.name === 'ValidationError' || err.name === 'CastError') {
+      res.status(400).json({ code: 'VALIDATION_ERROR', message: err.message });
+      return;
+    }
     sendError(res, 500, 'Failed to update loyalty config', err);
   }
 });

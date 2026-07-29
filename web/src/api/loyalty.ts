@@ -55,10 +55,19 @@ export async function createCustomer(body: {
   });
 }
 
+export async function updateLoyaltyConfig(
+  body: Partial<LoyaltyConfig>,
+): Promise<{ config: LoyaltyConfig }> {
+  return apiFetch('/loyalty/config', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function adjustPoints(
   customerId: string,
   body: { points: number; remarks: string },
-): Promise<{ newBalance: number; customerId: string }> {
+): Promise<{ newBalance: number; customerId: string; customer: CustomerProfile }> {
   return apiFetch(`/loyalty/customers/${customerId}/adjust`, {
     method: 'POST',
     body: JSON.stringify(body),

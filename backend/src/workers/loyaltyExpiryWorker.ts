@@ -57,8 +57,10 @@ export async function runLoyaltyExpiry(): Promise<void> {
       const toExpire = (record.totalEarnExpired as number) - alreadyExpired;
       if (toExpire <= 0) continue;
 
-      // Atomically deduct — cap to current balance so it never goes negative
-      const updated = await CustomerProfile.findOneAndUpdate(
+      // Atomically deduct — cap to current balance so it never goes negative.
+      // Use { new: false } to get the pre-update document so we can compute
+      // the exact points removed (Math.min(toExpire, preBalance)).
+      const beforeDoc = await CustomerProfile.findOneAndUpdate(
         {
           _id:            record._id,
           loyaltyBalance: { $gt: 0 },
@@ -72,19 +74,20 @@ export async function runLoyaltyExpiry(): Promise<void> {
             },
           },
         ],
-        { new: true },
+        { new: false },
       );
 
-      if (!updated) continue;
+      if (!beforeDoc) continue;
 
-      const actualExpired = Math.min(toExpire, updated.loyaltyBalance + toExpire);
+      const actualExpired = Math.min(toExpire, beforeDoc.loyaltyBalance);
+      const newBalance    = beforeDoc.loyaltyBalance - actualExpired;
 
       await LoyaltyTransaction.create({
         customerId:      record._id,
         hotelId:         record.hotelId as mongoose.Types.ObjectId,
         transactionType: 'expire',
         points:          -actualExpired,
-        balanceAfter:    updated.loyaltyBalance,
+        balanceAfter:    newBalance,
         createdBy:       'system:expiry',
         remarks:         `${actualExpired} points expired`,
       });
