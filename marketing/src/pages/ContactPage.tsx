@@ -125,14 +125,31 @@ export function ContactPage() {
           {submitted ? (
             <div className="flex flex-col items-center rounded-2xl border border-green-100 bg-green-50 px-6 py-12 text-center">
               <CheckCircle2 size={40} className="mb-4 text-green-500" />
-              <h3 className="mb-2 font-bold text-gray-900">Message sent!</h3>
-              <p className="text-sm text-gray-500">
-                We've received your message and will get back to you within one business day.
-              </p>
+              <h3 className="mb-1 text-xl font-bold text-gray-900">Message sent!</h3>
+              <p className="mb-1 text-sm font-medium text-gray-700">Thank you for contacting DinePOS.</p>
+              <p className="mb-7 text-sm text-gray-500">Our team will get back to you within 24 hours.</p>
+              <div className="w-full space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Need immediate help?</p>
+                <a
+                  href="tel:+916381356683"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  <Phone size={15} />
+                  +91 63813 56683
+                </a>
+                <a
+                  href="https://wa.me/916381356683"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1ebe5d]"
+                >
+                  Chat on WhatsApp
+                </a>
+              </div>
               <button
                 type="button"
                 onClick={() => { setForm(BLANK); setSubmitted(false); }}
-                className="mt-6 text-sm font-semibold text-[#E8380D] hover:underline"
+                className="mt-7 text-sm font-semibold text-[#E8380D] hover:underline"
               >
                 Send another message
               </button>
