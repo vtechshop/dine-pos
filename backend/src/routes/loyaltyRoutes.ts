@@ -17,7 +17,6 @@
  */
 
 import { Router, Response } from 'express';
-import crypto from 'crypto';
 import mongoose from 'mongoose';
 import {
   authMiddleware,
@@ -30,6 +29,7 @@ import { sendError } from '../utils/sendError';
 import Settings from '../models/Settings';
 import CustomerProfile from '../models/CustomerProfile';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
+import DailyCounter from '../models/DailyCounter';
 import { getLoyaltyConfig, adjustPoints } from '../utils/loyaltyUtils';
 
 function normalizePhone(raw: string): string | null {
@@ -41,10 +41,15 @@ function normalizePhone(raw: string): string | null {
   return null;
 }
 
-async function generateCustomerId(hotelObjId: mongoose.Types.ObjectId): Promise<string> {
-  const seq  = await CustomerProfile.countDocuments({ hotelId: hotelObjId }) + 1;
-  const rand = crypto.randomBytes(2).toString('hex').toUpperCase();
-  return `CUST-${rand}-${String(seq).padStart(4, '0')}`;
+async function generateCustomerId(hotelId: string): Promise<string> {
+  const key     = `LOYALTYCUST-${hotelId}`;
+  const counter = await DailyCounter.findOneAndUpdate(
+    { key },
+    { $inc: { seq: 1 }, $setOnInsert: { key } },
+    { upsert: true, new: true },
+  );
+  const shortId = hotelId.slice(-6).toUpperCase();
+  return `CUST-${shortId}-${String(counter!.seq).padStart(4, '0')}`;
 }
 
 const router = Router();
@@ -198,7 +203,7 @@ router.post('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: R
       return;
     }
 
-    const customerId = await generateCustomerId(hotelObjId);
+    const customerId = await generateCustomerId(req.hotelId!);
 
     const customer = await CustomerProfile.create({
       hotelId:      hotelObjId,
@@ -321,8 +326,7 @@ router.post('/customers/:customerId/adjust', requireAdmin, async (req: AuthReque
     }
 
     const config    = await getLoyaltyConfig(req.hotelId!);
-    const adminId   = (req as any).userId ?? (req as any).adminId ?? req.hotelId;
-    const createdBy = `admin:${adminId}`;
+    const createdBy = `admin:${req.hotelId}`;
 
     const { newBalance, updatedDoc } = await adjustPoints(
       customer._id as mongoose.Types.ObjectId,

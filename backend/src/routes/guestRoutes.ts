@@ -16,7 +16,7 @@ import Order from '../models/Order';
 import CustomerProfile from '../models/CustomerProfile';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
 import { guestLabel } from '../utils/guestLabel';
-import { getLoyaltyConfig, calculateEarnedPoints, calculateMaxRedeemablePoints, earnPoints, redeemPoints as redeemLoyaltyPts } from '../utils/loyaltyUtils';
+import { getLoyaltyConfig, calculateEarnedPoints, calculateMaxRedeemablePoints, calculateRedeemValue, earnPoints, redeemPoints as redeemLoyaltyPts } from '../utils/loyaltyUtils';
 import { scheduleReceiptPrint } from '../utils/printUtils';
 
 // mergeParams: true — inherits :sessionId from the parent sessionRoutes mount
@@ -245,10 +245,42 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
       if (paidAmount !== undefined && typeof paidAmount === 'number') {
         updateFields.paidAmount = paidAmount;
       }
+      // Pre-compute loyalty discount so split-payment validation uses the correct
+      // post-discount payable total. Read-only — actual point deduction happens after
+      // the H-07 atomic guard to prevent double-deduction races.
+      const wantsLoyalty = !!(
+        redeemPoints && typeof redeemPoints === 'number' && redeemPoints > 0
+        && guest.customerId && !guest.loyaltyPointsRedeemed
+      );
+      let loyaltyCfgPrecomputed: any = null;
+      let loyaltyToRedeem  = 0;
+      let loyaltyDiscount  = 0;
+
+      if (wantsLoyalty) {
+        try {
+          loyaltyCfgPrecomputed = await getLoyaltyConfig(req.hotelId!);
+          if (loyaltyCfgPrecomputed.enabled && (redeemPoints as number) >= loyaltyCfgPrecomputed.minimumRedeemPoints) {
+            const _prof = await CustomerProfile.findById(guest.customerId).select('loyaltyBalance').lean();
+            const _bal  = (_prof as any)?.loyaltyBalance ?? 0;
+            loyaltyToRedeem = calculateMaxRedeemablePoints(
+              guest.totalAmount, _bal, redeemPoints as number, loyaltyCfgPrecomputed,
+            );
+            if (loyaltyToRedeem > 0) {
+              loyaltyDiscount = calculateRedeemValue(loyaltyToRedeem, loyaltyCfgPrecomputed);
+            }
+          }
+        } catch { /* precompute failed — validation uses full amount, redemption retries fresh */ }
+      }
+
       if (paymentMethod === 'split' && splitDetails) {
-        const splitSum = (splitDetails.cash ?? 0) + (splitDetails.upi ?? 0) + (splitDetails.card ?? 0);
-        if (Math.abs(splitSum - guest.totalAmount) > 0.01) {
-          res.status(400).json({ message: `Split amounts (₹${splitSum.toFixed(2)}) must equal bill total (₹${guest.totalAmount.toFixed(2)})` });
+        const splitSum     = (splitDetails.cash ?? 0) + (splitDetails.upi ?? 0) + (splitDetails.card ?? 0);
+        const payableTotal = +(guest.totalAmount - loyaltyDiscount).toFixed(2);
+        if (Math.abs(splitSum - payableTotal) > 0.01) {
+          res.status(400).json({
+            message: loyaltyDiscount > 0
+              ? `Split amounts (₹${splitSum.toFixed(2)}) must equal payable amount (₹${payableTotal.toFixed(2)}) after ₹${loyaltyDiscount.toFixed(2)} loyalty discount`
+              : `Split amounts (₹${splitSum.toFixed(2)}) must equal bill total (₹${guest.totalAmount.toFixed(2)})`,
+          });
           return;
         }
         updateFields['splitDetails.cash'] = splitDetails.cash ?? 0;
@@ -256,10 +288,8 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         updateFields['splitDetails.card'] = splitDetails.card ?? 0;
       }
 
-      // H-07: atomic guard runs FIRST — before any loyalty deduction.
-      // Two concurrent billing requests both pass the status:'active' pre-check above,
-      // but only one can win this findOneAndUpdate. The loser gets null and returns 409
-      // before touching loyalty points, eliminating the double-deduction race.
+      // H-07: atomic guard — only one of two concurrent billing requests wins this.
+      // The loser gets null and returns 409 before touching loyalty points.
       const updated = await Guest.findOneAndUpdate(
         { _id: guest._id, status: 'active' },
         { $set: updateFields },
@@ -270,38 +300,41 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         return;
       }
 
-      // [Phase 6] Loyalty redemption — runs AFTER the atomic guard so only the
-      // request that won the findOneAndUpdate can deduct points.
-      if (redeemPoints && typeof redeemPoints === 'number' && redeemPoints > 0 && guest.customerId && !guest.loyaltyPointsRedeemed) {
+      // [Phase 6] Loyalty redemption — runs AFTER the atomic guard.
+      // Reuses precomputed config/toRedeem to avoid an extra round-trip in the happy path.
+      // Falls back to a fresh fetch when precompute failed (e.g. config service timeout).
+      let guestAfterLoyalty = updated;
+      if (wantsLoyalty) {
         try {
-          const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
-          if (loyaltyCfg.enabled && redeemPoints >= loyaltyCfg.minimumRedeemPoints) {
-            const profile = await CustomerProfile.findById(guest.customerId).select('loyaltyBalance').lean();
-            const balance = (profile as any)?.loyaltyBalance ?? 0;
-            const toRedeem = calculateMaxRedeemablePoints(
-              guest.totalAmount,
-              balance,
-              redeemPoints,
-              loyaltyCfg,
-            );
-            if (toRedeem > 0) {
-              const discount = await redeemLoyaltyPts(
-                guest.customerId as mongoose.Types.ObjectId,
-                req.hotelId!,
-                toRedeem,
-                loyaltyCfg,
-                { sessionId: String(session._id), guestId: String(guest._id), createdBy: `cashier:${req.hotelId}` },
-              );
-              updateFields.loyaltyPointsRedeemed = toRedeem;
-              updateFields.loyaltyDiscountAmount  = discount;
-              // Persist loyalty fields back to the already-updated guest document
-              await Guest.findByIdAndUpdate(updated._id, {
-                $set: {
-                  loyaltyPointsRedeemed: toRedeem,
-                  loyaltyDiscountAmount:  discount,
-                },
-              });
+          let cfg      = loyaltyCfgPrecomputed;
+          let toRedeem = loyaltyToRedeem;
+
+          if (!cfg || toRedeem === 0) {
+            cfg = await getLoyaltyConfig(req.hotelId!);
+            if (cfg.enabled && (redeemPoints as number) >= cfg.minimumRedeemPoints) {
+              const prof = await CustomerProfile.findById(guest.customerId).select('loyaltyBalance').lean();
+              const bal  = (prof as any)?.loyaltyBalance ?? 0;
+              toRedeem   = calculateMaxRedeemablePoints(guest.totalAmount, bal, redeemPoints as number, cfg);
             }
+          }
+
+          if (cfg && toRedeem > 0) {
+            const actorId = req.cashierId ? `cashier:${req.cashierId}` : `admin:${req.hotelId}`;
+            const discount = await redeemLoyaltyPts(
+              guest.customerId as mongoose.Types.ObjectId,
+              req.hotelId!,
+              toRedeem,
+              cfg,
+              { sessionId: String(session._id), guestId: String(guest._id), createdBy: actorId },
+            );
+            updateFields.loyaltyPointsRedeemed = toRedeem;
+            updateFields.loyaltyDiscountAmount  = discount;
+            const afterLoyalty = await Guest.findByIdAndUpdate(
+              updated._id,
+              { $set: { loyaltyPointsRedeemed: toRedeem, loyaltyDiscountAmount: discount } },
+              { new: true },
+            );
+            if (afterLoyalty) guestAfterLoyalty = afterLoyalty;
           }
         } catch (loyaltyErr: any) {
           logger.warn('Loyalty redemption skipped during billing', {
@@ -381,7 +414,7 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         totalAmount: guest.totalAmount,
       });
 
-      res.json({ guest: updated });
+      res.json({ guest: guestAfterLoyalty });
 
     } else if (action === 'left') {
       // Cashier/admin only for marking left
@@ -856,8 +889,7 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
     if (guest.customerId) {
       try {
         const hotelObjId = new mongoose.Types.ObjectId(req.hotelId!);
-        const adminId    = (req as any).userId ?? (req as any).adminId ?? req.hotelId;
-        const createdBy  = `admin:${adminId}`;
+        const createdBy = `admin:${req.hotelId}`;
 
         // 1. Restore redeemed points
         const redeemed = (guest as any).loyaltyPointsRedeemed as number | undefined;
@@ -904,6 +936,12 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
               balanceAfter:    afterDeduct.loyaltyBalance,
               createdBy,
               remarks:         `Reversal: guest reopened — reversed ${earnTx.points} earned points`,
+            });
+          } else {
+            logger.warn('Loyalty reopen: insufficient balance to reverse earned points — partial reversal skipped', {
+              hotelId:     req.hotelId,
+              guestId:     String(guest._id),
+              earnedPoints: earnTx.points,
             });
           }
         }

@@ -9,10 +9,27 @@
 import mongoose from 'mongoose';
 import CustomerProfile from '../models/CustomerProfile';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
+import { getRedisClient } from '../config/redis';
 import { logger } from '../utils/logger';
 
 export async function runLoyaltyExpiry(): Promise<void> {
   const now = new Date();
+
+  // Distributed lock: prevents duplicate sweeps when multiple backend instances
+  // trigger simultaneously. Key is date-scoped so it auto-rotates each calendar day.
+  // Falls through gracefully when Redis is unavailable (single-instance envs are
+  // protected by the scheduler's own expiryLastDate in-process guard).
+  const redis = getRedisClient();
+  if (redis) {
+    const dateKey  = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+    const lockKey  = `loyalty:expiry:lock:${dateKey}`;
+    const acquired = await redis.set(lockKey, '1', 'EX', 23 * 3600, 'NX');
+    if (!acquired) {
+      logger.info('[loyaltyExpiry] lock held by another instance — skipping sweep');
+      return;
+    }
+  }
+
   logger.info('[loyaltyExpiry] sweep started', { ts: now.toISOString() });
 
   // Aggregate all earn transactions that have expired, grouped by customer
