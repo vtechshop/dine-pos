@@ -185,6 +185,82 @@ export async function scheduleKOTPrint(
   );
 }
 
+// ── Public: schedule Receipt print after individual POS order payment ───────────
+
+export async function scheduleOrderReceiptPrint(
+  hotelId: string,
+  order: {
+    _id:             any;
+    orderNumber:     string;
+    tableNumber?:    string;
+    customerName?:   string;
+    paymentMethod:   string;
+    items:           { productName: string; variantName?: string; quantity: number; price: number; total: number; selectedModifiers?: any[] }[];
+    subtotal:        number;
+    taxTotal:        number;
+    grandTotal:      number;
+    discountAmount?: number;
+    createdAt:       Date | string;
+  },
+): Promise<void> {
+  const settings = await Settings.findOne({ hotelId: new mongoose.Types.ObjectId(hotelId) })
+    .select('printerMode kitchenPrinterAddress cashierPrinterAddress hotelName address phone gstNumber footerText upiId printerWidth defaultTaxPercent currencySymbol')
+    .lean();
+
+  const s              = settings as any;
+  const mode           = s?.printerMode           ?? 'single';
+  const kitchenAddr    = s?.kitchenPrinterAddress ?? '';
+  const cashierAddr    = s?.cashierPrinterAddress ?? '';
+  const printerAddress = mode === 'dual' ? cashierAddr : kitchenAddr;
+
+  const payload: ReceiptPayload = {
+    templateType:  'receipt',
+    hotelName:     s?.hotelName  ?? 'Hotel',
+    address:       s?.address    || undefined,
+    phone:         s?.phone      || undefined,
+    gstNumber:     s?.gstNumber  || undefined,
+    footerText:    s?.footerText || undefined,
+    upiId:         s?.upiId      || undefined,
+    printerWidth:  (s?.printerWidth ?? '80mm') as '58mm' | '80mm',
+    tableNumber:   order.tableNumber ?? '',
+    guestLabel:    order.customerName || undefined,
+    paymentMethod: order.paymentMethod,
+    items: order.items.map(i => {
+      const mods = (i.selectedModifiers || []) as any[];
+      return {
+        productName:   i.productName,
+        variantName:   i.variantName || undefined,
+        modifierLines: mods.length
+          ? mods.map(m => ({ name: m.modifierOptionName, price: m.modifierPrice }))
+          : undefined,
+        quantity: i.quantity,
+        price:    i.price,
+        total:    i.total,
+      };
+    }),
+    subtotal:              +order.subtotal.toFixed(2),
+    taxTotal:              +order.taxTotal.toFixed(2),
+    grandTotal:            +order.grandTotal.toFixed(2),
+    loyaltyDiscountAmount: order.discountAmount || undefined,
+    defaultTaxPercent:     s?.defaultTaxPercent ?? 5,
+    currencySymbol:        s?.currencySymbol    ?? '₹',
+    createdAt:             order.createdAt instanceof Date
+      ? order.createdAt.toISOString()
+      : (order.createdAt ?? new Date().toISOString()),
+  };
+
+  await dispatchPrintJob(
+    hotelId,
+    'receipt',
+    'cashier',
+    printerAddress,
+    mode,
+    true,
+    payload,
+    { orderId: String(order._id) },
+  );
+}
+
 // ── Public: schedule Receipt print after guest billing ──────────────────────────
 
 export interface ReceiptPrintInput {

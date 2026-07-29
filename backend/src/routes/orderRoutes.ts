@@ -8,7 +8,7 @@ import TableSession from '../models/TableSession';
 import Guest from '../models/Guest';
 import CustomerProfile from '../models/CustomerProfile';
 import { findOrCreateOpenSession, findOrCreateDefaultGuest } from '../utils/sessionUtils';
-import { scheduleKOTPrint } from '../utils/printUtils';
+import { scheduleKOTPrint, scheduleOrderReceiptPrint } from '../utils/printUtils';
 import { authMiddleware, requireAdmin, requireKitchenOrAdmin, requireWaiterOrAdmin, requireCashierOrAdmin, requireWaiterOrCashierOrAdmin, resolveHotelStatus, AuthRequest } from '../middleware/auth';
 import { requireActiveStaff } from '../middleware/staffAuth';
 import { logAudit } from '../utils/audit';
@@ -790,6 +790,10 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         completedBy: existing.completedBy || '',
         paymentMethod: existing.paymentMethod,
         grandTotal: existing.grandTotal,
+      });
+      // Fire-and-forget: auto-print receipt to cashier printer device
+      scheduleOrderReceiptPrint(req.hotelId!, existing.toObject()).catch(err => {
+        logger.warn('Receipt print dispatch failed', { orderId: String(existing._id), error: err?.message });
       });
     }
 

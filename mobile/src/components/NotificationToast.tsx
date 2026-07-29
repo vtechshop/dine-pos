@@ -13,10 +13,14 @@ const ACCENT: Record<string, string> = {
 };
 
 export function NotificationToast() {
-  const toast          = useToastState();
-  const { dismissToast } = useGlobalToast();
-  const { top }        = useSafeAreaInsets();
-  const slideY         = useRef(new Animated.Value(-120)).current;
+  const toast             = useToastState();
+  const { dismissToast }  = useGlobalToast();
+  const { top }           = useSafeAreaInsets();
+  const slideY            = useRef(new Animated.Value(-120)).current;
+  // Retain last content so it stays visible during the slide-out animation
+  const lastToastRef      = useRef<ReturnType<typeof useToastState>>(null);
+  if (toast) lastToastRef.current = toast;
+  const displayToast = toast ?? lastToastRef.current;
 
   useEffect(() => {
     Animated.spring(slideY, {
@@ -27,26 +31,26 @@ export function NotificationToast() {
     }).start();
   }, [toast]);
 
-  const accent = ACCENT[toast?.severity ?? 'info'];
+  const accent = ACCENT[displayToast?.severity ?? 'info'];
 
   return (
     <Animated.View
       style={[styles.wrapper, { top: top + 8 }, { transform: [{ translateY: slideY }] }]}
       pointerEvents={toast ? 'box-none' : 'none'}
     >
-      {toast && (
+      {displayToast && (
         <TouchableOpacity
           style={[styles.banner, { borderLeftColor: accent }]}
           onPress={dismissToast}
           activeOpacity={0.9}
         >
           <View style={[styles.iconWrap, { backgroundColor: accent + '22' }]}>
-            <MaterialIcons name={toast.icon as any} size={20} color={accent} />
+            <MaterialIcons name={displayToast.icon as any} size={20} color={accent} />
           </View>
           <View style={styles.textWrap}>
-            <Text style={styles.title}>{toast.title}</Text>
-            {!!toast.body && (
-              <Text style={styles.body} numberOfLines={2}>{toast.body}</Text>
+            <Text style={styles.title}>{displayToast.title}</Text>
+            {!!displayToast.body && (
+              <Text style={styles.body} numberOfLines={2}>{displayToast.body}</Text>
             )}
           </View>
           <MaterialIcons name="close" size={16} color={Colors.textMuted} />

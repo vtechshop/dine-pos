@@ -1,16 +1,25 @@
 import * as Notifications from 'expo-notifications';
 import { Platform, Vibration } from 'react-native';
 
+const ORDER_EVENT_TYPES = new Set([
+  'new_order', 'new_delivery_order', 'order_preparing', 'order_ready',
+  'order_served', 'order_completed', 'order_cancelled', 'printer_error',
+]);
+
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    // Banner is suppressed in foreground — the in-app NotificationToast replaces it.
-    // shouldPlaySound=true still fires the audio so the user hears the alert.
-    // In background the OS always shows the banner regardless of this handler.
-    shouldShowBanner: false,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const data = notification.request.content.data as Record<string, string> | undefined;
+    // Order/printer events: banner suppressed — in-app NotificationToast replaces it.
+    // Sound still plays via shouldPlaySound=true.
+    // Chat and lead notifications: banner shown normally so admin sees them in foreground.
+    const isOrderEvent = ORDER_EVENT_TYPES.has(data?.eventType ?? '');
+    return {
+      shouldShowBanner: !isOrderEvent,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 // ChannelAwareTriggerInput — immediate delivery, no AlarmManager required
