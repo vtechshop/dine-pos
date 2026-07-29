@@ -51,11 +51,13 @@ async function reportPrintStatus(
 export function usePrinterSocket(
   printerRole: 'kitchen' | 'cashier',
   printerName?: string,
+  onPrintError?: (message: string) => void,
 ): void {
   const { settings }   = useSettings();
   const settingsRef    = useRef(settings);
   const roleRef        = useRef(printerRole);
   const nameRef        = useRef(printerName);
+  const onErrorRef     = useRef(onPrintError);
   const socketRef      = useRef<Socket | null>(null);
   const heartbeatRef   = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -63,6 +65,7 @@ export function usePrinterSocket(
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   useEffect(() => { roleRef.current = printerRole; }, [printerRole]);
   useEffect(() => { nameRef.current = printerName; }, [printerName]);
+  useEffect(() => { onErrorRef.current = onPrintError; }, [onPrintError]);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,12 +105,15 @@ export function usePrinterSocket(
         });
       });
 
+      const wrappedReport = async (jobId: string, status: 'success' | 'failed', error?: string) => {
+        await reportPrintStatus(jobId, status, error);
+        if (status === 'failed' && onErrorRef.current) {
+          onErrorRef.current(error || 'Print failed. Check Bluetooth connection.');
+        }
+      };
+
       socket.on('print_job', async (event: PrintJobEvent) => {
-        await executePrintJob(
-          event,
-          settingsRef.current,
-          reportPrintStatus,
-        );
+        await executePrintJob(event, settingsRef.current, wrappedReport);
       });
 
       // Heartbeat every 30 s — server marks device offline if > 60 s stale

@@ -6,6 +6,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { CartProvider } from './src/context/CartContext';
 import { SettingsProvider } from './src/context/SettingsContext';
 import { AuthProvider } from './src/context/AuthContext';
+import { GlobalToastProvider } from './src/context/GlobalToastContext';
+import { NotificationToast } from './src/components/NotificationToast';
 import AppNavigator from './src/navigation/AppNavigator';
 import ErrorBoundary from './src/components/ErrorBoundary';
 
@@ -27,8 +29,11 @@ export default function App() {
           <AuthProvider>
             <SettingsProvider>
               <CartProvider>
+              <GlobalToastProvider>
                 <StatusBar style="dark" />
                 <AppNavigator />
+                <NotificationToast />
+              </GlobalToastProvider>
               </CartProvider>
             </SettingsProvider>
           </AuthProvider>

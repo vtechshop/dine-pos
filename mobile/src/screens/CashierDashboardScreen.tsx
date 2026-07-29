@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  ActivityIndicator, StatusBar, Vibration, Modal, Alert, TextInput,
+  ActivityIndicator, StatusBar, Modal, Alert, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -15,9 +15,10 @@ import {
   getCashierToken, getStoredHotelId, getSocketUrl, getSettings, CashierOrder,
 } from '../services/api';
 import { CASHIER_PROFILE_KEY } from './CashierLoginScreen';
-import { setupNotifications, notifyOrderReady } from '../utils/notifications';
+import { setupNotifications } from '../utils/notifications';
 import { usePrinterSocket } from '../hooks/usePrinterSocket';
-import * as Notifications from 'expo-notifications';
+import { useGlobalToast } from '../context/GlobalToastContext';
+import { NotificationSvc, orderLabel } from '../services/NotificationService';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import UnreadBadge from '../components/UnreadBadge';
@@ -49,7 +50,9 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [tick, setTick] = useState(0);
   const { count: cashierBadge, increment: incCashierBadge, reset: resetCashierBadge } = useBadgeCount(BADGE_KEYS.cashierPending);
 
-  usePrinterSocket('cashier');
+  const { showToast } = useGlobalToast();
+
+  usePrinterSocket('cashier', undefined, (msg) => showToast(NotificationSvc.printerError(msg), 8000));
 
   // Counter instead of boolean — every new order triggers a re-render
   const [newOrderCount, setNewOrderCount] = useState(0);
@@ -155,34 +158,37 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         if (mountedRef.current) setSocketLost(true);
       });
 
-      socket.on('new_order', (data: { _id?: string; orderNumber?: string }) => {
+      socket.on('new_order', (data: { _id?: string; orderNumber?: string; tableNumber?: string }) => {
         if (!mountedRef.current) return;
-        Vibration.vibrate([0, 200, 100, 200]);
-        Notifications.scheduleNotificationAsync({
-          content: {
-            title: '🆕 New Order!',
-            body: `Order ${data.orderNumber || ''} placed`,
-            data: { type: 'cashier_new' },
-          },
-          trigger: { channelId: 'order_alerts_v2' },
-        }).catch(() => {});
+        const label = orderLabel(data.tableNumber, data.orderNumber);
+        // Vibration + push (when background) handled by service; keep modal:
+        NotificationSvc.handle('new_order', 'cashier', data._id || Date.now().toString(), 'New Order!', `${label} placed an order`);
         setNewOrderCount(c => c + 1);
         loadOrders();
       });
 
       socket.on('order_completed',    () => { if (mountedRef.current) loadOrders(); });
-      socket.on('order_served', () => {
+      socket.on('order_served', (data: { orderId: string; tableNumber?: string; orderNumber?: string }) => {
         if (!mountedRef.current) return;
         incCashierBadge();
+        const label = orderLabel(data.tableNumber, data.orderNumber);
+        const ev = NotificationSvc.handle('order_served', 'cashier', data.orderId, 'Order Served', `${label} has been served`);
+        if (ev) showToast(ev);
         loadOrders();
       });
-      socket.on('order_status_update', (data: { orderId: string; status: string }) => {
+      socket.on('order_status_update', (data: { orderId: string; status: string; tableNumber?: string; orderNumber?: string }) => {
         if (!mountedRef.current) return;
+        const label = orderLabel(data.tableNumber, data.orderNumber);
         if (data.status === 'ready') {
-          Vibration.vibrate([0, 300, 150, 300]);
-          const found = ordersRef.current.find(o => o._id === data.orderId);
-          notifyOrderReady(found?.tableNumber || '', found?.orderNumber || '').catch(() => {});
+          const ev = NotificationSvc.handle('order_ready', 'cashier', data.orderId, '✅ Order Ready!', `${label} is ready to serve`);
+          if (ev) showToast(ev);
           incCashierBadge();
+        } else if (data.status === 'preparing') {
+          const ev = NotificationSvc.handle('order_preparing', 'cashier', data.orderId, 'Now Preparing', `${label} is being prepared`);
+          if (ev) showToast(ev);
+        } else if (data.status === 'cancelled') {
+          const ev = NotificationSvc.handle('order_cancelled', 'cashier', data.orderId, 'Order Cancelled', `${label} was cancelled`);
+          if (ev) showToast(ev);
         }
         loadOrders();
       });

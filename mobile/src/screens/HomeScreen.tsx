@@ -18,7 +18,9 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import TrialBanner from '../components/TrialBanner';
 import { printReceipt, printKOT } from '../utils/receipt';
-import { setupNotifications, notifyNewOrder, notifyChatMessage, notifyOrderReady, notifyOrderPreparing } from '../utils/notifications';
+import { setupNotifications, notifyChatMessage } from '../utils/notifications';
+import { useGlobalToast } from '../context/GlobalToastContext';
+import { NotificationSvc, orderLabel } from '../services/NotificationService';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
@@ -40,6 +42,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { clearCart } = useCart();
   const { top } = useSafeAreaInsets();
   const { increment: incAdminBadge } = useBadgeCount(BADGE_KEYS.adminOrders);
+  const { showToast } = useGlobalToast();
   const [stats, setStats]           = useState<Stats>({ todayOrders: 0, todaySales: 0, totalProducts: 0, totalCategories: 0, parcelOrders: 0 });
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,7 +55,6 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [deliveryToday, setDeliveryToday] = useState<DeliveryToday>({ swiggy: 0, swiggyRev: 0, zomato: 0, zomatoRev: 0 });
   const [notifUnread, setNotifUnread] = useState(0);
   const [printError, setPrintError] = useState(false);
-  const [orderStatusAlert, setOrderStatusAlert] = useState<{ label: string; isReady: boolean; isServed: boolean; isCompleted: boolean } | null>(null);
   const [notifBlocked, setNotifBlocked] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const settingsRef = useRef(settings);
@@ -152,30 +154,37 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       });
       socket.on('order_completed', (data: { orderId: string; tableNumber?: string; orderNumber?: string; completedBy?: string; paymentMethod?: string; grandTotal?: number }) => {
         if (!mounted) return;
-        const label = data.tableNumber ? `Table ${data.tableNumber}` : (data.orderNumber || 'Order');
-        setOrderStatusAlert({ label, isReady: false, isServed: false, isCompleted: true });
+        const label = orderLabel(data.tableNumber, data.orderNumber);
+        const ev = NotificationSvc.handle('order_completed', 'admin', data.orderId, '💰 Payment Collected', `${label}${data.paymentMethod ? ` · ${data.paymentMethod.toUpperCase()}` : ''}`);
+        if (ev) showToast(ev);
         fetchStats();
       });
       socket.on('order_status_update', (data: { orderId: string; status: string; tableNumber?: string; orderNumber?: string; customerName?: string }) => {
         if (!mounted) return;
-        const label = data.tableNumber ? `Table ${data.tableNumber}` : (data.orderNumber || 'Order');
+        const label = orderLabel(data.tableNumber, data.orderNumber);
         if (data.status === 'ready') {
-          setOrderStatusAlert({ label, isReady: true, isServed: false, isCompleted: false });
-          notifyOrderReady(data.tableNumber || '', data.orderNumber || '');
+          const ev = NotificationSvc.handle('order_ready', 'admin', data.orderId, '✅ Order Ready!', `${label} is ready to serve`);
+          if (ev) showToast(ev);
         } else if (data.status === 'preparing') {
-          setOrderStatusAlert({ label, isReady: false, isServed: false, isCompleted: false });
-          notifyOrderPreparing(data.tableNumber || '', data.orderNumber || '');
+          const ev = NotificationSvc.handle('order_preparing', 'admin', data.orderId, 'Now Preparing', `${label} is being prepared`);
+          if (ev) showToast(ev);
+        } else if (data.status === 'cancelled') {
+          const ev = NotificationSvc.handle('order_cancelled', 'admin', data.orderId, 'Order Cancelled', `${label} was cancelled`);
+          if (ev) showToast(ev);
         }
       });
       socket.on('order_served', (data: { orderId: string; tableNumber?: string; orderNumber?: string; servedBy?: string }) => {
         if (!mounted) return;
-        const label = data.tableNumber ? `Table ${data.tableNumber}` : (data.orderNumber || 'Order');
-        setOrderStatusAlert({ label, isReady: false, isServed: true, isCompleted: false });
+        const label = orderLabel(data.tableNumber, data.orderNumber);
+        const ev = NotificationSvc.handle('order_served', 'admin', data.orderId, '🛎 Order Served', `${label} has been served`);
+        if (ev) showToast(ev);
         fetchStats();
       });
       socket.on('new_delivery_order', (data: NewOrderAlert) => {
         if (!mounted) return;
         incAdminBadge();
+        const label = orderLabel(data.tableNumber, data.orderNumber);
+        NotificationSvc.handle('new_delivery_order', 'admin', data._id || Date.now().toString(), 'Delivery Order!', `${label} — ${data.itemCount} item${data.itemCount !== 1 ? 's' : ''}`);
         setNewOrderAlert(data);
         setOrderBadge(p => p + 1);
         fetchStats();
@@ -187,7 +196,9 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         setPrintError(false);
         setOrderBadge(p => p + 1);
         fetchStats();
-        notifyNewOrder(data.tableNumber, data.grandTotal, data.itemCount, settingsRef.current.currencySymbol || '₹');
+        const cur = settingsRef.current.currencySymbol || '₹';
+        const label = orderLabel(data.tableNumber, data.orderNumber);
+        NotificationSvc.handle('new_order', 'admin', data._id || Date.now().toString(), 'New Order!', `${label} — ${data.itemCount} item${data.itemCount !== 1 ? 's' : ''} · ${cur}${(data.grandTotal || 0).toFixed(0)}`);
         // Auto-print KOT + bill if a Bluetooth printer is configured
         if (data._id) {
           try {
@@ -216,13 +227,6 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       }
     };
   }, [fetchStats]);
-
-  // Auto-dismiss order-status banner after 8s
-  useEffect(() => {
-    if (!orderStatusAlert) return;
-    const t = setTimeout(() => setOrderStatusAlert(null), 8000);
-    return () => clearTimeout(t);
-  }, [orderStatusAlert]);
 
   const onRefresh = useCallback(() => { setRefreshing(true); fetchStats(); }, [fetchStats]);
 
@@ -406,32 +410,6 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           </View>
         </Modal>
-
-        {/* ── Order Status Banner (kitchen ready / preparing / served) ── */}
-        {orderStatusAlert && (
-          <TouchableOpacity
-            style={[styles.alertBanner, {
-              backgroundColor: orderStatusAlert.isCompleted ? Colors.success
-                : orderStatusAlert.isServed ? Colors.info
-                : orderStatusAlert.isReady ? Colors.success
-                : Colors.warning,
-            }]}
-            onPress={() => setOrderStatusAlert(null)}
-            activeOpacity={0.88}
-          >
-            <MaterialIcons
-              name={orderStatusAlert.isCompleted ? 'point-of-sale' : orderStatusAlert.isServed ? 'room-service' : orderStatusAlert.isReady ? 'check-circle' : 'local-fire-department'}
-              size={22} color={Colors.white}
-            />
-            <View style={{ flex: 1, marginLeft: Spacing.md }}>
-              <Text style={styles.alertTitle}>
-                {orderStatusAlert.isCompleted ? '💰 Payment Collected' : orderStatusAlert.isServed ? '🛎️ Order Served' : orderStatusAlert.isReady ? '✅ Ready to Serve' : '👨‍🍳 Now Preparing'}
-              </Text>
-              <Text style={styles.alertSub}>{orderStatusAlert.label}</Text>
-            </View>
-            <MaterialIcons name="close" size={18} color={Colors.white} />
-          </TouchableOpacity>
-        )}
 
         {/* ── Hero Revenue Card ── */}
         <View style={styles.heroCard}>

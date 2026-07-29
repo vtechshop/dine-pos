@@ -3,7 +3,10 @@ import { Platform, Vibration } from 'react-native';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowBanner: true,
+    // Banner is suppressed in foreground — the in-app NotificationToast replaces it.
+    // shouldPlaySound=true still fires the audio so the user hears the alert.
+    // In background the OS always shows the banner regardless of this handler.
+    shouldShowBanner: false,
     shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
@@ -41,6 +44,25 @@ export const setupNotifications = async (): Promise<boolean> => {
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 150, 80, 150],
       lightColor: '#E8380D',
+      enableVibrate: true,
+    });
+  } catch {}
+
+  try {
+    await Notifications.setNotificationChannelAsync('status_alerts_v2', {
+      name: 'Order Status Alerts',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 150, 80, 150],
+      lightColor: '#E8380D',
+      enableVibrate: true,
+    });
+  } catch {}
+
+  try {
+    await Notifications.setNotificationChannelAsync('printer_alerts_v2', {
+      name: 'Printer Alerts',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 200, 100, 200],
       enableVibrate: true,
     });
   } catch {}

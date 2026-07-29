@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList,
-  ActivityIndicator, StatusBar, Vibration, ScrollView, Modal, Alert,
+  ActivityIndicator, StatusBar, ScrollView, Modal, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -14,8 +14,10 @@ import {
   getKitchenToken, getStoredHotelId, getSocketUrl,
   KitchenOrder,
 } from '../services/api';
-import { setupNotifications, notifyNewKitchenOrder } from '../utils/notifications';
+import { setupNotifications } from '../utils/notifications';
 import { usePrinterSocket } from '../hooks/usePrinterSocket';
+import { useGlobalToast } from '../context/GlobalToastContext';
+import { NotificationSvc, orderLabel } from '../services/NotificationService';
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import UnreadBadge from '../components/UnreadBadge';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
@@ -33,7 +35,9 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const { count: kitchenBadge, increment: incKitchenBadge, reset: resetKitchenBadge } = useBadgeCount(BADGE_KEYS.kitchenOrders);
   const seenOrderIds = useRef<Set<string>>(new Set());
 
-  usePrinterSocket('kitchen');
+  const { showToast } = useGlobalToast();
+
+  usePrinterSocket('kitchen', undefined, (msg) => showToast(NotificationSvc.printerError(msg), 8000));
 
   // Counter instead of boolean — ensures every new order triggers a re-render
   // even if the popup is already visible (boolean setTrue on true = no re-render)
@@ -114,7 +118,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         if (mountedRef.current) setSocketLost(true);
       });
 
-      const handleNewOrder = (data: { orderId?: string; _id?: string }) => {
+      const handleNewOrder = (data: { orderId?: string; _id?: string; tableNumber?: string; orderNumber?: string }) => {
         if (!mountedRef.current) return;
         const id = data.orderId || data._id || '';
         if (id && seenOrderIds.current.has(id)) return;
@@ -125,8 +129,8 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
           seenOrderIds.current.add(id);
         }
         incKitchenBadge();
-        Vibration.vibrate([0, 300, 150, 300, 150, 500]);
-        notifyNewKitchenOrder();
+        // Service handles vibration + push notification when background
+        NotificationSvc.handle('new_order', 'kitchen', id || Date.now().toString(), 'New Order in Kitchen!', `${orderLabel(data.tableNumber, data.orderNumber)} needs to be prepared`);
         setNewOrderCount(c => c + 1);
         loadOrders();
       };
@@ -136,11 +140,16 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       socket.on('new_delivery_order', handleNewOrder);
 
       // Status updated by admin or another KDS instance
-      socket.on('order_status_update', (data: { orderId: string; status: string }) => {
+      socket.on('order_status_update', (data: { orderId: string; status: string; tableNumber?: string; orderNumber?: string }) => {
         if (!mountedRef.current) return;
         if (data.status === 'ready' || data.status === 'served' ||
             data.status === 'completed' || data.status === 'cancelled') {
           setOrders(prev => prev.filter(o => o._id !== data.orderId));
+          if (data.status === 'cancelled') {
+            const label = orderLabel(data.tableNumber, data.orderNumber);
+            const ev = NotificationSvc.handle('order_cancelled', 'kitchen', data.orderId, 'Order Cancelled', `${label} was cancelled`);
+            if (ev) showToast(ev);
+          }
         } else {
           setOrders(prev => prev.map(o =>
             o._id === data.orderId ? { ...o, status: data.status as KitchenOrder['status'] } : o
