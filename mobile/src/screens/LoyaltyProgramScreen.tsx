@@ -16,18 +16,22 @@ const fmtDate = (s: string) =>
 const fmtTime = (s: string) =>
   new Date(s).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-const TX_ICONS: Record<LoyaltyTransaction['type'], string> = {
-  earn:   '+',
-  redeem: '−',
-  manual: '~',
-  expire: '−',
+const TX_ICONS: Record<string, string> = {
+  earn:         '+',
+  redeem:       '−',
+  adjust:       '~',
+  expire:       '−',
+  transfer_in:  '+',
+  transfer_out: '−',
 };
 
-const TX_COLORS: Record<LoyaltyTransaction['type'], string> = {
-  earn:   Colors.success,
-  redeem: Colors.info,
-  manual: Colors.warning,
-  expire: Colors.danger,
+const TX_COLORS: Record<string, string> = {
+  earn:         Colors.success,
+  redeem:       Colors.info,
+  adjust:       Colors.warning,
+  expire:       Colors.danger,
+  transfer_in:  Colors.success,
+  transfer_out: Colors.danger,
 };
 
 const LoyaltyProgramScreen: React.FC = () => {
@@ -159,7 +163,7 @@ const LoyaltyProgramScreen: React.FC = () => {
         minimumRedeemPoints: minPts,
         maximumRedeemPercent: maxPct,
         pointValueInPaisa: Math.round(ptVal * 100),
-        expiryDays: f.expiryDays ? parseInt(f.expiryDays) : null,
+        expiryDays: f.expiryDays ? parseInt(f.expiryDays) : 0,
         roundingRule: f.roundingRule,
         calculationBase: f.calculationBase,
       });
@@ -191,15 +195,16 @@ const LoyaltyProgramScreen: React.FC = () => {
   );
 
   const renderTx = ({ item }: { item: LoyaltyTransaction }) => {
-    const color = TX_COLORS[item.type];
+    const color = TX_COLORS[item.transactionType] ?? Colors.text;
+    const label = item.transactionType.replace(/_/g, ' ');
     return (
       <View style={styles.txRow}>
         <View style={[styles.txIcon, { backgroundColor: color + '20' }]}>
-          <Text style={[styles.txIconText, { color }]}>{TX_ICONS[item.type]}</Text>
+          <Text style={[styles.txIconText, { color }]}>{TX_ICONS[item.transactionType] ?? '·'}</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.txType}>{item.type.charAt(0).toUpperCase() + item.type.slice(1)}</Text>
-          {item.orderNumber ? <Text style={styles.txSub}>{item.orderNumber}</Text> : null}
+          <Text style={styles.txType}>{label.charAt(0).toUpperCase() + label.slice(1)}</Text>
+          {item.orderId ? <Text style={styles.txSub}>{item.orderId}</Text> : null}
           {item.remarks ? <Text style={styles.txSub}>{item.remarks}</Text> : null}
           <Text style={styles.txDate}>{fmtDate(item.createdAt)}  ·  {fmtTime(item.createdAt)}</Text>
         </View>
@@ -207,7 +212,7 @@ const LoyaltyProgramScreen: React.FC = () => {
           <Text style={[styles.txPoints, { color }]}>
             {item.points > 0 ? '+' : ''}{item.points}
           </Text>
-          <Text style={styles.txBalance}>{item.balance} pts</Text>
+          <Text style={styles.txBalance}>{item.balanceAfter} pts</Text>
         </View>
       </View>
     );

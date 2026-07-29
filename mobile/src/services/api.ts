@@ -1010,7 +1010,7 @@ export const getLoyaltyCustomers = (params?: { phone?: string; name?: string; pa
 export const getLoyaltyCustomerTransactions = (id: string, page = 1): Promise<{ customer: Pick<LoyaltyCustomer, 'customerId' | 'name' | 'phone' | 'loyaltyBalance'>; transactions: LoyaltyTransaction[]; total: number }> =>
   fetchAPI(`/loyalty/customers/${id}/transactions?page=${page}&limit=20`);
 
-export const adjustLoyaltyPoints = (id: string, points: number, remarks: string): Promise<{ customer: LoyaltyCustomer }> =>
+export const adjustLoyaltyPoints = (id: string, points: number, remarks: string): Promise<{ newBalance: number; customerId: string; customer: LoyaltyCustomer }> =>
   fetchAPI(`/loyalty/customers/${id}/adjust`, { method: 'POST', body: JSON.stringify({ points, remarks }) });
 
 // ==================== EXPENSES ====================

@@ -1,11 +1,13 @@
 import { runHourlyAggregation } from '../workers/hourlyAggregator';
 import { dispatchDailySnapshots } from '../workers/dailySnapshotBuilder';
 import { dispatchMorningBriefs } from '../workers/morningBriefWorker';
+import { runLoyaltyExpiry } from '../workers/loyaltyExpiryWorker';
 import { logger } from '../utils/logger';
 
 let hourlyTimer:  ReturnType<typeof setTimeout>  | null = null;
 let hourlyTick:   ReturnType<typeof setInterval> | null = null;
 let dailyTick:    ReturnType<typeof setInterval> | null = null;
+let expiryLastDate = -1;
 
 // ─── Hourly aggregation ───────────────────────────────────────────────────────
 // Fires at :05 past every UTC hour (to let the last few stragglers land),
@@ -46,6 +48,7 @@ function scheduleDailyDispatch(): void {
   dailyTick = setInterval(() => {
     const now         = new Date();
     const minuteOfDay = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const todayDate   = now.getUTCDate();
 
     if (minuteOfDay < 240) {
       // Daily snapshot window
@@ -58,7 +61,14 @@ function scheduleDailyDispatch(): void {
         logger.error('[scheduler] morning brief error', { err: String(err) }),
       );
     }
-    // minuteOfDay ≥ 360: outside both windows — do nothing
+
+    // Loyalty expiry sweep — UTC 01:00 once per calendar day
+    if (now.getUTCHours() === 1 && todayDate !== expiryLastDate) {
+      expiryLastDate = todayDate;
+      void runLoyaltyExpiry().catch((err) =>
+        logger.error('[scheduler] loyalty expiry error', { err: String(err) }),
+      );
+    }
   }, 60 * 1000);
 }
 
@@ -76,7 +86,8 @@ export function startScheduler(): void {
 
 export function stopScheduler(): void {
   logger.info('[scheduler] stopping');
-  if (hourlyTimer) { clearTimeout(hourlyTimer);   hourlyTimer = null; }
-  if (hourlyTick)  { clearInterval(hourlyTick);   hourlyTick  = null; }
-  if (dailyTick)   { clearInterval(dailyTick);    dailyTick   = null; }
+  if (hourlyTimer) { clearTimeout(hourlyTimer);   hourlyTimer  = null; }
+  if (hourlyTick)  { clearInterval(hourlyTick);   hourlyTick   = null; }
+  if (dailyTick)   { clearInterval(dailyTick);    dailyTick    = null; }
+  expiryLastDate = -1;
 }

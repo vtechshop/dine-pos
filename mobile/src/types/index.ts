@@ -278,11 +278,12 @@ export interface LoyaltyCustomer {
 
 export interface LoyaltyTransaction {
   _id: string;
-  type: 'earn' | 'redeem' | 'manual' | 'expire';
+  transactionType: 'earn' | 'redeem' | 'adjust' | 'expire' | 'transfer_in' | 'transfer_out';
   points: number;
-  balance: number;
-  orderNumber?: string;
+  balanceAfter: number;
+  orderId?: string;
   remarks?: string;
+  expiresAt?: string | null;
   createdAt: string;
 }
 

@@ -155,10 +155,10 @@ const SettingsSchema: Schema = new Schema(
     // ── Loyalty Settings (Architecture v1.1) ─────────────────────────────
     loyaltySettings: {
       rewardName:               { type: String, default: 'Points', maxlength: 30 },
-      pointsPerHundredRupees:   { type: Number, default: 10, min: 0 },
+      pointsPerHundredRupees:   { type: Number, default: 10, min: 0, max: 1000 },
       minimumRedeemPoints:      { type: Number, default: 100, min: 0 },
       maximumRedeemPercent:     { type: Number, default: 10, min: 0, max: 100 },
-      pointValueInPaisa:        { type: Number, default: 100, min: 1 },
+      pointValueInPaisa:        { type: Number, default: 100, min: 1, max: 10000 },
       expiryDays:               { type: Number, default: 0, min: 0 },
       roundingRule:             { type: String, enum: ['floor', 'round', 'ceil'], default: 'floor' },
       calculationBase:          { type: String, enum: ['before_gst', 'after_gst'], default: 'before_gst' },

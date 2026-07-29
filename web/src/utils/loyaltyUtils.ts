@@ -26,11 +26,13 @@ export function getTier(lifetimeSpend: number): TierConfig {
 
 export function isBirthdayToday(birthday: string | null | undefined): boolean {
   if (!birthday) return false;
-  try {
-    const bd = new Date(birthday);
-    const now = new Date();
-    return bd.getMonth() === now.getMonth() && bd.getDate() === now.getDate();
-  } catch { return false; }
+  const parts = birthday.split('-');
+  if (parts.length !== 2) return false;
+  const mm = parseInt(parts[0]!, 10);
+  const dd = parseInt(parts[1]!, 10);
+  if (isNaN(mm) || isNaN(dd)) return false;
+  const now = new Date();
+  return (mm - 1) === now.getMonth() && dd === now.getDate();
 }
 
 export function nextTierInfo(lifetimeSpend: number): { nextTier: LoyaltyTier; remaining: number } | null {

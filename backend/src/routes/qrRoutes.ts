@@ -383,7 +383,7 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       // Validate customer info per customerIdentification feature flag
       const identMode  = features.customerIdentification;
       const cleanName  = String(name  ?? '').trim().slice(0, 100);
-      const cleanPhone = String(phone ?? '').trim().slice(0, 20);
+      let   cleanPhone = String(phone ?? '').trim().slice(0, 20);
 
       if (identMode === 'name_only' && !cleanName) {
         res.status(400).json({
@@ -410,6 +410,23 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
             message:       'Please enter your mobile number to place an order',
             requiresName:  true,
             requiresPhone: true,
+          });
+          return;
+        }
+        // Normalize and validate phone to E.164 before CustomerProfile lookup/create
+        const digits = cleanPhone.replace(/\D/g, '');
+        if (digits.length === 10) {
+          cleanPhone = `+91${digits}`;
+        } else if (digits.length === 12 && digits.startsWith('91')) {
+          cleanPhone = `+${digits}`;
+        } else if (digits.length === 11 && digits.startsWith('0')) {
+          cleanPhone = `+91${digits.slice(1)}`;
+        } else if (cleanPhone.startsWith('+') && digits.length >= 10) {
+          cleanPhone = `+${digits}`;
+        } else {
+          res.status(400).json({
+            code:    'INVALID_PHONE',
+            message: 'Please enter a valid 10-digit mobile number',
           });
           return;
         }

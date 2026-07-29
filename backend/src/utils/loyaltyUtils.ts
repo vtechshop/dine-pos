@@ -185,7 +185,7 @@ export async function adjustPoints(
   remarks: string,
   createdBy: string,
   config: LoyaltyConfig,
-): Promise<{ newBalance: number }> {
+): Promise<{ newBalance: number; updatedDoc: any }> {
   if (delta === 0) throw new Error('Adjustment cannot be zero');
 
   let updated: any;
@@ -215,5 +215,5 @@ export async function adjustPoints(
     remarks:         remarks.slice(0, 500),
   });
 
-  return { newBalance: updated.loyaltyBalance };
+  return { newBalance: updated.loyaltyBalance, updatedDoc: updated };
 }

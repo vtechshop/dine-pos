@@ -10,12 +10,14 @@
  *   GET  /config                              — hotel's loyalty settings
  *   PUT  /config                              — update loyalty settings (admin)
  *   GET  /customers?phone=&name=&page=&limit= — search customers
+ *   POST /customers                           — create a new customer
  *   GET  /customers/:customerId               — profile + balance (CUST-XXX or ObjectId)
  *   GET  /customers/:customerId/transactions  — paginated point history
  *   POST /customers/:customerId/adjust        — manual ±point adjustment (admin)
  */
 
 import { Router, Response } from 'express';
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 import {
   authMiddleware,
@@ -29,6 +31,21 @@ import Settings from '../models/Settings';
 import CustomerProfile from '../models/CustomerProfile';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
 import { getLoyaltyConfig, adjustPoints } from '../utils/loyaltyUtils';
+
+function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 10) return `+91${digits}`;
+  if (digits.length === 12 && digits.startsWith('91')) return `+${digits}`;
+  if (digits.length === 11 && digits.startsWith('0')) return `+91${digits.slice(1)}`;
+  if (raw.startsWith('+') && digits.length >= 10) return `+${digits}`;
+  return null;
+}
+
+async function generateCustomerId(hotelObjId: mongoose.Types.ObjectId): Promise<string> {
+  const seq  = await CustomerProfile.countDocuments({ hotelId: hotelObjId }) + 1;
+  const rand = crypto.randomBytes(2).toString('hex').toUpperCase();
+  return `CUST-${rand}-${String(seq).padStart(4, '0')}`;
+}
 
 const router = Router();
 
@@ -93,7 +110,7 @@ router.put('/config', requireAdmin, async (req: AuthRequest, res: Response): Pro
     const settings = await Settings.findOneAndUpdate(
       { hotelId: new mongoose.Types.ObjectId(req.hotelId) },
       { $set: update },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true },
     );
 
     res.json({ loyaltySettings: settings?.loyaltySettings });
@@ -120,7 +137,8 @@ router.get('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: Re
     };
 
     if (phone) {
-      filter.phone = { $regex: String(phone).trim(), $options: 'i' };
+      const escaped = String(phone).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.phone = { $regex: escaped, $options: 'i' };
     } else if (name) {
       filter.$text = { $search: String(name).trim() };
     }
@@ -137,6 +155,67 @@ router.get('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: Re
     res.json({ customers, total, page: pageNum, limit: limitNum });
   } catch (err) {
     sendError(res, 500, 'Failed to search customers', err);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// POST /api/loyalty/customers
+// Create a new loyalty customer for this hotel.
+// RBAC: cashier | admin
+// ────────────────────────────────────────────────────────────────────────────────
+router.post('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { name, phone, email, birthday } = req.body as {
+      name?: string; phone?: string; email?: string; birthday?: string;
+    };
+
+    const cleanName = String(name ?? '').trim().slice(0, 100);
+    if (!cleanName) {
+      res.status(400).json({ message: 'name is required' });
+      return;
+    }
+
+    const cleanPhone = String(phone ?? '').trim();
+    if (!cleanPhone) {
+      res.status(400).json({ message: 'phone is required' });
+      return;
+    }
+    const normalizedPhone = normalizePhone(cleanPhone);
+    if (!normalizedPhone) {
+      res.status(400).json({ message: 'Invalid phone number — must be a 10-digit Indian mobile number' });
+      return;
+    }
+
+    const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
+
+    const duplicate = await CustomerProfile.findOne({ hotelId: hotelObjId, phone: normalizedPhone });
+    if (duplicate) {
+      res.status(409).json({ message: 'A customer with this phone number already exists', customerId: duplicate.customerId });
+      return;
+    }
+
+    const customerId = await generateCustomerId(hotelObjId);
+
+    const customer = await CustomerProfile.create({
+      hotelId:      hotelObjId,
+      customerId,
+      name:         cleanName,
+      phone:        normalizedPhone,
+      email:        email ? String(email).trim().slice(0, 200) : undefined,
+      birthday:     birthday ? String(birthday).trim().slice(0, 5) : undefined,
+      loyaltyBalance: 0,
+      lifetimeSpend:  0,
+      visitCount:     0,
+      status:         'active',
+    });
+
+    res.status(201).json({ customer });
+  } catch (err: any) {
+    if (err.code === 11000) {
+      res.status(409).json({ message: 'A customer with this phone number already exists' });
+      return;
+    }
+    sendError(res, 500, 'Failed to create customer', err);
   }
 });
 
@@ -238,9 +317,10 @@ router.post('/customers/:customerId/adjust', requireAdmin, async (req: AuthReque
     }
 
     const config    = await getLoyaltyConfig(req.hotelId!);
-    const createdBy = `admin:${req.hotelId}`;
+    const adminId   = (req as any).userId ?? (req as any).adminId ?? req.hotelId;
+    const createdBy = `admin:${adminId}`;
 
-    const { newBalance } = await adjustPoints(
+    const { newBalance, updatedDoc } = await adjustPoints(
       customer._id as mongoose.Types.ObjectId,
       req.hotelId!,
       Math.round(points),
@@ -249,7 +329,7 @@ router.post('/customers/:customerId/adjust', requireAdmin, async (req: AuthReque
       config,
     );
 
-    res.json({ newBalance, customerId: customer.customerId });
+    res.json({ newBalance, customerId: customer.customerId, customer: updatedDoc });
   } catch (err: any) {
     if (err.message?.startsWith('Insufficient')) {
       res.status(400).json({ message: err.message });

@@ -14,6 +14,7 @@ import TableSession from '../models/TableSession';
 import Guest from '../models/Guest';
 import Order from '../models/Order';
 import CustomerProfile from '../models/CustomerProfile';
+import LoyaltyTransaction from '../models/LoyaltyTransaction';
 import { guestLabel } from '../utils/guestLabel';
 import { getLoyaltyConfig, calculateEarnedPoints, calculateMaxRedeemablePoints, earnPoints, redeemPoints as redeemLoyaltyPts } from '../utils/loyaltyUtils';
 import { scheduleReceiptPrint } from '../utils/printUtils';
@@ -850,6 +851,71 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
       return;
     }
 
+    // Reverse loyalty transactions before clearing the guest's billing fields
+    if (guest.customerId) {
+      try {
+        const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+        if (loyaltyCfg.enabled) {
+          const hotelObjId = new mongoose.Types.ObjectId(req.hotelId!);
+
+          // 1. Restore redeemed points
+          const redeemed = (guest as any).loyaltyPointsRedeemed as number | undefined;
+          if (redeemed && redeemed > 0) {
+            const afterRestore = await CustomerProfile.findByIdAndUpdate(
+              guest.customerId,
+              { $inc: { loyaltyBalance: redeemed } },
+              { new: true },
+            );
+            if (afterRestore) {
+              await LoyaltyTransaction.create({
+                customerId:      guest.customerId,
+                hotelId:         hotelObjId,
+                guestId:         guest._id,
+                transactionType: 'adjust',
+                points:          redeemed,
+                balanceAfter:    afterRestore.loyaltyBalance,
+                createdBy:       `admin:${req.hotelId}`,
+                remarks:         `Reversal: guest reopened — restored ${redeemed} redeemed points`,
+              });
+            }
+          }
+
+          // 2. Reverse earned points (find most recent earn transaction for this guest)
+          const earnTx = await LoyaltyTransaction.findOne({
+            guestId:         guest._id,
+            hotelId:         hotelObjId,
+            transactionType: 'earn',
+          }).sort({ createdAt: -1 });
+
+          if (earnTx && earnTx.points > 0) {
+            const afterDeduct = await CustomerProfile.findOneAndUpdate(
+              { _id: guest.customerId, loyaltyBalance: { $gte: earnTx.points } },
+              { $inc: { loyaltyBalance: -earnTx.points } },
+              { new: true },
+            );
+            if (afterDeduct) {
+              await LoyaltyTransaction.create({
+                customerId:      guest.customerId,
+                hotelId:         hotelObjId,
+                guestId:         guest._id,
+                transactionType: 'adjust',
+                points:          -earnTx.points,
+                balanceAfter:    afterDeduct.loyaltyBalance,
+                createdBy:       `admin:${req.hotelId}`,
+                remarks:         `Reversal: guest reopened — reversed ${earnTx.points} earned points`,
+              });
+            }
+          }
+        }
+      } catch (loyaltyErr: any) {
+        logger.warn('Loyalty reversal failed during guest reopen', {
+          hotelId: req.hotelId,
+          guestId: String(guest._id),
+          error:   loyaltyErr?.message,
+        });
+      }
+    }
+
     const updated = await Guest.findByIdAndUpdate(
       guest._id,
       {
@@ -863,6 +929,8 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
           'splitDetails.card': 0,
           qrSessionToken: null,
           qrTokenExpiresAt: null,
+          loyaltyPointsRedeemed: 0,
+          loyaltyDiscountAmount: 0,
         },
       },
       { new: true }

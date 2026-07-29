@@ -420,7 +420,15 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
               activeBeforeBill
                 .filter((g) => g.customerId)
                 .map((g) => (async () => {
-                  const pts = calculateEarnedPoints(g.totalAmount, loyaltyCfg);
+                  let earnBase = g.totalAmount;
+                  if (loyaltyCfg.calculationBase === 'before_gst') {
+                    const [sub] = await Order.aggregate([
+                      { $match: { sessionId: session._id, guestId: g._id, status: { $ne: 'cancelled' } } },
+                      { $group: { _id: null, s: { $sum: '$subtotal' } } },
+                    ]);
+                    earnBase = (sub as any)?.s ?? g.totalAmount;
+                  }
+                  const pts = calculateEarnedPoints(earnBase, loyaltyCfg);
                   if (pts > 0) {
                     await earnPoints(
                       g.customerId as mongoose.Types.ObjectId,
