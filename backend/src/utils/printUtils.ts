@@ -157,7 +157,7 @@ export async function scheduleKOTPrint(
   const s           = settings as any;
   const mode        = s?.printerMode           ?? 'single';
   const kotAddress  = s?.kitchenPrinterAddress ?? '';
-  const kotAutoPrint = s?.kotAutoPrint         ?? false;
+  const kotAutoPrint = s?.kotAutoPrint         ?? true;
 
   const payload: KOTPayload = {
     templateType: 'kot',
@@ -349,10 +349,12 @@ export async function scheduleReceiptPrint(
     createdAt:             new Date().toISOString(),
   };
 
+  const printerTarget: 'kitchen' | 'cashier' = mode === 'dual' ? 'cashier' : 'kitchen';
+
   await dispatchPrintJob(
     hotelId,
     'receipt',
-    'cashier',
+    printerTarget,
     printerAddress,
     mode,
     true,

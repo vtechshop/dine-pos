@@ -147,7 +147,7 @@ const SettingsSchema: Schema = new Schema(
     printerMode:            { type: String, enum: ['single', 'dual'], default: 'single' },
     kitchenPrinterAddress:  { type: String, default: '' },
     cashierPrinterAddress:  { type: String, default: '' },
-    kotAutoPrint:           { type: Boolean, default: false },
+    kotAutoPrint:           { type: Boolean, default: true },
 
     // ── QR Session Timeout (Architecture v1.1) ────────────────────────────
     qrGuestTimeoutMinutes:  { type: Number, default: 15, min: 1, max: 60 },

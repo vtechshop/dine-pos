@@ -19,6 +19,7 @@ import { logger } from './utils/logger';
 import ChatMessage from './models/ChatMessage';
 import PrinterDevice from './models/PrinterDevice';
 import PrintJob from './models/PrintJob';
+import Settings from './models/Settings';
 
 // Route imports
 import categoryRoutes from './routes/categoryRoutes';
@@ -807,6 +808,15 @@ process.on('SIGINT', shutdown);
 (async () => {
   try {
     await connectDB();
+
+    // Correct legacy kotAutoPrint=false documents written when model default was wrong.
+    // Web Settings UI has always shown true; this fixes hotels that never saved settings.
+    try {
+      await Settings.updateMany({ kotAutoPrint: { $ne: true } }, { $set: { kotAutoPrint: true } });
+    } catch (e) {
+      logger.warn('kotAutoPrint migration failed (non-fatal)', { err: String(e) });
+    }
+
     await connectRedis();
 
     // Attach Redis adapter to Socket.IO if Redis is available.
