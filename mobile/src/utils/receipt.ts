@@ -57,7 +57,7 @@ export const generateReceiptHTML = (order: Order, settings: Settings): string =>
         <td style="text-align:left; padding:3px 2px;">${escHtml(item.productName)}</td>
         <td style="text-align:center; padding:3px 2px;">${item.quantity}</td>
         <td style="text-align:right; padding:3px 2px;">${settings.currencySymbol}${item.price.toFixed(2)}</td>
-        <td style="text-align:right; padding:3px 2px;">${settings.currencySymbol}${(item.price * item.quantity).toFixed(2)}</td>
+        <td style="text-align:right; padding:3px 2px;">${settings.currencySymbol}${(item.total ?? item.price * item.quantity).toFixed(2)}</td>
       </tr>`
     )
     .join('');

@@ -2,7 +2,7 @@
 export const API_BASE_URL = 'https://dine-pos.onrender.com/api';
 
 // Must match versionName in android/app/build.gradle
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.2';
 export const UPI_ID = '';
 export const UPI_NAME = 'Dine POS';
 

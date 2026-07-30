@@ -24,7 +24,7 @@ Notifications.setNotificationHandler({
 
 // ChannelAwareTriggerInput — immediate delivery, no AlarmManager required
 const orderTrigger = (): Notifications.ChannelAwareTriggerInput => ({
-  channelId: 'order_alerts_v2',
+  channelId: 'order_alerts_v3',
 });
 
 const chatTrigger = (): Notifications.ChannelAwareTriggerInput => ({
@@ -61,12 +61,13 @@ export const setupNotifications = async (): Promise<boolean> => {
   } catch {}
 
   try {
-    await Notifications.setNotificationChannelAsync('status_alerts_v2', {
+    await Notifications.setNotificationChannelAsync('status_alerts_v3', {
       name: 'Order Status Alerts',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 150, 80, 150],
       lightColor: '#E8380D',
       enableVibrate: true,
+      sound: 'order_alert.wav',
     });
   } catch {}
 

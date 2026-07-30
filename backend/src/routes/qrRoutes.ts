@@ -44,6 +44,7 @@ import { guestLabel } from '../utils/guestLabel';
 import { findOrCreateOpenSession } from '../utils/sessionUtils';
 import { makeRateLimiter } from '../utils/rateLimiter';
 import { scheduleKOTPrint } from '../utils/printUtils';
+import { applyIngredientStockChange } from '../utils/stockUtils';
 import { io } from '../server';
 
 const router = Router();
@@ -316,6 +317,17 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       return;
     }
 
+    // Idempotency guard — client sends a unique clientOrderId per order attempt.
+    // If a network retry arrives with the same ID, return the already-saved order.
+    const clientOrderId = typeof req.body.clientOrderId === 'string' ? req.body.clientOrderId.slice(0, 64) : null;
+    if (clientOrderId) {
+      const dup = await Order.findOne({ offlineId: clientOrderId, hotelId }).lean();
+      if (dup) {
+        res.status(200).json({ guestToken: req.body.guestToken ?? '', order: dup });
+        return;
+      }
+    }
+
     // ── Hotel + feature validation ────────────────────────────────────────────
     const features = await validateHotelForQR(res, hotelId, true);
     if (!features) return;
@@ -544,10 +556,18 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     );
     const orderNumber = `ORD-${dateStr}-${String(counter!.seq).padStart(3, '0')}`;
 
-    // ── Create order with full session/guest linkage ──────────────────────────
-    const order = await Order.create({
+    // Per-guest order cap — prevent runaway ordering / DoS on the public endpoint
+    const guestOrderCount = await Order.countDocuments({ guestId: guest._id, hotelId });
+    if (guestOrderCount >= 20) {
+      res.status(429).json({ code: 'ORDER_LIMIT', message: 'Maximum orders per session reached. Please ask staff for assistance.' });
+      return;
+    }
+
+    // ── Create order + deduct stock atomically ────────────────────────────────
+    const orderDoc = {
       hotelId,
       orderNumber,
+      offlineId:      clientOrderId ?? null,
       items:          validatedItems,
       subtotal:       +subtotal.toFixed(2),
       taxTotal:       +taxTotal.toFixed(2),
@@ -560,7 +580,28 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       paymentMethod:  'cash',
       sessionId:      guest.sessionId,
       guestId:        guest._id,
-    });
+    };
+    const stockItems = validatedItems.filter((i: any) => i.product);
+    const stockBulkOps = stockItems.map((item: any) => ({
+      updateOne: {
+        filter: { _id: item.product, hotelId, stock: { $gt: 0 } },
+        update: [
+          { $set: { stock: { $max: [{ $subtract: ['$stock', item.quantity] }, 0] } } },
+          { $set: { isAvailable: { $gt: ['$stock', 0] } } },
+        ],
+      },
+    }));
+    let order: any;
+    const qrTx = await mongoose.startSession();
+    try {
+      await qrTx.withTransaction(async () => {
+        [order] = await Order.create([orderDoc], { session: qrTx });
+        if (stockBulkOps.length > 0) await Product.bulkWrite(stockBulkOps as any, { session: qrTx });
+        await applyIngredientStockChange(validatedItems, String(hotelId), -1, qrTx);
+      });
+    } finally {
+      await qrTx.endSession();
+    }
 
     // ── Phase 7: Fire-and-forget KOT print ───────────────────────────────────
     scheduleKOTPrint(String(hotelId), {
@@ -743,7 +784,7 @@ router.post('/waiter-call', qrWriteLimiter, async (req: Request, res: Response):
     };
 
     try {
-      io.to(cleanTable).emit('new_message', payload);
+      io.to(`hotel_${hotelId}_table_${cleanTable}`).emit('new_message', payload);
       io.to(`admin_${hotelId}`).emit('new_message', payload);
     } catch (emitErr: any) {
       logger.warn('Waiter call socket emit failed', { hotelId, tableNumber: cleanTable, error: emitErr?.message });

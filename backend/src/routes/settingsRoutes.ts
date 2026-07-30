@@ -11,6 +11,14 @@ const router = Router();
 
 router.use(authMiddleware);
 
+// Fields that must never be returned to non-admin roles (kitchen, cashier, waiter).
+// kitchenPin is a bcrypt hash — knowing it enables offline brute-force of the 4-digit PIN.
+// Bank/PAN/GST fields are sensitive business data with no operational need for staff devices.
+const ADMIN_ONLY_FIELDS = new Set([
+  'kitchenPin', 'bankAccountNumber', 'bankIfscCode', 'bankAccountHolder',
+  'panNumber', 'fssaiNumber', 'gstNumber', 'upiId',
+]);
+
 // GET settings for this hotel — includes premium status from Hotel record
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
@@ -19,7 +27,12 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       Settings.findOne({ hotelId: req.hotelId }),
       Hotel.findById(req.hotelId).select('isPremium premiumPlan premiumExpiry trialEndsAt features'),
     ]);
-    const settings = settingsDoc ?? await Settings.create({ hotelId: req.hotelId });
+    // Atomic upsert prevents the E11000 duplicate-key race on first-time hotel setup
+    const settings = settingsDoc ?? await Settings.findOneAndUpdate(
+      { hotelId: req.hotelId },
+      { $setOnInsert: { hotelId: req.hotelId } },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
 
     const now = new Date();
     const isPremiumActive =
@@ -30,14 +43,21 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       hotel?.trialEndsAt != null &&
       hotel.trialEndsAt > now;
 
-    res.json({
-      ...settings.toObject(),
+    const payload: Record<string, any> = {
+      ...settings!.toObject(),
       isPremium: isPremiumActive || isTrialActive || false,
       premiumPlan: hotel?.premiumPlan || 'free',
       premiumExpiry: hotel?.premiumExpiry || null,
       trialEndsAt: hotel?.trialEndsAt || null,
       features: hotel?.features ?? {},
-    });
+    };
+
+    // Strip sensitive fields for non-admin callers (kitchen, cashier, waiter tablets)
+    if (req.role !== 'admin') {
+      for (const field of ADMIN_ONLY_FIELDS) delete payload[field];
+    }
+
+    res.json(payload);
   } catch (error) {
     sendError(res, 500, 'Server error', error);
   }

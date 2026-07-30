@@ -41,3 +41,8 @@ web-build/
 
 # Google Play key (sensitive)
 mobile/google-play-key.json
+
+# Android signing credentials — never commit these
+mobile/android/keystore.properties
+mobile/android/*.keystore
+mobile/android/app/*.keystore

@@ -35,7 +35,7 @@ const CFG: Record<NotifEventType, EventCfg> = {
   },
   order_preparing: {
     icon: 'local-fire-department', severity: 'info',
-    channel: 'status_alerts_v2', vibrate: [0, 150],
+    channel: 'status_alerts_v3', vibrate: [0, 150],
     roles: ['admin', 'cashier'],
   },
   order_ready: {
@@ -45,12 +45,12 @@ const CFG: Record<NotifEventType, EventCfg> = {
   },
   order_served: {
     icon: 'room-service', severity: 'success',
-    channel: 'status_alerts_v2', vibrate: [0, 150],
+    channel: 'status_alerts_v3', vibrate: [0, 150],
     roles: ['admin', 'cashier'],
   },
   order_completed: {
     icon: 'point-of-sale', severity: 'success',
-    channel: 'status_alerts_v2', vibrate: [0, 150],
+    channel: 'status_alerts_v3', vibrate: [0, 150],
     roles: ['admin'],
   },
   order_cancelled: {

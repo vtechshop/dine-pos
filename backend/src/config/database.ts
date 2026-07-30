@@ -3,8 +3,12 @@ import { logger } from '../utils/logger';
 
 const connectDB = async (): Promise<void> => {
   try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/hotelbillingpos';
-    await mongoose.connect(mongoURI, {
+    const mongoURI = process.env.MONGODB_URI;
+    if (!mongoURI) {
+      logger.error('MONGODB_URI environment variable is not set');
+      process.exit(1);
+    }
+    await mongoose.connect(mongoURI!, {
       // Node.js is single-threaded; the event loop processes one callback at a
       // time regardless of pool size. 20 connections saturate the async I/O
       // pipeline for a single process while leaving Atlas headroom for other

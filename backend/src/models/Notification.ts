@@ -28,6 +28,8 @@ const NotificationSchema: Schema = new Schema(
 );
 
 NotificationSchema.index({ isActive: 1, createdAt: -1 });
-NotificationSchema.index({ expiresAt: 1 });
+// TTL index: MongoDB auto-deletes expired notifications. The sparse option means
+// documents with expiresAt: null are never evaluated by the TTL daemon.
+NotificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0, sparse: true });
 
 export default mongoose.model<INotification>('Notification', NotificationSchema);

@@ -52,7 +52,7 @@ export interface ISettings extends Document {
 
 const SettingsSchema: Schema = new Schema(
   {
-    hotelId: { type: Schema.Types.ObjectId, ref: 'Hotel', unique: true, sparse: true },
+    hotelId: { type: Schema.Types.ObjectId, ref: 'Hotel', required: true, unique: true, sparse: true },
     hotelName: {
       type: String,
       default: 'My Hotel',

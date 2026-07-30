@@ -11,27 +11,41 @@ const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
 
+// IST = UTC+05:30. Convert a YYYY-MM-DD string to the correct UTC Date for that
+// day's start (00:00:00 IST) or end (23:59:59.999 IST) so MongoDB $match
+// boundaries land on the right day regardless of server timezone.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+function istDay(isoDate: string, endOfDay = false): Date {
+  return new Date(isoDate + (endOfDay ? 'T23:59:59.999+05:30' : 'T00:00:00+05:30'));
+}
+function nowISTDateStr(): string {
+  const ist = new Date(Date.now() + IST_OFFSET_MS);
+  return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-${String(ist.getUTCDate()).padStart(2, '0')}`;
+}
+function thisMonthStartISTStr(): string {
+  const ist = new Date(Date.now() + IST_OFFSET_MS);
+  return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-01`;
+}
+
 // GET /api/reports/gst?from=YYYY-MM-DD&to=YYYY-MM-DD
-// Groups non-cancelled order items by tax rate, returns CGST/SGST breakdown
-router.get('/gst', authMiddleware, async (req: AuthRequest, res: Response) => {
+// Groups completed order items by tax rate, returns CGST/SGST breakdown
+router.get('/gst', async (req: AuthRequest, res: Response) => {
   try {
     const { from, to } = req.query as { from?: string; to?: string };
     if (from && !isValidDateParam(from)) return res.status(400).json({ message: 'Invalid from date. Use YYYY-MM-DD.' });
     if (to   && !isValidDateParam(to))   return res.status(400).json({ message: 'Invalid to date. Use YYYY-MM-DD.' });
     const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
 
-    const today = new Date();
-    const fromDate = from ? new Date(from) : new Date(today.getFullYear(), today.getMonth(), 1);
-    fromDate.setHours(0, 0, 0, 0);
-
-    const toDate = to ? new Date(to) : new Date();
-    toDate.setHours(23, 59, 59, 999);
+    const fromStr  = from || thisMonthStartISTStr();
+    const toStr    = to   || nowISTDateStr();
+    const fromDate = istDay(fromStr, false);
+    const toDate   = istDay(toStr, true);
 
     const rows = await Order.aggregate([
       {
         $match: {
           hotelId,
-          status: { $ne: 'cancelled' },
+          status: 'completed',
           createdAt: { $gte: fromDate, $lte: toDate },
         },
       },
@@ -57,9 +71,10 @@ router.get('/gst', authMiddleware, async (req: AuthRequest, res: Response) => {
       totalItems:   r.totalItems as number,
     }));
 
+    res.setHeader('Cache-Control', 'no-store');
     res.json({
-      from:              fromDate.toISOString().slice(0, 10),
-      to:                toDate.toISOString().slice(0, 10),
+      from:              fromStr,
+      to:                toStr,
       rows:              result,
       totalTaxableValue: result.reduce((s, r) => s + r.taxableValue, 0),
       totalCGST:         result.reduce((s, r) => s + r.cgst, 0),
@@ -75,26 +90,25 @@ router.get('/gst', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 // GET /api/reports/tally?from=YYYY-MM-DD&to=YYYY-MM-DD
 // Order-level CSV export in Tally-compatible format (DD-MM-YYYY dates, CGST/SGST split)
-router.get('/tally', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/tally', async (req: AuthRequest, res: Response) => {
   try {
     const { from, to } = req.query as { from?: string; to?: string };
     if (from && !isValidDateParam(from)) return res.status(400).json({ message: 'Invalid from date. Use YYYY-MM-DD.' });
     if (to   && !isValidDateParam(to))   return res.status(400).json({ message: 'Invalid to date. Use YYYY-MM-DD.' });
     const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
 
-    const today = new Date();
-    let fromDate = from ? new Date(from) : new Date(today.getFullYear(), today.getMonth(), 1);
-    fromDate.setHours(0, 0, 0, 0);
-    const toDate = to ? new Date(to) : new Date();
-    toDate.setHours(23, 59, 59, 999);
+    const toStr    = to   || nowISTDateStr();
+    const toDate   = istDay(toStr, true);
 
     // Cap range at 90 days to prevent loading years of orders into heap
-    const maxFrom = new Date(toDate);
-    maxFrom.setDate(maxFrom.getDate() - 90);
-    if (fromDate < maxFrom) fromDate = maxFrom;
+    const maxFromMs  = toDate.getTime() - 90 * 24 * 60 * 60 * 1000;
+    const defaultStr = thisMonthStartISTStr();
+    const fromStr    = from || defaultStr;
+    let fromDate     = istDay(fromStr, false);
+    if (fromDate.getTime() < maxFromMs) fromDate = new Date(maxFromMs);
 
     const orders = await Order.find(
-      { hotelId, status: { $ne: 'cancelled' }, createdAt: { $gte: fromDate, $lte: toDate } },
+      { hotelId, status: 'completed', createdAt: { $gte: fromDate, $lte: toDate } },
       { orderNumber: 1, createdAt: 1, customerName: 1, tableNumber: 1, paymentMethod: 1,
         subtotal: 1, taxTotal: 1, discountAmount: 1, grandTotal: 1, orderSource: 1 },
     ).sort({ createdAt: 1 }).lean();
@@ -117,9 +131,10 @@ router.get('/tally', authMiddleware, async (req: AuthRequest, res: Response) => 
       narration:   `${o.orderSource || 'dine-in'} - Table ${o.tableNumber || 'Walk-in'}`,
     }));
 
+    res.setHeader('Cache-Control', 'no-store');
     res.json({
-      from:         fromDate.toISOString().slice(0, 10),
-      to:           toDate.toISOString().slice(0, 10),
+      from:         fromStr,
+      to:           toStr,
       rows,
       totalOrders:  rows.length,
       totalRevenue: +rows.reduce((s, r) => s + r.grandTotal, 0).toFixed(2),
@@ -135,18 +150,17 @@ router.get('/tally', authMiddleware, async (req: AuthRequest, res: Response) => 
 // Generates official GSTR-1 JSON in portal-upload format (GST3.1.7)
 // B2B is empty (no customer GSTIN stored); B2CS covers all walk-in / dine-in sales
 // HSN uses product.hsnCode; items without one fall under SAC 9963 (restaurant services)
-router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/gstr1-json', async (req: AuthRequest, res: Response) => {
   try {
     const { from, to } = req.query as { from?: string; to?: string };
     if (from && !isValidDateParam(from)) return res.status(400).json({ message: 'Invalid from date. Use YYYY-MM-DD.' });
     if (to   && !isValidDateParam(to))   return res.status(400).json({ message: 'Invalid to date. Use YYYY-MM-DD.' });
     const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
 
-    const today = new Date();
-    const fromDate = from ? new Date(from) : new Date(today.getFullYear(), today.getMonth(), 1);
-    fromDate.setHours(0, 0, 0, 0);
-    const toDate = to ? new Date(to) : new Date();
-    toDate.setHours(23, 59, 59, 999);
+    const fromStr  = from || thisMonthStartISTStr();
+    const toStr    = to   || nowISTDateStr();
+    const fromDate = istDay(fromStr, false);
+    const toDate   = istDay(toStr, true);
 
     // Cap at 92 days (~one quarter) to avoid heap pressure on large datasets
     const maxMs = 92 * 24 * 60 * 60 * 1000;
@@ -157,13 +171,14 @@ router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response
     const settings = await Settings.findOne({ hotelId: req.hotelId }).maxTimeMS(10_000);
     const gstin    = (settings?.gstNumber || '').toUpperCase().trim();
     const stateCode = gstin.length >= 2 ? gstin.substring(0, 2) : '33';
-    const fp = `${String(fromDate.getMonth() + 1).padStart(2, '0')}${fromDate.getFullYear()}`;
+    // fp (filing period) uses the IST month/year from the fromStr date string
+    const fp = `${fromStr.slice(5, 7)}${fromStr.slice(0, 4)}`;
 
     const [agg] = await Order.aggregate([
       {
         $match: {
           hotelId,
-          status: { $ne: 'cancelled' },
+          status: 'completed',
           createdAt: { $gte: fromDate, $lte: toDate },
         },
       },
@@ -242,6 +257,7 @@ router.get('/gstr1-json', authMiddleware, async (req: AuthRequest, res: Response
       rt:     row._id.rt,
     }));
 
+    res.setHeader('Cache-Control', 'no-store');
     res.json({
       gstin,
       fp,

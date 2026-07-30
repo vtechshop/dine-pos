@@ -57,6 +57,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [printError, setPrintError] = useState(false);
   const [notifBlocked, setNotifBlocked] = useState(false);
   const socketRef = useRef<Socket | null>(null);
+  const authRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
 
@@ -139,8 +140,11 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         // Server rejected socket auth — stale admin token. The HTTP refresh
         // mechanism (tryRefreshTokens) doesn't restart the socket, so we
         // re-connect here with a fresh token after a short delay.
+        // Clear any pending retry before scheduling a new one to avoid timer accumulation.
         if (err.message?.includes('authentication')) {
-          setTimeout(async () => {
+          if (authRetryRef.current) clearTimeout(authRetryRef.current);
+          authRetryRef.current = setTimeout(async () => {
+            authRetryRef.current = null;
             if (!mounted) return;
             const freshToken = await getToken();
             socket.auth = { token: freshToken || '' };
@@ -233,6 +237,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     connect();
     return () => {
       mounted = false;
+      if (authRetryRef.current) clearTimeout(authRetryRef.current);
       if (socketRef.current) {
         socketRef.current.off();
         socketRef.current.disconnect();

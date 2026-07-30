@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 export type ToastSeverity = 'info' | 'success' | 'warning' | 'error';
 
@@ -31,6 +31,8 @@ export function GlobalToastProvider({ children }: { children: React.ReactNode })
     if (timerRef.current) clearTimeout(timerRef.current);
     setToast(null);
   }, []);
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
   return (
     <ToastDispatch.Provider value={{ showToast, dismissToast }}>

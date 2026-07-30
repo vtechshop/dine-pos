@@ -229,6 +229,7 @@ const io = new Server(httpServer, {
     credentials: true,
   },
   maxHttpBufferSize: 1e4, // 10KB max message size
+  transports: ['websocket'],
 });
 setIo(io); // L-2: break circular inquiryRoutes ↔ server dependency
 
@@ -518,7 +519,9 @@ if (process.env.SENTRY_DSN) {
   Sentry.setupExpressErrorHandler(app);
 }
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  const status = typeof err.status === 'number' ? err.status : (typeof err.statusCode === 'number' ? err.statusCode : 500);
+  // Mongoose ValidationError and CastError are always client faults → 400
+  let status = typeof err.status === 'number' ? err.status : (typeof err.statusCode === 'number' ? err.statusCode : 500);
+  if (err.name === 'ValidationError' || err.name === 'CastError') status = 400;
   logger.error('Unhandled error', { status, err: err?.message, stack: err?.stack });
   const isClientError = status >= 400 && status < 500;
   res.status(status).json({
@@ -598,14 +601,25 @@ io.on('connection', (socket) => {
     logger.info('[SOCKET] Joined room', { socketId: socket.id, room: `hotel_${hotelId}`, authenticated: !!socket.data.authenticated, clientsInRoom: roomSize });
   });
 
-  // join: customer table room (e.g. socket.emit('join', 'table_5'))
-  // H-04: hotel_ and admin_ rooms are managed server-side only — never granted
-  // by client request. Authenticated sockets auto-join their rooms on connection
-  // (lines above). This handler is kept only for customer QR table-chat rooms.
-  socket.on('join', (room: string) => {
-    if (typeof room !== 'string' || !room) return;
-    if (room.startsWith('admin_') || room.startsWith('hotel_')) return; // H-04
-    socket.join(room);
+  // join: customer table room (e.g. socket.emit('join', '5'))
+  // H-04: hotel_, admin_, and superadmin rooms are managed server-side only.
+  // H-05: table rooms are scoped per-hotel to prevent cross-tenant chat leaks.
+  //       Client sends the bare tableNumber; the server prefixes it with the
+  //       hotel identity so table "5" at Hotel A and Hotel B are separate rooms.
+  socket.on('join', (tableNumber: string) => {
+    if (typeof tableNumber !== 'string' || !tableNumber) return;
+    // Block attempts to join any managed room by name
+    if (
+      tableNumber.startsWith('admin_') ||
+      tableNumber.startsWith('hotel_') ||
+      tableNumber === 'superadmin'
+    ) return; // H-04 / H-05
+    // Scope the table room to the hotel so tenants cannot see each other's chat
+    const hotelId = socket.data.hotelId;
+    const scopedRoom = hotelId
+      ? `hotel_${hotelId}_table_${tableNumber}`
+      : `public_table_${tableNumber}`;
+    socket.join(scopedRoom);
   });
 
   // Per-connection message counter — prevents a single socket from flooding the DB
@@ -630,7 +644,9 @@ io.on('connection', (socket) => {
         sender: 'customer',
         message: String(data.message).substring(0, 500),
       });
-      io.to(data.tableNumber).to(`admin_${resolvedHotelId}`).emit('new_message', msg);
+      // H-05: emit to the hotel-scoped table room to prevent cross-tenant leaks
+      const tableRoom = `hotel_${resolvedHotelId}_table_${data.tableNumber}`;
+      io.to(tableRoom).to(`admin_${resolvedHotelId}`).emit('new_message', msg);
     } catch (err) {
       logger.error('Socket customer_message error', { err: String(err) });
     }
@@ -650,7 +666,8 @@ io.on('connection', (socket) => {
         message: String(data.message).substring(0, 500),
         read: true,
       });
-      io.to(data.tableNumber).to(`admin_${data.hotelId}`).emit('new_message', msg);
+      const adminTableRoom = `hotel_${data.hotelId}_table_${data.tableNumber}`;
+      io.to(adminTableRoom).to(`admin_${data.hotelId}`).emit('new_message', msg);
     } catch (err) {
       logger.error('Socket admin_message error', { err: String(err) });
     }
@@ -705,7 +722,16 @@ io.on('connection', (socket) => {
       }).sort({ createdAt: 1 }).lean();
 
       if (pendingJobs.length > 0) {
+        let flushed = 0;
         for (const job of pendingJobs) {
+          // Atomic per-job claim: prevents duplicate dispatch when two concurrent
+          // register_printer events race to flush the same pending jobs.
+          const claimed = await PrintJob.findOneAndUpdate(
+            { _id: job._id, status: { $in: ['pending', 'failed'] }, attemptCount: { $lt: 3 } },
+            { $set: { status: 'sent', sentAt: new Date() }, $inc: { attemptCount: 1 } },
+            { new: false },
+          );
+          if (!claimed) continue; // already claimed by a concurrent registration
           socket.emit('print_job', {
             jobId:          String(job._id),
             jobType:        job.jobType,
@@ -714,16 +740,15 @@ io.on('connection', (socket) => {
             printerMode:    job.printerMode,
             payload:        job.payload,
           });
+          flushed++;
         }
-        await PrintJob.updateMany(
-          { _id: { $in: pendingJobs.map(j => j._id) } },
-          { $set: { status: 'sent', sentAt: new Date() }, $inc: { attemptCount: 1 } },
-        );
-        logger.info('Flushed pending print jobs on printer reconnect', {
-          hotelId,
-          printerRole: data.printerRole,
-          count:       pendingJobs.length,
-        });
+        if (flushed > 0) {
+          logger.info('Flushed pending print jobs on printer reconnect', {
+            hotelId,
+            printerRole: data.printerRole,
+            count:       flushed,
+          });
+        }
       }
     } catch (err) {
       logger.error('register_printer error', { err: String(err) });

@@ -2,13 +2,13 @@ import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import Order from '../models/Order';
 import Product from '../models/Product';
-import Ingredient from '../models/Ingredient';
 import DailyCounter from '../models/DailyCounter';
 import TableSession from '../models/TableSession';
 import Guest from '../models/Guest';
 import CustomerProfile from '../models/CustomerProfile';
 import { findOrCreateOpenSession, findOrCreateDefaultGuest } from '../utils/sessionUtils';
 import { scheduleKOTPrint, scheduleOrderReceiptPrint } from '../utils/printUtils';
+import { applyIngredientStockChange } from '../utils/stockUtils';
 import { authMiddleware, requireAdmin, requireKitchenOrAdmin, requireWaiterOrAdmin, requireCashierOrAdmin, requireWaiterOrCashierOrAdmin, resolveHotelStatus, AuthRequest } from '../middleware/auth';
 import { requireActiveStaff } from '../middleware/staffAuth';
 import { logAudit } from '../utils/audit';
@@ -52,43 +52,7 @@ function recalcOrderTotals(
   return { items, subtotal, taxTotal, discountAmount, loyaltyDiscount, grandTotal };
 }
 
-// Deduct (-1) or restore (+1) raw-material stock based on each product's recipe (BOM)
-const applyIngredientStockChange = async (
-  orderItems: { product?: any; quantity: number }[],
-  hotelId: string,
-  sign: 1 | -1,
-  session?: mongoose.ClientSession,
-) => {
-  const productIds = orderItems.filter(i => i.product).map(i => i.product);
-  if (productIds.length === 0) return;
 
-  const productsWithRecipe = await Product.find({
-    _id: { $in: productIds }, hotelId, 'recipe.0': { $exists: true },
-  }).select('recipe').session(session ?? null);
-  if (productsWithRecipe.length === 0) return;
-
-  const deltas = new Map<string, number>();
-  for (const item of orderItems) {
-    if (!item.product) continue;
-    const product = productsWithRecipe.find(p => p._id.toString() === item.product.toString());
-    if (!product) continue;
-    for (const r of product.recipe) {
-      const key = r.ingredient.toString();
-      deltas.set(key, (deltas.get(key) || 0) + r.quantity * item.quantity);
-    }
-  }
-  if (deltas.size === 0) return;
-
-  const bulkOps = Array.from(deltas.entries()).map(([ingredientId, qty]) => ({
-    updateOne: {
-      filter: { _id: ingredientId, hotelId },
-      update: sign === -1
-        ? [{ $set: { currentStock: { $max: [{ $subtract: ['$currentStock', qty] }, 0] } } }]
-        : { $inc: { currentStock: qty } },
-    },
-  }));
-  await Ingredient.bulkWrite(bulkOps as any, { session });
-};
 
 // Helper: Generate order number like ORD-20260310-001 (per hotel)
 // Uses an atomic MongoDB $inc counter — no race condition under concurrent tablets.
@@ -572,16 +536,38 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
 
     const orderNumber = await generateOrderNumber(req.hotelId!);
     const recalc = recalcOrderTotals(req.body.items, req.body.discountAmount, req.body.loyaltyDiscount);
+
+    // Explicit field allowlist — never spread req.body to prevent mass-assignment of
+    // server-controlled fields (status, completedBy, completedAt, cashierId, hotelId).
+    const b = req.body;
     const order = new Order({
-      ...req.body,
-      hotelId:        req.hotelId,
+      tableNumber:         b.tableNumber,
+      customerName:        b.customerName,
+      customerPhone:       b.customerPhone,
+      notes:               b.notes,
+      orderSource:         b.orderSource,
+      isParcel:            b.isParcel,
+      paymentMethod:       b.paymentMethod,
+      splitDetails:        b.splitDetails,
+      tableId:             b.tableId,
+      sessionId:           b.sessionId,
+      guestId:             b.guestId,
+      offlineId:           b.offlineId ?? null,
+      deliveryAddress:     b.deliveryAddress,
+      platformOrderId:     b.platformOrderId,
+      deliveryFee:         b.deliveryFee,
+      platformCommission:  b.platformCommission,
+      estimatedPickupTime: b.estimatedPickupTime,
+      deliveryPartnerName: b.deliveryPartnerName,
+      redeemedPoints:      b.redeemedPoints,
+      hotelId:             req.hotelId,
       orderNumber,
-      items:           recalc.items,
-      subtotal:        recalc.subtotal,
-      taxTotal:        recalc.taxTotal,
-      discountAmount:  recalc.discountAmount,
-      loyaltyDiscount: recalc.loyaltyDiscount,
-      grandTotal:      recalc.grandTotal,
+      items:               recalc.items,
+      subtotal:            recalc.subtotal,
+      taxTotal:            recalc.taxTotal,
+      discountAmount:      recalc.discountAmount,
+      loyaltyDiscount:     recalc.loyaltyDiscount,
+      grandTotal:          recalc.grandTotal,
     });
     // ── Atomic transaction: persist order + deduct stock atomically ──────────
     // order.save() and both stock-deduction writes must succeed or fail together.
@@ -666,11 +652,10 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     // findOne check before either inserts. The unique index rejects one of them
     // with code 11000. Return the already-saved order rather than a 400 error.
     if (error.code === 11000 && error.keyPattern?.offlineId) {
-      const existing = await Order.findOne({
-        offlineId: req.body.offlineId,
-        hotelId: req.hotelId,
-      });
-      if (existing) return res.status(200).json(existing);
+      try {
+        const existing = await Order.findOne({ offlineId: req.body.offlineId, hotelId: req.hotelId });
+        if (existing) return res.status(200).json(existing);
+      } catch { /* fall through to sendError */ }
     }
     sendError(res, 400, 'Invalid data', error);
   }
@@ -733,8 +718,18 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
             update: { $inc: { stock: item.quantity }, $set: { isAvailable: true } },
           },
         }));
-        if (bulkOps.length > 0) await Product.bulkWrite(bulkOps as any);
-        await applyIngredientStockChange(existing.items, req.hotelId!, 1);
+        // Wrap both stock restores in a transaction so they succeed or fail together.
+        // Guest total update is outside the tx — it's a derived value that can be
+        // recomputed, and cross-collection txns have higher abort risk.
+        const cancelTx = await mongoose.startSession();
+        try {
+          await cancelTx.withTransaction(async () => {
+            if (bulkOps.length > 0) await Product.bulkWrite(bulkOps as any, { session: cancelTx });
+            await applyIngredientStockChange(existing.items, req.hotelId!, 1, cancelTx);
+          });
+        } finally {
+          await cancelTx.endSession();
+        }
         if (existing.guestId) {
           await Guest.findByIdAndUpdate(existing.guestId, [
             { $set: { totalAmount: { $max: [0, { $subtract: ['$totalAmount', existing.grandTotal] }] } } },

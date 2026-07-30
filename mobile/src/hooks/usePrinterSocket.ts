@@ -131,7 +131,8 @@ export function usePrinterSocket(
 
       // After all reconnection attempts are exhausted, restart the cycle.
       // socket.connect() resets the attempt counter and tries again.
-      socket.io.on('reconnect_failed', () => {
+      // Named so we can remove it from the manager on cleanup (avoids leak).
+      const onReconnectFailed = () => {
         if (cancelled) return;
         if (onErrorRef.current) {
           onErrorRef.current('Printer offline. Retrying connection…');
@@ -141,7 +142,8 @@ export function usePrinterSocket(
             socketRef.current.connect();
           }
         }, 30_000);
-      });
+      };
+      socket.io.on('reconnect_failed', onReconnectFailed);
 
       // Heartbeat every 30 s — server marks device offline if > 60 s stale
       heartbeatRef.current = setInterval(() => {
@@ -154,6 +156,8 @@ export function usePrinterSocket(
     return () => {
       cancelled = true;
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      // Remove manager-level listener before disconnect to prevent memory leak
+      socketRef.current?.io?.off('reconnect_failed');
       socketRef.current?.disconnect();
       socketRef.current = null;
     };

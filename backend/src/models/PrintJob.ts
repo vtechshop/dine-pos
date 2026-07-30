@@ -46,5 +46,9 @@ const PrintJobSchema = new Schema<IPrintJob>(
 
 PrintJobSchema.index({ hotelId: 1, status: 1, createdAt: -1 });
 PrintJobSchema.index({ hotelId: 1, createdAt: -1 });
+// Compound index for flush query on register_printer (hotelId + printerTarget + status + createdAt)
+PrintJobSchema.index({ hotelId: 1, printerTarget: 1, status: 1, createdAt: 1 });
+// TTL: auto-expire print jobs after 7 days to prevent unbounded collection growth
+PrintJobSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
 
 export default mongoose.model<IPrintJob>('PrintJob', PrintJobSchema);

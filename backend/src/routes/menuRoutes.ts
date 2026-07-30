@@ -9,6 +9,7 @@ import DailyCounter from '../models/DailyCounter';
 import mongoose from 'mongoose';
 import { io } from '../server';
 import { sendError } from '../utils/sendError';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -214,11 +215,11 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
     // Emit socket event so admin sees the order instantly
     try {
       if (!io) {
-        console.error('[menuRoutes] io is undefined — circular import issue');
+        logger.error('[menuRoutes] io is undefined — circular import issue');
       } else {
         const room = `hotel_${hotelId}`;
         const sockets = await io.in(room).allSockets();
-        console.log(`[menuRoutes] emitting new_order to ${room}, clients in room: ${sockets.size}`);
+        logger.info('[menuRoutes] emitting new_order', { room, clientsInRoom: sockets.size });
         io.to(room).emit('new_order', {
           _id:          order._id.toString(),
           orderNumber:  order.orderNumber,
@@ -229,7 +230,7 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
         });
       }
     } catch (emitErr: any) {
-      console.error('[menuRoutes] socket emit error:', emitErr?.message || emitErr);
+      logger.error('[menuRoutes] socket emit error', { error: emitErr?.message || String(emitErr) });
     }
 
     res.status(201).json(order);

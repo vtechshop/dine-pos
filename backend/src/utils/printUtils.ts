@@ -65,7 +65,10 @@ async function dispatchPrintJob(
   const lastHeartbeat = (device as any)?.lastHeartbeat as Date | null | undefined;
   const sixtySecsAgo  = new Date(Date.now() - 60_000);
   const isOnline      = !!socketId && !!lastHeartbeat && new Date(lastHeartbeat) > sixtySecsAgo;
-  const shouldEmit    = autoEmit && isOnline;
+  // Verify the socket is still in Socket.IO's live connection map — guards against
+  // the race where the device disconnected but the disconnect event hasn't fired yet.
+  const socketLive    = isOnline && !!socketId && io.sockets.sockets.has(socketId);
+  const shouldEmit    = autoEmit && socketLive;
 
   const job = await PrintJob.create({
     hotelId:      new mongoose.Types.ObjectId(hotelId),

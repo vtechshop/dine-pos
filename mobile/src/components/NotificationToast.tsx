@@ -23,12 +23,14 @@ export function NotificationToast() {
   const displayToast = toast ?? lastToastRef.current;
 
   useEffect(() => {
-    Animated.spring(slideY, {
+    const anim = Animated.spring(slideY, {
       toValue: toast ? 0 : -120,
       useNativeDriver: true,
       tension: 80,
       friction: 9,
-    }).start();
+    });
+    anim.start();
+    return () => anim.stop();
   }, [toast]);
 
   const accent = ACCENT[displayToast?.severity ?? 'info'];

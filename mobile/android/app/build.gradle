@@ -4,6 +4,15 @@ apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
+// Load signing credentials from keystore.properties (gitignored) so they are
+// never committed to source control. Fall back to empty strings if the file
+// is absent (e.g. CI where secrets are injected via environment variables).
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
@@ -92,8 +101,8 @@ android {
         applicationId 'com.jegatheswar.dinepos'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 47
-        versionName "1.4.1"
+        versionCode 48
+        versionName "1.4.2"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -105,10 +114,10 @@ android {
             keyPassword 'android'
         }
         release {
-            storeFile file('release.keystore')
-            storePassword '05c08ac5b23f031629b7093239dd3098'
-            keyAlias '58c91a09e82cba2cecfe5d410dfadc24'
-            keyPassword '7514b71e25a655533c8519ac285f0484'
+            storeFile file(keystoreProperties['storeFile'] ?: 'release.keystore')
+            storePassword keystoreProperties['storePassword'] ?: System.getenv('RELEASE_STORE_PASSWORD') ?: ''
+            keyAlias keystoreProperties['keyAlias'] ?: System.getenv('RELEASE_KEY_ALIAS') ?: ''
+            keyPassword keystoreProperties['keyPassword'] ?: System.getenv('RELEASE_KEY_PASSWORD') ?: ''
         }
     }
     buildTypes {
