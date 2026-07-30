@@ -36,8 +36,11 @@ export const setupNotifications = async (): Promise<boolean> => {
   if (Platform.OS !== 'android') return true;
 
   // Create channels first — Android permits this even without POST_NOTIFICATIONS
+  // v3: force channel recreation to ensure order_alert.wav is applied.
+  // Android caches channel settings and ignores updates to an existing channel,
+  // so the version suffix must be bumped whenever the sound configuration changes.
   try {
-    await Notifications.setNotificationChannelAsync('order_alerts_v2', {
+    await Notifications.setNotificationChannelAsync('order_alerts_v3', {
       name: 'New Order Alerts',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 200, 100, 300],

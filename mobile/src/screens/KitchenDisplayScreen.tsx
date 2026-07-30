@@ -82,11 +82,13 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
     // where mountedRef.current is reset to true by the new effect before the
     // old async IIFE checks it, which would create a duplicate socket.
     let cancelled = false;
-    setupNotifications();
     loadOrders();
 
     let socket: Socket;
     (async () => {
+      // Await channel creation before connecting so the first notification
+      // always has a valid Android channel and plays the correct sound.
+      await setupNotifications();
       const [hotelId, url, token] = await Promise.all([
         getStoredHotelId(), getSocketUrl(), getKitchenToken(),
       ]);

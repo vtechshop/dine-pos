@@ -25,12 +25,12 @@ interface EventCfg {
 const CFG: Record<NotifEventType, EventCfg> = {
   new_order: {
     icon: 'notifications-active', severity: 'warning',
-    channel: 'order_alerts_v2',  vibrate: [0, 200, 100, 300],
+    channel: 'order_alerts_v3',  vibrate: [0, 200, 100, 300],
     roles: ['admin', 'kitchen', 'cashier'],
   },
   new_delivery_order: {
     icon: 'delivery-dining', severity: 'warning',
-    channel: 'order_alerts_v2',  vibrate: [0, 200, 100, 300],
+    channel: 'order_alerts_v3',  vibrate: [0, 200, 100, 300],
     roles: ['admin'],
   },
   order_preparing: {
@@ -40,7 +40,7 @@ const CFG: Record<NotifEventType, EventCfg> = {
   },
   order_ready: {
     icon: 'check-circle', severity: 'success',
-    channel: 'order_alerts_v2',  vibrate: [0, 300, 150, 300],
+    channel: 'order_alerts_v3',  vibrate: [0, 300, 150, 300],
     roles: ['admin', 'cashier'],
   },
   order_served: {
@@ -55,7 +55,7 @@ const CFG: Record<NotifEventType, EventCfg> = {
   },
   order_cancelled: {
     icon: 'cancel', severity: 'error',
-    channel: 'order_alerts_v2',  vibrate: [0, 400, 100, 400],
+    channel: 'order_alerts_v3',  vibrate: [0, 400, 100, 400],
     roles: ['admin', 'kitchen', 'cashier'],
   },
   printer_error: {
