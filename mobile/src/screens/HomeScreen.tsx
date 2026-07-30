@@ -172,8 +172,21 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           const ev = NotificationSvc.handle('order_cancelled', 'admin', data.orderId, 'Order Cancelled', `${label} was cancelled`);
           if (ev) showToast(ev);
         }
+        fetchStats();
       });
-      socket.on('order_served', (data: { orderId: string; tableNumber?: string; orderNumber?: string; servedBy?: string }) => {
+      socket.on('guest_billed', (data: { sessionId: string; guestId: string; paymentMethod: string; netPayable?: number; totalAmount?: number }) => {
+        if (!mounted) return;
+        const cur = settingsRef.current.currencySymbol || '₹';
+        const amount = data.netPayable ?? data.totalAmount ?? 0;
+        const ev = NotificationSvc.handle('order_completed', 'admin', String(data.guestId), '💰 Guest Billed', `${(data.paymentMethod || '').toUpperCase()} · ${cur}${amount.toFixed(0)}`);
+        if (ev) showToast(ev);
+        fetchStats();
+      });
+      socket.on('session_closed', () => {
+        if (!mounted) return;
+        fetchStats();
+      });
+      socket.on('order_served', (data: { orderId: string; tableNumber?: string; orderNumber?: string; customerName?: string; servedBy?: string }) => {
         if (!mounted) return;
         const label = orderLabel(data.tableNumber, data.orderNumber);
         const ev = NotificationSvc.handle('order_served', 'admin', data.orderId, '🛎 Order Served', `${label} has been served`);

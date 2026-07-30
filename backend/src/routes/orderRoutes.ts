@@ -779,6 +779,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         orderId: existing._id,
         orderNumber: existing.orderNumber,
         tableNumber: existing.tableNumber || '',
+        customerName: existing.customerName || '',
         servedBy: existing.servedBy || '',
       });
     }

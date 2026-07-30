@@ -122,6 +122,27 @@ export function usePrinterSocket(
         );
       });
 
+      socket.on('disconnect', (reason) => {
+        if (cancelled) return;
+        if (onErrorRef.current) {
+          onErrorRef.current(`Printer disconnected: ${reason}. Reconnecting…`);
+        }
+      });
+
+      // After all reconnection attempts are exhausted, restart the cycle.
+      // socket.connect() resets the attempt counter and tries again.
+      socket.io.on('reconnect_failed', () => {
+        if (cancelled) return;
+        if (onErrorRef.current) {
+          onErrorRef.current('Printer offline. Retrying connection…');
+        }
+        setTimeout(() => {
+          if (!cancelled && socketRef.current) {
+            socketRef.current.connect();
+          }
+        }, 30_000);
+      });
+
       // Heartbeat every 30 s — server marks device offline if > 60 s stale
       heartbeatRef.current = setInterval(() => {
         if (socketRef.current?.connected) {

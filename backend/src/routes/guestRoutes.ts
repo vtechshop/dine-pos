@@ -394,24 +394,39 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         loyaltyDiscountAmount: updateFields.loyaltyDiscountAmount,
       }).catch(() => {});
 
-      // Sync paymentMethod to linked orders so Order-based daily/range reports
+      // Sync paymentMethod and mark orders completed so daily/range reports
       // reflect the correct payment breakdown for session-billed dine-in guests.
       Order.updateMany(
         { sessionId: session._id, guestId: updated._id, status: { $ne: 'cancelled' } },
-        { $set: { paymentMethod } },
+        { $set: { paymentMethod, status: 'completed' } },
       ).catch(() => {});
+
+      const billingDiscount = guestAfterLoyalty.loyaltyDiscountAmount ?? 0;
+      const netPayable = guestAfterLoyalty.totalAmount - billingDiscount;
 
       io.to(`hotel_${req.hotelId}`).emit('guest_billed', {
         sessionId: session._id,
         guestId: guest._id,
         paymentMethod,
-        totalAmount: guest.totalAmount,
+        totalAmount: guestAfterLoyalty.totalAmount,
+        loyaltyDiscountAmount: billingDiscount,
+        netPayable,
+      });
+
+      // Also emit order_completed so admin dashboard stats refresh immediately
+      io.to(`hotel_${req.hotelId}`).emit('order_completed', {
+        orderId: String(guest._id),
+        tableNumber: guest.tableNumber || '',
+        paymentMethod,
+        grandTotal: netPayable,
       });
 
       logAudit(req, 'guest.billed', 'guest', String(guest._id), {
         sessionId: String(session._id),
         paymentMethod,
-        totalAmount: guest.totalAmount,
+        totalAmount: guestAfterLoyalty.totalAmount,
+        loyaltyDiscountAmount: billingDiscount,
+        netPayable,
       });
 
       res.json({ guest: guestAfterLoyalty });
