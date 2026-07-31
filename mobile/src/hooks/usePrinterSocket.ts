@@ -88,6 +88,7 @@ function buildSocket(
   st.socket = socket;
 
   socket.on('connect', () => {
+    console.log(`[PrinterSocket][${role}] Socket connected — id=${socket.id}`);
     socket.emit('join_hotel', hotelId);
     socket.emit('register_printer', {
       deviceId,
@@ -100,17 +101,24 @@ function buildSocket(
   // Reads settings/error callback through module-level accessors so it always
   // uses the latest values even after a screen remount.
   socket.on('print_job', (event: PrintJobEvent) => {
+    console.log(`[PrinterSocket][${role}] Print job received — jobId=${event.jobId} type=${event.jobType}`);
     const settings = st.getSettings();
     const makeReport = (errCb: ((msg: string) => void) | undefined) =>
       async (jobId: string, status: 'success' | 'failed', error?: string) => {
+        if (status === 'success') {
+          console.log(`[PrinterSocket][${role}] Print job success — jobId=${jobId}`);
+        } else {
+          console.log(`[PrinterSocket][${role}] Print job failed — jobId=${jobId} error=${error}`);
+        }
         await reportPrintStatus(jobId, status, error);
         if (status === 'failed' && errCb) {
+          // Only surface to UI when the Bluetooth print itself failed — not server events
           errCb(error || 'Print failed. Check Bluetooth connection.');
         }
       };
 
     if (!settings) {
-      // No screen mounted — report failure immediately so the server can retry
+      console.log(`[PrinterSocket][${role}] Print job deferred — screen not mounted, will retry on reconnect`);
       const report = makeReport(st.getErrorCb());
       st.printQueue = st.printQueue.then(() =>
         report(event.jobId, 'failed', 'Printer screen not active'),
@@ -124,24 +132,44 @@ function buildSocket(
     );
   });
 
-  socket.on('disconnect', () => {
-    st.getErrorCb()?.('Printer disconnected. Reconnecting…');
+  // Socket.IO server connection dropped — NOT a Bluetooth event.
+  // The printer is likely still Bluetooth-connected and printing works.
+  // Socket.IO will auto-reconnect; no user error should be shown here.
+  socket.on('disconnect', (reason: string) => {
+    console.log(`[PrinterSocket][${role}] Socket disconnected — reason=${reason} (Bluetooth unaffected, auto-reconnecting)`);
   });
 
   const onReconnectFailed = () => {
-    st.getErrorCb()?.('Printer offline. Retrying connection…');
-    // After exhausting reconnection attempts, wait 30 s then restart the cycle
+    // 20 reconnection attempts exhausted — server is unreachable.
+    // This is NOT a Bluetooth failure: the printer can still be connected and
+    // print jobs still work. Do NOT call errCb here.
+    console.log(`[PrinterSocket][${role}] Reconnect failed after 20 attempts — server unreachable, NOT a Bluetooth error. Retrying in 30 s.`);
     setTimeout(() => {
-      if (st.socket === socket) socket.connect();
+      if (st.socket === socket) {
+        console.log(`[PrinterSocket][${role}] Retrying socket connection`);
+        socket.connect();
+      }
     }, 30_000);
   };
   st.onReconnectFailed = onReconnectFailed;
   socket.io.on('reconnect_failed', onReconnectFailed);
 
-  // Heartbeat every 30 s — server marks device offline if > 60 s stale
+  socket.io.on('reconnect_attempt', (n: number) => {
+    console.log(`[PrinterSocket][${role}] Reconnect attempt ${n}/20`);
+  });
+
+  socket.io.on('reconnect', (n: number) => {
+    console.log(`[PrinterSocket][${role}] Reconnected after ${n} attempt(s)`);
+  });
+
+  // Heartbeat every 30 s — server marks device offline if > 60 s stale.
+  // Only one timer per role: existing interval cleared before creating a new one.
   if (st.heartbeat) clearInterval(st.heartbeat);
   st.heartbeat = setInterval(() => {
-    if (socket.connected) socket.emit('printer_heartbeat');
+    if (socket.connected) {
+      console.log(`[PrinterSocket][${role}] Heartbeat sent — ${new Date().toISOString()}`);
+      socket.emit('printer_heartbeat');
+    }
   }, 30_000);
 
   return socket;

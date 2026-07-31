@@ -68,14 +68,24 @@ export const getPairedDevices = async (): Promise<BluetoothDevice[]> => {
 // callers await the same in-flight connect() rather than racing each other.
 export const connectPrinter = async (address: string): Promise<void> => {
   if (!BluetoothManager) throw new Error('Bluetooth printing not available on this device');
-  if (_btConnectedAddress === address) return; // already connected
-  if (_btConnecting) { await _btConnecting; return; } // join in-flight connection
+  if (_btConnectedAddress === address) {
+    console.log(`[BTPrinter] Already connected to ${address}`);
+    return;
+  }
+  if (_btConnecting) {
+    console.log(`[BTPrinter] Connection to ${address} in progress — joining`);
+    await _btConnecting;
+    return;
+  }
+  console.log(`[BTPrinter] Connecting to ${address}`);
   _btConnecting = (async () => {
     try {
       await BluetoothManager.connect(address);
       _btConnectedAddress = address;
+      console.log(`[BTPrinter] Bluetooth Connected — ${address}`);
     } catch (e: any) {
       _btConnectedAddress = null;
+      console.log(`[BTPrinter] Bluetooth connection failed to ${address}: ${e?.message}`);
       if (e.message && e.message.includes('BLUETOOTH_CONNECT')) {
         throw new Error(BT_PERMISSION_DENIED);
       }
@@ -92,6 +102,7 @@ export const printReceiptBluetooth = async (
   order: Order,
   settings: Settings
 ): Promise<void> => {
+  console.log(`[BTPrinter] Printing receipt for order=${order.orderNumber} total=${order.grandTotal}`);
   if (!BluetoothEscposPrinter) throw new Error('Bluetooth printing not available');
 
   const P = BluetoothEscposPrinter;
@@ -233,6 +244,7 @@ export const printReceiptBluetooth = async (
 
   // Paper feed and cut
   await P.printText('\n\n\n', {});
+  console.log(`[BTPrinter] Receipt printed OK — order=${order.orderNumber}`);
 };
 
 // Print a kitchen ticket (KOT) via Bluetooth ESC/POS — item + qty only, no prices
@@ -240,6 +252,7 @@ export const printKOTBluetooth = async (
   order: KOTOrderInput,
   settings: Settings
 ): Promise<void> => {
+  console.log(`[BTPrinter] Printing KOT for order=${order.orderNumber} items=${order.items.length}`);
   if (!BluetoothEscposPrinter) throw new Error('Bluetooth printing not available');
   const P = BluetoothEscposPrinter;
 
@@ -290,4 +303,5 @@ export const printKOTBluetooth = async (
   }
 
   await P.printText('\n\n\n', {});
+  console.log(`[BTPrinter] KOT printed OK — order=${order.orderNumber}`);
 };
