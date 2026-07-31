@@ -163,8 +163,9 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       socket.on('new_order', (data: { _id?: string; orderNumber?: string; tableNumber?: string }) => {
         if (!mountedRef.current) return;
         const label = orderLabel(data.tableNumber, data.orderNumber);
-        // Vibration + push (when background) handled by service; keep modal:
-        NotificationSvc.handle('new_order', 'cashier', data._id || Date.now().toString(), 'New Order!', `${label} placed an order`);
+        // Vibration + push notification (background) handled by service; also show in-app toast
+        const ev = NotificationSvc.handle('new_order', 'cashier', data._id || Date.now().toString(), 'New Order!', `${label} placed an order`);
+        if (ev) showToast(ev);
         setNewOrderCount(c => c + 1);
         loadOrders();
       });

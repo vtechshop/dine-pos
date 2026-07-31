@@ -17,7 +17,7 @@ import { OfflineIndicator } from '../components/OfflineIndicator';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import TrialBanner from '../components/TrialBanner';
-import { printReceipt, printKOT } from '../utils/receipt';
+import { printKOT } from '../utils/receipt';
 import { setupNotifications, notifyChatMessage } from '../utils/notifications';
 import { useGlobalToast } from '../context/GlobalToastContext';
 import { NotificationSvc, orderLabel } from '../services/NotificationService';
@@ -25,7 +25,6 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 
-const BT_PRINTER_ADDRESS_KEY = '@hotel_pos_bt_printer_address';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'Home'>,
@@ -206,7 +205,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         setOrderBadge(p => p + 1);
         fetchStats();
       });
-      socket.on('new_order', async (data: NewOrderAlert) => {
+      socket.on('new_order', (data: NewOrderAlert) => {
         if (!mounted) return;
         incAdminBadge();
         setNewOrderAlert(data);
@@ -215,23 +214,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         fetchStats();
         const cur = settingsRef.current.currencySymbol || '₹';
         const label = orderLabel(data.tableNumber, data.orderNumber);
-        NotificationSvc.handle('new_order', 'admin', data._id || Date.now().toString(), 'New Order!', `${label} — ${data.itemCount} item${data.itemCount !== 1 ? 's' : ''} · ${cur}${(data.grandTotal || 0).toFixed(0)}`);
-        // Auto-print KOT + bill if a Bluetooth printer is configured
-        if (data._id) {
-          try {
-            const btAddress = await AsyncStorage.getItem(BT_PRINTER_ADDRESS_KEY);
-            if (btAddress) {
-              const order = await getOrder(data._id);
-              if (order && mounted) {
-                await printKOT(order as unknown as KOTOrderInput, settingsRef.current);
-                await printReceipt(order, settingsRef.current);
-              }
-            }
-          } catch {
-            // Auto-print failed (printer off/out of range) — show red dot so admin can tap Print manually
-            if (mounted) setPrintError(true);
-          }
-        }
+        const ev = NotificationSvc.handle('new_order', 'admin', data._id || Date.now().toString(), 'New Order!', `${label} — ${data.itemCount} item${data.itemCount !== 1 ? 's' : ''} · ${cur}${(data.grandTotal || 0).toFixed(0)}`);
+        if (ev) showToast(ev);
       });
     };
     connect();

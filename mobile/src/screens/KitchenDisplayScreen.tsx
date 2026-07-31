@@ -131,8 +131,9 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
           seenOrderIds.current.add(id);
         }
         incKitchenBadge();
-        // Service handles vibration + push notification when background
-        NotificationSvc.handle('new_order', 'kitchen', id || Date.now().toString(), 'New Order in Kitchen!', `${orderLabel(data.tableNumber, data.orderNumber)} needs to be prepared`);
+        // Vibration + push notification (background) handled by service; also show in-app toast
+        const ev = NotificationSvc.handle('new_order', 'kitchen', id || Date.now().toString(), 'New Order in Kitchen!', `${orderLabel(data.tableNumber, data.orderNumber)} needs to be prepared`);
+        if (ev) showToast(ev);
         setNewOrderCount(c => c + 1);
         loadOrders();
       };
