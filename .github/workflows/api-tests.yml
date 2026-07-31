@@ -71,6 +71,7 @@ jobs:
           PORT: 5000
           MONGODB_URI: mongodb://localhost:27017/dinepos_test
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SUPER_ADMIN_JWT_SECRET: ${{ secrets.SUPER_ADMIN_JWT_SECRET }}
           REDIS_URL: redis://localhost:6379
           SUPER_ADMIN_ID: ${{ secrets.SUPER_ADMIN_ID }}
           SUPER_ADMIN_PASS: ${{ secrets.SUPER_ADMIN_PASS }}

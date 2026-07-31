@@ -46,12 +46,23 @@ const safeEqual = (a: string, b: string): boolean => {
 const SUPER_ADMIN_JWT_SECRET = process.env.SUPER_ADMIN_JWT_SECRET!;
 
 const superAdminAuth = (req: Request, res: Response, next: Function) => {
+  // JWT Bearer token (web dashboard / SA app flow)
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     try {
       const payload = jwt.verify(authHeader.slice(7), SUPER_ADMIN_JWT_SECRET) as any;
       if (payload?.role === 'superadmin') return next();
     } catch { /* invalid or expired token */ }
+  }
+  // Direct credential headers (CI / automation test flow)
+  const saId   = req.headers['x-super-admin-id']   as string | undefined;
+  const saPass = req.headers['x-super-admin-pass'] as string | undefined;
+  if (
+    saId && saPass &&
+    safeEqual(saId,   process.env.SUPER_ADMIN_ID!)   &&
+    safeEqual(saPass, process.env.SUPER_ADMIN_PASS!)
+  ) {
+    return next();
   }
   return res.status(401).json({ message: 'Unauthorized' });
 };

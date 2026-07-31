@@ -128,7 +128,11 @@ if (
   process.exit(1);
 }
 
-const SUPER_ADMIN_JWT_SECRET = process.env.SUPER_ADMIN_JWT_SECRET;
+// In non-production environments fall back to JWT_SECRET so CI doesn't need a
+// separate GitHub secret. Production requires its own distinct value.
+const SUPER_ADMIN_JWT_SECRET =
+  process.env.SUPER_ADMIN_JWT_SECRET ||
+  (process.env.NODE_ENV !== 'production' ? process.env.JWT_SECRET : undefined);
 const SA_JWT_KNOWN_BAD = [
   'secret', 'superadmin', 'superadminsecret', 'admin', 'changeme',
   'hotelbillingpos_super_admin_secret', 'sa_secret',
