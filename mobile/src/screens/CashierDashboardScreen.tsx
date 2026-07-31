@@ -27,6 +27,21 @@ import { printReceipt } from '../utils/receipt';
 type Props = NativeStackScreenProps<RootStackParamList, 'CashierDashboard'>;
 type PaymentMethod = 'cash' | 'upi' | 'card' | 'split';
 
+function HighlightText({ text, query, style, matchStyle }: {
+  text: string; query: string; style?: any; matchStyle?: any;
+}): React.ReactElement {
+  if (!query) return <Text style={style}>{text}</Text>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <Text style={style}>{text}</Text>;
+  return (
+    <Text style={style}>
+      {text.slice(0, idx)}
+      <Text style={matchStyle}>{text.slice(idx, idx + query.length)}</Text>
+      {text.slice(idx + query.length)}
+    </Text>
+  );
+}
+
 const ACTIVE_STATUSES = ['pending', 'preparing', 'ready', 'served'];
 
 const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
@@ -44,9 +59,11 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [socketLost, setSocketLost] = useState(false);
   const socketRef = useRef<Socket | null>(null);
-  const mountedRef    = useRef(true);
-  const submittingRef = useRef(false);
-  const ordersRef     = useRef<CashierOrder[]>([]);
+  const mountedRef      = useRef(true);
+  const submittingRef   = useRef(false);
+  const ordersRef       = useRef<CashierOrder[]>([]);
+  const listRef         = useRef<FlatList<CashierOrder>>(null);
+  const prevReadyRef    = useRef(0);
   const [tick, setTick] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const { count: cashierBadge, increment: incCashierBadge, reset: resetCashierBadge } = useBadgeCount(BADGE_KEYS.cashierPending);
@@ -83,9 +100,21 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
     return Colors.danger;
   };
 
-  const activeOrders    = orders.filter(o => ACTIVE_STATUSES.includes(o.status));
+  const STATUS_SORT: Record<string, number> = { ready: 0, preparing: 1, pending: 2, served: 3, completed: 4, cancelled: 5 };
+  const activeOrders = orders
+    .filter(o => ACTIVE_STATUSES.includes(o.status))
+    .sort((a, b) => (STATUS_SORT[a.status] ?? 9) - (STATUS_SORT[b.status] ?? 9));
   const completedOrders = orders.filter(o => o.status === 'completed');
+  const readyOrders     = activeOrders.filter(o => o.status === 'ready');
   const todayRevenue    = completedOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+
+  // Auto-scroll list to top when a new ready order arrives
+  useEffect(() => {
+    if (readyOrders.length > prevReadyRef.current) {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }
+    prevReadyRef.current = readyOrders.length;
+  }, [readyOrders.length]);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -276,8 +305,10 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const renderActiveOrder = ({ item }: { item: CashierOrder }) => {
     void tick;
     const token = item.orderNumber.split('-').pop() || '?';
+    const openPayment = () => { setSelectedMethod('cash'); setSplitCash(''); setSplitCard(''); setSplitUpi(''); setPayModal({ order: item }); };
     return (
-      <View style={styles.card}>
+      <TouchableOpacity activeOpacity={0.92} onPress={openPayment}>
+        <View style={styles.card}>
         {/* Order type banner */}
         <View style={[styles.orderTypeBanner, item.isParcel ? styles.orderTypeBannerTakeaway : styles.orderTypeBannerDineIn]}>
           <MaterialIcons name={item.isParcel ? 'shopping-bag' : 'restaurant'} size={14} color={item.isParcel ? Colors.warning : Colors.primary} />
@@ -287,7 +318,12 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         </View>
         <View style={styles.cardHeader}>
           <View style={styles.tokenBadge}>
-            <Text style={styles.tokenText}>#{token}</Text>
+            <HighlightText
+              text={'#' + token}
+              query={q}
+              style={styles.tokenText}
+              matchStyle={{ backgroundColor: Colors.warning + '55', color: Colors.warning, fontWeight: '900' }}
+            />
           </View>
           <View style={{ flex: 1, marginLeft: Spacing.md }}>
             {item.tableNumber ? <Text style={styles.tableText}>Table {item.tableNumber}</Text> : null}
@@ -322,13 +358,14 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
         <TouchableOpacity
           style={styles.payBtn}
-          onPress={() => { setSelectedMethod('cash'); setSplitCash(''); setSplitCard(''); setSplitUpi(''); setPayModal({ order: item }); }}
+          onPress={openPayment}
           activeOpacity={0.85}
         >
           <MaterialIcons name="point-of-sale" size={18} color={Colors.white} />
           <Text style={styles.payBtnText}>Collect Payment · ₹{item.grandTotal.toFixed(0)}</Text>
         </TouchableOpacity>
-      </View>
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -440,12 +477,59 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       <View style={styles.tabs}>
         {(['active', 'completed'] as const).map(t => (
           <TouchableOpacity key={t} style={[styles.tab, tab === t && styles.tabActive]} onPress={() => setTab(t)}>
-            <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
-              {t === 'active' ? `Active${activeOrders.length > 0 ? ` (${activeOrders.length})` : ''}` : `Completed${completedOrders.length > 0 ? ` (${completedOrders.length})` : ''}`}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
+                {t === 'active'
+                  ? `Active${activeOrders.length > 0 ? ` (${activeOrders.length})` : ''}`
+                  : `Completed${completedOrders.length > 0 ? ` (${completedOrders.length})` : ''}`}
+              </Text>
+              {t === 'active' && readyOrders.length > 0 && (
+                <View style={styles.readyTabBadge}>
+                  <Text style={styles.readyTabBadgeText}>{readyOrders.length}</Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         ))}
       </View>
+
+      {tab === 'active' && readyOrders.length > 0 && (
+        <View style={styles.readySection}>
+          <View style={styles.readySectionHeader}>
+            <View style={styles.readyCountBadge}>
+              <Text style={styles.readyCountBadgeText}>{readyOrders.length}</Text>
+            </View>
+            <Text style={styles.readySectionTitle}>READY FOR COLLECTION</Text>
+          </View>
+          {readyOrders.map(order => {
+            const rtoken = order.orderNumber.split('-').pop() || '?';
+            return (
+              <TouchableOpacity
+                key={order._id}
+                style={styles.readyCard}
+                onPress={() => { setSelectedMethod('cash'); setSplitCash(''); setSplitCard(''); setSplitUpi(''); setPayModal({ order }); }}
+                activeOpacity={0.85}
+              >
+                <View style={styles.readyCardRow}>
+                  <Text style={styles.readyToken}>#{rtoken}</Text>
+                  <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                    {order.tableNumber ? <Text style={styles.readyTable}>Table {order.tableNumber}</Text> : null}
+                    {order.customerName ? <Text style={styles.readyCustomer} numberOfLines={1}>{order.customerName}</Text> : null}
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.readyTime}>{elapsed(order.createdAt)}</Text>
+                    <Text style={styles.readyAmount}>₹{order.grandTotal.toFixed(0)}</Text>
+                  </View>
+                </View>
+                <View style={styles.readyPayBtn}>
+                  <MaterialIcons name="point-of-sale" size={14} color={Colors.white} />
+                  <Text style={styles.readyPayBtnText}>Collect Payment · ₹{order.grandTotal.toFixed(0)}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
 
       <View style={styles.searchContainer}>
         <MaterialIcons name="search" size={18} color={Colors.textMuted} />
@@ -466,6 +550,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       <FlatList
+        ref={listRef}
         data={filteredData}
         keyExtractor={item => item._id}
         renderItem={tab === 'active' ? renderActiveOrder : renderCompletedOrder}
@@ -711,6 +796,45 @@ const styles = StyleSheet.create({
   reprintBtnText: { color: Colors.info, fontSize: FontSize.sm, fontWeight: '700' },
   methodBadge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   methodBadgeText: { fontSize: FontSize.xs, fontWeight: '800' },
+  // ── Ready Orders section ─────────────────────────────────────────────────────
+  readySection: {
+    backgroundColor: Colors.statusReadyBg, borderBottomWidth: 1,
+    borderBottomColor: Colors.success + '40', paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md, paddingBottom: Spacing.sm, gap: Spacing.sm,
+  },
+  readySectionHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: 2,
+  },
+  readySectionTitle: {
+    fontSize: FontSize.xs, fontWeight: '800', color: Colors.success, letterSpacing: 0.8,
+  },
+  readyCountBadge: {
+    backgroundColor: Colors.danger, borderRadius: BorderRadius.round,
+    minWidth: 22, height: 22, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6,
+  },
+  readyCountBadgeText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900' },
+  readyCard: {
+    backgroundColor: Colors.surface, borderRadius: BorderRadius.lg,
+    padding: Spacing.md, borderWidth: 1.5, borderColor: Colors.success + '55', ...Shadows.sm,
+  },
+  readyCardRow: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.sm },
+  readyToken:   { fontSize: FontSize.xl, fontWeight: '900', color: Colors.success },
+  readyTable:   { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
+  readyCustomer:{ fontSize: FontSize.sm, color: Colors.textSecondary },
+  readyTime:    { fontSize: FontSize.sm, fontWeight: '700', color: Colors.success, textAlign: 'right' },
+  readyAmount:  { fontSize: FontSize.lg, fontWeight: '900', color: Colors.text, textAlign: 'right' },
+  readyPayBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: Colors.success, borderRadius: BorderRadius.md, paddingVertical: 8,
+  },
+  readyPayBtnText: { color: Colors.white, fontSize: FontSize.sm, fontWeight: '800' },
+  // ── Active tab ready badge ────────────────────────────────────────────────────
+  readyTabBadge: {
+    backgroundColor: Colors.danger, borderRadius: BorderRadius.round,
+    minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
+  },
+  readyTabBadgeText: { color: Colors.white, fontSize: 10, fontWeight: '900' },
+  // ── Search bar ───────────────────────────────────────────────────────────────
   searchContainer: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     backgroundColor: Colors.surface, marginHorizontal: Spacing.lg, marginTop: Spacing.sm,

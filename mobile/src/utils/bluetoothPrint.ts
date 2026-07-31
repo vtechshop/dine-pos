@@ -261,6 +261,15 @@ export const printKOTBluetooth = async (
     return ' '.repeat(pad) + t;
   };
 
+  // Large ORDER # — double-width + double-height for maximum readability across the kitchen
+  const rawToken   = clean(order.orderNumber).split('-').pop() || clean(order.orderNumber);
+  const orderLabel = 'ORDER #' + rawToken;
+  const dblW = Math.floor(W / 2);  // effective width when double-size
+  const dblPad = Math.max(0, Math.floor((dblW - orderLabel.length) / 2));
+  await P.printText('\n', {});
+  await P.printText(' '.repeat(dblPad) + orderLabel + '\n', { widthtimes: 1, heigthtimes: 1 });
+  await P.printText('\n', {});
+
   await P.printText(dividerH + '\n', {});
   await P.printText(cLine('** KITCHEN ORDER **') + '\n', {});
   await P.printText(dividerH + '\n', {});
