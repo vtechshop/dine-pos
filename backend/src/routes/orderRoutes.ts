@@ -695,8 +695,8 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     if (role === 'waiter' && existing.status !== 'ready') {
       return res.status(400).json({ message: `Order must be ready before it can be served (current: ${existing.status}).` });
     }
-    if (role === 'cashier' && existing.status !== 'served') {
-      return res.status(400).json({ message: `Order must be served before it can be completed (current: ${existing.status}).` });
+    if (role === 'cashier' && !['served', 'ready'].includes(existing.status)) {
+      return res.status(400).json({ message: `Order must be ready or served before it can be completed (current: ${existing.status}).` });
     }
 
     // H-04: atomic cancellation guard — only the first concurrent request runs side-effects
