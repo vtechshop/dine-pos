@@ -48,21 +48,25 @@ async function reportPrintStatus(
 // reconnect flush rather than silently dropped.
 
 type RoleState = {
-  socket:       Socket | null;
-  heartbeat:    ReturnType<typeof setInterval> | null;
-  printQueue:   Promise<void>;
-  getSettings:  () => Settings | null;
-  getErrorCb:   () => ((msg: string) => void) | undefined;
+  socket:              Socket | null;
+  heartbeat:           ReturnType<typeof setInterval> | null;
+  printQueue:          Promise<void>;
+  getSettings:         () => Settings | null;
+  getErrorCb:          () => ((msg: string) => void) | undefined;
+  getNameCb:           () => string | undefined;
+  onReconnectFailed:   (() => void) | null;
 };
 
 const _state: Record<'kitchen' | 'cashier', RoleState> = {
   kitchen: {
     socket: null, heartbeat: null, printQueue: Promise.resolve(),
-    getSettings: () => null, getErrorCb: () => undefined,
+    getSettings: () => null, getErrorCb: () => undefined, getNameCb: () => undefined,
+    onReconnectFailed: null,
   },
   cashier: {
     socket: null, heartbeat: null, printQueue: Promise.resolve(),
-    getSettings: () => null, getErrorCb: () => undefined,
+    getSettings: () => null, getErrorCb: () => undefined, getNameCb: () => undefined,
+    onReconnectFailed: null,
   },
 };
 
@@ -88,7 +92,7 @@ function buildSocket(
     socket.emit('register_printer', {
       deviceId,
       printerRole: role,
-      printerName: undefined,
+      printerName: st.getNameCb(),
     });
   });
 
@@ -131,6 +135,7 @@ function buildSocket(
       if (st.socket === socket) socket.connect();
     }, 30_000);
   };
+  st.onReconnectFailed = onReconnectFailed;
   socket.io.on('reconnect_failed', onReconnectFailed);
 
   // Heartbeat every 30 s — server marks device offline if > 60 s stale
@@ -172,6 +177,7 @@ export function usePrinterSocket(
     // Install accessors for this mount
     st.getSettings = () => settingsRef.current;
     st.getErrorCb  = () => onErrorRef.current;
+    st.getNameCb   = () => nameRef.current;
 
     let cancelled = false;
 
@@ -202,7 +208,8 @@ export function usePrinterSocket(
 
       // Disconnect stale socket before creating a new one
       if (st.socket) {
-        st.socket.io.off('reconnect_failed');
+        if (st.onReconnectFailed) st.socket.io.off('reconnect_failed', st.onReconnectFailed);
+        st.onReconnectFailed = null;
         st.socket.disconnect();
         st.socket = null;
       }
@@ -219,6 +226,7 @@ export function usePrinterSocket(
       // immediately without waiting for the screen to remount.
       st.getSettings = () => null;
       st.getErrorCb  = () => undefined;
+      st.getNameCb   = () => undefined;
     };
   }, []); // socket lifecycle is module-level; only runs once per mount
 }

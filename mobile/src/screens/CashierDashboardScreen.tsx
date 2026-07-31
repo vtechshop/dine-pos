@@ -48,6 +48,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const submittingRef = useRef(false);
   const ordersRef     = useRef<CashierOrder[]>([]);
   const [tick, setTick] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
   const { count: cashierBadge, increment: incCashierBadge, reset: resetCashierBadge } = useBadgeCount(BADGE_KEYS.cashierPending);
 
   const { showToast } = useGlobalToast();
@@ -378,6 +379,17 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   const listData = tab === 'active' ? activeOrders : completedOrders;
+  const q = searchQuery.trim().toLowerCase();
+  const filteredData = q
+    ? listData.filter(o => {
+        const token = (o.orderNumber.split('-').pop() || '').toLowerCase();
+        return (
+          token.endsWith(q) ||
+          o.tableNumber.toLowerCase().includes(q) ||
+          o.customerName.toLowerCase().includes(q)
+        );
+      })
+    : listData;
 
   return (
     <View style={[styles.container, { paddingTop: top }]}>
@@ -435,16 +447,34 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         ))}
       </View>
 
+      <View style={styles.searchContainer}>
+        <MaterialIcons name="search" size={18} color={Colors.textMuted} />
+        <TextInput
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Order no, table, name…"
+          placeholderTextColor={Colors.textMuted}
+          returnKeyType="search"
+          autoCorrect={false}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <MaterialIcons name="close" size={18} color={Colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
+
       <FlatList
-        data={listData}
+        data={filteredData}
         keyExtractor={item => item._id}
         renderItem={tab === 'active' ? renderActiveOrder : renderCompletedOrder}
         contentContainerStyle={{ padding: Spacing.lg, paddingBottom: bottom + 32 }}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
-            <Text style={{ fontSize: 40 }}>{tab === 'active' ? '✅' : '📋'}</Text>
+            <Text style={{ fontSize: 40 }}>{q ? '🔍' : tab === 'active' ? '✅' : '📋'}</Text>
             <Text style={styles.emptyText}>
-              {tab === 'active' ? 'No active orders' : 'No completed orders today'}
+              {q ? 'No orders match your search' : tab === 'active' ? 'No active orders' : 'No completed orders today'}
             </Text>
           </View>
         }
@@ -681,6 +711,13 @@ const styles = StyleSheet.create({
   reprintBtnText: { color: Colors.info, fontSize: FontSize.sm, fontWeight: '700' },
   methodBadge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   methodBadgeText: { fontSize: FontSize.xs, fontWeight: '800' },
+  searchContainer: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.surface, marginHorizontal: Spacing.lg, marginTop: Spacing.sm,
+    marginBottom: 2, borderRadius: BorderRadius.lg, paddingHorizontal: Spacing.md,
+    paddingVertical: 10, borderWidth: 1, borderColor: Colors.border,
+  },
+  searchInput: { flex: 1, fontSize: FontSize.md, color: Colors.text, paddingVertical: 0 },
   emptyWrap: { alignItems: 'center', paddingTop: 80, gap: Spacing.md },
   emptyText: { fontSize: FontSize.lg, color: Colors.textMuted },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
