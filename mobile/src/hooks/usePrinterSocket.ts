@@ -73,13 +73,22 @@ const _state: Record<'kitchen' | 'cashier', RoleState> = {
 function buildSocket(
   role:     'kitchen' | 'cashier',
   url:      string,
+  baseUrl:  string,
   token:    string,
   hotelId:  string,
   deviceId: string,
 ): Socket {
   const st = _state[role];
 
-  console.log(`[PrinterSocket][${role}] Creating socket — url=${url} tokenPresent=${!!token} hotelId=${hotelId}`);
+  console.log(
+    `[PrinterSocket][${role}] CREATING SOCKET` +
+    ` baseUrl=${baseUrl}` +
+    ` socketUrl=${url}` +
+    ` hotelId=${hotelId}` +
+    ` tokenPresent=${!!token}` +
+    ` autoConnect=true` +
+    ` transports=['websocket']`
+  );
   const socket = io(url, {
     transports:           ['websocket'],
     auth:                 { token },
@@ -89,12 +98,22 @@ function buildSocket(
   st.socket = socket;
 
   socket.on('connect_error', (err: any) => {
-    console.log(`[PrinterSocket][${role}] connect_error — message=${err?.message} description=${JSON.stringify(err?.description)} type=${err?.type}`);
+    console.log(
+      `[PrinterSocket][${role}] connect_error` +
+      ` message=${err?.message}` +
+      ` description=${JSON.stringify(err?.description)}` +
+      ` type=${err?.type}` +
+      ` transport=${err?.context?.transport?.name ?? 'n/a'}` +
+      ` uri=${(socket.io as any).uri}` +
+      ` socketId=${socket.id ?? 'none'}` +
+      ` connected=${socket.connected}`
+    );
   });
 
   socket.on('connect', () => {
     console.log(`[PrinterSocket][${role}] Socket connected — id=${socket.id}`);
     socket.emit('join_hotel', hotelId);
+    console.log(`[PrinterSocket][${role}] join_hotel emitted — room=hotel_${hotelId}`);
     socket.emit('register_printer', {
       deviceId,
       printerRole: role,
@@ -218,14 +237,28 @@ export function usePrinterSocket(
       const roleFetcher = printerRole === 'kitchen' ? getKitchenToken
                         : printerRole === 'cashier' ? getCashierToken
                         : getToken;
-      const [url, roleToken, adminToken, hotelId, deviceId] = await Promise.all([
+      const [url, roleToken, adminToken, hotelId, deviceId, baseUrl] = await Promise.all([
         getSocketUrl(),
         roleFetcher(),
         getToken(),
         getStoredHotelId(),
         getOrCreateDeviceId(),
+        getBaseUrl(),
       ]);
       const token = roleToken || adminToken;
+
+      console.log(
+        `[PrinterSocket][${printerRole}] PRE-CONNECT` +
+        ` baseUrl=${baseUrl}` +
+        ` socketUrl=${url}` +
+        ` hotelId=${hotelId ?? 'NULL'}` +
+        ` role=${printerRole}` +
+        ` tokenPresent=${!!token}` +
+        ` socketConnected=${st.socket?.connected ?? false}` +
+        ` autoConnect=true` +
+        ` transports=['websocket']` +
+        ` cancelled=${cancelled}`
+      );
 
       if (cancelled || !url || !hotelId) return;
 
@@ -247,7 +280,7 @@ export function usePrinterSocket(
         st.socket = null;
       }
 
-      buildSocket(printerRole, url, token || '', hotelId, deviceId);
+      buildSocket(printerRole, url, baseUrl, token || '', hotelId, deviceId);
     })();
 
     return () => {

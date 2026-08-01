@@ -587,7 +587,7 @@ io.on('connection', (socket) => {
 
   // join_hotel: admin app calls this on connect (backward-compat + customer fallback)
   socket.on('join_hotel', (hotelId: string) => {
-    logger.info('[SOCKET] join_hotel received', { socketId: socket.id, hotelId, authenticated: !!socket.data.authenticated });
+    logger.info('[SOCKET] join_hotel received', { socketId: socket.id, hotelId, authenticated: !!socket.data.authenticated, ip: socket.handshake.address, jwtHotelId: socket.data.hotelId || 'none' });
     if (typeof hotelId !== 'string' || !hotelId) return;
 
     if (socket.data.authenticated) {

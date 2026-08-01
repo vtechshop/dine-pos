@@ -11,7 +11,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import {
   getKitchenOrders, updateKitchenOrderStatus, clearKitchenToken,
-  getKitchenToken, getStoredHotelId, getSocketUrl,
+  getKitchenToken, getStoredHotelId, getSocketUrl, getBaseUrl,
   KitchenOrder,
 } from '../services/api';
 import { setupNotifications } from '../utils/notifications';
@@ -89,10 +89,20 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       // Await channel creation before connecting so the first notification
       // always has a valid Android channel and plays the correct sound.
       await setupNotifications();
-      const [hotelId, url, token] = await Promise.all([
-        getStoredHotelId(), getSocketUrl(), getKitchenToken(),
+      const [hotelId, url, token, baseUrl] = await Promise.all([
+        getStoredHotelId(), getSocketUrl(), getKitchenToken(), getBaseUrl(),
       ]);
-      console.log(`[KitchenNotifSocket] url=${url} hotelId=${hotelId || 'NULL'} tokenPresent=${!!token} cancelled=${cancelled}`);
+      console.log(
+        `[KitchenNotifSocket] PRE-CONNECT` +
+        ` baseUrl=${baseUrl}` +
+        ` socketUrl=${url}` +
+        ` hotelId=${hotelId || 'NULL'}` +
+        ` role=kitchen` +
+        ` tokenPresent=${!!token}` +
+        ` autoConnect=true` +
+        ` transports=['websocket']` +
+        ` cancelled=${cancelled}`
+      );
       if (cancelled || !hotelId) return;
 
       socket = io(url, {
@@ -104,13 +114,23 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       socketRef.current = socket;
 
       socket.on('connect', () => {
-        console.log(`[KitchenNotifSocket] connected id=${socket.id} joining hotel_${hotelId}`);
+        console.log(`[KitchenNotifSocket] connected — id=${socket.id} uri=${(socket.io as any).uri}`);
         socket.emit('join_hotel', hotelId);
+        console.log(`[KitchenNotifSocket] join_hotel emitted — room=hotel_${hotelId}`);
         loadOrders();
       });
 
       socket.on('connect_error', (err: any) => {
-        console.log(`[KitchenNotifSocket] connect_error — message=${err?.message} description=${JSON.stringify(err?.description)} type=${err?.type}`);
+        console.log(
+          `[KitchenNotifSocket] connect_error` +
+          ` message=${err?.message}` +
+          ` description=${JSON.stringify(err?.description)}` +
+          ` type=${err?.type}` +
+          ` transport=${err?.context?.transport?.name ?? 'n/a'}` +
+          ` uri=${(socket.io as any).uri}` +
+          ` socketId=${socket.id ?? 'none'}` +
+          ` connected=${socket.connected}`
+        );
         if (!mountedRef.current) return;
         if (err.message?.includes('authentication')) {
           clearKitchenToken().then(() => {
