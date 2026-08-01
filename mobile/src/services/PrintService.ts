@@ -132,10 +132,16 @@ export async function executePrintJob(
   settings:      Settings,
   reportStatus:  (jobId: string, status: 'success' | 'failed', error?: string) => Promise<void>,
 ): Promise<void> {
-  const { jobId, printerAddress, payload } = event;
+  const { jobId, payload } = event;
+  // Fall back to the locally stored BT address when the backend Settings field is empty.
+  // Handles setups where kitchenPrinterAddress / cashierPrinterAddress hasn't been
+  // configured in the admin dashboard but the device has the address in its own Settings.
+  const printerAddress = event.printerAddress
+    || (event.printerTarget === 'kitchen' ? settings.kitchenPrinterAddress : settings.cashierPrinterAddress)
+    || '';
 
   if (!printerAddress) {
-    await reportStatus(jobId, 'failed', 'No printer address in job');
+    await reportStatus(jobId, 'failed', 'No printer address — set Bluetooth address in Settings');
     return;
   }
 

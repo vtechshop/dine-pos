@@ -154,13 +154,22 @@ export async function scheduleKOTPrint(
   },
 ): Promise<void> {
   const settings = await Settings.findOne({ hotelId: new mongoose.Types.ObjectId(hotelId) })
-    .select('printerMode kitchenPrinterAddress kotAutoPrint')
+    .select('printerMode kitchenPrinterAddress cashierPrinterAddress kotAutoPrint')
     .lean();
 
-  const s           = settings as any;
-  const mode        = s?.printerMode           ?? 'single';
-  const kotAddress  = s?.kitchenPrinterAddress ?? '';
-  const kotAutoPrint = s?.kotAutoPrint         ?? true;
+  const s            = settings as any;
+  const mode         = s?.printerMode            ?? 'single';
+  const kitchenAddr  = s?.kitchenPrinterAddress  ?? '';
+  const cashierAddr  = s?.cashierPrinterAddress  ?? '';
+  const kotAutoPrint = s?.kotAutoPrint           ?? true;
+
+  // Single mode: CashierDashboardScreen registers as 'cashier' printer — there is no
+  // dedicated kitchen device running KitchenDisplayScreen, so 'kitchen' PrinterDevice
+  // is never registered and KOT jobs would queue as pending forever.
+  // Dispatch to 'cashier' in single mode so the active device actually receives the job.
+  // Dual mode: a separate KitchenDisplayScreen device registers as 'kitchen'.
+  const printerTarget: 'kitchen' | 'cashier' = mode === 'dual' ? 'kitchen' : 'cashier';
+  const kotAddress = mode === 'dual' ? kitchenAddr : (cashierAddr || kitchenAddr);
 
   const payload: KOTPayload = {
     templateType: 'kot',
@@ -185,7 +194,7 @@ export async function scheduleKOTPrint(
   await dispatchPrintJob(
     hotelId,
     'kot',
-    'kitchen',
+    printerTarget,
     kotAddress,
     mode,
     kotAutoPrint,
