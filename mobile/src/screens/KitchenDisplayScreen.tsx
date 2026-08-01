@@ -109,7 +109,8 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         loadOrders();
       });
 
-      socket.on('connect_error', (err) => {
+      socket.on('connect_error', (err: any) => {
+        console.log(`[KitchenNotifSocket] connect_error — message=${err?.message} description=${JSON.stringify(err?.description)} type=${err?.type}`);
         if (!mountedRef.current) return;
         if (err.message?.includes('authentication')) {
           clearKitchenToken().then(() => {
@@ -118,7 +119,20 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         }
       });
 
+      socket.on('disconnect', (reason: string) => {
+        console.log(`[KitchenNotifSocket] disconnect — reason=${reason}`);
+      });
+
+      socket.io.on('reconnect_attempt', (n: number) => {
+        console.log(`[KitchenNotifSocket] reconnect_attempt ${n}/20`);
+      });
+
+      socket.io.on('reconnect', (n: number) => {
+        console.log(`[KitchenNotifSocket] reconnected after ${n} attempt(s)`);
+      });
+
       socket.on('reconnect_failed', () => {
+        console.log(`[KitchenNotifSocket] reconnect_failed — gave up after 20 attempts`);
         if (mountedRef.current) setSocketLost(true);
       });
 

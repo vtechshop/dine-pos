@@ -179,7 +179,8 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         loadOrders();
       });
 
-      socket.on('connect_error', (err) => {
+      socket.on('connect_error', (err: any) => {
+        console.log(`[CashierNotifSocket] connect_error — message=${err?.message} description=${JSON.stringify(err?.description)} type=${err?.type}`);
         if (!mountedRef.current) return;
         if (err.message?.includes('authentication')) {
           clearCashierToken().then(() => {
@@ -188,7 +189,20 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         }
       });
 
+      socket.on('disconnect', (reason: string) => {
+        console.log(`[CashierNotifSocket] disconnect — reason=${reason}`);
+      });
+
+      socket.io.on('reconnect_attempt', (n: number) => {
+        console.log(`[CashierNotifSocket] reconnect_attempt ${n}/20`);
+      });
+
+      socket.io.on('reconnect', (n: number) => {
+        console.log(`[CashierNotifSocket] reconnected after ${n} attempt(s)`);
+      });
+
       socket.on('reconnect_failed', () => {
+        console.log(`[CashierNotifSocket] reconnect_failed — gave up after 20 attempts`);
         if (mountedRef.current) setSocketLost(true);
       });
 
