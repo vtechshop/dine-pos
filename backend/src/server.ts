@@ -541,7 +541,10 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 //        the client must refresh the access token before reconnecting.
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token as string | undefined;
-  if (!token) return next(); // no token = customer QR menu connection (allowed)
+  if (!token) {
+    logger.info('[SOCKET] Auth: no token — unauthenticated connection allowed', { socketId: socket.id, ip: socket.handshake.address });
+    return next(); // no token = customer QR menu connection (allowed)
+  }
 
   // Try Super Admin JWT first
   try {
@@ -549,18 +552,21 @@ io.use((socket, next) => {
     if (saPayload?.role === 'superadmin') {
       socket.data.role = 'superadmin';
       socket.data.authenticated = true;
+      logger.info('[SOCKET] Auth: superadmin accepted', { socketId: socket.id });
       return next();
     }
   } catch { /* not a SA token — try hotel JWT below */ }
 
   // Hotel JWT
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { hotelId: string };
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { hotelId: string; role?: string };
     socket.data.hotelId = decoded.hotelId;
     socket.data.authenticated = true;
+    logger.info('[SOCKET] Auth: accepted', { socketId: socket.id, hotelId: decoded.hotelId, role: decoded.role || 'admin' });
     next();
-  } catch {
+  } catch (err: any) {
     // H-05: token was provided but is expired or invalid — reject the connection.
+    logger.warn('[SOCKET] Auth: REJECTED — token invalid or expired', { socketId: socket.id, ip: socket.handshake.address, reason: err?.message });
     return next(new Error('Socket authentication failed: token expired or invalid'));
   }
 });

@@ -162,6 +162,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       const [hotelId, url, token] = await Promise.all([
         getStoredHotelId(), getSocketUrl(), getCashierToken(),
       ]);
+      console.log(`[CashierNotifSocket] url=${url} hotelId=${hotelId || 'NULL'} tokenPresent=${!!token} cancelled=${cancelled}`);
       if (cancelled || !hotelId) return;
 
       socket = io(url, {
@@ -173,6 +174,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       socketRef.current = socket;
 
       socket.on('connect', () => {
+        console.log(`[CashierNotifSocket] connected id=${socket.id} joining hotel_${hotelId}`);
         socket.emit('join_hotel', hotelId);
         loadOrders();
       });

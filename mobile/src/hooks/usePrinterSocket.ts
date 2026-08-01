@@ -79,6 +79,7 @@ function buildSocket(
 ): Socket {
   const st = _state[role];
 
+  console.log(`[PrinterSocket][${role}] Creating socket — url=${url} tokenPresent=${!!token} hotelId=${hotelId}`);
   const socket = io(url, {
     transports:           ['websocket'],
     auth:                 { token },
@@ -86,6 +87,10 @@ function buildSocket(
     reconnectionDelay:    3000,
   });
   st.socket = socket;
+
+  socket.on('connect_error', (err: any) => {
+    console.log(`[PrinterSocket][${role}] connect_error — message=${err?.message} description=${JSON.stringify(err?.description)} type=${err?.type}`);
+  });
 
   socket.on('connect', () => {
     console.log(`[PrinterSocket][${role}] Socket connected — id=${socket.id}`);
