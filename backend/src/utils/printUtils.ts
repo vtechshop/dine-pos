@@ -153,6 +153,8 @@ export async function scheduleKOTPrint(
     guestId?:    any;
   },
 ): Promise<void> {
+  logger.info('[scheduleKOTPrint] Called', { hotelId, orderId: String(order._id), orderNumber: order.orderNumber });
+
   const settings = await Settings.findOne({ hotelId: new mongoose.Types.ObjectId(hotelId) })
     .select('printerMode kitchenPrinterAddress cashierPrinterAddress kotAutoPrint')
     .lean();
@@ -170,6 +172,8 @@ export async function scheduleKOTPrint(
   // Dual mode: a separate KitchenDisplayScreen device registers as 'kitchen'.
   const printerTarget: 'kitchen' | 'cashier' = mode === 'dual' ? 'kitchen' : 'cashier';
   const kotAddress = mode === 'dual' ? kitchenAddr : (cashierAddr || kitchenAddr);
+
+  logger.info('[scheduleKOTPrint] Dispatching', { hotelId, orderId: String(order._id), printerTarget, kotAddress: kotAddress || '(none)', mode, kotAutoPrint });
 
   const payload: KOTPayload = {
     templateType: 'kot',

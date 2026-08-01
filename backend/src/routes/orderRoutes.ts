@@ -387,6 +387,7 @@ router.get('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
 // POST create order — admin, waiter, and cashier can create orders; kitchen cannot
 router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
+    logger.info('[POST /orders] Received', { hotelId: req.hotelId, role: req.role, itemCount: Array.isArray(req.body.items) ? req.body.items.length : 0 });
     // Every order must have at least one item and at most 100 items
     if (!Array.isArray(req.body.items) || req.body.items.length === 0) {
       return res.status(400).json({ message: 'Order must contain at least one item' });
@@ -657,6 +658,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
         if (existing) return res.status(200).json(existing);
       } catch { /* fall through to sendError */ }
     }
+    logger.error('[POST /orders] Failed', { hotelId: req.hotelId, error: String(error), code: error.code });
     sendError(res, 400, 'Invalid data', error);
   }
 });
