@@ -1,23 +1,35 @@
 import { Router, Request, Response } from 'express';
 import { timingSafeEqual } from 'crypto';
+import jwt from 'jsonwebtoken';
 import Ticket from '../models/Ticket';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-// Super admin auth — uses timingSafeEqual to prevent timing attacks
-const superAdminAuth = (req: Request, res: Response, next: Function) => {
-  const id   = req.headers['x-super-admin-id']   as string ?? '';
-  const pass = req.headers['x-super-admin-pass']  as string ?? '';
-  const expectedId   = process.env.SUPER_ADMIN_ID   || 'superadmin';
-  const expectedPass = process.env.SUPER_ADMIN_PASS || 'super1234';
+const safeEqual = (a: string, b: string): boolean => {
   try {
-    const idBuf   = Buffer.from(id);
-    const passBuf = Buffer.from(pass);
-    const okId   = idBuf.length   === Buffer.from(expectedId).length   && timingSafeEqual(idBuf,   Buffer.from(expectedId));
-    const okPass = passBuf.length === Buffer.from(expectedPass).length && timingSafeEqual(passBuf, Buffer.from(expectedPass));
-    if (okId && okPass) return next();
-  } catch { /* fall through */ }
+    const ab = Buffer.from(a);
+    const bb = Buffer.from(b);
+    return ab.length === bb.length && timingSafeEqual(ab, bb);
+  } catch { return false; }
+};
+
+// Super admin auth — JWT Bearer (SA app / web dashboard) or credential headers (CI / automation)
+const superAdminAuth = (req: Request, res: Response, next: Function) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const payload = jwt.verify(authHeader.slice(7), process.env.SUPER_ADMIN_JWT_SECRET!) as any;
+      if (payload?.role === 'superadmin') return next();
+    } catch { /* invalid or expired token */ }
+  }
+  const id   = req.headers['x-super-admin-id']   as string | undefined;
+  const pass = req.headers['x-super-admin-pass'] as string | undefined;
+  if (
+    id && pass &&
+    safeEqual(id,   process.env.SUPER_ADMIN_ID   || 'superadmin') &&
+    safeEqual(pass, process.env.SUPER_ADMIN_PASS || 'super1234')
+  ) return next();
   return res.status(401).json({ message: 'Unauthorized' });
 };
 
