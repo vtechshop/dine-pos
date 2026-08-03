@@ -809,6 +809,15 @@ io.on('connection', (socket) => {
             { new: false },
           );
           if (!claimed) continue; // already claimed by a concurrent registration
+          logger.info('[PRINT_JOB_DISPATCH]', {
+            source:        'register_printer_flush',
+            socketId:      socket.id,
+            hotelId,
+            jobId:         String(job._id),
+            jobType:       job.jobType,
+            printerTarget: job.printerTarget,
+            printerMode:   job.printerMode,
+          });
           socket.emit('print_job', {
             jobId:          String(job._id),
             jobType:        job.jobType,

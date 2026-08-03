@@ -262,6 +262,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       console.log('\n======== END ========');
 
       socket.on('new_order', (data: { _id?: string; orderNumber?: string; tableNumber?: string }) => {
+        console.log(`[CashierNotifSocket] new_order received — id=${data._id ?? 'n/a'} table=${data.tableNumber ?? 'n/a'} order=${data.orderNumber ?? 'n/a'}`);
         if (!mountedRef.current) return;
         const label = orderLabel(data.tableNumber, data.orderNumber);
         // Vibration + push notification (background) handled by service; also show in-app toast

@@ -165,6 +165,15 @@ router.post('/:jobId/reprint', requireCashierOrAdmin, async (req: AuthRequest, r
       $inc: { attemptCount: 1 },
     });
 
+    logger.info('[PRINT_JOB_DISPATCH]', {
+      source:        'printRoutes_reprint',
+      socketId,
+      hotelId:       req.hotelId,
+      jobId,
+      jobType:       job.jobType,
+      printerTarget: job.printerTarget,
+      printerMode:   job.printerMode,
+    });
     io.to(socketId).emit('print_job', {
       jobId:          String(job._id),
       jobType:        job.jobType,

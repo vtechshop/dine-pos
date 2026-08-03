@@ -192,6 +192,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       console.log('\n======== END ========');
 
       const handleNewOrder = (data: { orderId?: string; _id?: string; tableNumber?: string; orderNumber?: string }) => {
+        console.log(`[KitchenNotifSocket] new_order received — id=${data.orderId ?? data._id ?? 'n/a'} table=${data.tableNumber ?? 'n/a'} order=${data.orderNumber ?? 'n/a'}`);
         if (!mountedRef.current) return;
         const id = data.orderId || data._id || '';
         if (id && seenOrderIds.current.has(id)) return;

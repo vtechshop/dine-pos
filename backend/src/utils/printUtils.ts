@@ -86,6 +86,15 @@ async function dispatchPrintJob(
   });
 
   if (shouldEmit) {
+    logger.info('[PRINT_JOB_DISPATCH]', {
+      source:        'printUtils',
+      socketId,
+      hotelId,
+      jobId:         String(job._id),
+      jobType,
+      printerTarget,
+      printerMode,
+    });
     // Emit only to the registered device socket — never broadcast to the whole hotel room
     io.to(socketId!).emit('print_job', {
       jobId: String(job._id),
