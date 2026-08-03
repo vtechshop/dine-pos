@@ -176,6 +176,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
         return;
 
       case 'pending':
+        logger.warn('[AUTH] 403 HOTEL_PENDING_APPROVAL', { hotelId: decoded.hotelId, path: (req as any).path });
         res.status(403).json({
           code: 'HOTEL_PENDING_APPROVAL',
           message: 'Your registration is under review. Please wait for approval.',
@@ -183,6 +184,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
         return;
 
       case 'rejected':
+        logger.warn('[AUTH] 403 HOTEL_REJECTED', { hotelId: decoded.hotelId, path: (req as any).path });
         res.status(403).json({
           code: 'HOTEL_REJECTED',
           message: 'Your registration was rejected. Please contact support or resubmit.',
@@ -190,6 +192,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
         return;
 
       case 'suspended':
+        logger.warn('[AUTH] 403 HOTEL_SUSPENDED', { hotelId: decoded.hotelId, path: (req as any).path, hotelName });
         res.status(403).json({
           code: 'HOTEL_SUSPENDED',
           message: 'Your account has been suspended. Please contact support.',
@@ -199,6 +202,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
 
       case 'expired': {
         const isTrial = subscriptionType === 'trial' || !subscriptionType;
+        logger.warn('[AUTH] 403 ' + (isTrial ? 'TRIAL_EXPIRED' : 'PLAN_EXPIRED'), { hotelId: decoded.hotelId, path: (req as any).path, expiredOn, subscriptionType });
         res.status(403).json({
           code: isTrial ? 'TRIAL_EXPIRED' : 'PLAN_EXPIRED',
           message: isTrial

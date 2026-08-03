@@ -6,16 +6,9 @@ import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireActiveStaff } from '../middleware/staffAuth';
 import { sendError } from '../utils/sendError';
 import { getDeviceLimitForPlan } from '../utils/planLimits';
+import { logger } from '../utils/logger';
 
 const router = Router();
-
-async function getDeviceLimit(hotelId: string): Promise<number> {
-  const hotel = await Hotel.findById(hotelId).select('subscriptionPlan status').lean();
-  if (!hotel) return 1;
-  const h = hotel as any;
-  const plan: string = h.subscriptionPlan || (h.status === 'trial' ? 'trial' : 'none');
-  return getDeviceLimitForPlan(plan);
-}
 
 // POST /api/devices/register — called on app launch after login
 router.post('/register', authMiddleware, requireActiveStaff, async (req: AuthRequest, res: Response) => {
@@ -25,11 +18,40 @@ router.post('/register', authMiddleware, requireActiveStaff, async (req: AuthReq
 
     if (!deviceId) return res.status(400).json({ message: 'deviceId required' });
 
+    // Fetch hotel to get subscriptionPlan, status, and branchId for logging + limit calc
+    const hotelDoc = await Hotel.findById(hotelId).select('subscriptionPlan status branchId').lean();
+    const h = hotelDoc as any;
+    const rawPlan: string | null = h?.subscriptionPlan ?? null;
+    const hotelStatus: string = h?.status ?? 'unknown';
+    const branchId: string | null = h?.branchId ?? null;
+    const derivedPlan: string = rawPlan || (hotelStatus === 'trial' ? 'trial' : 'none');
+    const limit = getDeviceLimitForPlan(derivedPlan);
+
+    logger.info('[DEVICE_REGISTER] request received', {
+      hotelId,
+      deviceId: deviceId || 'MISSING',
+      rawSubscriptionPlan: rawPlan,
+      derivedPlan,
+      hotelStatus,
+      deviceLimit: limit,
+      branchId,
+      role: req.role,
+    });
+
     // Enforce plan-based device limit (count active devices for this hotel, exclude current deviceId)
-    const limit = await getDeviceLimit(hotelId);
     if (limit > 0) {
       const existingCount = await Device.countDocuments({ hotelId, isActive: true, deviceId: { $ne: deviceId } });
       if (existingCount >= limit) {
+        logger.warn('[DEVICE_REGISTER] 403 DEVICE_LIMIT_REACHED', {
+          hotelId,
+          deviceId,
+          existingCount,
+          deviceLimit: limit,
+          subscriptionPlan: derivedPlan,
+          rawSubscriptionPlan: rawPlan,
+          hotelStatus,
+          branchId,
+        });
         return res.status(403).json({
           code: 'DEVICE_LIMIT_REACHED',
           message: `Your plan allows a maximum of ${limit} device${limit === 1 ? '' : 's'}. Please remove an existing device or upgrade your plan.`,
