@@ -237,6 +237,21 @@ const io = new Server(httpServer, {
 });
 setIo(io); // L-2: break circular inquiryRoutes ↔ server dependency
 
+// Log every incoming HTTP→WebSocket upgrade request.
+// Fires BEFORE Socket.IO processes the connection — proves whether the upgrade
+// reaches Node.js at all. Zero entries here with io() firing on the client
+// means the connection is blocked before the Node.js process.
+httpServer.on('upgrade', (req) => {
+  logger.info('[HTTP_UPGRADE] WebSocket upgrade request received', {
+    url:                 req.url,
+    upgrade:             req.headers['upgrade']              ?? 'none',
+    connection:          req.headers['connection']           ?? 'none',
+    secWebSocketVersion: req.headers['sec-websocket-version'] ?? 'none',
+    origin:              req.headers['origin']               ?? 'none',
+    userAgent:           req.headers['user-agent']           ?? 'none',
+  });
+});
+
 app.use(compression()); // gzip responses — reduces JSON payload by ~85%
 app.use(express.json({
   limit: '1mb',

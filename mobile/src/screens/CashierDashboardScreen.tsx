@@ -202,6 +202,18 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       });
       socketRef.current = socket;
       console.log(`[CashierNotifSocket] io() returned — id=${socket.id ?? 'pending'} connected=${socket.connected}`);
+      const _ceng = (socket.io as any).engine;
+      console.log(
+        '\n======== ENGINE SNAPSHOT [CashierNotifSocket] ========\n' +
+        `uri=${(socket.io as any).uri}\n` +
+        `transport=${_ceng?.transport?.name ?? 'n/a'}\n` +
+        `readyState=${_ceng?.readyState ?? 'n/a'}\n` +
+        `hostname=${_ceng?.hostname ?? 'n/a'}\n` +
+        `port=${_ceng?.port ?? 'n/a'}\n` +
+        `secure=${_ceng?.secure ?? 'n/a'}\n` +
+        `path=${_ceng?.path ?? 'n/a'}\n` +
+        '======================================================='
+      );
       console.log('[CashierNotifSocket] autoConnect=true — socket.connect() NOT called explicitly');
       console.log('\n======== EVENTS ========');
 

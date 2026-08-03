@@ -132,6 +132,18 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       });
       socketRef.current = socket;
       console.log(`[KitchenNotifSocket] io() returned — id=${socket.id ?? 'pending'} connected=${socket.connected}`);
+      const _keng = (socket.io as any).engine;
+      console.log(
+        '\n======== ENGINE SNAPSHOT [KitchenNotifSocket] ========\n' +
+        `uri=${(socket.io as any).uri}\n` +
+        `transport=${_keng?.transport?.name ?? 'n/a'}\n` +
+        `readyState=${_keng?.readyState ?? 'n/a'}\n` +
+        `hostname=${_keng?.hostname ?? 'n/a'}\n` +
+        `port=${_keng?.port ?? 'n/a'}\n` +
+        `secure=${_keng?.secure ?? 'n/a'}\n` +
+        `path=${_keng?.path ?? 'n/a'}\n` +
+        '======================================================='
+      );
       console.log('[KitchenNotifSocket] autoConnect=true — socket.connect() NOT called explicitly');
       console.log('\n======== EVENTS ========');
 

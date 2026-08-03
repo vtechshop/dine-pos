@@ -89,6 +89,18 @@ function buildSocket(
   });
   st.socket = socket;
   console.log(`[PrinterSocket][${role}] Socket instance created — id=${socket.id ?? 'pending'} connected=${socket.connected}`);
+  const _eng = (socket.io as any).engine;
+  console.log(
+    `\n======== ENGINE SNAPSHOT [PrinterSocket][${role}] ========\n` +
+    `uri=${(socket.io as any).uri}\n` +
+    `transport=${_eng?.transport?.name ?? 'n/a'}\n` +
+    `readyState=${_eng?.readyState ?? 'n/a'}\n` +
+    `hostname=${_eng?.hostname ?? 'n/a'}\n` +
+    `port=${_eng?.port ?? 'n/a'}\n` +
+    `secure=${_eng?.secure ?? 'n/a'}\n` +
+    `path=${_eng?.path ?? 'n/a'}\n` +
+    '========================================================='
+  );
   // autoConnect=true: Socket.IO connects internally — no explicit socket.connect() call
   console.log('\n======== EVENTS ========');
 
