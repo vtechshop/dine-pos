@@ -79,8 +79,8 @@ jobs:
         run: |
           npm start &
           echo $! > /tmp/backend.pid
-          # Wait for server to be ready
-          timeout 30 bash -c 'until curl -s http://localhost:5000/api/superadmin/health -H "x-super-admin-id:$SUPER_ADMIN_ID" -H "x-super-admin-pass:$SUPER_ADMIN_PASS" | grep -q "ok\|healthy"; do sleep 2; done'
+          # Wait for server to be ready (unauthenticated liveness probe)
+          timeout 60 bash -c 'until curl -sf http://localhost:5000/api/health/live; do sleep 2; done'
 
       - name: Install automation dependencies
         working-directory: automation
