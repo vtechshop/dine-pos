@@ -92,19 +92,38 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       const [hotelId, url, token, baseUrl] = await Promise.all([
         getStoredHotelId(), getSocketUrl(), getKitchenToken(), getBaseUrl(),
       ]);
+      const _ts = new Date().toISOString();
       console.log(
-        `[KitchenNotifSocket] PRE-CONNECT` +
-        ` baseUrl=${baseUrl}` +
-        ` socketUrl=${url}` +
-        ` hotelId=${hotelId || 'NULL'}` +
-        ` role=kitchen` +
-        ` tokenPresent=${!!token}` +
-        ` autoConnect=true` +
-        ` transports=['websocket']` +
-        ` cancelled=${cancelled}`
+        '\n======== SOCKET START ========' +
+        '\nRole=kitchen' +
+        '\nScreen=KitchenDisplayScreen' +
+        '\nThread=JS_THREAD' +
+        `\nTimestamp=${_ts}` +
+        `\nBASE_URL=${baseUrl ?? 'NULL'}` +
+        `\nSOCKET_URL=${url ?? 'NULL'}` +
+        `\nhotelId=${hotelId ?? 'NULL'}` +
+        `\ntokenPresent=${!!token} tokenLength=${token?.length ?? 0}` +
+        '\nsocketExists=N/A (per-render local var)' +
+        '\nautoConnect=true' +
+        "\ntransports=['websocket']" +
+        `\ncancelled=${cancelled}` +
+        '\n=============================='
       );
-      if (cancelled || !hotelId) return;
+      if (cancelled || !hotelId) {
+        const _r: string[] = [];
+        if (cancelled) _r.push('cancelled=true');
+        if (!hotelId) _r.push('hotelId=NULL');
+        console.log(
+          '\n======== EARLY RETURN ========' +
+          '\nRETURN_BEFORE_SOCKET' +
+          `\nreason: ${_r.join(' | ')}` +
+          `\nstack: ${new Error('EARLY_RETURN').stack ?? 'unavailable'}` +
+          '\n=============================='
+        );
+        return;
+      }
 
+      console.log('[KitchenNotifSocket] Calling io()');
       socket = io(url, {
         transports: ['websocket'],
         auth: { token: token || '' },
@@ -112,24 +131,27 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         reconnectionDelay: 2000,
       });
       socketRef.current = socket;
+      console.log(`[KitchenNotifSocket] io() returned — id=${socket.id ?? 'pending'} connected=${socket.connected}`);
+      console.log('[KitchenNotifSocket] autoConnect=true — socket.connect() NOT called explicitly');
+      console.log('\n======== EVENTS ========');
 
       socket.on('connect', () => {
-        console.log(`[KitchenNotifSocket] connected — id=${socket.id} uri=${(socket.io as any).uri}`);
+        console.log(`[KitchenNotifSocket] EVENT connect — id=${socket.id} uri=${(socket.io as any).uri}`);
         socket.emit('join_hotel', hotelId);
-        console.log(`[KitchenNotifSocket] join_hotel emitted — room=hotel_${hotelId}`);
+        console.log(`[KitchenNotifSocket] join_hotel EMITTED — room=hotel_${hotelId} (no ack — not implemented)`);
         loadOrders();
       });
 
       socket.on('connect_error', (err: any) => {
         console.log(
-          `[KitchenNotifSocket] connect_error` +
-          ` message=${err?.message}` +
-          ` description=${JSON.stringify(err?.description)}` +
-          ` type=${err?.type}` +
-          ` transport=${err?.context?.transport?.name ?? 'n/a'}` +
-          ` uri=${(socket.io as any).uri}` +
-          ` socketId=${socket.id ?? 'none'}` +
-          ` connected=${socket.connected}`
+          `\n[KitchenNotifSocket] EVENT connect_error` +
+          `\nmessage=${err?.message}` +
+          `\ndescription=${JSON.stringify(err?.description)}` +
+          `\ntype=${err?.type}` +
+          `\ntransport=${err?.context?.transport?.name ?? 'n/a'}` +
+          `\nuri=${(socket.io as any).uri}` +
+          `\nsocketId=${socket.id ?? 'none'}` +
+          `\nconnected=${socket.connected}`
         );
         if (!mountedRef.current) return;
         if (err.message?.includes('authentication')) {
@@ -140,21 +162,22 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       });
 
       socket.on('disconnect', (reason: string) => {
-        console.log(`[KitchenNotifSocket] disconnect — reason=${reason}`);
+        console.log(`[KitchenNotifSocket] EVENT disconnect — reason=${reason}`);
       });
 
       socket.io.on('reconnect_attempt', (n: number) => {
-        console.log(`[KitchenNotifSocket] reconnect_attempt ${n}/20`);
+        console.log(`[KitchenNotifSocket] EVENT reconnect_attempt ${n}/20`);
       });
 
       socket.io.on('reconnect', (n: number) => {
-        console.log(`[KitchenNotifSocket] reconnected after ${n} attempt(s)`);
+        console.log(`[KitchenNotifSocket] EVENT reconnect — after ${n} attempt(s)`);
       });
 
       socket.on('reconnect_failed', () => {
-        console.log(`[KitchenNotifSocket] reconnect_failed — gave up after 20 attempts`);
+        console.log('[KitchenNotifSocket] EVENT reconnect_failed — gave up after 20 attempts');
         if (mountedRef.current) setSocketLost(true);
       });
+      console.log('\n======== END ========');
 
       const handleNewOrder = (data: { orderId?: string; _id?: string; tableNumber?: string; orderNumber?: string }) => {
         if (!mountedRef.current) return;

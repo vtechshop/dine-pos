@@ -80,15 +80,7 @@ function buildSocket(
 ): Socket {
   const st = _state[role];
 
-  console.log(
-    `[PrinterSocket][${role}] CREATING SOCKET` +
-    ` baseUrl=${baseUrl}` +
-    ` socketUrl=${url}` +
-    ` hotelId=${hotelId}` +
-    ` tokenPresent=${!!token}` +
-    ` autoConnect=true` +
-    ` transports=['websocket']`
-  );
+  console.log(`[PrinterSocket][${role}] CREATING SOCKET socketUrl=${url} hotelId=${hotelId} tokenPresent=${!!token}`);
   const socket = io(url, {
     transports:           ['websocket'],
     auth:                 { token },
@@ -96,24 +88,27 @@ function buildSocket(
     reconnectionDelay:    3000,
   });
   st.socket = socket;
+  console.log(`[PrinterSocket][${role}] Socket instance created — id=${socket.id ?? 'pending'} connected=${socket.connected}`);
+  // autoConnect=true: Socket.IO connects internally — no explicit socket.connect() call
+  console.log('\n======== EVENTS ========');
 
   socket.on('connect_error', (err: any) => {
     console.log(
-      `[PrinterSocket][${role}] connect_error` +
-      ` message=${err?.message}` +
-      ` description=${JSON.stringify(err?.description)}` +
-      ` type=${err?.type}` +
-      ` transport=${err?.context?.transport?.name ?? 'n/a'}` +
-      ` uri=${(socket.io as any).uri}` +
-      ` socketId=${socket.id ?? 'none'}` +
-      ` connected=${socket.connected}`
+      `\n[PrinterSocket][${role}] EVENT connect_error` +
+      `\nmessage=${err?.message}` +
+      `\ndescription=${JSON.stringify(err?.description)}` +
+      `\ntype=${err?.type}` +
+      `\ntransport=${err?.context?.transport?.name ?? 'n/a'}` +
+      `\nuri=${(socket.io as any).uri}` +
+      `\nsocketId=${socket.id ?? 'none'}` +
+      `\nconnected=${socket.connected}`
     );
   });
 
   socket.on('connect', () => {
-    console.log(`[PrinterSocket][${role}] Socket connected — id=${socket.id}`);
+    console.log(`[PrinterSocket][${role}] EVENT connect — id=${socket.id} uri=${(socket.io as any).uri}`);
     socket.emit('join_hotel', hotelId);
-    console.log(`[PrinterSocket][${role}] join_hotel emitted — room=hotel_${hotelId}`);
+    console.log(`[PrinterSocket][${role}] join_hotel EMITTED — room=hotel_${hotelId} (no ack — not implemented)`);
     socket.emit('register_printer', {
       deviceId,
       printerRole: role,
@@ -156,21 +151,15 @@ function buildSocket(
     );
   });
 
-  // Socket.IO server connection dropped — NOT a Bluetooth event.
-  // The printer is likely still Bluetooth-connected and printing works.
-  // Socket.IO will auto-reconnect; no user error should be shown here.
   socket.on('disconnect', (reason: string) => {
-    console.log(`[PrinterSocket][${role}] Socket disconnected — reason=${reason} (Bluetooth unaffected, auto-reconnecting)`);
+    console.log(`[PrinterSocket][${role}] EVENT disconnect — reason=${reason}`);
   });
 
   const onReconnectFailed = () => {
-    // 20 reconnection attempts exhausted — server is unreachable.
-    // This is NOT a Bluetooth failure: the printer can still be connected and
-    // print jobs still work. Do NOT call errCb here.
-    console.log(`[PrinterSocket][${role}] Reconnect failed after 20 attempts — server unreachable, NOT a Bluetooth error. Retrying in 30 s.`);
+    console.log(`[PrinterSocket][${role}] EVENT reconnect_failed — gave up after 20 attempts. Retrying in 30s.`);
     setTimeout(() => {
       if (st.socket === socket) {
-        console.log(`[PrinterSocket][${role}] Retrying socket connection`);
+        console.log(`[PrinterSocket][${role}] Retrying — calling socket.connect()`);
         socket.connect();
       }
     }, 30_000);
@@ -179,15 +168,14 @@ function buildSocket(
   socket.io.on('reconnect_failed', onReconnectFailed);
 
   socket.io.on('reconnect_attempt', (n: number) => {
-    console.log(`[PrinterSocket][${role}] Reconnect attempt ${n}/20`);
+    console.log(`[PrinterSocket][${role}] EVENT reconnect_attempt ${n}/20`);
   });
 
   socket.io.on('reconnect', (n: number) => {
-    console.log(`[PrinterSocket][${role}] Reconnected after ${n} attempt(s)`);
+    console.log(`[PrinterSocket][${role}] EVENT reconnect — after ${n} attempt(s)`);
   });
 
   // Heartbeat every 30 s — server marks device offline if > 60 s stale.
-  // Only one timer per role: existing interval cleared before creating a new one.
   if (st.heartbeat) clearInterval(st.heartbeat);
   st.heartbeat = setInterval(() => {
     if (socket.connected) {
@@ -195,6 +183,9 @@ function buildSocket(
       socket.emit('printer_heartbeat');
     }
   }, 30_000);
+
+  console.log(`[PrinterSocket][${role}] All event handlers registered`);
+  console.log('\n======== END ========');
 
   return socket;
 }
@@ -246,24 +237,42 @@ export function usePrinterSocket(
         getBaseUrl(),
       ]);
       const token = roleToken || adminToken;
+      const _ts = new Date().toISOString();
 
       console.log(
-        `[PrinterSocket][${printerRole}] PRE-CONNECT` +
-        ` baseUrl=${baseUrl}` +
-        ` socketUrl=${url}` +
-        ` hotelId=${hotelId ?? 'NULL'}` +
-        ` role=${printerRole}` +
-        ` tokenPresent=${!!token}` +
-        ` socketConnected=${st.socket?.connected ?? false}` +
-        ` autoConnect=true` +
-        ` transports=['websocket']` +
-        ` cancelled=${cancelled}`
+        '\n======== SOCKET START ========' +
+        `\nRole=${printerRole}` +
+        '\nScreen=usePrinterSocket' +
+        '\nThread=JS_THREAD' +
+        `\nTimestamp=${_ts}` +
+        `\nBASE_URL=${baseUrl ?? 'NULL'}` +
+        `\nSOCKET_URL=${url ?? 'NULL'}` +
+        `\nhotelId=${hotelId ?? 'NULL'}` +
+        `\ntokenPresent=${!!token} tokenLength=${token?.length ?? 0}` +
+        `\nsocketExists=${!!st.socket} socketConnected=${st.socket?.connected ?? false}` +
+        '\nautoConnect=true' +
+        "\ntransports=['websocket']" +
+        `\ncancelled=${cancelled}` +
+        '\n=============================='
       );
 
-      if (cancelled || !url || !hotelId) return;
+      if (cancelled || !url || !hotelId) {
+        const _r: string[] = [];
+        if (cancelled) _r.push('cancelled=true');
+        if (!url) _r.push('url=MISSING');
+        if (!hotelId) _r.push('hotelId=NULL');
+        console.log(
+          '\n======== EARLY RETURN ========' +
+          '\nRETURN_BEFORE_SOCKET' +
+          `\nreason: ${_r.join(' | ')}` +
+          `\nstack: ${new Error('EARLY_RETURN').stack ?? 'unavailable'}` +
+          '\n=============================='
+        );
+        return;
+      }
 
       if (st.socket?.connected) {
-        // Socket already live — re-register with current printerName
+        console.log(`[PrinterSocket][${printerRole}] Socket already connected — skipping io() — re-registering printer`);
         st.socket.emit('register_printer', {
           deviceId,
           printerRole,
@@ -274,13 +283,17 @@ export function usePrinterSocket(
 
       // Disconnect stale socket before creating a new one
       if (st.socket) {
+        console.log(`[PrinterSocket][${printerRole}] Disconnecting stale socket before rebuild`);
         if (st.onReconnectFailed) st.socket.io.off('reconnect_failed', st.onReconnectFailed);
         st.onReconnectFailed = null;
         st.socket.disconnect();
         st.socket = null;
       }
 
+      console.log(`[PrinterSocket][${printerRole}] Calling io()`);
       buildSocket(printerRole, url, baseUrl, token || '', hotelId, deviceId);
+      console.log(`[PrinterSocket][${printerRole}] io() call returned — socket instance created`);
+      console.log(`[PrinterSocket][${printerRole}] autoConnect=true — socket.connect() NOT called explicitly`);
     })();
 
     return () => {
