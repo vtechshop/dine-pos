@@ -138,7 +138,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
       socket.on('connect', () => {
         console.log(`[KitchenNotifSocket] EVENT connect — id=${socket.id} uri=${(socket.io as any).uri}`);
         socket.emit('join_hotel', hotelId);
-        console.log(`[KitchenNotifSocket] join_hotel EMITTED — room=hotel_${hotelId} (no ack — not implemented)`);
+        console.log(`[KitchenNotifSocket] join_hotel EMITTED — hotelId=${hotelId} socketId=${socket.id} room=hotel_${hotelId} (no ack)`);
         loadOrders();
       });
 

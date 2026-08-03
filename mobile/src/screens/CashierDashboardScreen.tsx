@@ -208,7 +208,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       socket.on('connect', () => {
         console.log(`[CashierNotifSocket] EVENT connect — id=${socket.id} uri=${(socket.io as any).uri}`);
         socket.emit('join_hotel', hotelId);
-        console.log(`[CashierNotifSocket] EVENT join_hotel EMITTED — room=hotel_${hotelId} (no ack — not implemented)`);
+        console.log(`[CashierNotifSocket] join_hotel EMITTED — hotelId=${hotelId} socketId=${socket.id} room=hotel_${hotelId} (no ack)`);
         loadOrders();
       });
 

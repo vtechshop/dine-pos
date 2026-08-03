@@ -541,9 +541,18 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 //        the client must refresh the access token before reconnecting.
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token as string | undefined;
+
+  logger.info('[SOCKET] Auth: middleware entered', {
+    socketId:     socket.id,
+    ip:           socket.handshake.address,
+    tokenPresent: !!token,
+    tokenLength:  token?.length ?? 0,
+    transport:    socket.conn.transport.name,
+  });
+
   if (!token) {
-    logger.info('[SOCKET] Auth: no token — unauthenticated connection allowed', { socketId: socket.id, ip: socket.handshake.address });
-    return next(); // no token = customer QR menu connection (allowed)
+    logger.info('[SOCKET] Auth: no token — unauthenticated connection allowed', { socketId: socket.id });
+    return next();
   }
 
   // Try Super Admin JWT first
@@ -552,7 +561,7 @@ io.use((socket, next) => {
     if (saPayload?.role === 'superadmin') {
       socket.data.role = 'superadmin';
       socket.data.authenticated = true;
-      logger.info('[SOCKET] Auth: superadmin accepted', { socketId: socket.id });
+      logger.info('[SOCKET] Auth: ACCEPTED superadmin', { socketId: socket.id });
       return next();
     }
   } catch { /* not a SA token — try hotel JWT below */ }
@@ -562,18 +571,34 @@ io.use((socket, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { hotelId: string; role?: string };
     socket.data.hotelId = decoded.hotelId;
     socket.data.authenticated = true;
-    logger.info('[SOCKET] Auth: accepted', { socketId: socket.id, hotelId: decoded.hotelId, role: decoded.role || 'admin' });
+    logger.info('[SOCKET] Auth: ACCEPTED hotel JWT', {
+      socketId:       socket.id,
+      jwtDecodeOk:    true,
+      hotelId:        decoded.hotelId,
+      role:           decoded.role || 'admin',
+    });
     next();
   } catch (err: any) {
-    // H-05: token was provided but is expired or invalid — reject the connection.
-    logger.warn('[SOCKET] Auth: REJECTED — token invalid or expired', { socketId: socket.id, ip: socket.handshake.address, reason: err?.message });
+    logger.warn('[SOCKET] Auth: REJECTED — token invalid or expired', {
+      socketId:     socket.id,
+      ip:           socket.handshake.address,
+      tokenPresent: !!token,
+      reason:       err?.message,
+    });
     return next(new Error('Socket authentication failed: token expired or invalid'));
   }
 });
 
 // ─── Socket.io ────────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
-  logger.info('[SOCKET] Connected', { socketId: socket.id, authenticated: !!socket.data.authenticated, hotelId: socket.data.hotelId || 'none' });
+  logger.info('[SOCKET] CONNECTED', {
+    socketId:      socket.id,
+    transport:     socket.conn.transport.name,
+    authenticated: !!socket.data.authenticated,
+    hotelId:       socket.data.hotelId || 'none',
+    role:          socket.data.role || 'none',
+    ip:            socket.handshake.address,
+  });
 
   // Auto-join authenticated sockets to their rooms immediately
   if (socket.data.authenticated && socket.data.role === 'superadmin') {
@@ -582,33 +607,60 @@ io.on('connection', (socket) => {
   } else if (socket.data.authenticated && socket.data.hotelId) {
     socket.join(`hotel_${socket.data.hotelId}`);
     socket.join(`admin_${socket.data.hotelId}`);
-    logger.info('[SOCKET] Auto-joined', { socketId: socket.id, room: `hotel_${socket.data.hotelId}` });
+    const _autoRoomSize = io.sockets.adapter.rooms.get(`hotel_${socket.data.hotelId}`)?.size ?? 0;
+    logger.info('[SOCKET] Auto-joined hotel room', {
+      socketId:      socket.id,
+      room:          `hotel_${socket.data.hotelId}`,
+      clientsInRoom: _autoRoomSize,
+    });
   }
 
   // join_hotel: admin app calls this on connect (backward-compat + customer fallback)
   socket.on('join_hotel', (hotelId: string) => {
-    logger.info('[SOCKET] join_hotel received', { socketId: socket.id, hotelId, authenticated: !!socket.data.authenticated, ip: socket.handshake.address, jwtHotelId: socket.data.hotelId || 'none' });
-    if (typeof hotelId !== 'string' || !hotelId) return;
+    const _room = `hotel_${hotelId}`;
+    const _clientsBefore = io.sockets.adapter.rooms.get(_room)?.size ?? 0;
+
+    logger.info('[SOCKET] JOIN_HOTEL RECEIVED', {
+      socketId:       socket.id,
+      hotelId,
+      authenticated:  !!socket.data.authenticated,
+      jwtHotelId:     socket.data.hotelId || 'none',
+      ip:             socket.handshake.address,
+      room:           _room,
+      clientsBefore:  _clientsBefore,
+    });
+
+    if (typeof hotelId !== 'string' || !hotelId) {
+      logger.warn('[SOCKET] join_hotel IGNORED — hotelId invalid', { socketId: socket.id, hotelId });
+      return;
+    }
 
     if (socket.data.authenticated) {
-      // Authenticated: JWT must match the claimed hotelId.
-      // The socket was already auto-joined to the correct rooms on connection.
       if (socket.data.hotelId !== hotelId) {
-        logger.warn('[SOCKET] join_hotel REJECTED', { socketId: socket.id, claimed: hotelId, jwt: socket.data.hotelId });
+        logger.warn('[SOCKET] join_hotel REJECTED — hotelId mismatch', {
+          socketId: socket.id,
+          claimed:  hotelId,
+          jwt:      socket.data.hotelId,
+        });
         return;
       }
-      // Re-join in case of reconnect after server restart
       socket.join(`hotel_${hotelId}`);
       socket.join(`admin_${hotelId}`);
     } else {
-      // Unauthenticated (customer QR / browser): allow hotel_ room only.
-      // admin_ room is restricted to authenticated sockets.
       socket.data.hotelId = hotelId;
       socket.join(`hotel_${hotelId}`);
     }
 
-    const roomSize = io.sockets.adapter.rooms.get(`hotel_${hotelId}`)?.size ?? 0;
-    logger.info('[SOCKET] Joined room', { socketId: socket.id, room: `hotel_${hotelId}`, authenticated: !!socket.data.authenticated, clientsInRoom: roomSize });
+    const _clientsAfter  = io.sockets.adapter.rooms.get(_room)?.size ?? 0;
+    const _socketIds     = Array.from(io.sockets.adapter.rooms.get(_room) ?? []);
+    logger.info('[SOCKET] JOINED ROOM', {
+      socketId:      socket.id,
+      room:          _room,
+      authenticated: !!socket.data.authenticated,
+      clientsBefore: _clientsBefore,
+      clientsAfter:  _clientsAfter,
+      socketIds:     _socketIds,
+    });
   });
 
   // join: customer table room (e.g. socket.emit('join', '5'))
@@ -878,7 +930,16 @@ process.on('SIGINT', shutdown);
       logger.info(`API Base: http://localhost:${PORT}/api`);
       logger.info(`Customer Menu: http://localhost:${PORT}/menu`);
       logger.info('Chat: Socket.io ready');
-      logger.info('Socket debug build active — transports=websocket auth=middleware io.on(connection)=registered');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const _sioVer: string = (require('socket.io/package.json') as { version: string }).version;
+      logger.info('====================================');
+      logger.info('[SOCKET-DIAG] BUILD ACTIVE', {
+        buildTimestamp:  new Date().toISOString(),
+        commitSha:       process.env.RENDER_GIT_COMMIT || 'local-dev',
+        socketIOVersion: _sioVer,
+        transports:      ['websocket'],
+      });
+      logger.info('====================================');
     });
   } catch (err) {
     logger.error('Failed to start server', { err: String(err) });

@@ -219,7 +219,11 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
       } else {
         const room = `hotel_${hotelId}`;
         const sockets = await io.in(room).allSockets();
-        logger.info('[menuRoutes] emitting new_order', { room, clientsInRoom: sockets.size });
+        logger.info('[menuRoutes] emitting new_order', {
+          room,
+          clientsInRoom: sockets.size,
+          socketIds:     Array.from(sockets),
+        });
         io.to(room).emit('new_order', {
           _id:          order._id.toString(),
           orderNumber:  order.orderNumber,
