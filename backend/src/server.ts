@@ -878,6 +878,7 @@ process.on('SIGINT', shutdown);
       logger.info(`API Base: http://localhost:${PORT}/api`);
       logger.info(`Customer Menu: http://localhost:${PORT}/menu`);
       logger.info('Chat: Socket.io ready');
+      logger.info('Socket debug build active — transports=websocket auth=middleware io.on(connection)=registered');
     });
   } catch (err) {
     logger.error('Failed to start server', { err: String(err) });
