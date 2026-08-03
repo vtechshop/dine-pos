@@ -22,7 +22,10 @@ async function reportPrintStatus(
   error?:  string,
 ): Promise<void> {
   try {
-    const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+    const [base, kitchenTok, cashierTok, adminTok] = await Promise.all([
+      getBaseUrl(), getKitchenToken(), getCashierToken(), getToken(),
+    ]);
+    const token = kitchenTok || cashierTok || adminTok;
     await fetch(`${base}/print-jobs/${jobId}/status`, {
       method:  'PATCH',
       headers: {
