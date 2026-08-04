@@ -4,6 +4,7 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    public readonly code?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -100,8 +101,18 @@ export async function apiFetch<T>(path: string, init: ExtendedInit = {}): Promis
       window.location.replace(isSA ? '/super-admin/login' : '/login');
       throw new ApiError(401, 'Session expired');
     }
-    const body = (await res.json().catch(() => ({}))) as { message?: string };
-    throw new ApiError(res.status, body.message ?? `HTTP ${res.status}`);
+    const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string; hotelName?: string; expiredOn?: string; subscriptionType?: string };
+    if (res.status === 403 && (body.code === 'TRIAL_EXPIRED' || body.code === 'PLAN_EXPIRED')) {
+      sessionStorage.setItem('sub_expired_info', JSON.stringify({
+        code:             body.code,
+        hotelName:        body.hotelName        ?? '',
+        expiredOn:        body.expiredOn         ?? '',
+        subscriptionType: body.subscriptionType  ?? 'trial',
+      }));
+      window.location.replace('/subscription-expired');
+      throw new ApiError(403, body.message ?? 'Subscription expired', body.code);
+    }
+    throw new ApiError(res.status, body.message ?? `HTTP ${res.status}`, body.code);
   }
 
   return res.json() as Promise<T>;

@@ -45,6 +45,7 @@ const DemoRequestsPage      = lazy(() => import('./pages/super-admin/DemoRequest
 const FollowUpsPage         = lazy(() => import('./pages/super-admin/FollowUpsPage').then(m => ({ default: m.FollowUpsPage })));
 const LeadDetailPage        = lazy(() => import('./pages/super-admin/LeadDetailPage').then(m => ({ default: m.LeadDetailPage })));
 const LeadPipelinePage      = lazy(() => import('./pages/super-admin/LeadPipelinePage').then(m => ({ default: m.LeadPipelinePage })));
+import { SubscriptionExpiredPage } from './pages/SubscriptionExpiredPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
@@ -120,6 +121,7 @@ export function App() {
                   <Route path="/register/success"  element={<RegisterSuccessPage />} />
                   <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
                   <Route path="/customer-display"  element={<CustomerDisplayPage />} />
+                  <Route path="/subscription-expired" element={<SubscriptionExpiredPage />} />
 
                   {/* Super Admin protected routes */}
                   <Route element={<SuperAdminRoute />}>
