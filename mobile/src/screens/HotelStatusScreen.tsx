@@ -61,7 +61,7 @@ const HotelStatusScreen: React.FC<Props> = ({ navigation, route }) => {
       cardTextStyle: styles.statusTextTrial,
       cardIcon: 'timer',
       cardIconColor: Colors.warning,
-      message: `Your free trial ${trialDaysRemaining === 1 ? 'expires today' : `expires in ${trialDaysRemaining} days`}. Activate a subscription to keep using Dine POS without interruption.`,
+      message: `Your free trial ${trialDaysRemaining === 1 ? 'expires today' : `expires in ${trialDaysRemaining ?? 0} days`}. Activate a subscription to keep using Dine POS without interruption.`,
       stepsTitle: 'Keep your data safe',
       steps: [
         { icon: 'contact-support', text: 'Contact support to activate your subscription plan' },

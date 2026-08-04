@@ -101,7 +101,8 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
       ).catch(() => {});
 
       // Warn if trial is running low — show warning screen with a Continue button
-      if (result.trialDaysRemaining !== undefined && result.trialDaysRemaining <= 7) {
+      // Use != null (not !== undefined) — null also coerces to 0 in <= comparisons
+      if (result.trialDaysRemaining != null && result.trialDaysRemaining <= 7) {
         navigation.replace('HotelStatus', {
           status: 'trial',
           hotelName: result.hotelName,
