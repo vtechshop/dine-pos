@@ -79,6 +79,7 @@ router.put('/', requireAdmin, async (req: AuthRequest, res: Response) => {
     // device's address) saves settings.
     if (!body.kitchenPrinterAddress)  delete body.kitchenPrinterAddress;
     if (!body.cashierPrinterAddress)  delete body.cashierPrinterAddress;
+    if (!body.kitchenPin)             delete body.kitchenPin;
     const settings = await Settings.findOneAndUpdate(
       { hotelId: req.hotelId },
       { ...body, hotelId: req.hotelId },

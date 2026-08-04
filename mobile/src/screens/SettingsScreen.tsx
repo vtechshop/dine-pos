@@ -69,6 +69,7 @@ const SettingsScreen: React.FC = () => {
 
   const [saving, setSaving]           = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [hasKitchenPin, setHasKitchenPin] = useState(false);
   const [subscriptionInfo, setSubscriptionInfo] = useState<import('../types').SubscriptionInfo | null>(null);
 
   // Kiosk device lock
@@ -150,7 +151,8 @@ const SettingsScreen: React.FC = () => {
     setCurrencySymbol(settings.currencySymbol || '₹');
     setQrGuestTimeout(settings.qrGuestTimeoutMinutes != null ? String(settings.qrGuestTimeoutMinutes) : '');
     setFooterText(settings.footerText || '');
-    setKitchenPin((settings as any).kitchenPin || '');
+    setHasKitchenPin(!!(settings as any).kitchenPin);
+    setKitchenPin(''); // never pre-fill with the stored hash — user types a new PIN to change it
   }, [settings]);
 
   // Load subscription info once on mount
@@ -302,7 +304,7 @@ const SettingsScreen: React.FC = () => {
         cashierPrinterAddress: cashierPrinterAddress.trim(),
         kotAutoPrint,
         footerText: footerText.trim(),
-        kitchenPin: kitchenPin.trim(),
+        ...(kitchenPin.trim() ? { kitchenPin: kitchenPin.trim() } : {}),
       });
 
       showAlert('Success', 'Settings saved successfully');
@@ -850,7 +852,7 @@ const SettingsScreen: React.FC = () => {
               style={styles.input}
               value={kitchenPin}
               onChangeText={v => setKitchenPin(v.replace(/\D/g, '').slice(0, 6))}
-              placeholder="4–6 digit PIN for kitchen staff"
+              placeholder={hasKitchenPin ? 'PIN set — enter new PIN to change' : '4–6 digit PIN for kitchen staff'}
               placeholderTextColor={Colors.textMuted}
               keyboardType="number-pad"
               maxLength={6}
