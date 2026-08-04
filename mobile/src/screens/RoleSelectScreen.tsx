@@ -18,6 +18,8 @@ export const ROLE_IMG_KEYS = {
   staff:    '@role_img_staff',
 };
 
+export const HOTEL_LOGO_KEY = '@hotel_logo';
+
 type Props = NativeStackScreenProps<RootStackParamList, 'RoleSelect'>;
 
 const DARK_BG = '#160A02';
@@ -59,22 +61,26 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
   const rowAnims   = useRef(ROLES.map(() => new Animated.Value(0))).current;
 
   const [roleImgs, setRoleImgs] = useState({ customer: '', admin: '', staff: '' });
+  const [hotelLogo, setHotelLogo] = useState('');
 
   useEffect(() => {
-    AsyncStorage.multiGet([ROLE_IMG_KEYS.customer, ROLE_IMG_KEYS.admin, ROLE_IMG_KEYS.staff])
-      .then(([[, c], [, a], [, s]]) => {
+    AsyncStorage.multiGet([ROLE_IMG_KEYS.customer, ROLE_IMG_KEYS.admin, ROLE_IMG_KEYS.staff, HOTEL_LOGO_KEY])
+      .then(([[, c], [, a], [, s], [, logo]]) => {
         const merged = {
           customer: c || settings.roleImageCustomer || '',
           admin:    a || settings.roleImageAdmin    || '',
           staff:    s || settings.roleImageStaff    || '',
         };
         setRoleImgs(merged);
+        const resolvedLogo = logo || settings.hotelLogo || '';
+        setHotelLogo(resolvedLogo);
         if (!c && merged.customer) AsyncStorage.setItem(ROLE_IMG_KEYS.customer, merged.customer).catch(() => {});
         if (!a && merged.admin)    AsyncStorage.setItem(ROLE_IMG_KEYS.admin,    merged.admin).catch(() => {});
         if (!s && merged.staff)    AsyncStorage.setItem(ROLE_IMG_KEYS.staff,    merged.staff).catch(() => {});
+        if (!logo && resolvedLogo) AsyncStorage.setItem(HOTEL_LOGO_KEY, resolvedLogo).catch(() => {});
       })
       .catch(() => {});
-  }, [settings.roleImageAdmin, settings.roleImageCustomer, settings.roleImageStaff]);
+  }, [settings.roleImageAdmin, settings.roleImageCustomer, settings.roleImageStaff, settings.hotelLogo]);
 
   useEffect(() => {
     Animated.parallel([
@@ -115,7 +121,11 @@ const RoleSelectScreen: React.FC<Props> = ({ navigation }) => {
 
         <Animated.View style={[styles.headerContent, { opacity: headerAnim, transform: [{ translateY: headerTranslateY }] }]}>
           <View style={styles.brandRing}>
-            <Text style={styles.brandEmoji}>🏨</Text>
+            {hotelLogo ? (
+              <Image source={{ uri: hotelLogo }} style={styles.brandLogoImage} resizeMode="cover" />
+            ) : (
+              <Text style={styles.brandEmoji}>🏨</Text>
+            )}
           </View>
           <Text style={styles.brandName} numberOfLines={1}>
             {settings.hotelName || 'Dine POS'}
@@ -280,6 +290,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   brandEmoji: { fontSize: 38 },
+  brandLogoImage: { width: 80, height: 80, borderRadius: 40 },
   brandName: {
     fontSize: FontSize.xxxl,
     fontWeight: '800',

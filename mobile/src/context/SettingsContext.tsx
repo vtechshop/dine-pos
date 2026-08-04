@@ -36,6 +36,10 @@ const defaultSettings: Settings = {
   kitchenPrinterAddress: '',
   cashierPrinterAddress: '',
   kotAutoPrint: false,
+  hotelLogo: '',
+  roleImageAdmin: '',
+  roleImageCustomer: '',
+  roleImageStaff: '',
 };
 
 const SettingsContext = createContext<SettingsContextType | null>(null);

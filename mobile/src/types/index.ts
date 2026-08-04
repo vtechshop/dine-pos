@@ -188,6 +188,7 @@ export interface Settings {
   premiumPlan?: string;
   premiumExpiry?: string | null;
   trialEndsAt?: string | null;
+  hotelLogo?: string;
   roleImageAdmin?: string;
   roleImageCustomer?: string;
   roleImageStaff?: string;

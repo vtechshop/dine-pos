@@ -15,7 +15,7 @@ import {
   Switch,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { ROLE_IMG_KEYS } from './RoleSelectScreen';
+import { ROLE_IMG_KEYS, HOTEL_LOGO_KEY } from './RoleSelectScreen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -77,6 +77,41 @@ const SettingsScreen: React.FC = () => {
   useEffect(() => {
     getKioskHotelId().then(setKioskLockedId).catch(() => {});
   }, []);
+
+  // Hotel logo
+  const [hotelLogo, setHotelLogo] = useState('');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(HOTEL_LOGO_KEY)
+      .then(stored => setHotelLogo(stored || settings.hotelLogo || ''))
+      .catch(() => {});
+  }, [settings.hotelLogo]);
+
+  const pickHotelLogo = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { showAlert('Permission needed', 'Allow photo library access to pick an image.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+    if (!result.canceled && result.assets[0]) {
+      setUploadingLogo(true);
+      try {
+        const url = await uploadImage(result.assets[0].uri);
+        await AsyncStorage.setItem(HOTEL_LOGO_KEY, url);
+        await saveSettings({ hotelLogo: url } as any);
+        setHotelLogo(url);
+      } catch (e: any) {
+        showAlert('Upload Failed', e.message || 'Could not upload image. Check your connection.');
+      } finally {
+        setUploadingLogo(false);
+      }
+    }
+  };
+
+  const removeHotelLogo = async () => {
+    await AsyncStorage.removeItem(HOTEL_LOGO_KEY);
+    await saveSettings({ hotelLogo: '' } as any).catch(() => {});
+    setHotelLogo('');
+  };
 
   // Role card images
   const [roleImgs, setRoleImgs] = useState({ customer: '', admin: '', staff: '' });
@@ -378,6 +413,37 @@ const SettingsScreen: React.FC = () => {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: Spacing.xxl * 3 + bottom }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Hotel Branding */}
+        <Text style={styles.sectionHeader}>Hotel Branding</Text>
+        <View style={styles.section}>
+          <Text style={[styles.label, { marginBottom: Spacing.md }]}>
+            Hotel Logo — shown in the header of the role select screen.
+          </Text>
+          <View style={styles.roleImgRow}>
+            <TouchableOpacity style={styles.roleImgThumb} onPress={uploadingLogo ? undefined : pickHotelLogo} activeOpacity={0.8}>
+              {uploadingLogo ? (
+                <ActivityIndicator size="small" color={Colors.primary} />
+              ) : hotelLogo ? (
+                <Image source={{ uri: hotelLogo }} style={styles.roleImgPreview} resizeMode="cover" />
+              ) : (
+                <Text style={{ fontSize: 28 }}>🏨</Text>
+              )}
+              <View style={styles.roleImgEditBadge}>
+                <MaterialIcons name={uploadingLogo ? 'hourglass-empty' : 'edit'} size={11} color={Colors.white} />
+              </View>
+            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.roleImgLabel}>Hotel Logo</Text>
+              <Text style={styles.roleImgSub}>{hotelLogo ? 'Custom logo set' : 'Using default 🏨 emoji'}</Text>
+            </View>
+            {hotelLogo ? (
+              <TouchableOpacity onPress={removeHotelLogo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <MaterialIcons name="close" size={20} color={Colors.danger} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+
         {/* Role Card Appearance */}
         <Text style={styles.sectionHeader}>Role Card Appearance</Text>
         <View style={styles.section}>

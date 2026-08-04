@@ -15,6 +15,7 @@ export interface ILoyaltySettings {
 export interface ISettings extends Document {
   hotelId: Types.ObjectId;
   hotelName: string;
+  hotelLogo: string;
   address: string;
   phone: string;
   email: string;
@@ -139,6 +140,7 @@ const SettingsSchema: Schema = new Schema(
       type: String,
       default: '',
     },
+    hotelLogo: { type: String, default: '' },
     roleImageAdmin: { type: String, default: '' },
     roleImageCustomer: { type: String, default: '' },
     roleImageStaff: { type: String, default: '' },

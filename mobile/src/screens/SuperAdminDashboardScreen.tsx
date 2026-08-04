@@ -166,6 +166,10 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [convertPlan, setConvertPlan] = useState<'starter' | 'professional' | 'enterprise'>('starter');
   const [convertDuration, setConvertDuration] = useState(30);
 
+  // Edit feature flags modal
+  const [showEditFeaturesModal, setShowEditFeaturesModal] = useState(false);
+  const [editHotelFeatures, setEditHotelFeatures] = useState<Partial<FeatureFlags>>({});
+
   // Tickets
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [ticketFilter, setTicketFilter] = useState<TicketFilter>('all');
@@ -579,6 +583,27 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const openEditFeaturesModal = (hotel: Hotel) => {
+    setSelectedHotel(hotel);
+    setEditHotelFeatures({ ...(hotel.features ?? {}) });
+    setShowEditFeaturesModal(true);
+  };
+
+  const handleEditFeaturesSubmit = async () => {
+    if (!selectedHotel) return;
+    setActionLoading(true);
+    try {
+      await updateHotelFeatures(selectedHotel._id, editHotelFeatures);
+      setShowEditFeaturesModal(false);
+      loadData();
+      showAlert('Done', 'Feature flags updated!');
+    } catch (e: any) {
+      showAlert('Error', e.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleExpire = async (hotel: Hotel) => {
     showAlert('Expire', `Force-expire ${hotel.hotelName}?`, [
       { text: 'Cancel', style: 'cancel' },
@@ -832,6 +857,10 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
                     <MaterialIcons name="upgrade" size={18} color={Colors.white} />
                     <Text style={styles.actionBtnText}>Convert to Plan</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#0097A7', flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openEditFeaturesModal(hotel)} disabled={actionLoading}>
+                    <MaterialIcons name="tune" size={18} color={Colors.white} />
+                    <Text style={styles.actionBtnText}>Edit Features</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleActivate(hotel)} disabled={actionLoading}>
                     <MaterialIcons name="check-circle" size={18} color={Colors.white} />
                     <Text style={styles.actionBtnText}>Activate</Text>
@@ -844,6 +873,10 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
               )}
               {hotel.status === 'active' && (
                 <>
+                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#0097A7', flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => openEditFeaturesModal(hotel)} disabled={actionLoading}>
+                    <MaterialIcons name="tune" size={18} color={Colors.white} />
+                    <Text style={styles.actionBtnText}>Edit Features</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={[styles.actionBtn, styles.suspendBtn, { flex: 0, paddingHorizontal: Spacing.lg }]} onPress={() => handleSuspend(hotel)} disabled={actionLoading}>
                     <MaterialIcons name="block" size={18} color={Colors.white} />
                     <Text style={styles.actionBtnText}>Suspend</Text>
@@ -1114,6 +1147,62 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
                   {actionLoading ? <ActivityIndicator size="small" color={Colors.white} /> : (
                     <Text style={styles.actionBtnText}>Convert</Text>
                   )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Edit Feature Flags Modal — for trial/active hotels */}
+      <Modal visible={showEditFeaturesModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: Spacing.md }}>
+            <View style={[styles.rejectModal, { maxHeight: undefined }]}>
+              <Text style={styles.rejectModalTitle}>Edit Features</Text>
+              <Text style={{ color: Colors.textSecondary, fontSize: FontSize.sm, marginBottom: Spacing.md }}>
+                {selectedHotel?.hotelName} — toggle features on or off.
+              </Text>
+              {([
+                ['tables',       'Tables'],
+                ['expenses',     'Expenses'],
+                ['reports',      'Reports'],
+                ['reservations', 'Reservations'],
+                ['qrOrdering',   'QR Ordering'],
+                ['customerChat', 'Customer Chat'],
+                ['ingredients',  'Ingredients'],
+                ['waste',        'Waste Tracking'],
+                ['payment',      'Payment Module'],
+                ['aggregator',   'Aggregator'],
+              ] as [keyof FeatureFlags, string][]).map(([key, label]) => (
+                <View key={key} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 }}>
+                  <Text style={{ color: Colors.text, fontSize: FontSize.sm }}>{label}</Text>
+                  <TouchableOpacity
+                    onPress={() => setEditHotelFeatures(prev => ({ ...prev, [key]: !prev[key] }))}
+                    style={{
+                      width: 46, height: 26, borderRadius: 13,
+                      backgroundColor: editHotelFeatures[key] ? Colors.success : Colors.border,
+                      justifyContent: 'center',
+                      alignItems: editHotelFeatures[key] ? 'flex-end' : 'flex-start',
+                      paddingHorizontal: 3,
+                    }}
+                  >
+                    <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: Colors.white }} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <View style={[styles.rejectModalActions, { marginTop: Spacing.md }]}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowEditFeaturesModal(false)}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmRejectBtn, { backgroundColor: '#0097A7' }]}
+                  onPress={handleEditFeaturesSubmit}
+                  disabled={actionLoading}
+                >
+                  {actionLoading
+                    ? <ActivityIndicator size="small" color={Colors.white} />
+                    : <Text style={styles.actionBtnText}>Save Features</Text>}
                 </TouchableOpacity>
               </View>
             </View>
