@@ -10,6 +10,7 @@ import mongoose from 'mongoose';
 import { io } from '../server';
 import { sendError } from '../utils/sendError';
 import { logger } from '../utils/logger';
+import { scheduleKOTPrint } from '../utils/printUtils';
 
 const router = Router();
 
@@ -211,6 +212,18 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
       paymentMethod: 'cash',
     });
     await order.save();
+
+    // Fire-and-forget KOT print — never blocks the order response
+    scheduleKOTPrint(hotelId, {
+      _id:         order._id,
+      orderNumber: order.orderNumber,
+      tableNumber: order.tableNumber,
+      customerName: order.customerName,
+      items:       order.items as { productName: string; quantity: number }[],
+      notes:       order.notes,
+      orderSource: order.orderSource,
+      createdAt:   order.createdAt,
+    }).catch(() => {});
 
     // Emit socket event so admin sees the order instantly
     try {
