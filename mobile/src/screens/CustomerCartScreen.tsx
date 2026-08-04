@@ -15,7 +15,7 @@ import { showAlert } from '../utils/alert';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
-import { getStoredHotelId, enqueueCustomerOrder, getSocketUrl } from '../services/api';
+import { getEffectiveHotelId, enqueueCustomerOrder, getSocketUrl } from '../services/api';
 import type { PublicGatewayInfo } from '../services/api';
 import { CUSTOMER_ORDER_KEY } from './CustomerOrderStatusScreen';
 import { io as socketIO, Socket } from 'socket.io-client';
@@ -70,7 +70,7 @@ const CustomerCartScreen: React.FC = () => {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const hotelId = await getStoredHotelId();
+      const hotelId = await getEffectiveHotelId();
       if (!hotelId || !mounted) return;
       try {
         const gw = await api.getPublicGateway(hotelId);
@@ -103,7 +103,7 @@ const CustomerCartScreen: React.FC = () => {
     setLiveStatus('received');
     let mounted = true;
     (async () => {
-      const [hotelId, url] = await Promise.all([getStoredHotelId(), getSocketUrl()]);
+      const [hotelId, url] = await Promise.all([getEffectiveHotelId(), getSocketUrl()]);
       if (!hotelId || !mounted) return;
       const socket = socketIO(url, { transports: ['websocket'], reconnectionAttempts: 5 });
       statusSocketRef.current = socket;
@@ -133,7 +133,7 @@ const CustomerCartScreen: React.FC = () => {
     if (!cart.customerName.trim()) { setNameError(true); return; }
     if (cart.customerPhone.replace(/\D/g, '').length < 10) { setPhoneError(true); return; }
 
-    const hotelId = await getStoredHotelId();
+    const hotelId = await getEffectiveHotelId();
     if (!hotelId) { showAlert('Error', 'Hotel not found. Scan the QR code again.'); return; }
 
     setRazorpayBusy(true);
@@ -229,7 +229,7 @@ const CustomerCartScreen: React.FC = () => {
     if (!cart.customerName.trim()) { setNameError(true); return; }
     if (cart.customerPhone.replace(/\D/g, '').length < 10) { setPhoneError(true); return; }
 
-    const hotelId = await getStoredHotelId();
+    const hotelId = await getEffectiveHotelId();
     if (!hotelId) { showAlert('Error', 'Hotel not found. Please scan the QR code again.'); return; }
 
     setPlacing(true);

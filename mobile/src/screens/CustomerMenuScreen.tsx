@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
-import { getPublicMenu, getStoredHotelId, saveMenuCache, loadMenuCache } from '../services/api';
+import { getPublicMenu, getEffectiveHotelId, saveMenuCache, loadMenuCache } from '../services/api';
 import { Category, Product, SelectedModifier, ModifierGroup } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
 import { useNavigation } from '@react-navigation/native';
@@ -71,11 +71,11 @@ const CustomerMenuScreen: React.FC = () => {
       setFiltered(prods);
       setIsOffline(false);
       // Persist for offline use
-      const hotelId = await getStoredHotelId();
+      const hotelId = await getEffectiveHotelId();
       if (hotelId) saveMenuCache(hotelId, cats, prods).catch(() => {});
     } catch {
       // No network — try cached menu
-      const hotelId = await getStoredHotelId();
+      const hotelId = await getEffectiveHotelId();
       const cached = hotelId ? await loadMenuCache(hotelId) : null;
       if (cached) {
         setCategories(cached.categories);

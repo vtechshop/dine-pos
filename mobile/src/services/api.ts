@@ -7,6 +7,8 @@ import { emitSessionExpired } from '../utils/authEvents';
 
 const API_URL_STORAGE_KEY  = '@hotel_pos_api_base_url';
 const HOTEL_ID_STORAGE_KEY = '@hotel_pos_hotel_id';
+// Separate key for kiosk device binding — never overwritten by staff login/logout
+const KIOSK_HOTEL_ID_KEY   = '@kiosk_hotel_id';
 
 // SecureStore keys (no @ — Android Keystore only allows [a-zA-Z0-9._-]).
 // AsyncStorage legacy keys kept for one-time migration on first read.
@@ -110,6 +112,31 @@ export const getStoredHotelId = async (): Promise<string | null> => {
   } catch {
     return null;
   }
+};
+
+// Returns the kiosk-locked hotel ID (set once by admin via Settings → Lock as Kiosk Device).
+// Never overwritten by staff login/logout — this is the correct source for customer-facing screens.
+export const getKioskHotelId = async (): Promise<string | null> => {
+  try {
+    return await AsyncStorage.getItem(KIOSK_HOTEL_ID_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const setKioskHotelId = async (hotelId: string): Promise<void> => {
+  await AsyncStorage.setItem(KIOSK_HOTEL_ID_KEY, hotelId);
+};
+
+export const clearKioskHotelId = async (): Promise<void> => {
+  await AsyncStorage.removeItem(KIOSK_HOTEL_ID_KEY);
+};
+
+// Customer-facing screens always use this — kiosk lock takes priority over login session.
+export const getEffectiveHotelId = async (): Promise<string | null> => {
+  const kiosk = await getKioskHotelId();
+  if (kiosk) return kiosk;
+  return getStoredHotelId();
 };
 
 // ── Super admin session token (SecureStore) ──────────────────────────────────
@@ -626,7 +653,7 @@ export const getPublicMenu = async (): Promise<{
   categories: Category[];
   products: Product[];
 }> => {
-  const hotelId = await getStoredHotelId();
+  const hotelId = await getEffectiveHotelId();
   const query = hotelId ? `?hotel=${hotelId}` : '';
   return fetchAPI(`/public/menu${query}`, undefined, true);
 };

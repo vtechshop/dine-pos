@@ -24,7 +24,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
 import { useSettings } from '../context/SettingsContext';
 import { useCart } from '../context/CartContext';
-import { registerHotel, clearApiUrlCache, seedData, uploadImage, getSubscriptionInfo } from '../services/api';
+import { registerHotel, clearApiUrlCache, seedData, uploadImage, getSubscriptionInfo, getKioskHotelId, setKioskHotelId, clearKioskHotelId, getStoredHotelId } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../types';
 import { getPairedDevices, connectPrinter, BluetoothDevice, BT_PERMISSION_DENIED } from '../utils/bluetoothPrint';
@@ -70,6 +70,12 @@ const SettingsScreen: React.FC = () => {
   const [saving, setSaving]           = useState(false);
   const [registering, setRegistering] = useState(false);
   const [subscriptionInfo, setSubscriptionInfo] = useState<import('../types').SubscriptionInfo | null>(null);
+
+  // Kiosk device lock
+  const [kioskLockedId, setKioskLockedId] = useState<string | null>(null);
+  useEffect(() => {
+    getKioskHotelId().then(setKioskLockedId).catch(() => {});
+  }, []);
 
   // Role card images
   const [roleImgs, setRoleImgs] = useState({ customer: '', admin: '', staff: '' });
@@ -1161,6 +1167,72 @@ const SettingsScreen: React.FC = () => {
               <Text style={styles.supportBtnText}>Customer Support / Raise Ticket</Text>
               <MaterialIcons name="chevron-right" size={20} color={Colors.info} />
             </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Kiosk Device Lock */}
+        <View style={[styles.seedSection, { marginTop: Spacing.sm }]}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Kiosk Device</Text>
+            <Text style={[styles.label, { marginBottom: Spacing.sm, color: Colors.textMuted }]}>
+              {kioskLockedId
+                ? `This device is locked to serve customers for this hotel. Staff login/logout will not change the customer menu.`
+                : `Lock this device so the customer menu always shows this hotel — even if staff from another hotel log in.`}
+            </Text>
+            {kioskLockedId ? (
+              <TouchableOpacity
+                style={[styles.logoutBtn, { backgroundColor: Colors.warning }]}
+                onPress={() =>
+                  showAlert(
+                    'Release Kiosk Lock',
+                    'Customer menu will fall back to whoever is logged in. Release the lock?',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Release',
+                        style: 'destructive',
+                        onPress: async () => {
+                          await clearKioskHotelId();
+                          setKioskLockedId(null);
+                          showAlert('Done', 'Kiosk lock released.');
+                        },
+                      },
+                    ],
+                  )
+                }
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="lock-open" size={20} color={Colors.white} />
+                <Text style={styles.logoutBtnText}>Release Kiosk Lock</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.logoutBtn, { backgroundColor: Colors.info }]}
+                onPress={() =>
+                  showAlert(
+                    'Lock as Kiosk Device',
+                    'The customer menu on this device will always show this hotel\'s menu. Staff login from any hotel will not change it. Continue?',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Lock',
+                        onPress: async () => {
+                          const id = await getStoredHotelId();
+                          if (!id) { showAlert('Error', 'No hotel found. Log in as admin first.'); return; }
+                          await setKioskHotelId(id);
+                          setKioskLockedId(id);
+                          showAlert('Locked', 'This device is now locked as a kiosk for this hotel.');
+                        },
+                      },
+                    ],
+                  )
+                }
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="lock" size={20} color={Colors.white} />
+                <Text style={styles.logoutBtnText}>Lock as Kiosk Device</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
