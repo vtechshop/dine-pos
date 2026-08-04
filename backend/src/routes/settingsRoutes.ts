@@ -74,6 +74,11 @@ router.put('/', requireAdmin, async (req: AuthRequest, res: Response) => {
       }
       body.kitchenPin = await bcrypt.hash(body.kitchenPin, 12);
     }
+    // Printer addresses are set per-device. Don't overwrite an existing address
+    // with an empty string when a different device (that doesn't know the other
+    // device's address) saves settings.
+    if (!body.kitchenPrinterAddress)  delete body.kitchenPrinterAddress;
+    if (!body.cashierPrinterAddress)  delete body.cashierPrinterAddress;
     const settings = await Settings.findOneAndUpdate(
       { hotelId: req.hotelId },
       { ...body, hotelId: req.hotelId },
