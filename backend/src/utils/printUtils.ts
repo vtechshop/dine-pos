@@ -30,6 +30,7 @@ export interface ReceiptPayload {
   printerWidth:          '58mm' | '80mm';
   tableNumber:           string;
   guestLabel?:           string;
+  orderSource?:          string;
   paymentMethod:         string;
   items:                 { productName: string; variantName?: string; modifierLines?: { name: string; price: number }[]; quantity: number; price: number; total: number }[];
   subtotal:              number;
@@ -229,6 +230,7 @@ export async function scheduleOrderReceiptPrint(
     orderNumber:     string;
     tableNumber?:    string;
     customerName?:   string;
+    orderSource?:    string;
     paymentMethod:   string;
     items:           { productName: string; variantName?: string; quantity: number; price: number; total: number; selectedModifiers?: any[] }[];
     subtotal:        number;
@@ -262,6 +264,7 @@ export async function scheduleOrderReceiptPrint(
     printerWidth:  (s?.printerWidth ?? '80mm') as '58mm' | '80mm',
     tableNumber:   order.tableNumber ?? '',
     guestLabel:    order.customerName || undefined,
+    orderSource:   order.orderSource  || undefined,
     paymentMethod: order.paymentMethod,
     items: order.items.map(i => {
       const mods = (i.selectedModifiers || []) as any[];
@@ -309,6 +312,7 @@ export interface ReceiptPrintInput {
   totalAmount:            number;
   paymentMethod:          string;
   loyaltyDiscountAmount?: number;
+  orderSource?:           string;
 }
 
 export async function scheduleReceiptPrint(
@@ -363,6 +367,7 @@ export async function scheduleReceiptPrint(
     printerWidth:          (s?.printerWidth      ?? '80mm') as '58mm' | '80mm',
     tableNumber:           input.tableNumber,
     guestLabel:            input.guestLabel,
+    orderSource:           input.orderSource || undefined,
     paymentMethod:         input.paymentMethod,
     items,
     subtotal:              +subtotal.toFixed(2),

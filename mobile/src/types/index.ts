@@ -225,6 +225,7 @@ export interface KOTOrderInput {
   tableNumber: string;
   notes: string;
   createdAt: string;
+  orderSource?: string;
 }
 
 // Customer (aggregated from orders)

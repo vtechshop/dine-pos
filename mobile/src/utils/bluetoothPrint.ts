@@ -177,7 +177,22 @@ export const printReceiptBluetooth = async (
   // ── BILL INFO ────────────────────────────────────────────
   await P.printText('Bill No: ' + clean(order.orderNumber) + '\n', {});
   await P.printText('Date   : ' + dateStr + ' ' + timeStr + '\n', {});
-  if (order.tableNumber)  await P.printText('Table  : ' + clean(order.tableNumber) + '\n', {});
+  const rsrc = order.orderSource || '';
+  const rTypeLabel =
+    rsrc === 'takeaway' ? 'TAKEAWAY' :
+    rsrc === 'swiggy'   ? 'SWIGGY'   :
+    rsrc === 'zomato'   ? 'ZOMATO'   :
+    rsrc === 'kiosk'    ? 'KIOSK'    :
+    rsrc === 'qr'       ? 'QR ORDER' :
+    order.isParcel      ? 'TAKEAWAY' :
+    'DINE IN';
+  await P.printText('Type   : ' + rTypeLabel + '\n', {});
+  if (rsrc === 'takeaway' || order.isParcel) {
+    const rToken = clean(order.orderNumber).split('-').pop() || clean(order.orderNumber);
+    await P.printText('Token  : #' + rToken + '\n', {});
+  } else if (order.tableNumber) {
+    await P.printText('Table  : ' + clean(order.tableNumber) + '\n', {});
+  }
   if (order.customerName) await P.printText('Name   : ' + clean(order.customerName) + '\n', {});
   await P.printText(divider + '\n', {});
 
@@ -281,13 +296,30 @@ export const printKOTBluetooth = async (
   const dblPad = Math.max(0, Math.floor((dblW - orderLabel.length) / 2));
   await P.printText('\n', {});
   await P.printText(' '.repeat(dblPad) + orderLabel + '\n', { widthtimes: 1, heigthtimes: 1 });
+
+  // Order type immediately below the order number — same large size
+  const src = order.orderSource || '';
+  const orderTypeLabel =
+    src === 'takeaway' ? 'TAKEAWAY' :
+    src === 'swiggy'   ? 'SWIGGY'   :
+    src === 'zomato'   ? 'ZOMATO'   :
+    src === 'kiosk'    ? 'KIOSK'    :
+    src === 'qr'       ? 'QR ORDER' :
+    'DINE IN';
+  const dblPad2 = Math.max(0, Math.floor((dblW - orderTypeLabel.length) / 2));
+  await P.printText(' '.repeat(dblPad2) + orderTypeLabel + '\n', { widthtimes: 1, heigthtimes: 1 });
   await P.printText('\n', {});
 
   await P.printText(dividerH + '\n', {});
   await P.printText(cLine('** KITCHEN ORDER **') + '\n', {});
   await P.printText(dividerH + '\n', {});
   await P.printText('Order : ' + clean(order.orderNumber) + '\n', {});
-  if (order.tableNumber) await P.printText('Table : ' + clean(order.tableNumber) + '\n', {});
+  // Takeaway → show token number; all others → show table if present
+  if (src === 'takeaway') {
+    await P.printText('Token : #' + clean(rawToken) + '\n', {});
+  } else if (order.tableNumber) {
+    await P.printText('Table : ' + clean(order.tableNumber) + '\n', {});
+  }
   await P.printText('Time  : ' + dateStr + ' ' + timeStr + '\n', {});
   await P.printText(divider + '\n', {});
 

@@ -25,6 +25,7 @@ export interface ReceiptPayload {
   printerWidth:          '58mm' | '80mm';
   tableNumber:           string;
   guestLabel?:           string;
+  orderSource?:          string;
   paymentMethod:         string;
   items:                 { productName: string; quantity: number; price: number; total: number }[];
   subtotal:              number;
@@ -65,6 +66,7 @@ class BluetoothPrintDriver implements PrintDriver {
       items:       payload.items,
       notes:       payload.notes || '',
       createdAt:   payload.createdAt,
+      orderSource: payload.orderSource,
     };
     await printKOTBluetooth(kotInput, settings);
   }
@@ -92,7 +94,8 @@ class BluetoothPrintDriver implements PrintDriver {
       paymentMethod: payload.paymentMethod as Order['paymentMethod'],
       splitDetails:  {},
       status:        'completed',
-      isParcel:      false,
+      isParcel:      payload.orderSource === 'takeaway',
+      orderSource:   payload.orderSource as Order['orderSource'],
       customerName:  payload.guestLabel || '',
       customerPhone: '',
       tableNumber:   payload.tableNumber,
