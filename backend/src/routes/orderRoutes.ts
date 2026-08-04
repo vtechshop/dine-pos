@@ -395,6 +395,13 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     if (req.body.items.length > 100) {
       return res.status(400).json({ message: 'Order cannot contain more than 100 items' });
     }
+    // Customer name and phone are mandatory for all orders
+    if (!req.body.customerName || !String(req.body.customerName).trim()) {
+      return res.status(400).json({ message: 'Customer name is required' });
+    }
+    if (!req.body.customerPhone || !String(req.body.customerPhone).trim()) {
+      return res.status(400).json({ message: 'Customer phone is required' });
+    }
 
     // ── Idempotency guard ────────────────────────────────────────────────────
     // offlineId is the client-generated queue item id. If the network dropped

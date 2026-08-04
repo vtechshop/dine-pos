@@ -268,6 +268,8 @@ Thank you for dining with us! 🍽️`;
 
   const handlePlaceOrder = () => {
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items first.'); return; }
+    if (!cart.customerName.trim()) { showAlert('Name Required', 'Enter customer name before placing the order.'); return; }
+    if (!customerPhone.trim()) { showAlert('Phone Required', 'Enter customer phone number before placing the order.'); return; }
     applyDiscount();
     setShowPayModal(true);
   };
@@ -866,9 +868,9 @@ Thank you for dining with us! 🍽️`;
                 <MaterialIcons name="delete-outline" size={20} color={Colors.danger} />
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.placeBtn, (cart.items.length === 0 || placing) && styles.placeBtnDisabled]}
+                style={[styles.placeBtn, (cart.items.length === 0 || placing || !cart.customerName.trim() || !customerPhone.trim()) && styles.placeBtnDisabled]}
                 onPress={handlePlaceOrder}
-                disabled={placing || cart.items.length === 0}
+                disabled={placing || cart.items.length === 0 || !cart.customerName.trim() || !customerPhone.trim()}
                 activeOpacity={0.85}
               >
                 {placing

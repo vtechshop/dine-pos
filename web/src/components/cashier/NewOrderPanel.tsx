@@ -27,7 +27,7 @@ function fmtINR(sym: string, n: number) {
 type OrderType = 'dine-in' | 'takeaway' | 'delivery';
 type PayMethod = 'cash' | 'upi' | 'card' | 'split';
 
-interface DineInMeta { tableId: string; tableNumber: string; guestCount: string; notes: string }
+interface DineInMeta { tableId: string; tableNumber: string; guestCount: string; notes: string; customerName: string; phone: string }
 interface TakeAwayMeta { customerName: string; phone: string; notes: string }
 interface DeliveryMeta { customerName: string; phone: string; address: string; deliveryPartner: string; deliveryCharge: string; notes: string }
 
@@ -338,7 +338,7 @@ export function NewOrderPanel() {
 
   // ── Order meta ─────────────────────────────────────────────────────────────
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
-  const [dineIn, setDineIn]   = useState<DineInMeta>({ tableId: '', tableNumber: '', guestCount: '1', notes: '' });
+  const [dineIn, setDineIn]   = useState<DineInMeta>({ tableId: '', tableNumber: '', guestCount: '1', notes: '', customerName: '', phone: '' });
   const [takeAway, setTakeAway] = useState<TakeAwayMeta>({ customerName: '', phone: '', notes: '' });
   const [delivery, setDelivery] = useState<DeliveryMeta>({ customerName: '', phone: '', address: '', deliveryPartner: '', deliveryCharge: '0', notes: '' });
 
@@ -551,6 +551,8 @@ export function NewOrderPanel() {
       ...(orderType === 'dine-in' ? {
         tableId: dineIn.tableId,
         tableNumber: dineIn.tableNumber,
+        customerName: dineIn.customerName,
+        customerPhone: dineIn.phone,
         notes: dineIn.notes,
       } : orderType === 'takeaway' ? {
         customerName: takeAway.customerName,
@@ -619,6 +621,8 @@ export function NewOrderPanel() {
           orderSource,
           tableId: dineIn.tableId || undefined,
           tableNumber: dineIn.tableNumber || undefined,
+          customerName: dineIn.customerName || undefined,
+          customerPhone: dineIn.phone || undefined,
           notes: dineIn.notes || undefined,
           isParcel: false,
         };
@@ -681,7 +685,11 @@ export function NewOrderPanel() {
   const splitTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) + (parseFloat(splitCard) || 0);
   const splitOk = payMethod !== 'split' || Math.abs(splitTotal - grandTotal) < 0.5;
   const cashOk  = payMethod !== 'cash'  || (parseFloat(cashGiven) || 0) >= grandTotal;
-  const canConfirm = cart.length > 0 && splitOk && cashOk;
+  const customerOk =
+    orderType === 'dine-in'  ? (dineIn.customerName.trim() !== '' && dineIn.phone.trim() !== '') :
+    orderType === 'takeaway' ? (takeAway.customerName.trim() !== '' && takeAway.phone.trim() !== '') :
+    (delivery.customerName.trim() !== '' && delivery.phone.trim() !== '');
+  const canConfirm = cart.length > 0 && splitOk && cashOk && customerOk;
 
   // ── Success overlay ────────────────────────────────────────────────────────
   if (successOrder) {
@@ -740,6 +748,22 @@ export function NewOrderPanel() {
                 />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={dineIn.customerName}
+                onChange={e => setDineIn(d => ({ ...d, customerName: e.target.value }))}
+                placeholder="Customer name *"
+                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+              />
+              <input
+                type="tel"
+                value={dineIn.phone}
+                onChange={e => setDineIn(d => ({ ...d, phone: e.target.value }))}
+                placeholder="Phone *"
+                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+              />
+            </div>
             <input
               type="text"
               value={dineIn.notes}
@@ -759,14 +783,14 @@ export function NewOrderPanel() {
                 type="text"
                 value={takeAway.customerName}
                 onChange={e => setTakeAway(d => ({ ...d, customerName: e.target.value }))}
-                placeholder="Customer name (optional)"
+                placeholder="Customer name *"
                 className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
               />
               <input
                 type="tel"
                 value={takeAway.phone}
                 onChange={e => setTakeAway(d => ({ ...d, phone: e.target.value }))}
-                placeholder="Mobile (optional)"
+                placeholder="Phone *"
                 className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
               />
             </div>
