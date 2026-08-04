@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, FlatList,
+  View, Text, TouchableOpacity, StyleSheet, FlatList, ScrollView,
   ActivityIndicator, StatusBar, Modal, Alert, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -66,6 +66,8 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const prevReadyRef    = useRef(0);
   const [tick, setTick] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [payMethodFilter, setPayMethodFilter] = useState<'all' | 'cash' | 'upi' | 'card' | 'split'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'ready' | 'served'>('all');
   const { count: cashierBadge, increment: incCashierBadge, reset: resetCashierBadge } = useBadgeCount(BADGE_KEYS.cashierPending);
 
   const { showToast } = useGlobalToast();
@@ -489,16 +491,24 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   const listData = tab === 'active' ? activeOrders : completedOrders;
   const q = searchQuery.trim().toLowerCase();
+
+  const afterPayFilter = (tab === 'completed' && payMethodFilter !== 'all')
+    ? listData.filter(o => o.paymentMethod === payMethodFilter)
+    : (tab === 'active' && statusFilter !== 'all')
+    ? listData.filter(o => o.status === statusFilter)
+    : listData;
+
   const filteredData = q
-    ? listData.filter(o => {
+    ? afterPayFilter.filter(o => {
         const token = (o.orderNumber.split('-').pop() || '').toLowerCase();
         return (
           token.endsWith(q) ||
           o.tableNumber.toLowerCase().includes(q) ||
-          o.customerName.toLowerCase().includes(q)
+          o.customerName.toLowerCase().includes(q) ||
+          (tab === 'completed' && (o.paymentMethod || '').toLowerCase().includes(q))
         );
       })
-    : listData;
+    : afterPayFilter;
 
   return (
     <View style={[styles.container, { paddingTop: top }]}>
@@ -620,6 +630,53 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         )}
       </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterChipRow}
+        contentContainerStyle={styles.filterChipRowContent}
+      >
+        {tab === 'active'
+          ? (['all', 'pending', 'preparing', 'ready', 'served'] as const).map(s => {
+              const count = s === 'all'
+                ? activeOrders.length
+                : activeOrders.filter(o => o.status === s).length;
+              if (s !== 'all' && count === 0) return null;
+              const chipColor = s === 'ready' ? Colors.success : s === 'preparing' ? Colors.info : s === 'served' ? Colors.accent : Colors.warning;
+              return (
+                <TouchableOpacity
+                  key={s}
+                  style={[styles.filterChip, statusFilter === s && { backgroundColor: chipColor + '22', borderColor: chipColor }]}
+                  onPress={() => setStatusFilter(statusFilter === s && s !== 'all' ? 'all' : s)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.filterChipText, statusFilter === s && { color: s === 'all' ? Colors.info : chipColor }]}>
+                    {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)} ({count})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })
+          : (['all', 'cash', 'upi', 'card', 'split'] as const).map(m => {
+              const count = m === 'all'
+                ? completedOrders.length
+                : completedOrders.filter(o => o.paymentMethod === m).length;
+              if (m !== 'all' && count === 0) return null;
+              return (
+                <TouchableOpacity
+                  key={m}
+                  style={[styles.filterChip, payMethodFilter === m && styles.filterChipActive]}
+                  onPress={() => setPayMethodFilter(payMethodFilter === m && m !== 'all' ? 'all' : m)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.filterChipText, payMethodFilter === m && styles.filterChipTextActive]}>
+                    {m === 'all' ? 'All' : m.toUpperCase()} ({count})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })
+        }
+      </ScrollView>
 
       <FlatList
         ref={listRef}
@@ -914,6 +971,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10, borderWidth: 1, borderColor: Colors.border,
   },
   searchInput: { flex: 1, fontSize: FontSize.md, color: Colors.text, paddingVertical: 0 },
+  filterChipRow: { marginTop: Spacing.sm },
+  filterChipRowContent: { gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: 4 },
+  filterChip: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100,
+    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
+  },
+  filterChipActive: { backgroundColor: Colors.infoBg, borderColor: Colors.info },
+  filterChipText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.textSecondary },
+  filterChipTextActive: { color: Colors.info },
   emptyWrap: { alignItems: 'center', paddingTop: 80, gap: Spacing.md },
   emptyText: { fontSize: FontSize.lg, color: Colors.textMuted },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
