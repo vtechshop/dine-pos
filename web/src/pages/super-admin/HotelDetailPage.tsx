@@ -701,17 +701,22 @@ export function HotelDetailPage() {
 
             <div className="mb-5">
               <p className="mb-2 text-sm font-medium text-ink/70">Feature Flags</p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 {FEATURE_LABELS.map(([key, label]) => (
-                  <label key={key} className="flex cursor-pointer items-center gap-2 text-sm text-ink">
-                    <input
-                      type="checkbox"
-                      checked={!!(features as any)[key]}
-                      onChange={e => setFeatures(f => ({ ...f, [key]: e.target.checked }))}
-                      className="accent-brand"
-                    />
-                    {label}
-                  </label>
+                  <div
+                    key={key}
+                    className="flex cursor-pointer items-center gap-2.5"
+                    onClick={() => setFeatures(f => ({ ...f, [key]: !(f as any)[key] }))}
+                  >
+                    <div className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
+                      (features as any)[key] ? 'bg-brand' : 'bg-ink/20'
+                    }`}>
+                      <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                        (features as any)[key] ? 'translate-x-4' : 'translate-x-0'
+                      }`} />
+                    </div>
+                    <span className="text-sm text-ink">{label}</span>
+                  </div>
                 ))}
               </div>
             </div>
