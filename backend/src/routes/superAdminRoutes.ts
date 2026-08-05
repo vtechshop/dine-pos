@@ -206,6 +206,7 @@ router.put('/hotels/:id/approve', superAdminAuth, async (req: Request, res: Resp
     return res.json({
       message: `${hotel.hotelName} approved — ${days}-day trial started`,
       hotel,
+      credentials,
       adminId,
       whatsappPayload,
     });
