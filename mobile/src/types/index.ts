@@ -858,6 +858,7 @@ export type RootStackParamList = {
   AIRecommendations: undefined;
   StaffKitchen: undefined;
   PurchaseAssistant: undefined;
+  AIMenuImport: undefined;
 };
 
 export type TabParamList = {

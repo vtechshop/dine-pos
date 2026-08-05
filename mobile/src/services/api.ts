@@ -2262,3 +2262,102 @@ export const approveAIOcrJob = (jobId: string, vendorId?: string): Promise<{ mes
 
 export const rejectAIOcrJob = (jobId: string): Promise<{ message: string }> =>
   fetchAPI(`/ai/ocr/job/${jobId}/reject`, { method: 'POST' });
+
+// ==================== AI MENU IMPORT ====================
+
+export interface AIExtractedProduct {
+  name:        string;
+  price:       number | null;
+  variant:     string;
+  veg:         boolean;
+  gst:         number | null;
+  description: string;
+  confidence:  number;
+}
+
+export interface AIExtractedCategory {
+  name:     string;
+  products: AIExtractedProduct[];
+}
+
+export interface AIMenuExtractionResult {
+  restaurantName: string;
+  categories:     AIExtractedCategory[];
+}
+
+export interface AIImportProduct extends AIExtractedProduct {
+  duplicateAction?: 'skip' | 'overwrite' | 'copy';
+}
+
+export interface AIImportCategory {
+  name:     string;
+  products: AIImportProduct[];
+}
+
+export interface AIMenuImportResults {
+  categoriesCreated:   number;
+  productsCreated:     number;
+  productsOverwritten: number;
+  productsSkipped:     number;
+  errors:              Array<{ name: string; reason: string }>;
+}
+
+export interface AIDuplicateCheckResult {
+  duplicates: Array<{ productName: string; categoryName: string }>;
+}
+
+export const extractMenuFromFile = async (
+  uri: string,
+  mimeType: string,
+  filename: string,
+): Promise<AIMenuExtractionResult> => {
+  const baseUrl = await getBaseUrl();
+  const token = await getToken();
+
+  const formData = new FormData();
+  formData.append('menu', { uri, name: filename, type: mimeType } as any);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 min for AI
+
+  try {
+    const response = await fetch(`${baseUrl}/ai-menu/extract`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({})) as { message?: string };
+      throw new Error(error.message || `HTTP ${response.status}`);
+    }
+
+    return response.json() as Promise<AIMenuExtractionResult>;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') throw new Error('AI extraction timed out. Try a smaller file.');
+    throw error;
+  }
+};
+
+export const checkMenuDuplicates = (
+  categories: AIExtractedCategory[],
+): Promise<AIDuplicateCheckResult> =>
+  fetchAPI('/ai-menu/check-duplicates', {
+    method: 'POST',
+    body: JSON.stringify({ categories }),
+  });
+
+export const importExtractedMenu = (
+  categories: AIImportCategory[],
+): Promise<{ success: boolean; results: AIMenuImportResults }> =>
+  fetchAPI('/ai-menu/import', {
+    method: 'POST',
+    body: JSON.stringify({ categories }),
+  });

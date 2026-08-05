@@ -466,6 +466,14 @@ const ProductsScreen: React.FC = () => {
         </View>
         <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
           <TouchableOpacity
+            style={styles.aiImportBtn}
+            onPress={() => navigation.navigate('AIMenuImport')}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="auto-awesome" size={16} color='#7C3AED' />
+            <Text style={styles.aiImportBtnText}>AI Import</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={styles.autoFillBtn}
             onPress={openAutoFill}
             activeOpacity={0.8}
@@ -1032,6 +1040,14 @@ const styles = StyleSheet.create({
     color: Colors.warning,
     fontWeight: '600',
   },
+
+  // AI Import button
+  aiImportBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.xs,
+    backgroundColor: '#7C3AED18', borderWidth: 1, borderColor: '#7C3AED50',
+    borderRadius: BorderRadius.round, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md,
+  },
+  aiImportBtnText: { color: '#7C3AED', fontSize: FontSize.sm, fontWeight: '700' },
 
   // Auto-fill button
   autoFillBtn: {
