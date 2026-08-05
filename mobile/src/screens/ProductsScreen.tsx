@@ -457,14 +457,16 @@ const ProductsScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4, marginRight: 8 }}>
-          <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Menu Items</Text>
-          <Text style={styles.headerSub}>{products.length} product{products.length !== 1 ? 's' : ''}</Text>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4, marginRight: 8 }}>
+            <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Menu Items</Text>
+            <Text style={styles.headerSub}>{products.length} product{products.length !== 1 ? 's' : ''}</Text>
+          </View>
         </View>
-        <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+        <View style={styles.headerActionsRow}>
           <TouchableOpacity
             style={styles.aiImportBtn}
             onPress={() => navigation.navigate('AIMenuImport')}
@@ -675,9 +677,16 @@ const styles = StyleSheet.create({
   },
   // Header
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.md,
+    flexDirection: 'column',
+    paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm,
     backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  headerTopRow: {
+    flexDirection: 'row', alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  headerActionsRow: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
   },
   headerTitle: { color: Colors.text, fontSize: FontSize.xxl, fontWeight: '800', letterSpacing: -0.5 },
   headerSub: { color: Colors.textMuted, fontSize: FontSize.sm, marginTop: 2 },
