@@ -156,6 +156,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleConfirm = async () => {
     if (placing) return;
+    if (method === 'upi_intent' && !upiLaunched) return;
 
     // Validate
     if (method === 'split') {
@@ -492,10 +493,13 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           style={[
             styles.confirmBtn,
             { backgroundColor: active.color },
-            (placing || (method === 'split' && Math.abs(splitRemaining) > 1)) && styles.confirmBtnDisabled,
+            (placing ||
+              (method === 'split' && Math.abs(splitRemaining) > 1) ||
+              (method === 'upi_intent' && !upiLaunched)
+            ) && styles.confirmBtnDisabled,
           ]}
           onPress={handleConfirm}
-          disabled={placing || (method === 'split' && Math.abs(splitRemaining) > 1)}
+          disabled={placing || (method === 'split' && Math.abs(splitRemaining) > 1) || (method === 'upi_intent' && !upiLaunched)}
           activeOpacity={0.85}
         >
           {placing ? (
@@ -505,7 +509,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
               <MaterialIcons name="check-circle" size={20} color="#FFF" />
               <Text style={styles.confirmBtnText}>
                 {method === 'cash'        ? 'Mark as Paid — Cash' :
-                 method === 'upi_intent'  ? 'Mark as Paid — UPI' :
+                 method === 'upi_intent'  ? (upiLaunched ? 'Customer Paid — Confirm' : 'Tap an app above to launch UPI') :
                  method === 'upi_qr'      ? 'Customer Paid via QR' :
                  method === 'upi_collect' ? 'Mark as Received' :
                  method === 'card'        ? 'Mark as Paid — Card' :
