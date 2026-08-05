@@ -25,10 +25,7 @@ jobs:
 
     services:
       mongodb:
-        image: mongo:7.0
-        credentials:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+        image: public.ecr.aws/docker/library/mongo:7.0
         ports:
           - 27017:27017
         options: >-
@@ -38,10 +35,7 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis:7-alpine
-        credentials:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+        image: public.ecr.aws/docker/library/redis:7-alpine
         ports:
           - 6379:6379
         options: >-
