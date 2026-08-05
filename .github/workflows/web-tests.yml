@@ -21,6 +21,9 @@ jobs:
     services:
       mongodb:
         image: mongo:7.0
+        credentials:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
         ports:
           - 27017:27017
         options: >-
@@ -47,9 +50,9 @@ jobs:
         env:
           PORT: 5000
           MONGODB_URI: mongodb://localhost:27017/dinepos_test
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          SUPER_ADMIN_ID: ${{ secrets.SUPER_ADMIN_ID }}
-          SUPER_ADMIN_PASS: ${{ secrets.SUPER_ADMIN_PASS }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-test-jwt-secret-not-for-production' }}
+          SUPER_ADMIN_ID: ${{ secrets.SUPER_ADMIN_ID || 'ci-superadmin' }}
+          SUPER_ADMIN_PASS: ${{ secrets.SUPER_ADMIN_PASS || 'ci-superpass-1234' }}
           NODE_ENV: test
         run: |
           npm ci
@@ -81,8 +84,8 @@ jobs:
           cat > .env.test << EOF
           WEB_BASE_URL=http://localhost:3000
           TEST_API_URL=http://localhost:5000
-          SUPER_ADMIN_ID=${{ secrets.SUPER_ADMIN_ID }}
-          SUPER_ADMIN_PASS=${{ secrets.SUPER_ADMIN_PASS }}
+          SUPER_ADMIN_ID=${{ secrets.SUPER_ADMIN_ID || 'ci-superadmin' }}
+          SUPER_ADMIN_PASS=${{ secrets.SUPER_ADMIN_PASS || 'ci-superpass-1234' }}
           ADMIN_ID=${{ secrets.TEST_ADMIN_ID }}
           ADMIN_PASSWORD=${{ secrets.TEST_ADMIN_PASSWORD }}
           EOF

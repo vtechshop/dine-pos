@@ -212,7 +212,9 @@ const HotelSchema: Schema = new Schema(
 
 HotelSchema.index({ phone: 1 });                    // login + registration lookup
 HotelSchema.index({ status: 1 });                   // super admin hotel list filter
-HotelSchema.index({ adminId: 1 }, { unique: true, sparse: true }); // credential lookup + uniqueness guard
+// Partial filter excludes empty-string adminId (set during registration before approval assigns credentials)
+// sparse:true alone would still index "" and cause E11000 when multiple hotels register concurrently
+HotelSchema.index({ adminId: 1 }, { unique: true, partialFilterExpression: { adminId: { $gt: '' } } });
 HotelSchema.index({ status: 1, trialEndDate: 1 });  // churn risk query
 HotelSchema.index({ status: 1, subscriptionEndDate: 1 }); // pending renewals query
 HotelSchema.index({ createdAt: -1 });               // latest registrations

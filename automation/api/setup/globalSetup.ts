@@ -277,10 +277,10 @@ export default async function globalSetup(): Promise<void> {
   }
 
   // Set up two isolated hotels for multi-tenant isolation tests
-  const [hotelA, hotelB] = await Promise.all([
-    setupHotel('A'),
-    setupHotel('B'),
-  ]);
+  // Sequential (not Promise.all) — concurrent registrations both start with adminId:""
+  // and the unique index rejects the second insert even with sparse:true
+  const hotelA = await setupHotel('A');
+  const hotelB = await setupHotel('B');
 
   // Also register a pending (unapproved) hotel for status tests
   const pendingPhone = nextPhone();
