@@ -222,7 +222,30 @@ export const generateReceiptHTML = (order: Order, settings: Settings): string =>
 
     <hr class="line">
 
-    <div class="payment-method"><strong>Payment:</strong> ${order.paymentMethod.toUpperCase()}</div>
+    ${(() => {
+      const pm = order.paymentMethod || 'cash';
+      const sym = settings.currencySymbol || '₹';
+      const label = (m: string) => {
+        const map: Record<string, string> = {
+          cash: 'Cash', upi: 'UPI', upi_intent: 'UPI (Intent)', upi_qr: 'UPI QR',
+          upi_collect: 'UPI Collect', card: 'Card', split: 'Split', razorpay: 'Razorpay',
+        };
+        return map[m] || m.toUpperCase();
+      };
+      if (pm === 'split' && order.payments && order.payments.length > 0) {
+        const rows = order.payments.map(p =>
+          `<div style="display:flex;justify-content:space-between;font-size:${fs.info}px;">
+             <span>${label(p.mode)}${p.transactionId ? ` (${escHtml(p.transactionId)})` : ''}</span>
+             <span>${sym}${p.amount.toFixed(2)}</span>
+           </div>`
+        ).join('');
+        return `<div class="payment-method"><strong>Payment: Split</strong>${rows}</div>`;
+      }
+      const txn = (order as any).transactionId;
+      const app = (order as any).upiApp;
+      const extra = [app ? `via ${escHtml(app)}` : '', txn ? `Txn: ${escHtml(txn)}` : ''].filter(Boolean).join(' · ');
+      return `<div class="payment-method"><strong>Payment:</strong> ${label(pm)}${extra ? `<br/><small style="color:#666;">${extra}</small>` : ''}</div>`;
+    })()}
 
     <hr class="line">
 

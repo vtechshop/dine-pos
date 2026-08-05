@@ -5,7 +5,10 @@ import {
   Modal, Linking, Vibration, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../types';
+import { setPendingOrder } from '../utils/paymentBridge';
 import { MaterialIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { showAlert } from '../utils/alert';
@@ -16,7 +19,6 @@ import { Category, Product, Table } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, UPI_ID, UPI_NAME } from '../utils/constants';
 import { SelectedModifier, ModifierGroup } from '../types';
 import RazorpayCheckout from 'react-native-razorpay';
-import { enqueueOrder } from '../utils/offlineQueue';
 import { getLocalCategories, getLocalProducts, saveCategories, saveProducts } from '../database/localCacheDao';
 import { printKOT } from '../utils/receipt';
 import { KOTOrderInput } from '../types';
@@ -24,7 +26,6 @@ import { KOTOrderInput } from '../types';
 const CAT_W  = 100; // tablet landscape vertical sidebar width
 const CART_W = 340; // tablet landscape cart panel width
 
-type PayMethod = 'cash' | 'upi' | 'card' | 'split' | 'razorpay';
 type OrderSource = 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr';
 
 const SOURCE_OPTIONS: { id: OrderSource; label: string; emoji: string; color: string }[] = [
@@ -35,13 +36,6 @@ const SOURCE_OPTIONS: { id: OrderSource; label: string; emoji: string; color: st
   { id: 'qr',       label: 'QR Order', emoji: '📲', color: Colors.upi },
 ];
 
-const PAY_OPTIONS: { id: PayMethod; label: string; icon: any; color: string; bg: string }[] = [
-  { id: 'cash',     label: 'Cash',     icon: 'payments',        color: Colors.cash,        bg: Colors.cashBg },
-  { id: 'upi',      label: 'UPI',      icon: 'qr-code',         color: Colors.upi,         bg: Colors.upiBg },
-  { id: 'card',     label: 'Card',     icon: 'credit-card',     color: Colors.cardPayment, bg: Colors.cardBg },
-  { id: 'split',    label: 'Split',    icon: 'call-split',      color: Colors.split,       bg: Colors.splitBg },
-  { id: 'razorpay', label: 'Razorpay', icon: 'currency-rupee',  color: Colors.info,        bg: Colors.infoBg },
-];
 
 interface OrderSuccess {
   orderNumber: string;
@@ -61,6 +55,7 @@ const BillingScreen: React.FC = () => {
   } = useCart();
   const { settings } = useSettings();
   const { bottom } = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const { width: winW, height: winH } = useWindowDimensions();
   const isPortrait     = winH > winW;
@@ -72,19 +67,14 @@ const BillingScreen: React.FC = () => {
   const [products,          setProducts]         = useState<Product[]>([]);
   const [filtered,          setFiltered]         = useState<Product[]>([]);
   const [selectedCat,       setSelectedCat]      = useState<string | null>(null);
-  const [payMethod,         setPayMethod]        = useState<PayMethod>('cash');
   const [loading,           setLoading]          = useState(true);
   const [placing,           setPlacing]          = useState(false);
   const [search,            setSearch]           = useState('');
   const [showCart,          setShowCart]         = useState(IS_TABLET && !tabletPortrait);
-  const [showPayModal,      setShowPayModal]     = useState(false);
   const [discountInput,     setDiscountInput]    = useState('');
   const [discountType,      setDiscountType]     = useState<DiscountType>('percent');
   const [showSuccess,       setShowSuccess]      = useState<OrderSuccess | null>(null);
   const [showUpiQr,         setShowUpiQr]        = useState(false);
-  const [splitCash,         setSplitCash]        = useState('');
-  const [splitCard,         setSplitCard]        = useState('');
-  const [splitUpi,          setSplitUpi]         = useState('');
   const [customerPhone,     setCustomerPhone]    = useState('');
   const [orderSource,       setOrderSource]      = useState<OrderSource>('dine-in');
   const [printingKot,       setPrintingKot]      = useState(false);
@@ -270,8 +260,57 @@ Thank you for dining with us! 🍽️`;
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items first.'); return; }
     if (!cart.customerName.trim()) { showAlert('Name Required', 'Enter customer name before placing the order.'); return; }
     if (!customerPhone.trim()) { showAlert('Phone Required', 'Enter customer phone number before placing the order.'); return; }
+    // Compute discount from input directly so we don't rely on async state update
+    const discountVal = parseFloat(discountInput) || 0;
+    const preTax = cart.subtotal + cart.taxTotal;
+    const discountAmount = discountVal > 0
+      ? (discountType === 'percent' ? (preTax * discountVal) / 100 : Math.min(discountVal, preTax))
+      : 0;
+    const finalGrandTotal = Math.max(0, preTax - discountAmount);
     applyDiscount();
-    setShowPayModal(true);
+
+    const isOrderParcel = ['swiggy', 'zomato', 'takeaway'].includes(orderSource);
+    const getTableNumber = () => {
+      if (orderSource === 'swiggy')   return 'Swiggy';
+      if (orderSource === 'zomato')   return 'Zomato';
+      if (orderSource === 'takeaway') return 'Takeaway';
+      return cart.tableNumber;
+    };
+    const orderData = {
+      items: cart.items.map(item => ({
+        product:           item.product._id,
+        productName:       item.product.name,
+        variantId:         item.variantId   || '',
+        variantName:       item.variantName || '',
+        selectedModifiers: (item.selectedModifiers || []).map(m => ({ ...m, modifierTotal: m.modifierPrice * item.quantity })),
+        quantity:          item.quantity,
+        price:             item.effectivePrice + item.modifierTotal,
+        taxPercent:        item.product.taxPercent,
+        taxAmount:         item.taxAmount,
+        total:             item.total,
+      })),
+      subtotal:      cart.subtotal,
+      taxTotal:      cart.taxTotal,
+      grandTotal:    finalGrandTotal,
+      discountAmount,
+      status:        'pending',
+      tableNumber:   getTableNumber(),
+      customerName:  cart.customerName,
+      customerPhone: customerPhone.replace(/\D/g, '').replace(/^0+/, '').slice(0, 12) || undefined,
+      notes:         cart.notes,
+      isParcel:      isOrderParcel,
+      orderSource,
+    };
+    setPendingOrder(orderData as Record<string, unknown>);
+    navigation.navigate('PaymentScreen', { mode: 'billing', grandTotal: finalGrandTotal });
+  };
+
+  const handleRazorpayFlow = () => {
+    if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items first.'); return; }
+    if (!cart.customerName.trim()) { showAlert('Name Required', 'Enter customer name before placing the order.'); return; }
+    if (!customerPhone.trim()) { showAlert('Phone Required', 'Enter customer phone number before placing the order.'); return; }
+    applyDiscount();
+    handleRazorpayCheckout();
   };
 
   const handleRazorpayCheckout = async () => {
@@ -389,105 +428,6 @@ Thank you for dining with us! 🍽️`;
     }
   };
 
-  const confirmOrder = async () => {
-    if (payMethod === 'split') {
-      const splitTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitCard) || 0) + (parseFloat(splitUpi) || 0);
-      if (Math.abs(splitTotal - cart.grandTotal) > 1) {
-        showAlert('Split Mismatch', `Split total (${fmt(splitTotal)}) must equal ${fmt(cart.grandTotal)}.`);
-        return;
-      }
-    }
-    setShowPayModal(false);
-    setPlacing(true);
-
-    // ── Razorpay checkout flow ────────────────────────────────────────────────
-    if (payMethod === 'razorpay') {
-      await handleRazorpayCheckout();
-      return;
-    }
-    const isOrderParcel = ['swiggy', 'zomato', 'takeaway'].includes(orderSource);
-    const getTableNumber = () => {
-      if (orderSource === 'swiggy')   return 'Swiggy';
-      if (orderSource === 'zomato')   return 'Zomato';
-      if (orderSource === 'takeaway') return 'Takeaway';
-      return cart.tableNumber;
-    };
-    const orderData = {
-      items: cart.items.map(item => ({
-        product:           item.product._id,
-        productName:       item.product.name,
-        variantId:         item.variantId   || '',
-        variantName:       item.variantName || '',
-        selectedModifiers: (item.selectedModifiers || []).map(m => ({ ...m, modifierTotal: m.modifierPrice * item.quantity })),
-        quantity:          item.quantity,
-        price:             item.effectivePrice + item.modifierTotal,
-        taxPercent:        item.product.taxPercent,
-        taxAmount:         item.taxAmount,
-        total:             item.total,
-      })),
-      subtotal:      cart.subtotal,
-      taxTotal:      cart.taxTotal,
-      grandTotal:    cart.grandTotal,
-      discountAmount:cart.discountAmount,
-      paymentMethod: payMethod,
-      status:        'pending' as const,
-      tableNumber:   getTableNumber(),
-      customerName:  cart.customerName,
-      customerPhone: customerPhone.replace(/\D/g, '').replace(/^0+/, '').slice(0, 12) || undefined,
-      notes:         cart.notes,
-      isParcel:      isOrderParcel,
-      orderSource,
-      ...(payMethod === 'split' ? {
-        splitDetails: {
-          cash: parseFloat(splitCash) || 0,
-          card: parseFloat(splitCard) || 0,
-          upi:  parseFloat(splitUpi)  || 0,
-        },
-      } : {}),
-    };
-    // Snapshot cart before clearCart wipes it
-    const cartSnapshot = {
-      items:          cart.items.map(i => ({ name: i.variantName ? `${i.product.name} (${i.variantName})` : i.product.name, qty: i.quantity, price: i.effectivePrice })),
-      subtotal:       cart.subtotal,
-      taxTotal:       cart.taxTotal,
-      discountAmount: cart.discountAmount,
-      grandTotal:     cart.grandTotal,
-    };
-    const kotSnapshot: Omit<KOTOrderInput, 'orderNumber'> = {
-      items:       cart.items.map(i => ({ productName: i.variantName ? `${i.product.name} (${i.variantName})` : i.product.name, quantity: i.quantity })),
-      tableNumber: getTableNumber(),
-      notes:       cart.notes,
-      createdAt:   new Date().toISOString(),
-    };
-    try {
-      // Try server first; on network failure queue offline
-      let order: any;
-      try {
-        order = await api.createOrder(orderData);
-      } catch (netErr: any) {
-        const offlineId = await enqueueOrder(orderData);
-        const tokenNum = `Q${offlineId.slice(-3).toUpperCase()}`;
-        const orderNumber = `OFFLINE-${tokenNum}`;
-        setShowSuccess({ orderNumber, token: tokenNum, ...cartSnapshot, kot: { orderNumber, ...kotSnapshot } });
-        Vibration.vibrate([0, 100, 80, 200]);
-        showAlert('Saved Offline', 'No server connection. Order queued and will sync when online.');
-        clearCart();
-        setDiscountInput('');
-        setDiscount({ type: 'percent', value: 0 });
-        setSplitCash(''); setSplitCard(''); setSplitUpi('');
-        return;
-      }
-      const tokenNum = order.orderNumber.split('-').pop() || '1';
-      setShowSuccess({ orderNumber: order.orderNumber, token: tokenNum, ...cartSnapshot, grandTotal: order.grandTotal, kot: { orderNumber: order.orderNumber, ...kotSnapshot } });
-      Vibration.vibrate([0, 100, 80, 200]);
-      clearCart();
-      setDiscountInput('');
-      setDiscount({ type: 'percent', value: 0 });
-      setSplitCash(''); setSplitCard(''); setSplitUpi('');
-    } catch (e: any) {
-      showAlert('Error', e.message || 'Failed to place order');
-    } finally { setPlacing(false); }
-  };
 
   // ── Category button ──────────────────────────────────────────────────────
   const renderCat = (cat: Category | null) => {
@@ -867,6 +807,16 @@ Thank you for dining with us! 🍽️`;
               <TouchableOpacity style={styles.clearBtn} onPress={() => { if (cart.items.length) showAlert('Clear?', 'Remove all items?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: clearCart }]); }}>
                 <MaterialIcons name="delete-outline" size={20} color={Colors.danger} />
               </TouchableOpacity>
+              {!!(settings as any).razorpayKeyId && (
+                <TouchableOpacity
+                  style={[styles.razorpayBtn, (cart.items.length === 0 || placing || !cart.customerName.trim() || !customerPhone.trim()) && styles.placeBtnDisabled]}
+                  onPress={handleRazorpayFlow}
+                  disabled={placing || cart.items.length === 0 || !cart.customerName.trim() || !customerPhone.trim()}
+                  activeOpacity={0.85}
+                >
+                  <MaterialIcons name="currency-rupee" size={18} color={Colors.info} />
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={[styles.placeBtn, (cart.items.length === 0 || placing || !cart.customerName.trim() || !customerPhone.trim()) && styles.placeBtnDisabled]}
                 onPress={handlePlaceOrder}
@@ -962,90 +912,6 @@ Thank you for dining with us! 🍽️`;
             <TouchableOpacity style={[styles.payCancel, { marginTop: 12, marginHorizontal: 0 }]} onPress={() => setShowTablePicker(false)}>
               <Text style={styles.payCancelText}>Cancel</Text>
             </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── Payment Modal ── */}
-      <Modal visible={showPayModal} transparent animationType="slide" onRequestClose={() => setShowPayModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.payModal, { paddingBottom: 36 + bottom }]}>
-            <View style={styles.payModalHandle} />
-            <Text style={styles.payModalTitle}>Choose Payment</Text>
-            <Text style={styles.payModalAmount}>{fmt(cart.grandTotal)}</Text>
-
-            <View style={styles.payGrid}>
-              {PAY_OPTIONS.map(p => (
-                <TouchableOpacity
-                  key={p.id}
-                  style={[styles.payCard, payMethod === p.id && { borderColor: p.color, backgroundColor: p.bg }]}
-                  onPress={() => setPayMethod(p.id)}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.payIconWrap, { backgroundColor: payMethod === p.id ? p.color + '25' : Colors.surface }]}>
-                    <MaterialIcons name={p.icon} size={28} color={payMethod === p.id ? p.color : Colors.textSecondary} />
-                  </View>
-                  <Text style={[styles.payLabel, payMethod === p.id && { color: p.color }]}>{p.label}</Text>
-                  {payMethod === p.id && (
-                    <MaterialIcons name="check-circle" size={16} color={p.color} style={styles.payCheck} />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {payMethod === 'split' && (
-              <View style={styles.splitSection}>
-                <View style={styles.splitRow}>
-                  <MaterialIcons name="payments" size={18} color={Colors.cash} />
-                  <Text style={styles.splitMethodLabel}>Cash</Text>
-                  <TextInput
-                    style={styles.splitInput}
-                    value={splitCash}
-                    onChangeText={setSplitCash}
-                    keyboardType="decimal-pad"
-                    placeholder="0.00"
-                    placeholderTextColor={Colors.textMuted}
-                  />
-                </View>
-                <View style={styles.splitRow}>
-                  <MaterialIcons name="credit-card" size={18} color={Colors.cardPayment} />
-                  <Text style={styles.splitMethodLabel}>Card</Text>
-                  <TextInput
-                    style={styles.splitInput}
-                    value={splitCard}
-                    onChangeText={setSplitCard}
-                    keyboardType="decimal-pad"
-                    placeholder="0.00"
-                    placeholderTextColor={Colors.textMuted}
-                  />
-                </View>
-                <View style={styles.splitRow}>
-                  <MaterialIcons name="qr-code" size={18} color={Colors.upi} />
-                  <Text style={styles.splitMethodLabel}>UPI</Text>
-                  <TextInput
-                    style={styles.splitInput}
-                    value={splitUpi}
-                    onChangeText={setSplitUpi}
-                    keyboardType="decimal-pad"
-                    placeholder="0.00"
-                    placeholderTextColor={Colors.textMuted}
-                  />
-                </View>
-                <Text style={styles.splitHint}>
-                  {`Remaining: ${fmt(cart.grandTotal - (parseFloat(splitCash) || 0) - (parseFloat(splitCard) || 0) - (parseFloat(splitUpi) || 0))}`}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.payActions}>
-              <TouchableOpacity style={styles.payCancel} onPress={() => setShowPayModal(false)}>
-                <Text style={styles.payCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.payConfirm} onPress={confirmOrder} activeOpacity={0.85}>
-                <Text style={styles.payConfirmText}>Confirm Order</Text>
-                <MaterialIcons name="arrow-forward" size={18} color={Colors.white} />
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </Modal>
@@ -1255,7 +1121,7 @@ Thank you for dining with us! 🍽️`;
                 <Text style={[styles.successPrintText, { color: Colors.warning }]}>Print KOT</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={[styles.successDoneBtn, { width: '100%', marginTop: 8 }]} onPress={() => { setShowSuccess(null); setCustomerPhone(''); setOrderSource('dine-in'); setParcel(false); setSplitCash(''); setSplitCard(''); setSplitUpi(''); }}>
+            <TouchableOpacity style={[styles.successDoneBtn, { width: '100%', marginTop: 8 }]} onPress={() => { setShowSuccess(null); setCustomerPhone(''); setOrderSource('dine-in'); setParcel(false); }}>
               <Text style={styles.successDoneText}>New Order</Text>
               <MaterialIcons name="add" size={18} color={Colors.white} />
             </TouchableOpacity>
@@ -1448,6 +1314,7 @@ const styles = StyleSheet.create({
   // Cart actions
   cartActions: { flexDirection: 'row', padding: Spacing.md, gap: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border },
   clearBtn: { width: 48, height: 48, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.dangerBg, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.dangerBg },
+  razorpayBtn: { width: 48, height: 48, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.infoBg, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.infoBg },
   placeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.success, borderRadius: BorderRadius.lg, paddingVertical: 13, gap: 8, ...Shadows.success },
   placeBtnDisabled: { opacity: 0.45 },
   placeBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '800' },

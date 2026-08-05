@@ -129,12 +129,20 @@ export interface Order {
   taxTotal: number;
   discountAmount: number;
   grandTotal: number;
-  paymentMethod: 'cash' | 'upi' | 'card' | 'split' | 'razorpay';
+  paymentMethod: 'cash' | 'upi' | 'upi_intent' | 'upi_qr' | 'upi_collect' | 'card' | 'split' | 'razorpay';
   splitDetails: {
     cash?: number;
     upi?: number;
     card?: number;
   };
+  transactionId?: string;
+  upiApp?: string;
+  paymentTime?: string;
+  payments?: Array<{
+    mode: 'cash' | 'upi_intent' | 'upi_qr' | 'upi_collect' | 'card';
+    amount: number;
+    transactionId?: string;
+  }>;
   status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
   orderSource?: 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr';
   isParcel: boolean;
@@ -205,7 +213,10 @@ export interface DailyReport {
   totalDiscount?: number;
   paymentBreakdown: {
     cash: number;
-    upi: number;
+    upi: number;          // total of all UPI methods (backward compat)
+    upi_intent?: number;
+    upi_qr?: number;
+    upi_collect?: number;
     card: number;
     split: number;
   };
@@ -832,6 +843,12 @@ export type RootStackParamList = {
   VendorLedger:          undefined;
   InventoryIntelligence: undefined;
   PaymentSettings: undefined;
+  PaymentScreen: {
+    mode: 'billing' | 'cashier';
+    orderId?: string;
+    orderNumber?: string;
+    grandTotal: number;
+  };
   AIHome: undefined;
   MorningBrief: undefined;
   AIReports: undefined;

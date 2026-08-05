@@ -32,12 +32,20 @@ export interface IOrder extends Document {
   taxTotal: number;
   discountAmount: number;
   grandTotal: number;
-  paymentMethod: 'cash' | 'upi' | 'card' | 'split';
+  paymentMethod: 'cash' | 'upi' | 'upi_intent' | 'upi_qr' | 'upi_collect' | 'card' | 'split' | 'razorpay';
   splitDetails: {
     cash?: number;
     upi?: number;
     card?: number;
   };
+  transactionId: string;
+  upiApp: string;
+  paymentTime: Date | null;
+  payments: Array<{
+    mode: 'cash' | 'upi_intent' | 'upi_qr' | 'upi_collect' | 'card';
+    amount: number;
+    transactionId?: string;
+  }>;
   status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
   orderSource: 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr' | 'kiosk' | 'waiter' | 'admin';
   isParcel: boolean;
@@ -148,14 +156,23 @@ const OrderSchema: Schema = new Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['cash', 'upi', 'card', 'split'],
+      enum: ['cash', 'upi', 'upi_intent', 'upi_qr', 'upi_collect', 'card', 'split', 'razorpay'],
       default: 'cash',
     },
     splitDetails: {
       cash: { type: Number, default: 0 },
-      upi: { type: Number, default: 0 },
+      upi:  { type: Number, default: 0 },
       card: { type: Number, default: 0 },
     },
+    transactionId: { type: String, default: '' },
+    upiApp:        { type: String, default: '' },
+    paymentTime:   { type: Date,   default: null },
+    payments: [{
+      _id:           false,
+      mode:          { type: String, enum: ['cash', 'upi_intent', 'upi_qr', 'upi_collect', 'card'], required: true },
+      amount:        { type: Number, required: true },
+      transactionId: { type: String, default: '' },
+    }],
     status: {
       type: String,
       enum: ['pending', 'preparing', 'ready', 'served', 'completed', 'cancelled'],

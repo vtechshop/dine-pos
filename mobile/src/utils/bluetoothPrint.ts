@@ -233,6 +233,30 @@ export const printReceiptBluetooth = async (
   await P.printText(row('GRAND TOTAL', cur + order.grandTotal.toFixed(2)) + '\n', {});
   await P.printText(dividerH + '\n', {});
 
+  // ── PAYMENT BREAKDOWN ────────────────────────────────────
+  const pmLabel = (m: string) => {
+    const map: Record<string, string> = {
+      cash: 'Cash', upi: 'UPI', upi_intent: 'UPI Intent', upi_qr: 'UPI QR',
+      upi_collect: 'UPI Collect', card: 'Card', split: 'Split', razorpay: 'Razorpay',
+    };
+    return map[m] || m.toUpperCase();
+  };
+  const pm = order.paymentMethod || 'cash';
+  if (pm === 'split' && order.payments && order.payments.length > 0) {
+    await P.printText('Payment: Split\n', {});
+    for (const p of order.payments) {
+      await P.printText(row('  ' + pmLabel(p.mode), cur + p.amount.toFixed(2)) + '\n', {});
+      if (p.transactionId) await P.printText('  Txn: ' + clean(p.transactionId) + '\n', {});
+    }
+  } else {
+    await P.printText(row('Payment', pmLabel(pm)) + '\n', {});
+    const txn = (order as any).transactionId as string | undefined;
+    const app = (order as any).upiApp as string | undefined;
+    if (app) await P.printText('App: ' + clean(app) + '\n', {});
+    if (txn) await P.printText('Txn: ' + clean(txn) + '\n', {});
+  }
+  await P.printText(divider + '\n', {});
+
   // ── UPI QR ───────────────────────────────────────────────
   await P.printText('\n', {});
   await P.printText(cLine('=== Scan & Pay ===') + '\n', {});

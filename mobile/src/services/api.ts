@@ -1609,18 +1609,40 @@ export const getCashierOrders = async (): Promise<CashierOrder[]> => {
   return res.json();
 };
 
-export const completeOrderPayment = async (orderId: string, paymentMethod: 'cash' | 'upi' | 'card' | 'split'): Promise<void> => {
+export type PaymentDetails = {
+  transactionId?: string;
+  upiApp?: string;
+  payments?: Array<{ mode: string; amount: number; transactionId?: string }>;
+  splitDetails?: { cash?: number; upi?: number; card?: number };
+};
+
+export const completeOrderPayment = async (
+  orderId: string,
+  paymentMethod: string,
+  details?: PaymentDetails,
+): Promise<void> => {
   const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
   const res = await staffFetch(`${base}/orders/${orderId}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ status: 'completed', paymentMethod }),
+    body: JSON.stringify({ status: 'completed', paymentMethod, ...details }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error((data as any).message || 'Failed to complete order');
   }
 };
+
+// Admin (billing) path — uses admin JWT, not cashier token
+export const completeOrderWithDetails = (
+  orderId: string,
+  paymentMethod: string,
+  details?: PaymentDetails,
+): Promise<Order> =>
+  fetchAPI<Order>(`/orders/${orderId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'completed', paymentMethod, ...details }),
+  });
 
 // ==================== AGGREGATOR / ONLINE DELIVERY ====================
 

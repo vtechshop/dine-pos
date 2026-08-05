@@ -85,10 +85,13 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
         totalOrders:    { $sum: 1 },
         parcelOrders:   { $sum: { $cond: ['$isParcel', 1, 0] } },
         parcelRevenue:  { $sum: { $cond: ['$isParcel', '$grandTotal', 0] } },
-        cashTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash']  }, '$grandTotal', 0] } },
-        upiTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi']   }, '$grandTotal', 0] } },
-        cardTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card']  }, '$grandTotal', 0] } },
-        splitTotal:     { $sum: { $cond: [{ $eq: ['$paymentMethod', 'split'] }, '$grandTotal', 0] } },
+        cashTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash']  }, '$grandTotal', 0] } },
+        upiTotal:        { $sum: { $cond: [{ $in: ['$paymentMethod', ['upi', 'upi_intent', 'upi_qr', 'upi_collect']] }, '$grandTotal', 0] } },
+        upiIntentTotal:  { $sum: { $cond: [{ $in: ['$paymentMethod', ['upi', 'upi_intent']] }, '$grandTotal', 0] } },
+        upiQrTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi_qr'] }, '$grandTotal', 0] } },
+        upiCollectTotal: { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi_collect'] }, '$grandTotal', 0] } },
+        cardTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card']  }, '$grandTotal', 0] } },
+        splitTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'split'] }, '$grandTotal', 0] } },
         dineInOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, 1, 0] } },
         dineInTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, '$grandTotal', 0] } },
         takeawayOrders: { $sum: { $cond: [{ $eq: ['$orderSource', 'takeaway'] }, 1, 0] } },
@@ -112,7 +115,8 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
 
     const empty = {
       totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0,
-      cashTotal: 0, upiTotal: 0, cardTotal: 0, splitTotal: 0,
+      cashTotal: 0, upiTotal: 0, upiIntentTotal: 0, upiQrTotal: 0, upiCollectTotal: 0,
+      cardTotal: 0, splitTotal: 0,
       dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0,
       swiggyOrders: 0, swiggyTotal: 0, zomatoOrders: 0, zomatoTotal: 0,
       qrOrders: 0, qrTotal: 0,
@@ -129,7 +133,15 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
       totalOrders: r.totalOrders,
       parcelOrders: r.parcelOrders,
       parcelRevenue: r.parcelRevenue,
-      paymentBreakdown: { cash: r.cashTotal, upi: r.upiTotal, card: r.cardTotal, split: r.splitTotal },
+      paymentBreakdown: {
+        cash: r.cashTotal,
+        upi: r.upiTotal,
+        upi_intent: r.upiIntentTotal,
+        upi_qr: r.upiQrTotal,
+        upi_collect: r.upiCollectTotal,
+        card: r.cardTotal,
+        split: r.splitTotal,
+      },
       sourceBreakdown: {
         'dine-in':  { orders: r.dineInOrders,    revenue: r.dineInTotal },
         takeaway:   { orders: r.takeawayOrders,  revenue: r.takeawayTotal },
@@ -165,10 +177,13 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
         totalOrders:    { $sum: 1 },
         parcelOrders:   { $sum: { $cond: ['$isParcel', 1, 0] } },
         parcelRevenue:  { $sum: { $cond: ['$isParcel', '$grandTotal', 0] } },
-        cashTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash']  }, '$grandTotal', 0] } },
-        upiTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi']   }, '$grandTotal', 0] } },
-        cardTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card']  }, '$grandTotal', 0] } },
-        splitTotal:     { $sum: { $cond: [{ $eq: ['$paymentMethod', 'split'] }, '$grandTotal', 0] } },
+        cashTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash']  }, '$grandTotal', 0] } },
+        upiTotal:        { $sum: { $cond: [{ $in: ['$paymentMethod', ['upi', 'upi_intent', 'upi_qr', 'upi_collect']] }, '$grandTotal', 0] } },
+        upiIntentTotal:  { $sum: { $cond: [{ $in: ['$paymentMethod', ['upi', 'upi_intent']] }, '$grandTotal', 0] } },
+        upiQrTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi_qr'] }, '$grandTotal', 0] } },
+        upiCollectTotal: { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi_collect'] }, '$grandTotal', 0] } },
+        cardTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card']  }, '$grandTotal', 0] } },
+        splitTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'split'] }, '$grandTotal', 0] } },
         dineInOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, 1, 0] } },
         dineInTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, '$grandTotal', 0] } },
         takeawayOrders: { $sum: { $cond: [{ $eq: ['$orderSource', 'takeaway'] }, 1, 0] } },
@@ -188,14 +203,28 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
     ]);
     const rangeSessionLoyaltyDiscount = rangeLoyaltyAgg?.total ?? 0;
 
-    const empty = { totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0, cashTotal: 0, upiTotal: 0, cardTotal: 0, splitTotal: 0, dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0, swiggyOrders: 0, swiggyTotal: 0, zomatoOrders: 0, zomatoTotal: 0, qrOrders: 0, qrTotal: 0 };
+    const empty = {
+      totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0,
+      cashTotal: 0, upiTotal: 0, upiIntentTotal: 0, upiQrTotal: 0, upiCollectTotal: 0,
+      cardTotal: 0, splitTotal: 0,
+      dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0,
+      swiggyOrders: 0, swiggyTotal: 0, zomatoOrders: 0, zomatoTotal: 0, qrOrders: 0, qrTotal: 0,
+    };
     const r = result || empty;
     const netRangeSales = +(r.totalSales - rangeSessionLoyaltyDiscount).toFixed(2);
     res.json({
       from: fromStr, to: toStr,
       totalSales: netRangeSales, totalTax: r.totalTax, totalDiscount: r.totalDiscount,
       totalOrders: r.totalOrders, parcelOrders: r.parcelOrders, parcelRevenue: r.parcelRevenue,
-      paymentBreakdown: { cash: r.cashTotal, upi: r.upiTotal, card: r.cardTotal, split: r.splitTotal },
+      paymentBreakdown: {
+        cash: r.cashTotal,
+        upi: r.upiTotal,
+        upi_intent: r.upiIntentTotal,
+        upi_qr: r.upiQrTotal,
+        upi_collect: r.upiCollectTotal,
+        card: r.cardTotal,
+        split: r.splitTotal,
+      },
       sourceBreakdown: {
         'dine-in':  { orders: r.dineInOrders,    revenue: r.dineInTotal },
         takeaway:   { orders: r.takeawayOrders,  revenue: r.takeawayTotal },
@@ -756,9 +785,15 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       existing.completedBy = req.cashierName || req.cashierId || '';
       existing.completedAt = new Date();
       existing.cashierId   = req.cashierId || '';
-      if (paymentMethod && ['cash', 'upi', 'card', 'split'].includes(paymentMethod)) {
+      const VALID_PM = ['cash', 'upi', 'upi_intent', 'upi_qr', 'upi_collect', 'card', 'split', 'razorpay'];
+      if (paymentMethod && VALID_PM.includes(paymentMethod)) {
         existing.paymentMethod = paymentMethod;
       }
+      if (body.transactionId)  (existing as any).transactionId = body.transactionId;
+      if (body.upiApp)         (existing as any).upiApp = body.upiApp;
+      if (body.payments)       (existing as any).payments = body.payments;
+      if (body.splitDetails)   existing.splitDetails = body.splitDetails;
+      (existing as any).paymentTime = new Date();
     }
     await existing.save();
 
@@ -813,6 +848,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
 const ORDER_UPDATE_ALLOWED = new Set([
   'paymentStatus', 'paymentMethod', 'notes', 'discountAmount',
   'tableNumber', 'isParcel', 'customerName',
+  'transactionId', 'upiApp', 'payments', 'splitDetails',
 ]);
 
 router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {

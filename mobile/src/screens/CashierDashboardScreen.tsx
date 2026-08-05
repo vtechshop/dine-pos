@@ -11,7 +11,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList, Settings, Order } from '../types';
 import {
-  getCashierOrders, completeOrderPayment, clearCashierToken,
+  getCashierOrders, clearCashierToken,
   getCashierToken, getStoredHotelId, getSocketUrl, getBaseUrl, getSettings, CashierOrder,
 } from '../services/api';
 import { CASHIER_PROFILE_KEY } from './CashierLoginScreen';
@@ -25,7 +25,6 @@ import UnreadBadge from '../components/UnreadBadge';
 import { printReceipt } from '../utils/receipt';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CashierDashboard'>;
-type PaymentMethod = 'cash' | 'upi' | 'card' | 'split';
 
 function HighlightText({ text, query, style, matchStyle }: {
   text: string; query: string; style?: any; matchStyle?: any;
@@ -50,12 +49,6 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'active' | 'completed'>('active');
   const [cashierName, setCashierName] = useState('');
-  const [payModal, setPayModal] = useState<{ order: CashierOrder } | null>(null);
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('cash');
-  const [splitCash, setSplitCash] = useState('');
-  const [splitCard, setSplitCard] = useState('');
-  const [splitUpi,  setSplitUpi]  = useState('');
-  const [completing, setCompleting] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [socketLost, setSocketLost] = useState(false);
   const socketRef = useRef<Socket | null>(null);
@@ -319,40 +312,6 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
     };
   }, [loadOrders]);
 
-  const handleCollectPayment = async () => {
-    if (!payModal || submittingRef.current) return;
-    if (selectedMethod === 'split') {
-      const splitTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitCard) || 0) + (parseFloat(splitUpi) || 0);
-      if (Math.abs(splitTotal - payModal.order.grandTotal) > 1) {
-        Alert.alert('Split Mismatch', `Split total (₹${splitTotal.toFixed(2)}) must equal ₹${payModal.order.grandTotal.toFixed(2)}.`);
-        return;
-      }
-    }
-    submittingRef.current = true;
-    setCompleting(true);
-    try {
-      await completeOrderPayment(payModal.order._id, selectedMethod);
-      const paid = { ...payModal.order, status: 'completed' as const, paymentMethod: selectedMethod };
-      setOrders(prev => prev.map(o => o._id === paid._id ? paid : o));
-      setPayModal(null);
-      setSplitCash(''); setSplitCard(''); setSplitUpi('');
-      if (settings) {
-        Alert.alert(
-          'Payment Collected ✓',
-          `₹${paid.grandTotal.toFixed(0)} via ${selectedMethod.toUpperCase()}`,
-          [
-            { text: 'Print Receipt', onPress: () => printReceipt(paid as unknown as Order, settings).catch((err: any) => Alert.alert('Print Failed', err?.message || 'Could not print receipt. Check your printer.')) },
-            { text: 'Done', style: 'cancel' },
-          ]
-        );
-      }
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to collect payment');
-    } finally {
-      submittingRef.current = false;
-      setCompleting(false);
-    }
-  };
 
   const handleLogout = async () => {
     await clearCashierToken();
@@ -379,7 +338,12 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const renderActiveOrder = ({ item }: { item: CashierOrder }) => {
     void tick;
     const token = item.orderNumber.split('-').pop() || '?';
-    const openPayment = () => { setSelectedMethod('cash'); setSplitCash(''); setSplitCard(''); setSplitUpi(''); setPayModal({ order: item }); };
+    const openPayment = () => navigation.navigate('PaymentScreen', {
+      mode: 'cashier',
+      orderId: item._id,
+      orderNumber: item.orderNumber,
+      grandTotal: item.grandTotal,
+    });
     return (
       <TouchableOpacity activeOpacity={0.92} onPress={openPayment}>
         <View style={styles.card}>
@@ -589,7 +553,12 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
               <TouchableOpacity
                 key={order._id}
                 style={styles.readyCard}
-                onPress={() => { setSelectedMethod('cash'); setSplitCash(''); setSplitCard(''); setSplitUpi(''); setPayModal({ order }); }}
+                onPress={() => navigation.navigate('PaymentScreen', {
+                  mode: 'cashier',
+                  orderId: order._id,
+                  orderNumber: order.orderNumber,
+                  grandTotal: order.grandTotal,
+                })}
                 activeOpacity={0.85}
               >
                 <View style={styles.readyCardRow}>
@@ -693,104 +662,6 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         }
       />
-
-      <Modal visible={!!payModal} transparent animationType="slide" onRequestClose={() => { setPayModal(null); setSplitCash(''); setSplitCard(''); setSplitUpi(''); }}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { paddingBottom: bottom + Spacing.xl }]}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Collect Payment</Text>
-
-            {payModal && (
-              <>
-                <View style={styles.modalOrderInfo}>
-                  <Text style={styles.modalOrderNum}>{payModal.order.orderNumber}</Text>
-                  {payModal.order.tableNumber ? <Text style={styles.modalOrderSub}>Table {payModal.order.tableNumber}</Text> : null}
-                  {payModal.order.customerName ? <Text style={styles.modalOrderSub}>{payModal.order.customerName}</Text> : null}
-                </View>
-
-                <Text style={styles.modalTotal}>₹{payModal.order.grandTotal.toFixed(0)}</Text>
-
-                <Text style={styles.modalMethodLabel}>Payment Method</Text>
-                <View style={styles.methodRow}>
-                  {(['cash', 'upi', 'card', 'split'] as PaymentMethod[]).map(m => (
-                    <TouchableOpacity
-                      key={m}
-                      style={[styles.methodBtn, selectedMethod === m && styles.methodBtnActive]}
-                      onPress={() => setSelectedMethod(m)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.methodBtnIcon}>{m === 'cash' ? '💵' : m === 'upi' ? '📱' : m === 'split' ? '🔀' : '💳'}</Text>
-                      <Text style={[styles.methodBtnText, selectedMethod === m && styles.methodBtnTextActive]}>
-                        {m.toUpperCase()}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {selectedMethod === 'split' && payModal && (
-                  <View style={styles.splitSection}>
-                    <View style={styles.splitRow}>
-                      <Text style={styles.splitMethodLabel}>Cash</Text>
-                      <TextInput
-                        style={styles.splitInput}
-                        value={splitCash}
-                        onChangeText={setSplitCash}
-                        keyboardType="decimal-pad"
-                        placeholder="0.00"
-                        placeholderTextColor={Colors.textMuted}
-                      />
-                    </View>
-                    <View style={styles.splitRow}>
-                      <Text style={styles.splitMethodLabel}>Card</Text>
-                      <TextInput
-                        style={styles.splitInput}
-                        value={splitCard}
-                        onChangeText={setSplitCard}
-                        keyboardType="decimal-pad"
-                        placeholder="0.00"
-                        placeholderTextColor={Colors.textMuted}
-                      />
-                    </View>
-                    <View style={styles.splitRow}>
-                      <Text style={styles.splitMethodLabel}>UPI</Text>
-                      <TextInput
-                        style={styles.splitInput}
-                        value={splitUpi}
-                        onChangeText={setSplitUpi}
-                        keyboardType="decimal-pad"
-                        placeholder="0.00"
-                        placeholderTextColor={Colors.textMuted}
-                      />
-                    </View>
-                    <Text style={styles.splitHint}>
-                      {`Remaining: ₹${(payModal.order.grandTotal - (parseFloat(splitCash) || 0) - (parseFloat(splitCard) || 0) - (parseFloat(splitUpi) || 0)).toFixed(2)}`}
-                    </Text>
-                  </View>
-                )}
-
-                <TouchableOpacity
-                  style={[styles.confirmBtn, completing && styles.confirmBtnDisabled]}
-                  onPress={handleCollectPayment}
-                  disabled={completing}
-                  activeOpacity={0.88}
-                >
-                  {completing
-                    ? <ActivityIndicator size="small" color={Colors.white} />
-                    : <>
-                        <MaterialIcons name="check-circle" size={20} color={Colors.white} />
-                        <Text style={styles.confirmBtnText}>Confirm Payment</Text>
-                      </>
-                  }
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => { setPayModal(null); setSplitCash(''); setSplitCard(''); setSplitUpi(''); }}>
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
 
       {/* ── New Order Popup (floats over screen) ── */}
       <Modal

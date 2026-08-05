@@ -40,6 +40,7 @@ interface PlacedOrder {
   customerPhone: string;
   tableNumber: string;
   notes: string;
+  paymentMethod: 'cash' | 'upi_qr';
   isOffline?: boolean;
 }
 
@@ -49,6 +50,7 @@ const CustomerCartScreen: React.FC = () => {
   const { settings } = useSettings();
   const navigation = useNavigation<NavProp>();
   const [placing, setPlacing] = useState(false);
+  const [payChoice, setPayChoice] = useState<'counter' | 'upi_qr'>('counter');
   const [nameError, setNameError] = useState(false);
   const [phoneError, setPhoneError] = useState(false);
   const [activeGateway, setActiveGateway] = useState<PublicGatewayInfo | null>(null);
@@ -63,6 +65,13 @@ const CustomerCartScreen: React.FC = () => {
 
   const cur = settings.currencySymbol || '₹';
   const fmt = (n: number) => `${cur}${n.toFixed(0)}`;
+  const buildUpiUrl = (amount: number, ref: string) => {
+    const pa = encodeURIComponent(settings.upiId || '');
+    const pn = encodeURIComponent(settings.hotelName || 'Restaurant');
+    const am = amount.toFixed(2);
+    const tn = encodeURIComponent(`Order-${ref}`);
+    return `upi://pay?pa=${pa}&pn=${pn}&am=${am}&cu=INR&tn=${tn}`;
+  };
 
   const billUrl = placedOrder ? `${BACKEND_URL}/bill/${placedOrder._id}` : '';
 
@@ -214,6 +223,7 @@ const CustomerCartScreen: React.FC = () => {
         customerPhone:cart.customerPhone,
         tableNumber:  cart.tableNumber,
         notes:        cart.notes,
+        paymentMethod: 'cash' as const,
       });
     } catch (e: any) {
       if (e?.code !== 'USER_CANCEL') {
@@ -258,7 +268,7 @@ const CustomerCartScreen: React.FC = () => {
       subtotal:      cart.subtotal,
       taxTotal:      cart.taxTotal,
       grandTotal:    cart.grandTotal,
-      paymentMethod: 'cash',
+      paymentMethod: payChoice === 'upi_qr' ? 'upi_qr' : 'cash',
       status:        'pending',
     };
 
@@ -280,6 +290,7 @@ const CustomerCartScreen: React.FC = () => {
         customerPhone: cart.customerPhone,
         tableNumber: cart.tableNumber,
         notes: cart.notes,
+        paymentMethod: 'cash',
         isOffline: true,
       });
       setPlacing(false);
@@ -302,6 +313,7 @@ const CustomerCartScreen: React.FC = () => {
         customerPhone: cart.customerPhone,
         tableNumber: cart.tableNumber,
         notes: cart.notes,
+        paymentMethod: payChoice === 'upi_qr' ? 'upi_qr' as const : 'cash' as const,
       };
       clearCart();
       Vibration.vibrate([0, 100, 80, 300]);
@@ -535,7 +547,24 @@ const CustomerCartScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.payNote}>💵 Please pay {fmt(placedOrder.grandTotal)} at the counter</Text>
+          {placedOrder.paymentMethod === 'upi_qr' && settings.upiId ? (
+            <View style={styles.upiPaySection}>
+              <Text style={styles.upiPayTitle}>Scan & Pay</Text>
+              <Text style={styles.upiPayAmount}>{fmt(placedOrder.grandTotal)}</Text>
+              <View style={styles.upiQrBox}>
+                <QRCode
+                  value={buildUpiUrl(placedOrder.grandTotal, placedOrder.orderNumber)}
+                  size={200}
+                  color={Colors.text}
+                  backgroundColor={Colors.white}
+                />
+              </View>
+              <Text style={styles.upiPayId}>{settings.upiId}</Text>
+              <Text style={styles.upiPayHint}>Open any UPI app and scan to pay</Text>
+            </View>
+          ) : (
+            <Text style={styles.payNote}>💵 Please pay {fmt(placedOrder.grandTotal)} at the counter</Text>
+          )}
         </ScrollView>
       </View>
     );
@@ -701,6 +730,28 @@ const CustomerCartScreen: React.FC = () => {
             </View>
           </ScrollView>
 
+          {/* Payment method choice (shown only when UPI is configured and no Razorpay active) */}
+          {settings.upiId && !(activeGateway?.active && activeGateway?.isIntegrated) && (
+            <View style={styles.payChoiceRow}>
+              <TouchableOpacity
+                style={[styles.payChoiceBtn, payChoice === 'counter' && styles.payChoiceBtnActive]}
+                onPress={() => setPayChoice('counter')}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="payments" size={16} color={payChoice === 'counter' ? Colors.white : Colors.textSecondary} />
+                <Text style={[styles.payChoiceText, payChoice === 'counter' && styles.payChoiceTextActive]}>Pay at Counter</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.payChoiceBtn, payChoice === 'upi_qr' && styles.payChoiceBtnUpi]}
+                onPress={() => setPayChoice('upi_qr')}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="qr-code" size={16} color={payChoice === 'upi_qr' ? Colors.white : Colors.textSecondary} />
+                <Text style={[styles.payChoiceText, payChoice === 'upi_qr' && styles.payChoiceTextActive]}>Pay via UPI</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Place order button(s) */}
           <View style={[styles.bottomBar, { paddingBottom: Spacing.md + bottom }]}>
             {activeGateway?.active && activeGateway?.isIntegrated && activeGateway?.gatewayType === 'razorpay' && (
@@ -833,6 +884,22 @@ const styles = StyleSheet.create({
   grandLabel: { color: Colors.text, fontSize: FontSize.xl, fontWeight: '800' },
   grandVal: { color: Colors.primary, fontSize: FontSize.xxl, fontWeight: '900' },
   payNote: { color: Colors.textMuted, fontSize: FontSize.sm, textAlign: 'center', marginTop: 4 },
+
+  // Payment choice chips
+  payChoiceRow: { flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border },
+  payChoiceBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.background },
+  payChoiceBtnActive: { backgroundColor: Colors.success, borderColor: Colors.success },
+  payChoiceBtnUpi:    { backgroundColor: Colors.upi,     borderColor: Colors.upi },
+  payChoiceText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.textSecondary },
+  payChoiceTextActive: { color: Colors.white },
+
+  // UPI payment section (success screen)
+  upiPaySection: { alignItems: 'center', paddingVertical: Spacing.xl, paddingHorizontal: Spacing.lg },
+  upiPayTitle: { fontSize: FontSize.xxl, fontWeight: '900', color: Colors.text, marginBottom: 4 },
+  upiPayAmount: { fontSize: FontSize.xxxl, fontWeight: '900', color: Colors.upi, marginBottom: Spacing.lg },
+  upiQrBox: { padding: Spacing.lg, backgroundColor: Colors.white, borderRadius: BorderRadius.xl, ...Shadows.sm },
+  upiPayId: { fontSize: FontSize.md, fontWeight: '700', color: Colors.textSecondary, marginTop: Spacing.lg },
+  upiPayHint: { fontSize: FontSize.sm, color: Colors.textMuted, marginTop: 4, textAlign: 'center' },
 
   // Bottom bar
   bottomBar: { padding: Spacing.lg, paddingBottom: Spacing.md, backgroundColor: Colors.surface, borderTopWidth: 1, borderTopColor: Colors.border },

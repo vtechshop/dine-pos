@@ -68,6 +68,7 @@ import GoodsReceiveScreen from '../screens/GoodsReceiveScreen';
 import VendorLedgerScreen from '../screens/VendorLedgerScreen';
 import InventoryIntelligenceScreen from '../screens/InventoryIntelligenceScreen';
 import PaymentSettingsScreen from '../screens/PaymentSettingsScreen';
+import PaymentScreen from '../screens/PaymentScreen';
 import AIHomeScreen from '../screens/ai/AIHomeScreen';
 import MorningBriefScreen from '../screens/ai/MorningBriefScreen';
 import AIReportsScreen from '../screens/ai/AIReportsScreen';
@@ -272,6 +273,7 @@ const AppNavigator = () => {
             <Stack.Screen name="WaiterDisplay"        component={(p: any) => <ErrorBoundary><WaiterDisplayScreen {...p} /></ErrorBoundary>}        options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="CashierLogin"         component={CashierLoginScreen}         options={{ contentStyle: safeTop }} />
             <Stack.Screen name="CashierDashboard"     component={(p: any) => <ErrorBoundary><CashierDashboardScreen {...p} /></ErrorBoundary>}     options={{ contentStyle: safeTop, gestureEnabled: false }} />
+            <Stack.Screen name="PaymentScreen"        component={PaymentScreen}              options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="HotelRegister"        component={HotelRegisterScreen}        options={{ contentStyle: safeTop }} />
             <Stack.Screen name="HotelRegisterSuccess" component={HotelRegisterSuccessScreen} options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="Support"              component={SupportScreen}              options={{ contentStyle: safeTop }} />
@@ -304,6 +306,7 @@ const AppNavigator = () => {
             <Stack.Screen name="VendorLedger"             component={VendorLedgerScreen}             options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Vendor Ledger',          headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="InventoryIntelligence"    component={InventoryIntelligenceScreen}    options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Inventory Intelligence',   headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="PaymentSettings"          component={PaymentSettingsScreen}          options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Payment Settings',          headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="PaymentScreen"            component={PaymentScreen}                  options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="AIHome"            component={AIHomeScreen}            options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'AI Intelligence',        headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="MorningBrief"      component={MorningBriefScreen}      options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="AIReports"         component={AIReportsScreen}         options={{ contentStyle: safeTop, headerShown: false }} />
