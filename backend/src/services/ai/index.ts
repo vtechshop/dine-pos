@@ -11,6 +11,9 @@ export function getAIProvider(): AIProvider {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
 
+  const resolvedModel = process.env.GEMINI_MODEL ?? '(unset — will use GeminiProvider default: gemini-2.5-flash)';
+  console.log(`[AI index] GEMINI_MODEL env="${resolvedModel}"`);
+
   _provider = new GeminiProvider(apiKey, process.env.GEMINI_MODEL);
   return _provider;
 }
