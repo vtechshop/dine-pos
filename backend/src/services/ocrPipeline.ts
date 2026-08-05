@@ -13,7 +13,7 @@ import { IExtractedInvoice, IExtractedItem } from '../models/OcrJob';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const API_KEY = process.env.GEMINI_API_KEY || '';
-const MODEL   = process.env.GEMINI_MODEL   || 'gemini-2.5-flash';
+const MODEL   = process.env.GEMINI_MODEL   || 'gemini-2.5-flash-preview-05-20';
 
 // 60-second timeout for multimodal calls — PDFs can be large.
 const OCR_TIMEOUT_MS = 60_000;

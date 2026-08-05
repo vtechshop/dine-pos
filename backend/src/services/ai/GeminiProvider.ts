@@ -1,8 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { AIProvider, MenuExtractionResult } from './AIProvider';
 
-// Set GEMINI_MODEL to override (e.g. 'gemini-2.5-flash-preview-05-20')
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+// Set GEMINI_MODEL env var to override
+const DEFAULT_MODEL = 'gemini-2.5-flash-preview-05-20';
 
 const EXTRACTION_PROMPT = `
 You are a menu data extraction assistant for a restaurant POS system.
