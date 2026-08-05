@@ -12,6 +12,7 @@ export interface OrderItem {
 export interface CreateOrderOptions {
   tableNumber?: string;
   customerName?: string;
+  customerPhone?: string;
   orderSource?: 'dine-in' | 'takeaway' | 'qr';
   items?: OrderItem[];
   paymentMethod?: string;
@@ -36,6 +37,7 @@ export async function createOrder(
   const payload = {
     tableNumber: options.tableNumber || 'T1',
     customerName: options.customerName || 'Test Customer',
+    customerPhone: options.customerPhone || '9999999999',
     orderSource: options.orderSource || 'dine-in',
     items,
     subtotal,
