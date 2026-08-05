@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, ActivityIndicator, Alert, Linking, Platform,
+  StyleSheet, ActivityIndicator, Alert,
 } from 'react-native';
+import * as IntentLauncher from 'expo-intent-launcher';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -42,14 +43,6 @@ const METHODS: Array<{ key: PayMethod; label: string; icon: keyof typeof Materia
   { key: 'split',       label: 'Split',       icon: 'call-split',   color: '#C62828' },
 ];
 
-const UPI_APPS = [
-  { name: 'Google Pay', short: 'GPay',   scheme: 'tez://upi/pay',     pkg: 'com.google.android.apps.nbu.paisa.user', color: '#4285F4' },
-  { name: 'PhonePe',   short: 'PhonePe', scheme: 'phonepe://pay',     pkg: 'com.phonepe.app',                       color: '#5F259F' },
-  { name: 'Paytm',     short: 'Paytm',   scheme: 'paytmmp://pay',     pkg: 'net.one97.paytm',                       color: '#00BAF2' },
-  { name: 'BHIM',      short: 'BHIM',    scheme: 'upi://pay',         pkg: 'in.org.npci.upiapp',                    color: '#FF6D00' },
-  { name: 'Amazon Pay', short: 'Amazon', scheme: 'amazonpay://',      pkg: 'in.amazon.mShop.android.shopping',      color: '#FF9900' },
-  { name: 'Any App',   short: 'Any UPI', scheme: 'upi://pay',         pkg: '',                                      color: '#546E7A' },
-];
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PaymentScreen'>;
 
@@ -64,10 +57,10 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const [method, setMethod]       = useState<PayMethod>('cash');
   const [placing, setPlacing]     = useState(false);
 
-  // UPI Intent state
-  const [selectedApp, setSelectedApp]   = useState('');
-  const [upiLaunched, setUpiLaunched]   = useState(false);
-  const launchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // UPI Intent state — result comes from startActivityForResult via expo-intent-launcher
+  type UpiStatus = 'idle' | 'launching' | 'success' | 'failed' | 'cancelled';
+  const [upiStatus, setUpiStatus] = useState<UpiStatus>('idle');
+  const [upiTxnId,  setUpiTxnId]  = useState('');
 
   // UPI Collect state
   const [collectUpiId, setCollectUpiId]     = useState('');
@@ -110,34 +103,42 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const splitTotal = splits.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const splitRemaining = grandTotal - splitTotal;
 
-  // ── UPI Intent launch ──────────────────────────────────────────────────────
+  // ── UPI Intent launch — real Android startActivityForResult ───────────────
 
-  const launchUpi = async (app: typeof UPI_APPS[0]) => {
+  const launchUpiPayment = async () => {
     if (!settings.upiId) {
       Alert.alert('UPI Not Configured', 'Add your UPI ID in Settings → Payment.');
       return;
     }
-    setSelectedApp(app.name);
-    setUpiLaunched(false);
-    const url = upiString(grandTotal, orderRef);
+    const uri = upiString(grandTotal, orderRef);
+    setUpiStatus('launching');
     try {
-      const canOpen = await Linking.canOpenURL(url);
-      if (!canOpen) {
-        Alert.alert('App Not Found', `${app.name} is not installed. Try "Any App".`);
-        return;
+      const result = await IntentLauncher.startActivityAsync('android.intent.action.VIEW', { data: uri });
+      const extra       = (result.extra ?? {}) as Record<string, string>;
+      const status      = String(extra.Status      ?? '').toUpperCase();
+      const responseCode = String(extra.responseCode ?? '');
+      const txnId        = String(extra.txnId ?? extra.txnRef ?? '');
+
+      if (status === 'SUCCESS' || responseCode === '00') {
+        setUpiTxnId(txnId);
+        setUpiStatus('success');
+      } else if (status === 'FAILURE') {
+        setUpiStatus('failed');
+      } else if (status === 'CANCELLED' || result.resultCode === 0) {
+        setUpiStatus('cancelled');
+      } else {
+        setUpiStatus('failed');
       }
-      await Linking.openURL(url);
     } catch {
-      Alert.alert('Cannot Open', 'Failed to launch UPI app. Check your UPI ID in Settings.');
-      return;
+      Alert.alert('No UPI App Found', 'Install Google Pay, PhonePe, or BHIM to pay via UPI.');
+      setUpiStatus('idle');
     }
-    // After 1.5 s show Mark Paid / Failed buttons
-    launchTimerRef.current = setTimeout(() => setUpiLaunched(true), 1500);
   };
 
-  useEffect(() => () => {
-    if (launchTimerRef.current) clearTimeout(launchTimerRef.current);
-  }, []);
+  useEffect(() => {
+    setUpiStatus('idle');
+    setUpiTxnId('');
+  }, [method]);
 
   // ── Split row helpers ──────────────────────────────────────────────────────
 
@@ -156,7 +157,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleConfirm = async () => {
     if (placing) return;
-    if (method === 'upi_intent' && !upiLaunched) return;
+    if (method === 'upi_intent' && upiStatus !== 'success') return;
 
     // Validate
     if (method === 'split') {
@@ -176,8 +177,8 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
 
     const details: PaymentDetails = {};
     if (method === 'upi_intent') {
-      details.upiApp = selectedApp || 'UPI Intent';
-      if (txnId.trim()) details.transactionId = txnId.trim();
+      details.upiApp = 'UPI Intent';
+      if (upiTxnId) details.transactionId = upiTxnId;
     }
     if (method === 'upi_qr') {
       if (txnId.trim()) details.transactionId = txnId.trim();
@@ -278,8 +279,6 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
             style={[styles.tab, method === m.key && { backgroundColor: m.color, borderColor: m.color }]}
             onPress={() => {
               setMethod(m.key);
-              setUpiLaunched(false);
-              setSelectedApp('');
               setCollectSent(false);
               setTxnId('');
             }}
@@ -308,43 +307,44 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>UPI Intent</Text>
             <Text style={styles.cardAmt}>₹{grandTotal.toFixed(2)}</Text>
-            {!upiLaunched ? (
+
+            {upiStatus === 'idle' && (
               <>
-                <Text style={styles.cardHint}>Select the customer's UPI app to open payment:</Text>
-                <View style={styles.appGrid}>
-                  {UPI_APPS.map(app => (
-                    <TouchableOpacity
-                      key={app.name}
-                      style={[styles.appBtn, selectedApp === app.name && styles.appBtnSelected, { borderColor: app.color }]}
-                      onPress={() => launchUpi(app)}
-                      activeOpacity={0.8}
-                    >
-                      <View style={[styles.appIcon, { backgroundColor: app.color + '20' }]}>
-                        <Text style={[styles.appIconText, { color: app.color }]}>
-                          {app.short.slice(0, 2).toUpperCase()}
-                        </Text>
-                      </View>
-                      <Text style={styles.appName}>{app.short}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            ) : (
-              <View style={styles.afterLaunch}>
                 <Text style={styles.cardHint}>
-                  Opened <Text style={{ fontWeight: '700' }}>{selectedApp}</Text> for ₹{grandTotal.toFixed(2)}.
-                  {'\n'}Did the customer complete payment?
+                  Hand the phone to the customer or tap below to open their UPI app.
                 </Text>
-                <TextInput
-                  style={styles.txnInput}
-                  placeholder="UPI Transaction ID (optional)"
-                  placeholderTextColor={Colors.textMuted}
-                  value={txnId}
-                  onChangeText={setTxnId}
-                  autoCapitalize="characters"
+                <TouchableOpacity style={styles.upiLaunchBtn} onPress={launchUpiPayment} activeOpacity={0.85}>
+                  <MaterialIcons name="smartphone" size={22} color="#FFF" />
+                  <Text style={styles.upiLaunchBtnText}>Pay ₹{grandTotal.toFixed(2)} via UPI</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {upiStatus === 'launching' && (
+              <ActivityIndicator size="large" color={Colors.primary} style={{ marginVertical: 28 }} />
+            )}
+
+            {upiStatus === 'success' && (
+              <View style={styles.upiResult}>
+                <MaterialIcons name="check-circle" size={56} color="#2E7D32" />
+                <Text style={[styles.upiResultTitle, { color: '#2E7D32' }]}>Payment Successful</Text>
+                {!!upiTxnId && <Text style={styles.upiTxnIdText}>Txn ID: {upiTxnId}</Text>}
+                <Text style={styles.cardHint}>Tap "Confirm" below to record payment and print receipt.</Text>
+              </View>
+            )}
+
+            {(upiStatus === 'failed' || upiStatus === 'cancelled') && (
+              <View style={styles.upiResult}>
+                <MaterialIcons
+                  name={upiStatus === 'cancelled' ? 'cancel' : 'error-outline'}
+                  size={56}
+                  color={upiStatus === 'cancelled' ? Colors.textMuted : '#C62828'}
                 />
-                <TouchableOpacity style={styles.retryBtn} onPress={() => { setUpiLaunched(false); setSelectedApp(''); }}>
-                  <Text style={styles.retryBtnText}>Try Another App</Text>
+                <Text style={[styles.upiResultTitle, { color: upiStatus === 'cancelled' ? Colors.textSecondary : '#C62828' }]}>
+                  {upiStatus === 'cancelled' ? 'Payment Cancelled' : 'Payment Failed'}
+                </Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={() => setUpiStatus('idle')}>
+                  <Text style={styles.retryBtnText}>Try Again</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -495,11 +495,11 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
             { backgroundColor: active.color },
             (placing ||
               (method === 'split' && Math.abs(splitRemaining) > 1) ||
-              (method === 'upi_intent' && !upiLaunched)
+              (method === 'upi_intent' && upiStatus !== 'success')
             ) && styles.confirmBtnDisabled,
           ]}
           onPress={handleConfirm}
-          disabled={placing || (method === 'split' && Math.abs(splitRemaining) > 1) || (method === 'upi_intent' && !upiLaunched)}
+          disabled={placing || (method === 'split' && Math.abs(splitRemaining) > 1) || (method === 'upi_intent' && upiStatus !== 'success')}
           activeOpacity={0.85}
         >
           {placing ? (
@@ -509,7 +509,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
               <MaterialIcons name="check-circle" size={20} color="#FFF" />
               <Text style={styles.confirmBtnText}>
                 {method === 'cash'        ? 'Mark as Paid — Cash' :
-                 method === 'upi_intent'  ? (upiLaunched ? 'Customer Paid — Confirm' : 'Tap an app above to launch UPI') :
+                 method === 'upi_intent'  ? (upiStatus === 'success' ? 'Confirm — UPI Paid' : 'Launch UPI to Continue') :
                  method === 'upi_qr'      ? 'Customer Paid via QR' :
                  method === 'upi_collect' ? 'Mark as Received' :
                  method === 'card'        ? 'Mark as Paid — Card' :
@@ -556,17 +556,16 @@ const styles = StyleSheet.create({
   cardHint:    { fontSize: FontSize.sm, color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.lg, lineHeight: 20 },
 
   // UPI Intent
-  appGrid:       { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center', width: '100%' },
-  appBtn:        {
-    width: 76, alignItems: 'center', borderRadius: BorderRadius.md,
-    borderWidth: 1.5, padding: 10, backgroundColor: Colors.surface,
+  upiLaunchBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 10, backgroundColor: '#1565C0', paddingVertical: 14, paddingHorizontal: 28,
+    borderRadius: BorderRadius.md, marginTop: Spacing.md, width: '100%',
   },
-  appBtnSelected:{ backgroundColor: '#E8F5E9' },
-  appIcon:       { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  appIconText:   { fontSize: 14, fontWeight: '800' },
-  appName:       { fontSize: 10, fontWeight: '600', color: Colors.textSecondary, textAlign: 'center' },
+  upiLaunchBtnText: { color: '#FFF', fontSize: FontSize.md, fontWeight: '700' },
+  upiResult:     { alignItems: 'center', paddingVertical: Spacing.md, gap: Spacing.sm, width: '100%' },
+  upiResultTitle:{ fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
+  upiTxnIdText:  { fontSize: FontSize.sm, color: Colors.textSecondary },
 
-  afterLaunch:   { width: '100%', alignItems: 'center' },
   retryBtn:      { paddingVertical: 8, paddingHorizontal: 20, borderRadius: BorderRadius.md, borderWidth: 1.5, borderColor: Colors.border, marginTop: Spacing.sm },
   retryBtnText:  { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600' },
 
