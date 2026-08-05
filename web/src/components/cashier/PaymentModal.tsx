@@ -13,7 +13,7 @@ import type { LoyaltyConfig, CustomerSummary, CustomerProfile } from '../../type
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type PayMethod = 'cash' | 'upi' | 'card' | 'split';
+export type PayMethod = 'cash' | 'upi' | 'upi_qr' | 'upi_collect' | 'upi_intent' | 'card' | 'split';
 
 export interface PaymentResult {
   method: PayMethod;
@@ -25,6 +25,7 @@ export interface PaymentResult {
   loyaltyPointsRedeemed: number;
   loyaltyDiscountAmount: number;
   paymentRef: string;
+  upiApp?: string;
   finalTotal: number;
 }
 
@@ -329,6 +330,7 @@ export function PaymentModal({
   const [splitUpi, setSplitUpi] = useState('');
   const [splitCard, setSplitCard] = useState('');
   const [payRef, setPayRef] = useState('');
+  const [collectUpiId, setCollectUpiId] = useState('');
 
   // Adjustments
   const [tip, setTip] = useState('');
@@ -412,6 +414,7 @@ export function PaymentModal({
       loyaltyPointsRedeemed: pointsToRedeem,
       loyaltyDiscountAmount: loyaltyDiscAmt,
       paymentRef: payRef.trim(),
+      upiApp: method === 'upi_collect' ? collectUpiId.trim() || undefined : undefined,
       finalTotal,
     };
     try {
@@ -510,11 +513,14 @@ export function PaymentModal({
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
               {/* Method tabs */}
-              <div className="flex gap-1 rounded-xl border border-border bg-mist p-1">
-                <MethodTab active={method === 'cash'}  icon={<Banknote size={12} />}    label="Cash"  onClick={() => setMethod('cash')} />
-                <MethodTab active={method === 'upi'}   icon={<Smartphone size={12} />}  label="UPI"   onClick={() => setMethod('upi')} />
-                <MethodTab active={method === 'card'}  icon={<CreditCard size={12} />}  label="Card"  onClick={() => setMethod('card')} />
-                <MethodTab active={method === 'split'} icon={<span className="text-[10px] font-bold">÷</span>} label="Split" onClick={() => setMethod('split')} />
+              <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-mist p-1">
+                <MethodTab active={method === 'cash'}        icon={<Banknote size={12} />}   label="Cash"    onClick={() => setMethod('cash')} />
+                <MethodTab active={method === 'upi'}         icon={<Smartphone size={12} />} label="UPI"     onClick={() => setMethod('upi')} />
+                <MethodTab active={method === 'upi_qr'}      icon={<Smartphone size={12} />} label="UPI QR"  onClick={() => setMethod('upi_qr')} />
+                <MethodTab active={method === 'upi_collect'} icon={<Smartphone size={12} />} label="Collect" onClick={() => setMethod('upi_collect')} />
+                <MethodTab active={method === 'upi_intent'}  icon={<Smartphone size={12} />} label="Intent"  onClick={() => setMethod('upi_intent')} />
+                <MethodTab active={method === 'card'}        icon={<CreditCard size={12} />}  label="Card"   onClick={() => setMethod('card')} />
+                <MethodTab active={method === 'split'}       icon={<span className="text-[10px] font-bold">÷</span>} label="Split" onClick={() => setMethod('split')} />
               </div>
 
               {/* Cash inputs */}
@@ -567,6 +573,64 @@ export function PaymentModal({
                     value={payRef}
                     onChange={e => setPayRef(e.target.value)}
                     placeholder="UPI Transaction Reference (optional)"
+                    className="w-full rounded-xl border border-border px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+                  />
+                </div>
+              )}
+
+              {/* UPI QR inputs */}
+              {method === 'upi_qr' && (
+                <div className="space-y-2">
+                  <div className="rounded-xl border border-border bg-mist px-4 py-3 text-center">
+                    <p className="text-xs text-ink/60">Show QR code — verify payment before confirming</p>
+                    <p className="text-xl font-bold text-ink mt-0.5">{fmtINR(sym, finalTotal)}</p>
+                  </div>
+                  <input
+                    type="text"
+                    value={payRef}
+                    onChange={e => setPayRef(e.target.value)}
+                    placeholder="UPI Transaction ID (optional)"
+                    className="w-full rounded-xl border border-border px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+                  />
+                </div>
+              )}
+
+              {/* UPI Collect inputs */}
+              {method === 'upi_collect' && (
+                <div className="space-y-2">
+                  <div className="rounded-xl border border-border bg-mist px-4 py-3 text-center">
+                    <p className="text-xs text-ink/60">Enter customer UPI ID and send collect request</p>
+                    <p className="text-xl font-bold text-ink mt-0.5">{fmtINR(sym, finalTotal)}</p>
+                  </div>
+                  <input
+                    type="text"
+                    value={collectUpiId}
+                    onChange={e => setCollectUpiId(e.target.value)}
+                    placeholder="Customer UPI ID (e.g. customer@bank)"
+                    className="w-full rounded-xl border border-border px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+                  />
+                  <input
+                    type="text"
+                    value={payRef}
+                    onChange={e => setPayRef(e.target.value)}
+                    placeholder="UPI Transaction ID (optional)"
+                    className="w-full rounded-xl border border-border px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+                  />
+                </div>
+              )}
+
+              {/* UPI Intent inputs */}
+              {method === 'upi_intent' && (
+                <div className="space-y-2">
+                  <div className="rounded-xl border border-border bg-mist px-4 py-3 text-center">
+                    <p className="text-xs text-ink/60">Open UPI app on customer's phone</p>
+                    <p className="text-xl font-bold text-ink mt-0.5">{fmtINR(sym, finalTotal)}</p>
+                  </div>
+                  <input
+                    type="text"
+                    value={payRef}
+                    onChange={e => setPayRef(e.target.value)}
+                    placeholder="UPI Transaction ID (optional)"
                     className="w-full rounded-xl border border-border px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
                   />
                 </div>

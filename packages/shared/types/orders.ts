@@ -21,6 +21,9 @@ export type PaymentMethod =
   | 'cash'
   | 'card'
   | 'upi'
+  | 'upi_intent'
+  | 'upi_qr'
+  | 'upi_collect'
   | 'split'
   | 'complimentary';
 

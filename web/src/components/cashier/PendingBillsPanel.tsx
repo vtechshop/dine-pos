@@ -167,7 +167,7 @@ function OrderRow({
           taxTotal={order.taxTotal}
           appliedDiscount={order.discountAmount ?? 0}
           onConfirm={async (result: PaymentResult) => {
-            await updateOrderPayment(order._id, result.method, result.splitDetails);
+            await updateOrderPayment(order._id, result.method, result.splitDetails, result.paymentRef || undefined, result.upiApp);
             await completeOrder(order._id);
             paymentCompletedRef.current = true;
           }}

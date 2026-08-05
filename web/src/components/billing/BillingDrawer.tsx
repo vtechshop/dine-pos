@@ -42,6 +42,8 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
   const [paymentMethod, setPaymentMethod]     = useState<PaymentMethod>('cash');
   const [splitDetails, setSplitDetails]       = useState<SplitDetails>({ cash: 0, card: 0, upi: 0 });
   const [paidAmount, setPaidAmount]           = useState(0);
+  const [transactionId, setTransactionId]     = useState('');
+  const [upiApp, setUpiApp]                   = useState('');
   const [confirming, setConfirming]           = useState(false);
   const [actionError, setActionError]         = useState<string | null>(null);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
@@ -93,8 +95,8 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
     return () => { BILLING_EVENTS.forEach(ev => socket.off(ev, handler)); };
   }, [socket, sessionId, load]);
 
-  // Reset cash paid amount whenever payment method changes
-  useEffect(() => { setPaidAmount(0); }, [paymentMethod]);
+  // Reset method-specific fields whenever payment method changes
+  useEffect(() => { setPaidAmount(0); setTransactionId(''); setUpiApp(''); }, [paymentMethod]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -132,7 +134,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
     function onKey(e: KeyboardEvent) {
       if ((e.target as HTMLElement).matches('input, textarea, select')) return;
       const map: Record<string, PaymentMethod> = {
-        c: 'cash', k: 'card', u: 'upi', s: 'split', m: 'complimentary',
+        c: 'cash', k: 'card', u: 'upi', q: 'upi_qr', o: 'upi_collect', i: 'upi_intent', s: 'split', m: 'complimentary',
       };
       const method = map[e.key.toLowerCase()];
       if (method) { e.preventDefault(); setPaymentMethod(method); }
@@ -162,6 +164,8 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
           sessionId,
           paymentMethod,
           paymentMethod === 'split' ? splitDetails : undefined,
+          transactionId || undefined,
+          upiApp || undefined,
         );
         setReceipt({
           mode: 'table',
@@ -176,6 +180,8 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
           paymentMethod,
           splitDetails: paymentMethod === 'split' ? splitDetails : undefined,
           paidAmount: paymentMethod === 'cash' && paidAmount > 0 ? paidAmount : undefined,
+          transactionId: transactionId || undefined,
+          upiApp: upiApp || undefined,
         });
         setReceipt({
           mode: 'guest',
@@ -187,6 +193,8 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
         setSelectedGuestId(null);
         setSplitDetails({ cash: 0, card: 0, upi: 0 });
         setPaidAmount(0);
+        setTransactionId('');
+        setUpiApp('');
       }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Payment failed');
@@ -338,6 +346,8 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
                         setMode(m);
                         if (m === 'table') setSelectedGuestId(null);
                         setPaidAmount(0);
+                        setTransactionId('');
+                        setUpiApp('');
                         setSplitDetails({ cash: 0, card: 0, upi: 0 });
                       }}
                       selectedGuestBill={selectedGuestBill}
@@ -350,6 +360,10 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
                       onSplitChange={setSplitDetails}
                       paidAmount={paidAmount}
                       onPaidAmountChange={setPaidAmount}
+                      transactionId={transactionId}
+                      onTransactionIdChange={setTransactionId}
+                      upiApp={upiApp}
+                      onUpiAppChange={setUpiApp}
                       canConfirm={canConfirm}
                       confirming={confirming}
                       onConfirm={() => void handleConfirm()}

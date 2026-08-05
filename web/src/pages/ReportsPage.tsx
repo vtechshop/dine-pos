@@ -578,11 +578,11 @@ export function ReportsPage() {
     const pb = sales.paymentBreakdown;
     downloadCSV(`sales-${from}-${to}.csv`, [
       'Period', 'Sales', 'Orders', 'Tax', 'Discount',
-      'Cash', 'UPI', 'Card', 'Split', 'Parcel Orders', 'Parcel Revenue',
+      'Cash', 'UPI', 'UPI Intent', 'UPI QR', 'UPI Collect', 'Card', 'Split', 'Parcel Orders', 'Parcel Revenue',
     ], [[
       [isSingleDay ? from : `${from} to ${to}`,
        sales.totalSales, sales.totalOrders, sales.totalTax, sales.totalDiscount,
-       pb.cash, pb.upi, pb.card, pb.split,
+       pb.cash, pb.upi, pb.upi_intent ?? 0, pb.upi_qr ?? 0, pb.upi_collect ?? 0, pb.card, pb.split,
        sales.parcelOrders, sales.parcelRevenue],
     ]]);
   }, [sales, from, to, isSingleDay]);
@@ -847,10 +847,13 @@ export function ReportsPage() {
                     <HorizBars
                       sym={sym}
                       data={[
-                        { label: 'Cash',  value: sales.paymentBreakdown.cash  },
-                        { label: 'UPI',   value: sales.paymentBreakdown.upi   },
-                        { label: 'Card',  value: sales.paymentBreakdown.card  },
-                        { label: 'Split', value: sales.paymentBreakdown.split },
+                        { label: 'Cash',       value: sales.paymentBreakdown.cash  },
+                        { label: 'UPI',        value: sales.paymentBreakdown.upi   },
+                        ...(sales.paymentBreakdown.upi_intent  ? [{ label: 'UPI Intent',  value: sales.paymentBreakdown.upi_intent  }] : []),
+                        ...(sales.paymentBreakdown.upi_qr      ? [{ label: 'UPI QR',      value: sales.paymentBreakdown.upi_qr      }] : []),
+                        ...(sales.paymentBreakdown.upi_collect  ? [{ label: 'UPI Collect', value: sales.paymentBreakdown.upi_collect  }] : []),
+                        { label: 'Card',       value: sales.paymentBreakdown.card  },
+                        { label: 'Split',      value: sales.paymentBreakdown.split },
                       ]}
                     />
                   </Card>

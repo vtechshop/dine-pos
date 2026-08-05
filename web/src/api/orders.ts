@@ -123,9 +123,16 @@ export async function updateOrderPayment(
   orderId: string,
   paymentMethod: string,
   splitDetails?: { cash: number; upi: number; card: number },
+  transactionId?: string,
+  upiApp?: string,
 ): Promise<void> {
   await apiFetch<unknown>(`/orders/${orderId}`, {
     method: 'PUT',
-    body: JSON.stringify({ paymentMethod, ...(splitDetails ? { splitDetails } : {}) }),
+    body: JSON.stringify({
+      paymentMethod,
+      ...(splitDetails    ? { splitDetails }    : {}),
+      ...(transactionId   ? { transactionId }   : {}),
+      ...(upiApp          ? { upiApp }          : {}),
+    }),
   });
 }

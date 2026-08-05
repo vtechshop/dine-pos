@@ -456,8 +456,13 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const listData = tab === 'active' ? activeOrders : completedOrders;
   const q = searchQuery.trim().toLowerCase();
 
+  const UPI_VARIANTS = ['upi', 'upi_intent', 'upi_qr', 'upi_collect'];
   const afterPayFilter = (tab === 'completed' && payMethodFilter !== 'all')
-    ? listData.filter(o => o.paymentMethod === payMethodFilter)
+    ? listData.filter(o =>
+        payMethodFilter === 'upi'
+          ? UPI_VARIANTS.includes(o.paymentMethod || '')
+          : o.paymentMethod === payMethodFilter
+      )
     : (tab === 'active' && statusFilter !== 'all')
     ? listData.filter(o => o.status === statusFilter)
     : listData;
@@ -629,6 +634,8 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
           : (['all', 'cash', 'upi', 'card', 'split'] as const).map(m => {
               const count = m === 'all'
                 ? completedOrders.length
+                : m === 'upi'
+                ? completedOrders.filter(o => UPI_VARIANTS.includes(o.paymentMethod || '')).length
                 : completedOrders.filter(o => o.paymentMethod === m).length;
               if (m !== 'all' && count === 0) return null;
               return (

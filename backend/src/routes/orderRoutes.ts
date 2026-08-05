@@ -789,10 +789,10 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       if (paymentMethod && VALID_PM.includes(paymentMethod)) {
         existing.paymentMethod = paymentMethod;
       }
-      if (body.transactionId)  (existing as any).transactionId = body.transactionId;
-      if (body.upiApp)         (existing as any).upiApp = body.upiApp;
-      if (body.payments)       (existing as any).payments = body.payments;
-      if (body.splitDetails)   existing.splitDetails = body.splitDetails;
+      if (req.body.transactionId)  (existing as any).transactionId = req.body.transactionId;
+      if (req.body.upiApp)         (existing as any).upiApp = req.body.upiApp;
+      if (req.body.payments)       (existing as any).payments = req.body.payments;
+      if (req.body.splitDetails)   existing.splitDetails = req.body.splitDetails;
       (existing as any).paymentTime = new Date();
     }
     await existing.save();

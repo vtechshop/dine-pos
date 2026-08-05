@@ -1644,6 +1644,13 @@ export const completeOrderWithDetails = (
     body: JSON.stringify({ status: 'completed', paymentMethod, ...details }),
   });
 
+// Cancel an orphaned order (billing mode: payment failed after createOrder succeeded)
+export const cancelOrderAdmin = (orderId: string): Promise<Order> =>
+  fetchAPI<Order>(`/orders/${orderId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'cancelled' }),
+  });
+
 // ==================== AGGREGATOR / ONLINE DELIVERY ====================
 
 export interface OnlineDeliveryOrder {

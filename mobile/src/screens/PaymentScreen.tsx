@@ -13,6 +13,7 @@ import { useSettings } from '../context/SettingsContext';
 import { useCart } from '../context/CartContext';
 import {
   createOrder,
+  cancelOrderAdmin,
   completeOrderPayment,
   completeOrderWithDetails,
   PaymentDetails,
@@ -177,8 +178,11 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       details.upiApp = selectedApp || 'UPI Intent';
       if (txnId.trim()) details.transactionId = txnId.trim();
     }
-    if (method === 'upi_qr' || method === 'card') {
+    if (method === 'upi_qr') {
       if (txnId.trim()) details.transactionId = txnId.trim();
+    }
+    if (method === 'card') {
+      if (cardTxnId.trim()) details.transactionId = cardTxnId.trim();
     }
     if (method === 'upi_collect') {
       details.upiApp = collectUpiId.trim();
@@ -203,13 +207,19 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       let completedOrder: Order | null = null;
 
       if (mode === 'billing') {
-        // Create order + mark complete in single step
+        // Create order, then confirm payment. KOT only fires on payment success.
         const payload = pendingOrderRef.current;
         if (!payload) throw new Error('Order data missing. Go back and retry.');
         const created = await createOrder({ ...payload, paymentMethod: method } as Parameters<typeof createOrder>[0]);
-        // Print KOT fire-and-forget
+        try {
+          completedOrder = await completeOrderWithDetails(created._id, method, details);
+        } catch (payErr) {
+          // Payment confirmation failed — cancel the just-created order so it does not orphan
+          cancelOrderAdmin(created._id).catch(() => {});
+          throw payErr;
+        }
+        // KOT fires only after payment is confirmed — never on a failed payment
         printKOT(created, settings).catch(() => {});
-        completedOrder = await completeOrderWithDetails(created._id, method, details);
       } else {
         // Cashier completing an existing order
         await completeOrderPayment(orderId!, method, details);

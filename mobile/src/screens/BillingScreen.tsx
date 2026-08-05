@@ -276,6 +276,8 @@ Thank you for dining with us! 🍽️`;
       if (orderSource === 'takeaway') return 'Takeaway';
       return cart.tableNumber;
     };
+    // offlineId: idempotency key so a network retry on createOrder never duplicates the order
+    const offlineId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
     const orderData = {
       items: cart.items.map(item => ({
         product:           item.product._id,
@@ -300,6 +302,7 @@ Thank you for dining with us! 🍽️`;
       notes:         cart.notes,
       isParcel:      isOrderParcel,
       orderSource,
+      offlineId,
     };
     setPendingOrder(orderData as Record<string, unknown>);
     navigation.navigate('PaymentScreen', { mode: 'billing', grandTotal: finalGrandTotal });

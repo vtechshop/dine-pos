@@ -7,11 +7,14 @@ interface Props {
 }
 
 const METHODS: { key: PaymentMethod; label: string; shortcut: string }[] = [
-  { key: 'cash',          label: 'Cash',    shortcut: 'C' },
-  { key: 'card',          label: 'Card',    shortcut: 'K' },
-  { key: 'upi',           label: 'UPI',     shortcut: 'U' },
-  { key: 'split',         label: 'Split',   shortcut: 'S' },
-  { key: 'complimentary', label: 'Comp',    shortcut: 'M' },
+  { key: 'cash',          label: 'Cash',       shortcut: 'C' },
+  { key: 'card',          label: 'Card',       shortcut: 'K' },
+  { key: 'upi',           label: 'UPI',        shortcut: 'U' },
+  { key: 'upi_qr',        label: 'UPI QR',     shortcut: 'Q' },
+  { key: 'upi_collect',   label: 'UPI Collect',shortcut: 'O' },
+  { key: 'upi_intent',    label: 'UPI Intent', shortcut: 'I' },
+  { key: 'split',         label: 'Split',      shortcut: 'S' },
+  { key: 'complimentary', label: 'Comp',       shortcut: 'M' },
 ];
 
 export function PaymentSelector({ value, onChange, disabled }: Props) {

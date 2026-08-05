@@ -18,6 +18,10 @@ interface Props {
   onSplitChange: (v: SplitDetails) => void;
   paidAmount: number;
   onPaidAmountChange: (v: number) => void;
+  transactionId: string;
+  onTransactionIdChange: (v: string) => void;
+  upiApp: string;
+  onUpiAppChange: (v: string) => void;
   canConfirm: boolean;
   confirming: boolean;
   onConfirm: () => void;
@@ -43,6 +47,10 @@ export const PaymentPanel = memo(function PaymentPanel({
   onSplitChange,
   paidAmount,
   onPaidAmountChange,
+  transactionId,
+  onTransactionIdChange,
+  upiApp,
+  onUpiAppChange,
   canConfirm,
   confirming,
   onConfirm,
@@ -182,19 +190,101 @@ export const PaymentPanel = memo(function PaymentPanel({
           </div>
         )}
 
-        {/* UPI: informational section */}
+        {/* UPI (generic) */}
         {paymentMethod === 'upi' && (
-          <div className="rounded-xl border border-border bg-mist px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 mb-1">UPI Payment</p>
-            <p className="text-sm text-ink/60">Scan QR or enter UPI ID on the guest's device.</p>
+          <div className="space-y-2">
+            <div className="rounded-xl border border-border bg-mist px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 mb-1">UPI Payment</p>
+              <p className="text-sm text-ink/60">Scan QR or enter UPI ID on the guest's device.</p>
+            </div>
+            <input
+              type="text"
+              disabled={confirming}
+              value={transactionId}
+              onChange={e => onTransactionIdChange(e.target.value)}
+              placeholder="UPI Transaction ID (optional)"
+              className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20 disabled:opacity-50"
+            />
+          </div>
+        )}
+
+        {/* UPI QR */}
+        {paymentMethod === 'upi_qr' && (
+          <div className="space-y-2">
+            <div className="rounded-xl border border-border bg-mist px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 mb-1">UPI QR Code</p>
+              <p className="text-sm text-ink/60">Show QR code to guest. Verify payment in your UPI app before confirming.</p>
+            </div>
+            <input
+              type="text"
+              disabled={confirming}
+              value={transactionId}
+              onChange={e => onTransactionIdChange(e.target.value)}
+              placeholder="UPI Transaction ID (optional)"
+              className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20 disabled:opacity-50"
+            />
+          </div>
+        )}
+
+        {/* UPI Collect */}
+        {paymentMethod === 'upi_collect' && (
+          <div className="space-y-2">
+            <div className="rounded-xl border border-border bg-mist px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 mb-1">UPI Collect</p>
+              <p className="text-sm text-ink/60">Enter customer's UPI ID and send a collect request via your UPI app.</p>
+            </div>
+            <input
+              type="text"
+              disabled={confirming}
+              value={upiApp}
+              onChange={e => onUpiAppChange(e.target.value)}
+              placeholder="Customer UPI ID (e.g. customer@bank)"
+              className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20 disabled:opacity-50"
+            />
+            <input
+              type="text"
+              disabled={confirming}
+              value={transactionId}
+              onChange={e => onTransactionIdChange(e.target.value)}
+              placeholder="UPI Transaction ID (optional)"
+              className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20 disabled:opacity-50"
+            />
+          </div>
+        )}
+
+        {/* UPI Intent */}
+        {paymentMethod === 'upi_intent' && (
+          <div className="space-y-2">
+            <div className="rounded-xl border border-border bg-mist px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 mb-1">UPI Intent</p>
+              <p className="text-sm text-ink/60">Open a UPI app on the guest's phone for payment.</p>
+            </div>
+            <input
+              type="text"
+              disabled={confirming}
+              value={transactionId}
+              onChange={e => onTransactionIdChange(e.target.value)}
+              placeholder="UPI Transaction ID (optional)"
+              className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20 disabled:opacity-50"
+            />
           </div>
         )}
 
         {/* Card: informational section */}
         {paymentMethod === 'card' && (
-          <div className="rounded-xl border border-border bg-mist px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 mb-1">Card Payment</p>
-            <p className="text-sm text-ink/60">Swipe or tap card on the terminal.</p>
+          <div className="space-y-2">
+            <div className="rounded-xl border border-border bg-mist px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50 mb-1">Card Payment</p>
+              <p className="text-sm text-ink/60">Swipe or tap card on the terminal.</p>
+            </div>
+            <input
+              type="text"
+              disabled={confirming}
+              value={transactionId}
+              onChange={e => onTransactionIdChange(e.target.value)}
+              placeholder="Card Approval / Transaction ID (optional)"
+              className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20 disabled:opacity-50"
+            />
           </div>
         )}
 

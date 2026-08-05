@@ -11,6 +11,9 @@ export interface SalesReport {
   paymentBreakdown: {
     cash: number;
     upi: number;
+    upi_intent?: number;
+    upi_qr?: number;
+    upi_collect?: number;
     card: number;
     split: number;
   };
