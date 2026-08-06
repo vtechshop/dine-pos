@@ -79,6 +79,7 @@ import RecommendationsScreen from '../screens/ai/RecommendationsScreen';
 import StaffKitchenScreen from '../screens/ai/StaffKitchenScreen';
 import PurchaseAssistantScreen from '../screens/ai/PurchaseAssistantScreen';
 import AIMenuImportScreen from '../screens/ai/AIMenuImportScreen';
+import BulkImageAssignScreen from '../screens/ai/BulkImageAssignScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<TabParamList>();
@@ -318,6 +319,7 @@ const AppNavigator = () => {
             <Stack.Screen name="StaffKitchen"      component={StaffKitchenScreen}      options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="PurchaseAssistant" component={PurchaseAssistantScreen} options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="AIMenuImport"      component={AIMenuImportScreen}      options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="BulkImageAssign"  component={BulkImageAssignScreen}  options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen
               name="AddProduct"
               component={AddProductScreen}

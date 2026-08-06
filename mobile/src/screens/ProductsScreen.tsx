@@ -494,6 +494,21 @@ const ProductsScreen: React.FC = () => {
         </View>
       </View>
 
+      {/* Bulk image assignment banner */}
+      {noImageCount > 0 && (
+        <TouchableOpacity
+          style={styles.bulkImageBanner}
+          onPress={() => navigation.navigate('BulkImageAssign')}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons name="add-photo-alternate" size={16} color={Colors.warning} />
+          <Text style={styles.bulkImageBannerText}>
+            {noImageCount} product{noImageCount !== 1 ? 's' : ''} missing images — Add photos in bulk
+          </Text>
+          <MaterialIcons name="chevron-right" size={18} color={Colors.warning} />
+        </TouchableOpacity>
+      )}
+
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <MaterialIcons name="search" size={20} color={Colors.textMuted} style={{ marginRight: Spacing.sm }} />
@@ -1065,6 +1080,13 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.round, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md,
   },
   autoFillBtnText: { color: Colors.success, fontSize: FontSize.sm, fontWeight: '700' },
+  bulkImageBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.xs,
+    backgroundColor: Colors.warning + '12',
+    borderBottomWidth: 1, borderBottomColor: Colors.warning + '40',
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+  },
+  bulkImageBannerText: { flex: 1, color: Colors.warning, fontSize: FontSize.sm, fontWeight: '600' },
   autoFillRunBtn: {
     flex: 1, paddingVertical: Spacing.md, borderRadius: BorderRadius.md,
     backgroundColor: Colors.success, alignItems: 'center', justifyContent: 'center',

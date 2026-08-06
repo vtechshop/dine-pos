@@ -15,6 +15,8 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, FontSize, BorderRadius } from '../../utils/constants';
 import {
@@ -29,8 +31,10 @@ import {
 
 type Step = 'pick' | 'processing' | 'review' | 'result';
 
+type NavProp = NativeStackNavigationProp<RootStackParamList>;
+
 const AIMenuImportScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavProp>();
   const { bottom } = useSafeAreaInsets();
 
   const [step, setStep] = useState<Step>('pick');
@@ -332,6 +336,15 @@ const AIMenuImportScreen: React.FC = () => {
 
           <TouchableOpacity
             style={[styles.importBtn, { marginTop: Spacing.xl }]}
+            onPress={() => navigation.navigate('BulkImageAssign')}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="add-photo-alternate" size={18} color={Colors.white} />
+            <Text style={styles.importBtnText}>Add Product Images</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.importBtn, { marginTop: Spacing.sm, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border }]}
             onPress={() => {
               setStep('pick');
               setExtractedCategories([]);
@@ -341,8 +354,8 @@ const AIMenuImportScreen: React.FC = () => {
             }}
             activeOpacity={0.8}
           >
-            <MaterialIcons name="upload" size={18} color={Colors.white} />
-            <Text style={styles.importBtnText}>Import Another</Text>
+            <MaterialIcons name="upload" size={18} color={Colors.text} />
+            <Text style={[styles.importBtnText, { color: Colors.text }]}>Import Another Menu</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

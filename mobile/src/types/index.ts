@@ -859,6 +859,7 @@ export type RootStackParamList = {
   StaffKitchen: undefined;
   PurchaseAssistant: undefined;
   AIMenuImport: undefined;
+  BulkImageAssign: undefined;
 };
 
 export type TabParamList = {
