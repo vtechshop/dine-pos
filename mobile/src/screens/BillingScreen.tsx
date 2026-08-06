@@ -17,6 +17,7 @@ import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
 import { Category, Product, Table } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows, UPI_ID, UPI_NAME } from '../utils/constants';
+import { applyCloudinaryTransform } from '../utils/cloudinary';
 import { SelectedModifier, ModifierGroup } from '../types';
 import RazorpayCheckout from 'react-native-razorpay';
 import { getLocalCategories, getLocalProducts, saveCategories, saveProducts } from '../database/localCacheDao';
@@ -493,7 +494,7 @@ Thank you for dining with us! 🍽️`;
         {/* Image / placeholder */}
         <View style={styles.prodTileImgWrap}>
           {item.image
-            ? <Image source={{ uri: item.image }} style={styles.prodTileImg} resizeMode="cover" />
+            ? <Image source={{ uri: applyCloudinaryTransform(item.image, 100, 100) ?? item.image }} style={styles.prodTileImg} resizeMode="cover" />
             : <View style={[styles.prodTileImgPlaceholder, { backgroundColor: accentColor + '18' }]}>
                 <MaterialIcons name="restaurant" size={22} color={accentColor} />
               </View>

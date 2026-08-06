@@ -11,6 +11,7 @@ import { useSettings } from '../context/SettingsContext';
 import { getPublicMenu, getEffectiveHotelId, saveMenuCache, loadMenuCache } from '../services/api';
 import { Category, Product, SelectedModifier, ModifierGroup } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
+import { applyCloudinaryTransform } from '../utils/cloudinary';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
@@ -199,8 +200,8 @@ const CustomerMenuScreen: React.FC = () => {
       >
         {/* Image */}
         <View style={styles.prodImgWrap}>
-          {item.image
-            ? <Image source={{ uri: item.image }} style={[styles.prodImg, { height: IMG_H }]} resizeMode="cover" />
+          {item.image && item.imageStatus !== 'placeholder'
+            ? <Image source={{ uri: applyCloudinaryTransform(item.image, 600, 600) ?? item.image }} style={[styles.prodImg, { height: IMG_H }]} resizeMode="cover" />
             : <View style={[styles.prodImgPlaceholder, { height: IMG_H }]}><MaterialIcons name="fastfood" size={Math.round(IMG_H * 0.28)} color={Colors.textMuted} /></View>
           }
           {/* Non-veg warning badge only */}
@@ -282,8 +283,8 @@ const CustomerMenuScreen: React.FC = () => {
             <View style={styles.modalHandle} />
 
             {/* Product image */}
-            {item.image
-              ? <Image source={{ uri: item.image }} style={styles.modalImage} resizeMode="contain" />
+            {item.image && item.imageStatus !== 'placeholder'
+              ? <Image source={{ uri: applyCloudinaryTransform(item.image, 600, 600) ?? item.image }} style={styles.modalImage} resizeMode="contain" />
               : (
                 <View style={styles.modalImagePlaceholder}>
                   <MaterialIcons name="fastfood" size={64} color={Colors.textMuted} />

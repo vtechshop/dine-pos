@@ -111,7 +111,11 @@ router.get('/menu', publicReadLimiter, async (req: Request, res: Response) => {
         },
       },
       categories,
-      products,
+      products: products.map(p => {
+        const obj = (p as any).toObject ? (p as any).toObject() : { ...p };
+        if (obj.imageStatus === 'placeholder') obj.image = '';
+        return obj;
+      }),
       bestsellerIds,
       cachedAt: new Date().toISOString(),
     });

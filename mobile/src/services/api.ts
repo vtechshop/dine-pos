@@ -520,6 +520,14 @@ export const uploadImage = async (uri: string): Promise<string> => {
   }
 };
 
+export const uploadPlaceholderImage = async (sourceUrl: string): Promise<string> => {
+  const data = await fetchAPI<{ url: string }>('/uploads/placeholder-image', {
+    method: 'POST',
+    body: JSON.stringify({ sourceUrl }),
+  });
+  return data.url;
+};
+
 // ==================== ORDERS ====================
 
 export const getOrders = (

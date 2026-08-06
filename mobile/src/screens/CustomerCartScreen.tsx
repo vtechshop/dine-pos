@@ -12,6 +12,7 @@ import QRCode from 'react-native-qrcode-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RazorpayCheckout from 'react-native-razorpay';
 import { showAlert } from '../utils/alert';
+import { applyCloudinaryTransform } from '../utils/cloudinary';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
@@ -397,7 +398,7 @@ const CustomerCartScreen: React.FC = () => {
   const renderItem = (item: CartItem) => (
     <View key={item.cartLineId} style={styles.cartItem}>
       {item.product.image
-        ? <Image source={{ uri: item.product.image }} style={styles.itemImg} />
+        ? <Image source={{ uri: applyCloudinaryTransform(item.product.image, 100, 100) ?? item.product.image }} style={styles.itemImg} />
         : <View style={[styles.itemImg, styles.itemImgPlaceholder]}><MaterialIcons name="restaurant" size={22} color={Colors.textMuted} /></View>
       }
       <View style={styles.itemInfo}>

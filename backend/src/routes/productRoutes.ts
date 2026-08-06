@@ -75,7 +75,7 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
 // PUT update product — admin only
 router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const ALLOWED = ['name', 'description', 'price', 'taxPercent', 'category', 'isAvailable', 'isVeg', 'shortCode', 'image', 'stock', 'variants', 'modifierGroups'] as const;
+    const ALLOWED = ['name', 'description', 'price', 'taxPercent', 'category', 'isAvailable', 'isVeg', 'shortCode', 'image', 'imageSource', 'imageStatus', 'stock', 'variants', 'modifierGroups'] as const;
     const update: Record<string, unknown> = {};
     for (const key of ALLOWED) {
       if (req.body[key] !== undefined) update[key] = req.body[key];

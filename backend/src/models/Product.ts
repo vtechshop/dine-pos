@@ -8,6 +8,8 @@ export interface IProduct extends Document {
   taxPercent: number;
   hsnCode: string;
   image: string;
+  imageSource?: 'camera' | 'gallery' | 'zip' | 'library' | 'copy' | 'pexels' | null;
+  imageStatus?: 'none' | 'real' | 'placeholder' | 'failed';
   isAvailable: boolean;
   isVeg: boolean;
   shortCode: string;
@@ -67,6 +69,16 @@ const ProductSchema: Schema = new Schema(
     image: {
       type: String,
       default: '',
+    },
+    imageSource: {
+      type: String,
+      enum: ['camera', 'gallery', 'zip', 'library', 'copy', 'pexels', null],
+      default: null,
+    },
+    imageStatus: {
+      type: String,
+      enum: ['none', 'real', 'placeholder', 'failed'],
+      default: 'none',
     },
     isAvailable: {
       type: Boolean,

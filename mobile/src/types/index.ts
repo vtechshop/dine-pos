@@ -71,6 +71,8 @@ export interface Product {
   taxPercent: number;
   hsnCode?: string;
   image: string;
+  imageSource?: 'camera' | 'gallery' | 'zip' | 'library' | 'copy' | 'pexels' | null;
+  imageStatus?: 'none' | 'real' | 'placeholder' | 'failed';
   isAvailable: boolean;
   isVeg: boolean;
   shortCode: string;

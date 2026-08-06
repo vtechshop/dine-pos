@@ -16,23 +16,20 @@ import {
   Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { API_BASE_URL } from '../utils/constants';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList, Product, Category } from '../types';
 import { MaterialIcons } from '@expo/vector-icons';
-import { getProducts, getCategories, deleteProduct, updateProduct, uploadImage } from '../services/api';
+import { getProducts, getCategories, deleteProduct, updateProduct, uploadImage, uploadPlaceholderImage } from '../services/api';
+import { applyCloudinaryTransform } from '../utils/cloudinary';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const NO_IMAGE_KEY = '__no_image__';
-const BASE_URL = API_BASE_URL.replace('/api', '');
-const getImageUri = (image?: string): string | null => {
-  if (!image) return null;
-  return image.startsWith('/uploads/') ? `${BASE_URL}${image}` : image;
-};
+const getImageUri = (image?: string): string | null =>
+  applyCloudinaryTransform(image, 100, 100);
 
 const ProductsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -71,8 +68,8 @@ const ProductsScreen: React.FC = () => {
     setUploadingProductId(product._id);
     try {
       const url = await uploadImage(result.assets[0].uri);
-      await updateProduct(product._id, { image: url });
-      setProducts(prev => prev.map(p => p._id === product._id ? { ...p, image: url } : p));
+      await updateProduct(product._id, { image: url, imageSource: 'gallery', imageStatus: 'real' });
+      setProducts(prev => prev.map(p => p._id === product._id ? { ...p, image: url, imageSource: 'gallery', imageStatus: 'real' } : p));
     } catch (e: any) {
       showAlert('Upload Failed', e.message || 'Could not upload image.');
     } finally {
@@ -228,8 +225,9 @@ const ProductsScreen: React.FC = () => {
           }
         }
         if (imageUrl) {
-          await updateProduct(product._id, { image: imageUrl });
-          setProducts(prev => prev.map(p => p._id === product._id ? { ...p, image: imageUrl! } : p));
+          const cloudUrl = await uploadPlaceholderImage(imageUrl);
+          await updateProduct(product._id, { image: cloudUrl, imageSource: 'pexels', imageStatus: 'placeholder' });
+          setProducts(prev => prev.map(p => p._id === product._id ? { ...p, image: cloudUrl, imageSource: 'pexels', imageStatus: 'placeholder' } : p));
         }
         done++;
         setAutoFillProgress(`Done "${product.name}"  ✓  (${done} / ${missing.length})`);
@@ -330,7 +328,16 @@ const ProductsScreen: React.FC = () => {
     >
       {/* Image thumbnail */}
       {imageUri
-        ? <Image source={{ uri: imageUri }} style={styles.productThumb} resizeMode="cover" />
+        ? (
+          <View style={{ position: 'relative' }}>
+            <Image source={{ uri: imageUri }} style={styles.productThumb} resizeMode="cover" />
+            {item.imageStatus === 'placeholder' && (
+              <View style={styles.placeholderBadge}>
+                <Text style={styles.placeholderBadgeText}>PLACEHOLDER</Text>
+              </View>
+            )}
+          </View>
+        )
         : (
           <TouchableOpacity
             style={styles.noImageThumb}
@@ -1045,6 +1052,21 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: BorderRadius.md,
     marginBottom: Spacing.sm,
+  },
+  placeholderBadge: {
+    position: 'absolute',
+    bottom: Spacing.sm,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(230,81,0,0.82)',
+    paddingVertical: 2,
+    alignItems: 'center',
+  },
+  placeholderBadgeText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.5,
   },
   noImageThumb: {
     width: '100%',

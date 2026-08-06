@@ -23,7 +23,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { RootStackParamList, Category, Ingredient, RecipeItem } from '../types';
 import { showAlert } from '../utils/alert';
 import { createProduct, updateProduct, getCategories, uploadImage, getIngredients } from '../services/api';
-import { Colors, Spacing, FontSize, BorderRadius, API_BASE_URL } from '../utils/constants';
+import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
+import { applyCloudinaryTransform } from '../utils/cloudinary';
 import { useSettings } from '../context/SettingsContext';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'AddProduct'>;
@@ -50,6 +51,7 @@ const AddProductScreen: React.FC = () => {
   const [shortCode, setShortCode] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [imageSource, setImageSource] = useState<'gallery' | 'camera' | ''>('');
   const [stock, setStock] = useState('');
   const [hsnCode, setHsnCode] = useState('');
   const [recipe, setRecipe] = useState<RecipeItem[]>([]);
@@ -86,6 +88,7 @@ const AddProductScreen: React.FC = () => {
       setShortCode(editProduct.shortCode || '');
       setDescription(editProduct.description || '');
       setImageUrl(editProduct.image || '');
+      setImageSource((editProduct.imageSource as 'gallery' | 'camera' | '') || '');
       setStock(editProduct.stock >= 0 ? editProduct.stock.toString() : '');
       setHsnCode(editProduct.hsnCode || '');
       setRecipe(editProduct.recipe || []);
@@ -144,7 +147,7 @@ const AddProductScreen: React.FC = () => {
     setSaving(true);
     try {
       const stockValue = stock.trim() === '' ? -1 : parseInt(stock, 10);
-      const productData = {
+      const productData: Record<string, unknown> = {
         name: name.trim(),
         price: parseFloat(price),
         category: categoryId,
@@ -157,6 +160,12 @@ const AddProductScreen: React.FC = () => {
         stock: isNaN(stockValue) ? -1 : stockValue,
         recipe,
       };
+      if (imageUrl.trim() && imageSource) {
+        productData.imageSource = imageSource;
+        productData.imageStatus = 'real';
+      } else if (!imageUrl.trim()) {
+        productData.imageStatus = 'none';
+      }
 
       if (isEditMode && editProduct) {
         await updateProduct(editProduct._id, productData);
@@ -176,11 +185,12 @@ const AddProductScreen: React.FC = () => {
     }
   };
 
-  const uploadAndSetImage = async (uri: string) => {
+  const uploadAndSetImage = async (uri: string, src: 'gallery' | 'camera') => {
     setUploadingImage(true);
     try {
       const url = await uploadImage(uri);
       setImageUrl(url);
+      setImageSource(src);
     } catch (error: any) {
       showAlert('Upload Failed', error.message || 'Could not upload image. Check your connection.');
     } finally {
@@ -201,7 +211,7 @@ const AddProductScreen: React.FC = () => {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      await uploadAndSetImage(result.assets[0].uri);
+      await uploadAndSetImage(result.assets[0].uri, 'gallery');
     }
   };
 
@@ -217,7 +227,7 @@ const AddProductScreen: React.FC = () => {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      await uploadAndSetImage(result.assets[0].uri);
+      await uploadAndSetImage(result.assets[0].uri, 'camera');
     }
   };
 
@@ -416,7 +426,7 @@ const AddProductScreen: React.FC = () => {
               </View>
             ) : imageUrl ? (
               <Image
-                source={{ uri: imageUrl.startsWith('/uploads/') ? `${API_BASE_URL.replace('/api', '')}${imageUrl}` : imageUrl }}
+                source={{ uri: applyCloudinaryTransform(imageUrl, 600, 600) ?? imageUrl }}
                 style={styles.imagePreview}
                 resizeMode="cover"
               />
