@@ -1,11 +1,20 @@
 import https from 'https';
 
-// Ordered from most to least preferred for API keys restricted from gemini-2.5-flash.
+// Preference order: newest production Flash first, oldest last.
+// gemini-2.5-flash is kept in the list but ranked below 2.5-flash-lite because
+// the generateContent v1 endpoint returns 404 "no longer available to new users"
+// for some API keys even though the models discovery API lists it as available.
+// If it fails at call time, callers should fall back via GEMINI_MODEL override.
 const PREFERENCE = [
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
   'gemini-1.5-flash',
-  'gemini-1.5-pro',
 ];
 
 let _resolved: string | null = null;
@@ -36,29 +45,26 @@ function listModels(apiKey: string): Promise<string[]> {
 }
 
 function pickModel(available: string[]): { model: string; reason: string } {
-  const has25Flash = available.some(m => m.includes('gemini-2.5-flash'));
-  if (has25Flash) {
-    return { model: 'gemini-2.5-flash', reason: 'gemini-2.5-flash available and selected' };
-  }
-
+  // Walk the preference list and return the first model present in the available set.
   for (const pref of PREFERENCE) {
     if (available.some(m => m.includes(pref))) {
-      return {
-        model: pref,
-        reason: `gemini-2.5-flash not in available list (new-user API key restriction); selected next best: ${pref}`,
-      };
+      return { model: pref, reason: `selected from preference list: ${pref}` };
     }
   }
 
-  const fallback = available.find(m => m.includes('gemini') && !m.includes('nano'));
+  // No preference matched — pick the first listed Gemini model (excluding nano/image variants).
+  const fallback = available.find(
+    m => m.includes('gemini') && !m.includes('nano') && !m.includes('-image'),
+  );
   if (fallback) {
     const name = fallback.replace('models/', '');
-    return { model: name, reason: `gemini-2.5-flash unavailable; first listed Gemini model selected: ${name}` };
+    return { model: name, reason: `no preferred model available; first listed: ${name}` };
   }
 
+  // models list was empty or returned no usable model — surface the error at call time.
   return {
-    model: 'gemini-1.5-flash',
-    reason: 'Could not fetch model list — using gemini-1.5-flash as last-resort fallback',
+    model: '',
+    reason: 'model list empty or no usable Gemini model found; set GEMINI_MODEL to override',
   };
 }
 
@@ -79,11 +85,6 @@ export async function resolveGeminiModel(apiKey: string): Promise<string> {
         console.log('  (none listed — check API key validity or quota)');
       } else {
         available.forEach(m => console.log('  -', m));
-      }
-
-      const has25Flash = available.some(m => m.includes('gemini-2.5-flash'));
-      if (!has25Flash) {
-        console.log('[Gemini] gemini-2.5-flash REJECTED: not in available models list for this API key (new-user restriction)');
       }
 
       const { model, reason } = pickModel(available);
