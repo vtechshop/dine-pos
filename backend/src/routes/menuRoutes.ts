@@ -150,6 +150,18 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
 
     const hotelId = String(hotelParam);
 
+    // Idempotency guard: if the client sends an offlineId (UUID generated before the request),
+    // return the existing order rather than creating a duplicate. The sparse unique index on
+    // Order.offlineId is the DB-level guard; this findOne is the fast path.
+    const offlineId: string | null =
+      typeof req.body.offlineId === 'string' && req.body.offlineId.trim()
+        ? req.body.offlineId.trim().slice(0, 64)
+        : null;
+    if (offlineId) {
+      const dup = await Order.findOne({ offlineId, hotelId });
+      if (dup) return res.status(200).json(dup);
+    }
+
     // All items must reference a product by ObjectId so prices are always verified
     // against the server-side catalog. Items without a valid product ID are rejected.
     const productIds = clientItems
@@ -198,6 +210,7 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
     const orderNumber = await generateOrderNumber(hotelId);
     const order = new Order({
       hotelId,
+      offlineId: offlineId ?? undefined,
       orderNumber,
       items:        validatedItems,
       subtotal:     +subtotal.toFixed(2),
@@ -252,6 +265,18 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
 
     res.status(201).json(order);
   } catch (error: any) {
+    // Two concurrent submissions of the same offlineId can race past the findOne above.
+    // The sparse unique index then rejects the second insert with code 11000.
+    // Return the already-saved order instead of a 400.
+    if (error.code === 11000 && error.keyPattern?.offlineId) {
+      try {
+        const saved = await Order.findOne({
+          offlineId: req.body.offlineId,
+          hotelId:   String(req.body.hotel || req.body.hotelId || ''),
+        });
+        if (saved) return res.status(200).json(saved);
+      } catch { /* fall through to generic error */ }
+    }
     sendError(res, 400, error?.message || 'Invalid order data', error);
   }
 });

@@ -776,24 +776,74 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Atomic completion guard — mirrors the guard on the 'cancelled' path.
+    // Only the request that wins the findOneAndUpdate runs the side effects
+    // (receipt print + socket emit), preventing duplicate receipts from two
+    // concurrent cashier taps on the same order.
+    if (status === 'completed') {
+      const VALID_PM = ['cash', 'upi', 'upi_intent', 'upi_qr', 'upi_collect', 'card', 'split', 'razorpay'];
+      const completionFields: Record<string, unknown> = {
+        status:      'completed',
+        completedBy: req.cashierName || req.cashierId || '',
+        completedAt: new Date(),
+        cashierId:   req.cashierId || '',
+        paymentTime: new Date(),
+      };
+      if (paymentMethod && VALID_PM.includes(paymentMethod)) {
+        completionFields.paymentMethod = paymentMethod;
+      }
+      if (req.body.transactionId) completionFields.transactionId = req.body.transactionId;
+      if (req.body.upiApp)        completionFields.upiApp        = req.body.upiApp;
+      if (req.body.payments)      completionFields.payments      = req.body.payments;
+      if (req.body.splitDetails)  completionFields.splitDetails  = req.body.splitDetails;
+
+      const prevDoc = await Order.findOneAndUpdate(
+        { _id: req.params.id, hotelId: req.hotelId, status: { $in: ['served', 'ready'] } },
+        { $set: completionFields },
+        { new: false },
+      );
+
+      if (!prevDoc) {
+        const current = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId });
+        if (!current) return res.status(404).json({ message: 'Order not found' });
+        // Idempotent: a concurrent request already completed this order.
+        if (current.status === 'completed') return res.json(current);
+        // The order is not in a completable state — tell the caller explicitly.
+        return res.status(409).json({
+          message: `Cannot complete order from status '${current.status}'. Order must be 'ready' or 'served'.`,
+        });
+      }
+
+      // This request won the atomic update — run side effects exactly once.
+      const completedOrder = await Order.findById(req.params.id);
+      const orderForResponse = completedOrder ?? existing;
+
+      io.to(`hotel_${req.hotelId}`).emit('order_status_update', {
+        orderId:      existing._id,
+        orderNumber:  existing.orderNumber,
+        status:       'completed',
+        tableNumber:  existing.tableNumber  || '',
+        customerName: existing.customerName || '',
+      });
+      io.to(`hotel_${req.hotelId}`).emit('order_completed', {
+        orderId:       existing._id,
+        orderNumber:   existing.orderNumber,
+        tableNumber:   existing.tableNumber  || '',
+        completedBy:   String(completionFields.completedBy   ?? ''),
+        paymentMethod: String(completionFields.paymentMethod ?? existing.paymentMethod),
+        grandTotal:    existing.grandTotal,
+      });
+      scheduleOrderReceiptPrint(req.hotelId!, orderForResponse.toObject()).catch(err => {
+        logger.warn('Receipt print dispatch failed', { orderId: String(existing._id), error: err?.message });
+      });
+
+      return res.json(orderForResponse);
+    }
+
     existing.status = status;
     if (status === 'served') {
       existing.servedBy = req.waiterName || req.waiterId || '';
       existing.servedAt = new Date();
-    }
-    if (status === 'completed') {
-      existing.completedBy = req.cashierName || req.cashierId || '';
-      existing.completedAt = new Date();
-      existing.cashierId   = req.cashierId || '';
-      const VALID_PM = ['cash', 'upi', 'upi_intent', 'upi_qr', 'upi_collect', 'card', 'split', 'razorpay'];
-      if (paymentMethod && VALID_PM.includes(paymentMethod)) {
-        existing.paymentMethod = paymentMethod;
-      }
-      if (req.body.transactionId)  (existing as any).transactionId = req.body.transactionId;
-      if (req.body.upiApp)         (existing as any).upiApp = req.body.upiApp;
-      if (req.body.payments)       (existing as any).payments = req.body.payments;
-      if (req.body.splitDetails)   existing.splitDetails = req.body.splitDetails;
-      (existing as any).paymentTime = new Date();
     }
     await existing.save();
 
@@ -820,20 +870,6 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         tableNumber: existing.tableNumber || '',
         customerName: existing.customerName || '',
         servedBy: existing.servedBy || '',
-      });
-    }
-    if (existing.status === 'completed') {
-      io.to(`hotel_${req.hotelId}`).emit('order_completed', {
-        orderId: existing._id,
-        orderNumber: existing.orderNumber,
-        tableNumber: existing.tableNumber || '',
-        completedBy: existing.completedBy || '',
-        paymentMethod: existing.paymentMethod,
-        grandTotal: existing.grandTotal,
-      });
-      // Fire-and-forget: auto-print receipt to cashier printer device
-      scheduleOrderReceiptPrint(req.hotelId!, existing.toObject()).catch(err => {
-        logger.warn('Receipt print dispatch failed', { orderId: String(existing._id), error: err?.message });
       });
     }
 

@@ -20,9 +20,9 @@ const router = Router();
 // ── Legacy: simple shared-secret guard ────────────────────────────────────────
 const WEBHOOK_SECRET = process.env.AGGREGATOR_SECRET;
 if (!WEBHOOK_SECRET || WEBHOOK_SECRET === 'agg-secret-changeme') {
-  logger.warn(
-    'AGGREGATOR_SECRET is not set or is using the default value. ' +
-    'Set a strong secret in .env to prevent fake webhook orders.',
+  throw new Error(
+    'FATAL: AGGREGATOR_SECRET is not set or is using the default value. ' +
+    'Set a strong random secret in .env before starting the server.',
   );
 }
 
