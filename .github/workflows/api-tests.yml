@@ -75,6 +75,7 @@ jobs:
           REDIS_URL: redis://localhost:6379
           SUPER_ADMIN_ID: ${{ secrets.SUPER_ADMIN_ID || 'ci-superadmin' }}
           SUPER_ADMIN_PASS: ${{ secrets.SUPER_ADMIN_PASS || 'ci-superpass-1234' }}
+          AGGREGATOR_SECRET: ${{ secrets.AGGREGATOR_SECRET || 'ci-aggregator-secret-not-for-production' }}
           NODE_ENV: test
         run: |
           npm start &
