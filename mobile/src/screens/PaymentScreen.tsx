@@ -111,26 +111,35 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
     const uri = upiString(grandTotal, orderRef);
+    console.log('[UPI] Launching intent', { uri, amount: grandTotal, ref: orderRef });
     setUpiStatus('launching');
     try {
+      console.log('[UPI] Intent launched — waiting for Android activity result');
       const result = await IntentLauncher.startActivityAsync('android.intent.action.VIEW', { data: uri });
-      const extra       = (result.extra ?? {}) as Record<string, string>;
-      const status      = String(extra.Status      ?? '').toUpperCase();
+      const extra        = (result.extra ?? {}) as Record<string, string>;
+      const status       = String(extra.Status      ?? '').toUpperCase();
       const responseCode = String(extra.responseCode ?? '');
       const txnId        = String(extra.txnId ?? extra.txnRef ?? '');
+      console.log('[UPI] Activity result', { resultCode: result.resultCode, status, responseCode, txnId });
 
       if (status === 'SUCCESS' || responseCode === '00') {
+        console.log('[UPI] Status: SUCCESS', { txnId });
         setUpiTxnId(txnId);
         setUpiStatus('success');
+        console.log('[UPI] Payment confirmed — Confirm button now enabled');
       } else if (status === 'FAILURE') {
+        console.log('[UPI] Status: FAILURE');
         setUpiStatus('failed');
       } else if (status === 'CANCELLED' || result.resultCode === 0) {
+        console.log('[UPI] Status: CANCELLED');
         setUpiStatus('cancelled');
       } else {
+        console.log('[UPI] Status: unknown — treating as failed', { status, responseCode });
         setUpiStatus('failed');
       }
-    } catch {
-      Alert.alert('No UPI App Found', 'Install Google Pay, PhonePe, or BHIM to pay via UPI.');
+    } catch (err) {
+      console.log('[UPI] Intent error — no UPI app installed', { err: String(err) });
+      Alert.alert('No UPI app installed', 'Install Google Pay, PhonePe, or BHIM to pay via UPI.\n\nOrder has NOT been marked paid.');
       setUpiStatus('idle');
     }
   };

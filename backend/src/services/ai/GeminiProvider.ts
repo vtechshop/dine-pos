@@ -1,8 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { AIProvider, MenuExtractionResult } from './AIProvider';
 
-// Set GEMINI_MODEL env var to override (gemini-2.5-flash is the GA stable alias)
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+// Model is resolved at runtime by modelResolver.ts — do not hardcode here.
 
 const EXTRACTION_PROMPT = `
 You are a menu data extraction assistant for a restaurant POS system.
@@ -77,10 +76,9 @@ export class GeminiProvider implements AIProvider {
   private readonly client: GoogleGenerativeAI;
   private readonly modelId: string;
 
-  constructor(apiKey: string, modelId: string = DEFAULT_MODEL) {
+  constructor(apiKey: string, modelId: string) {
     this.client  = new GoogleGenerativeAI(apiKey);
     this.modelId = modelId;
-    console.log(`[GeminiProvider] init — model="${this.modelId}" apiVersion="v1" endpoint="https://generativelanguage.googleapis.com/v1/models/${this.modelId}:generateContent"`);
   }
 
   async extractMenu(buffer: Buffer, mimeType: string): Promise<MenuExtractionResult> {
@@ -107,7 +105,6 @@ export class GeminiProvider implements AIProvider {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    console.log(`[GeminiProvider] generateContent — model="${this.modelId}" apiVersion="v1" bytes=${buffer.length} mimeType="${mimeType}"`);
     try {
       const result = await model.generateContent({
         contents: [

@@ -8,19 +8,16 @@ import { logger } from '../utils/logger';
 import { IExtractedInvoice, IExtractedItem } from '../models/OcrJob';
 
 // ─── Gemini client setup ──────────────────────────────────────────────────────
-// Reuse the same env var and model as geminiNarrative.ts
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
-
-const API_KEY = process.env.GEMINI_API_KEY || '';
-const MODEL   = process.env.GEMINI_MODEL   || 'gemini-2.5-flash';
+import { resolveGeminiModel } from './ai/modelResolver';
 
 // 60-second timeout for multimodal calls — PDFs can be large.
 const OCR_TIMEOUT_MS = 60_000;
 
 function getClient(): GoogleGenerativeAI | null {
-  if (!API_KEY) return null;
-  return new GoogleGenerativeAI(API_KEY);
+  if (!process.env.GEMINI_API_KEY) return null;
+  return new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 }
 
 function ocrTimeout<T>(promise: Promise<T>): Promise<T> {
@@ -183,7 +180,8 @@ export async function extractInvoiceData(
   }
 
   try {
-    const model  = client.getGenerativeModel({ model: MODEL }, { apiVersion: 'v1' });
+    const resolvedModel = await resolveGeminiModel(process.env.GEMINI_API_KEY!);
+    const model  = client.getGenerativeModel({ model: resolvedModel }, { apiVersion: 'v1' });
     const result = await ocrTimeout(model.generateContent({
       contents: [{
         role: 'user',

@@ -796,7 +796,11 @@ const CustomerCartScreen: React.FC = () => {
                     <Text style={[
                       styles.placeBtnSub,
                       activeGateway?.active && activeGateway?.isIntegrated && styles.placeBtnTextDark,
-                    ]}>Pay {fmt(cart.grandTotal)} at counter</Text>
+                    ]}>
+                      {payChoice === 'upi_qr'
+                        ? `Scan QR & pay ${fmt(cart.grandTotal)} via UPI`
+                        : `Pay ${fmt(cart.grandTotal)} at counter`}
+                    </Text>
                   </View>
                   <MaterialIcons
                     name="arrow-forward"

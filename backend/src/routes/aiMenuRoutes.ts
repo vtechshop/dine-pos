@@ -49,7 +49,7 @@ router.post('/extract', upload.single('menu'), async (req: AuthRequest, res: Res
 
   let provider;
   try {
-    provider = getAIProvider();
+    provider = await getAIProvider();
   } catch {
     return res.status(503).json({ message: 'AI service is not configured. Set GEMINI_API_KEY.' });
   }

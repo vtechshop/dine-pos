@@ -1,7 +1,6 @@
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import { resolveGeminiModel } from '../services/ai/modelResolver';
 import { logger } from './logger';
-
-const MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
 
 // 45-second hard cap — Gemini SDK has no built-in request timeout.
 // Beyond this, the caller's Express slot would be held indefinitely.
@@ -10,10 +9,12 @@ const GEMINI_TIMEOUT_MS = 45_000;
 let gemini: GoogleGenerativeAI | null = null;
 let cachedModel: GenerativeModel | null = null;
 
-function getModel(): GenerativeModel | null {
+async function getModel(): Promise<GenerativeModel | null> {
   if (!process.env.GEMINI_API_KEY) return null;
+  if (cachedModel) return cachedModel;
   if (!gemini) gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  if (!cachedModel) cachedModel = gemini.getGenerativeModel({ model: MODEL }, { apiVersion: 'v1' });
+  const model = await resolveGeminiModel(process.env.GEMINI_API_KEY);
+  cachedModel = gemini.getGenerativeModel({ model }, { apiVersion: 'v1' });
   return cachedModel;
 }
 
@@ -35,7 +36,7 @@ function geminiTimeout<T>(promise: Promise<T>): Promise<T> {
  * allowing callers to degrade gracefully.
  */
 export async function generateNarrative(prompt: string): Promise<string | null> {
-  const model = getModel();
+  const model = await getModel();
   if (!model) return null;
 
   try {
