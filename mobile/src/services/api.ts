@@ -2354,10 +2354,40 @@ export const checkMenuDuplicates = (
     body: JSON.stringify({ categories }),
   });
 
-export const importExtractedMenu = (
+export const importExtractedMenu = async (
   categories: AIImportCategory[],
-): Promise<{ success: boolean; results: AIMenuImportResults }> =>
-  fetchAPI('/ai-menu/import', {
-    method: 'POST',
-    body: JSON.stringify({ categories }),
-  });
+): Promise<{ success: boolean; results: AIMenuImportResults }> => {
+  const baseUrl = await getBaseUrl();
+  const token = await getToken();
+
+  const controller = new AbortController();
+  // Import can be slow (60+ products ≈ 17–30 s on the server). The standard
+  // fetchAPI 12 s timeout aborts before the server responds and then retries,
+  // causing duplicate inserts. Use the same 120 s budget as extraction.
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+  try {
+    const response = await fetch(`${baseUrl}/ai-menu/import`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ categories }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({})) as { message?: string };
+      throw new Error(errBody.message || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') throw new Error('Import timed out after 2 minutes. Please try again.');
+    throw error;
+  }
+};

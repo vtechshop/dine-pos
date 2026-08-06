@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -43,6 +43,7 @@ const AIMenuImportScreen: React.FC = () => {
   const [importResults, setImportResults] = useState<AIMenuImportResults | null>(null);
 
   const [expandedCategory, setExpandedCategory] = useState<number | null>(null);
+  const importingRef = useRef(false);
 
   const handlePickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -178,6 +179,8 @@ const AIMenuImportScreen: React.FC = () => {
     duplicates.some(d => d.categoryName === catName && d.productName === prodName);
 
   const handleImport = async () => {
+    if (importingRef.current) return;
+
     const toImport: AIImportCategory[] = extractedCategories
       .map(cat => ({
         ...cat,
@@ -190,6 +193,7 @@ const AIMenuImportScreen: React.FC = () => {
       return;
     }
 
+    importingRef.current = true;
     setProcessing(true);
     try {
       const res = await importExtractedMenu(toImport);
@@ -198,6 +202,7 @@ const AIMenuImportScreen: React.FC = () => {
     } catch (e: any) {
       Alert.alert('Import failed', e.message || 'Could not import menu. Please try again.');
     } finally {
+      importingRef.current = false;
       setProcessing(false);
     }
   };
