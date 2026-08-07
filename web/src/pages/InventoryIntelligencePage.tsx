@@ -219,7 +219,8 @@ export function InventoryIntelligencePage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-mist p-4 md:p-6">
+    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex-1 overflow-y-auto bg-mist p-4 md:p-6">
       {/* Header */}
       <div className="flex items-start justify-between mb-5 gap-3 flex-wrap">
         <div>
@@ -615,6 +616,7 @@ export function InventoryIntelligencePage() {
           </Card>
         </div>
       )}
+    </div>
     </div>
   );
 }

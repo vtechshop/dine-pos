@@ -448,8 +448,8 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                       <span className="sr-only">{p.isVeg ? 'Veg' : 'Non-veg'}</span>
                     </td>
                     {/* Name */}
-                    <td className="px-3 py-2.5">
-                      <div className="font-medium text-ink">{p.name}</div>
+                    <td className="px-3 py-2.5 max-w-[12rem]">
+                      <div className="font-medium text-ink truncate">{p.name}</div>
                       {p.shortCode && (
                         <div className="font-mono text-[10px] text-ink/40">{p.shortCode}</div>
                       )}
@@ -457,7 +457,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                     {/* Category badge */}
                     <td className="px-3 py-2.5">
                       <span
-                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium max-w-[8rem] truncate"
                         style={{ backgroundColor: `${color}1a`, color }}
                       >
                         {name}

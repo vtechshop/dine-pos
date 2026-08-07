@@ -451,7 +451,7 @@ function PODrawer({
                 <Plus size={11} /> Add Item
               </button>
             </div>
-            <div className="rounded-xl border border-border overflow-hidden">
+            <div className="rounded-xl border border-border overflow-x-auto">
               {/* Column headers */}
               <div className="grid bg-mist px-2 py-1.5 text-[9px] font-semibold uppercase tracking-wider text-ink/40"
                 style={{ gridTemplateColumns: '3fr 1fr 1.5fr 1.5fr 1fr 1fr 1.5fr auto' }}>
@@ -990,7 +990,7 @@ export function PurchaseOrdersPage() {
                   )}
                 </div>
               ) : (
-                <div className="rounded-xl border border-border bg-canvas overflow-hidden">
+                <div className="rounded-xl border border-border bg-canvas overflow-x-auto">
                   <table className="w-full border-collapse text-sm">
                     <thead>
                       <tr className="bg-mist">

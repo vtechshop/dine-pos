@@ -206,7 +206,7 @@ export function CouponsPage() {
             <p>{search ? 'No coupons match your search.' : 'No coupons yet. Create one above.'}</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-border bg-canvas overflow-hidden">
+          <div className="rounded-xl border border-border bg-canvas overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-mist text-left text-xs font-semibold uppercase tracking-wide text-ink/50">

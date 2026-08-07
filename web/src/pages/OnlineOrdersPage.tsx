@@ -730,7 +730,9 @@ export function OnlineOrdersPage() {
   });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 p-6">
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-6">
+      <div className="mx-auto max-w-5xl space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-ink">Online Orders</h1>
         <button type="button" onClick={() => void load()} disabled={loading}
@@ -777,6 +779,8 @@ export function OnlineOrdersPage() {
       )}
 
       <ToastList toasts={toasts} />
+      </div>
+      </div>
     </div>
   );
 }

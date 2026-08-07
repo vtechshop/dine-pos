@@ -326,11 +326,14 @@ export function KitchenPage() {
 
   const handleAction = useCallback(async (orderId: string, newStatus: string) => {
     setActing(true);
+    setError(null);
     try {
       await updateOrderStatus(orderId, newStatus);
       void load();
     } catch (e) {
+      void load();
       setError(e instanceof Error ? e.message : 'Failed to update order status');
+      setTimeout(() => setError(null), 5000);
     } finally {
       setActing(false);
     }
@@ -338,12 +341,15 @@ export function KitchenPage() {
 
   const handleAccept = useCallback(async (orderId: string, platformOrderId: string, _source: string) => {
     setActing(true);
+    setError(null);
     try {
       await acceptDeliveryOrder(orderId);
       await updateOrderStatus(orderId, 'preparing');
       void load();
     } catch (e) {
+      void load();
       setError(e instanceof Error ? e.message : 'Failed to accept order');
+      setTimeout(() => setError(null), 5000);
     } finally {
       setActing(false);
     }
@@ -351,11 +357,14 @@ export function KitchenPage() {
 
   const handleReject = useCallback(async (orderId: string, _platformOrderId: string, _source: string, reason: string) => {
     setActing(true);
+    setError(null);
     try {
       await rejectDeliveryOrder(orderId, reason);
       void load();
     } catch (e) {
+      void load();
       setError(e instanceof Error ? e.message : 'Failed to reject order');
+      setTimeout(() => setError(null), 5000);
     } finally {
       setActing(false);
     }
@@ -363,12 +372,15 @@ export function KitchenPage() {
 
   const handleDispatch = useCallback(async (orderId: string, _platformOrderId: string, _source: string) => {
     setActing(true);
+    setError(null);
     try {
       await dispatchDeliveryOrder(orderId);
       await updateOrderStatus(orderId, 'served');
       void load();
     } catch (e) {
+      void load();
       setError(e instanceof Error ? e.message : 'Failed to dispatch order');
+      setTimeout(() => setError(null), 5000);
     } finally {
       setActing(false);
     }

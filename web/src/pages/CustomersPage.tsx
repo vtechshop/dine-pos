@@ -404,7 +404,7 @@ export function CustomersPage() {
           ) : (
             <div className="grid gap-6 lg:grid-cols-2">
               {/* Top Customers */}
-              <div className="overflow-hidden rounded-xl border border-border bg-canvas">
+              <div className="overflow-x-auto rounded-xl border border-border bg-canvas">
                 <div className="flex items-center gap-2 border-b border-border px-5 py-3">
                   <Award size={14} className="text-brand" />
                   <h3 className="text-sm font-semibold text-ink">
@@ -447,7 +447,7 @@ export function CustomersPage() {
               </div>
 
               {/* Repeat Customers */}
-              <div className="overflow-hidden rounded-xl border border-border bg-canvas">
+              <div className="overflow-x-auto rounded-xl border border-border bg-canvas">
                 <div className="flex items-center gap-2 border-b border-border px-5 py-3">
                   <TrendingUp size={14} className="text-brand" />
                   <h3 className="text-sm font-semibold text-ink">Most Frequent Visitors</h3>

@@ -339,7 +339,9 @@ export function MenuSyncPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-6">
+      <div className="mx-auto max-w-4xl space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -411,6 +413,8 @@ export function MenuSyncPage() {
       )}
 
       <ToastList toasts={toasts} />
+      </div>
+      </div>
     </div>
   );
 }

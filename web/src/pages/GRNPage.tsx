@@ -754,7 +754,7 @@ export function GRNPage() {
                   <p className="text-sm text-ink/40">No GRNs found</p>
                 </div>
               ) : (
-                <div className="rounded-xl border border-border bg-canvas overflow-hidden">
+                <div className="rounded-xl border border-border bg-canvas overflow-x-auto">
                   <table className="w-full border-collapse text-sm">
                     <thead>
                       <tr className="bg-mist">

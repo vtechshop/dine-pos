@@ -565,8 +565,8 @@ export function VendorLedgerPage() {
                 <p className="text-sm font-medium text-ink/60">All clear! No outstanding dues</p>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto">
-                <table className="w-full text-xs">
+              <div className="flex-1 overflow-x-auto overflow-y-auto">
+                <table className="w-full text-xs min-w-[480px]">
                   <thead className="sticky top-0 border-b border-border bg-canvas">
                     <tr className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">
                       <th className="px-5 py-2.5 text-left">Vendor</th>
