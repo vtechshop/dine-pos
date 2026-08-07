@@ -98,6 +98,13 @@ function AdminOnly({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Redirect cashier away from admin/kitchen pages to their own POS interface
+function CashierRedirect({ children }: { children: React.ReactNode }) {
+  const { role } = useAuth();
+  if (role === 'cashier') return <Navigate to="/cashier" replace />;
+  return <>{children}</>;
+}
+
 export function App() {
   return (
     <ErrorBoundary>
@@ -162,9 +169,9 @@ export function App() {
 
                   <Route element={<AppLayout />}>
                     <Route index element={<Navigate to="/dashboard" replace />} />
-                    <Route path="/dashboard"   element={<DashboardPage />} />
-                    <Route path="/tables"      element={<TablesPage />} />
-                    <Route path="/kitchen"     element={<KitchenPage />} />
+                    <Route path="/dashboard"   element={<CashierRedirect><DashboardPage /></CashierRedirect>} />
+                    <Route path="/tables"      element={<CashierRedirect><TablesPage /></CashierRedirect>} />
+                    <Route path="/kitchen"     element={<CashierRedirect><KitchenPage /></CashierRedirect>} />
                     <Route path="/cashier"     element={<CashierPage />} />
                     <Route path="/orders"      element={<AdminOnly><Suspense fallback={<PageFallback />}><OrdersPage /></Suspense></AdminOnly>} />
                     <Route path="/customers"   element={<AdminOnly><Suspense fallback={<PageFallback />}><CustomersPage /></Suspense></AdminOnly>} />

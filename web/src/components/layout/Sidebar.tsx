@@ -108,8 +108,9 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-// Routes visible only to the admin role
+// Routes visible only to the admin role (cashier sees none of these)
 const ADMIN_ONLY_ROUTES = new Set([
+  '/dashboard', '/tables', '/kitchen',
   '/orders', '/customers', '/products', '/modifiers', '/vendors', '/purchase-orders', '/grn',
   '/vendor-ledger', '/coupons', '/gift-vouchers', '/audit-logs',
   '/inventory', '/inventory-intelligence', '/payments',
