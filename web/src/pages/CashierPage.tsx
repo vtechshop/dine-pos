@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plus, CreditCard, PauseCircle, BarChart2,
-  Wallet, Search, Users, Printer, Bell, LogOut,
+  Wallet, Bell, LogOut,
   TrendingUp, ShoppingBag, AlertCircle, RefreshCw,
-  Home, LayoutGrid, Flame, UserCircle, X, Monitor, Shield, Truck,
+  X, Monitor,
 } from 'lucide-react';
 import { useShortcut } from '../hooks/useShortcut';
 import { useCashier, calcCartTotals, type CashierTab } from '../context/CashierContext';
@@ -54,32 +53,6 @@ function getCashierIdentity() {
     code: (payload.employeeCode as string | undefined) ?? '',
   };
 }
-
-// ── Tab config ────────────────────────────────────────────────────────────────
-
-interface TabDef {
-  key: CashierTab;
-  icon: React.ReactNode;
-  label: string;
-  shortcut?: string;
-}
-
-const TABS: TabDef[] = [
-  { key: 'dashboard',  icon: <Home size={15} />,          label: 'Dashboard',   shortcut: '' },
-  { key: 'new-order',  icon: <Plus size={15} />,          label: 'New Order',   shortcut: 'Ctrl+N' },
-  { key: 'pending',    icon: <CreditCard size={15} />,    label: 'Pending',     shortcut: 'F6' },
-  { key: 'hold',       icon: <PauseCircle size={15} />,   label: 'Hold',        shortcut: '' },
-  { key: 'tables',     icon: <LayoutGrid size={15} />,    label: 'Tables',      shortcut: 'Ctrl+T' },
-  { key: 'kitchen',       icon: <Flame size={15} />,  label: 'Kitchen',       shortcut: 'Ctrl+K' },
-  { key: 'online-orders', icon: <Truck size={15} />,  label: 'Online Orders', shortcut: 'Ctrl+O' },
-  { key: 'search',        icon: <Search size={15} />, label: 'Bill Search',   shortcut: 'Ctrl+F' },
-  { key: 'customers',  icon: <Users size={15} />,         label: 'Customers',   shortcut: 'F4' },
-  { key: 'shift',      icon: <BarChart2 size={15} />,     label: 'Shift',       shortcut: '' },
-  { key: 'drawer',     icon: <Wallet size={15} />,        label: 'Drawer',      shortcut: 'Ctrl+D' },
-  { key: 'printers',   icon: <Printer size={15} />,       label: 'Printers',    shortcut: '' },
-  { key: 'profile',      icon: <UserCircle size={15} />,  label: 'Profile',      shortcut: '' },
-  { key: 'permissions',  icon: <Shield size={15} />,      label: 'Permissions',  shortcut: '' },
-];
 
 // ── Header KPI strip ──────────────────────────────────────────────────────────
 
@@ -446,38 +419,6 @@ export function CashierPage() {
           onRetrySync={() => void syncQueue()}
           syncing={syncing}
         />
-      </div>
-
-      {/* ── Tab bar ────────────────────────────────────────────────────────── */}
-      <div className="shrink-0 overflow-x-auto border-b border-border bg-canvas px-2">
-        <div className="flex gap-0.5 py-1.5">
-          {TABS.map(tab => {
-            const badge = tab.key === 'hold' && heldBills.length > 0 ? heldBills.length : 0;
-            const active = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`relative flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                  active
-                    ? 'bg-brand text-white'
-                    : 'text-ink/60 hover:bg-mist hover:text-ink'
-                }`}
-              >
-                {tab.icon}
-                <span className="hidden sm:inline">{tab.label}</span>
-                {badge > 0 && (
-                  <span className={`absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold ${
-                    active ? 'bg-white text-brand' : 'bg-amber-400 text-white'
-                  }`}>
-                    {badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       {/* ── Panel content ───────────────────────────────────────────────────── */}
