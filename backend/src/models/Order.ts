@@ -75,6 +75,7 @@ export interface IOrder extends Document {
   rejectedAt:          Date | null;
   rejectionReason:     string;
   deliveryPartnerName: string;
+  ingredientDeltas?: Map<string, number>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -227,6 +228,12 @@ const OrderSchema: Schema = new Schema(
     rejectedAt:          { type: Date,   default: null },
     rejectionReason:     { type: String, default: '' },
     deliveryPartnerName: { type: String, default: '' },
+
+    // ── Stock deduction audit (P1-9: asymmetric clamp fix) ───────────────────
+    // Records the ACTUAL quantity deducted per ingredient (may be less than
+    // recipe demand if stock was insufficient). Used on cancellation to restore
+    // exactly what was taken rather than the full recipe amount.
+    ingredientDeltas: { type: Map, of: Number },
   },
   { timestamps: true }
 );

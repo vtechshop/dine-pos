@@ -30,6 +30,7 @@ export interface IPayment extends Document {
   settlementId:          string;
   failureReason:         string;
   initiatedBy:           string;   // userId | 'webhook' | 'system'
+  refundInProgress:      boolean;  // advisory lock: true while a refund gateway call is in flight
   createdAt:             Date;
   updatedAt:             Date;
 }
@@ -67,6 +68,7 @@ const schema = new Schema<IPayment>(
     settlementId:          { type: String, default: '' },
     failureReason:         { type: String, default: '' },
     initiatedBy:           { type: String, default: '' },
+    refundInProgress:      { type: Boolean, default: false },
   },
   { timestamps: true },
 );

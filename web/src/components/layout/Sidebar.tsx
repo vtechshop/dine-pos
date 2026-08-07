@@ -29,6 +29,9 @@ import {
   Bell,
   Lightbulb,
   ScanLine,
+  Tag,
+  Gift,
+  Shield,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -62,10 +65,13 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/purchase-orders', icon: ShoppingBag,   label: 'Purchase Orders' },
       { to: '/grn',             icon: ClipboardList, label: 'Receive Goods' },
       { to: '/vendor-ledger',   icon: Wallet,        label: 'Vendor Ledger' },
+      { to: '/coupons',         icon: Tag,           label: 'Coupons' },
+      { to: '/gift-vouchers',   icon: Gift,          label: 'Gift Vouchers' },
       { to: '/inventory',              icon: Archive,     label: 'Inventory' },
       { to: '/inventory-intelligence', icon: TrendingUp,  label: 'Stock Intel' },
       { to: '/payments',               icon: CreditCard,  label: 'Payments' },
       { to: '/reports',                icon: BarChart2,   label: 'Reports' },
+      { to: '/audit-logs',   icon: Shield,          label: 'Audit Logs' },
       { to: '/settings',     icon: Settings,        label: 'Settings' },
       { to: '/reservations', icon: CalendarDays,    label: 'Reservations' },
       { to: '/kitchen',      icon: ChefHat,         label: 'Kitchen' },
@@ -105,7 +111,8 @@ const NAV_GROUPS: NavGroup[] = [
 // Routes visible only to the admin role
 const ADMIN_ONLY_ROUTES = new Set([
   '/orders', '/customers', '/products', '/modifiers', '/vendors', '/purchase-orders', '/grn',
-  '/vendor-ledger', '/inventory', '/inventory-intelligence', '/payments',
+  '/vendor-ledger', '/coupons', '/gift-vouchers', '/audit-logs',
+  '/inventory', '/inventory-intelligence', '/payments',
   '/reports', '/settings', '/reservations',
   '/online-orders', '/integrations', '/menu-sync',
   '/ai-menu-import',

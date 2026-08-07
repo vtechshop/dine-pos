@@ -69,6 +69,9 @@ const VendorsPage           = lazy(() => import('./pages/VendorsPage').then(m =>
 const PurchaseOrdersPage    = lazy(() => import('./pages/PurchaseOrdersPage').then(m => ({ default: m.PurchaseOrdersPage })));
 const GRNPage               = lazy(() => import('./pages/GRNPage').then(m => ({ default: m.GRNPage })));
 const VendorLedgerPage      = lazy(() => import('./pages/VendorLedgerPage').then(m => ({ default: m.VendorLedgerPage })));
+const CouponsPage           = lazy(() => import('./pages/CouponsPage').then(m => ({ default: m.CouponsPage })));
+const GiftVouchersPage      = lazy(() => import('./pages/GiftVouchersPage').then(m => ({ default: m.GiftVouchersPage })));
+const AuditLogsPage         = lazy(() => import('./pages/AuditLogsPage').then(m => ({ default: m.AuditLogsPage })));
 const AIMenuImportPage      = lazy(() => import('./pages/AIMenuImportPage').then(m => ({ default: m.AIMenuImportPage })));
 // AI Platform pages — admin only, code-split
 const AIDashboardPage       = lazy(() => import('./pages/ai/AIDashboardPage').then(m => ({ default: m.AIDashboardPage })));
@@ -180,6 +183,9 @@ export function App() {
                     <Route path="/purchase-orders" element={<AdminOnly><Suspense fallback={<PageFallback />}><PurchaseOrdersPage /></Suspense></AdminOnly>} />
                     <Route path="/grn"             element={<AdminOnly><Suspense fallback={<PageFallback />}><GRNPage /></Suspense></AdminOnly>} />
                     <Route path="/vendor-ledger"   element={<AdminOnly><Suspense fallback={<PageFallback />}><VendorLedgerPage /></Suspense></AdminOnly>} />
+                    <Route path="/coupons"         element={<AdminOnly><Suspense fallback={<PageFallback />}><CouponsPage /></Suspense></AdminOnly>} />
+                    <Route path="/gift-vouchers"   element={<AdminOnly><Suspense fallback={<PageFallback />}><GiftVouchersPage /></Suspense></AdminOnly>} />
+                    <Route path="/audit-logs"      element={<AdminOnly><Suspense fallback={<PageFallback />}><AuditLogsPage /></Suspense></AdminOnly>} />
                     <Route path="/ai-menu-import"  element={<AdminOnly><Suspense fallback={<PageFallback />}><AIMenuImportPage /></Suspense></AdminOnly>} />
                     <Route path="/ai"              element={<AdminOnly><Suspense fallback={<PageFallback />}><AIDashboardPage /></Suspense></AdminOnly>} />
                     <Route path="/ai/brief"        element={<AdminOnly><Suspense fallback={<PageFallback />}><MorningBriefPage /></Suspense></AdminOnly>} />
@@ -190,7 +196,7 @@ export function App() {
                     <Route path="/ai/recommendations" element={<AdminOnly><Suspense fallback={<PageFallback />}><RecommendationsPage /></Suspense></AdminOnly>} />
                     <Route path="/ai/purchase"     element={<AdminOnly><Suspense fallback={<PageFallback />}><PurchaseAssistantPage /></Suspense></AdminOnly>} />
 
-                    <Route path="/waiter"  element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/waiter"   element={<Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Route>
                 </Routes>

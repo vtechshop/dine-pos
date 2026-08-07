@@ -61,6 +61,10 @@ import vendorPaymentRoutes from './routes/vendorPaymentRoutes';
 import vendorLedgerRoutes from './routes/vendorLedgerRoutes';
 import financeRoutes from './routes/financeRoutes';
 import inventoryIntelligenceRoutes from './routes/inventoryIntelligenceRoutes';
+import couponRoutes from './routes/couponRoutes';
+import giftVoucherRoutes from './routes/giftVoucherRoutes';
+import walletRoutes from './routes/walletRoutes';
+import purchaseInvoiceRoutes from './routes/purchaseInvoiceRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import paymentGatewayConfigRoutes from './routes/paymentGatewayConfigRoutes';
 import paymentWebhookRoutes from './routes/paymentWebhookRoutes';
@@ -358,6 +362,10 @@ app.use('/api/vendor-payments',   vendorPaymentRoutes);
 app.use('/api/vendor-ledger',     vendorLedgerRoutes);
 app.use('/api/finance',                    financeRoutes);
 app.use('/api/inventory-intelligence',     inventoryIntelligenceRoutes);
+app.use('/api/coupons',           couponRoutes);
+app.use('/api/gift-vouchers',     giftVoucherRoutes);
+app.use('/api/wallet',            walletRoutes);
+app.use('/api/purchase-invoices', purchaseInvoiceRoutes);
 app.use('/api/payments',                   paymentRoutes);
 app.use('/api/payment-gateway-configs',    paymentGatewayConfigRoutes);
 app.use('/api/payment-webhooks',           paymentWebhookRoutes);
@@ -446,8 +454,15 @@ const escHtml = (s: unknown): string =>
 // Public bill view (customer scans QR to see their bill)
 app.get('/bill/:orderId', async (_req, res) => {
   try {
+    // P0-6: Validate ObjectId format before DB query to prevent 500 on malformed IDs
+    if (!mongoose.isValidObjectId(_req.params.orderId)) {
+      return res.status(404).send('<h2>Bill not found</h2>');
+    }
     const Order = (await import('./models/Order')).default;
-    const order = await Order.findById(_req.params.orderId).lean();
+    // Select only the fields needed for the public bill — no PII beyond customer name
+    const order = await Order.findById(_req.params.orderId)
+      .select('orderNumber items subtotal taxTotal grandTotal discountAmount tableNumber customerName createdAt status')
+      .lean();
     if (!order) return res.status(404).send('<h2>Bill not found</h2>');
     const cur = '₹';
     const rows = (order.items as any[]).map((i: any) =>
@@ -662,6 +677,13 @@ io.on('connection', (socket) => {
       socket.join(`hotel_${hotelId}`);
       socket.join(`admin_${hotelId}`);
     } else {
+      // P0-3: Validate hotelId is a real ObjectId before allowing anonymous room join
+      if (!mongoose.isValidObjectId(hotelId)) {
+        logger.warn('[SOCKET] join_hotel REJECTED — invalid hotelId format (unauthenticated)', { socketId: socket.id });
+        socket.emit('error', 'Invalid hotel ID');
+        return;
+      }
+      // Unauthenticated: customer QR flow — join public hotel room only, never admin room
       socket.data.hotelId = hotelId;
       socket.join(`hotel_${hotelId}`);
     }

@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL } from '../utils/constants';
-import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport, GSTR1Json, RemoteConfig, Device, AppNotification, FeatureFlags, LoyaltyConfig, LoyaltyCustomer, LoyaltyTransaction, AggregatorIntegration, AggregatorSyncStatus, WebhookLog, ExecutiveDashboard, MorningBrief, BriefHistoryResponse, AIDailyReport, SalesForecast, InventoryForecast, AIAlertResult, AIRecommendationSet, AIStaffAnalyticsReport, AIKitchenAnalyticsReport, AIChatResponse, AIChatHistoryResponse, OcrJobsResponse, OcrReviewScreen } from '../types';
+import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport, GSTR1Json, RemoteConfig, Device, AppNotification, FeatureFlags, LoyaltyConfig, LoyaltyCustomer, LoyaltyTransaction, AggregatorIntegration, AggregatorSyncStatus, WebhookLog, ExecutiveDashboard, MorningBrief, BriefHistoryResponse, AIDailyReport, SalesForecast, InventoryForecast, AIAlertResult, AIRecommendationSet, AIStaffAnalyticsReport, AIKitchenAnalyticsReport, AIChatResponse, AIChatHistoryResponse, OcrJobsResponse, OcrReviewScreen, Coupon, CouponValidation, GiftVoucher, WalletTransaction } from '../types';
 import { navigateGlobal } from '../utils/navigationRef';
 import { emitSessionExpired } from '../utils/authEvents';
 
@@ -1045,11 +1045,70 @@ export const getLoyaltyCustomers = (params?: { phone?: string; name?: string; pa
 export const getLoyaltyCustomerTransactions = (id: string, page = 1): Promise<{ customer: Pick<LoyaltyCustomer, 'customerId' | 'name' | 'phone' | 'loyaltyBalance'>; transactions: LoyaltyTransaction[]; total: number }> =>
   fetchAPI(`/loyalty/customers/${id}/transactions?page=${page}&limit=20`);
 
-export const createLoyaltyCustomer = (data: { name: string; phone: string; email?: string; birthday?: string }): Promise<{ customer: LoyaltyCustomer }> =>
+export const createLoyaltyCustomer = (data: {
+  name: string; phone: string; email?: string; birthday?: string;
+  anniversary?: string; gstCustomer?: boolean; companyName?: string; gstin?: string;
+  tags?: string[]; notes?: string; marketingOptIn?: boolean;
+}): Promise<{ customer: LoyaltyCustomer }> =>
   fetchAPI('/loyalty/customers', { method: 'POST', body: JSON.stringify(data) });
+
+export const updateLoyaltyCustomer = (id: string, data: Partial<LoyaltyCustomer>): Promise<{ customer: LoyaltyCustomer }> =>
+  fetchAPI(`/loyalty/customers/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 
 export const adjustLoyaltyPoints = (id: string, points: number, remarks: string): Promise<{ newBalance: number; customerId: string; customer: LoyaltyCustomer }> =>
   fetchAPI(`/loyalty/customers/${id}/adjust`, { method: 'POST', body: JSON.stringify({ points, remarks }) });
+
+// ==================== COUPONS ====================
+
+export const getCoupons = (params?: { page?: number; active?: boolean }): Promise<{ coupons: Coupon[]; total: number }> => {
+  const q = params ? '?' + new URLSearchParams(Object.fromEntries(Object.entries(params).map(([k,v]) => [k, String(v)]))) : '';
+  return fetchAPI(`/coupons${q}`);
+};
+
+export const createCoupon = (data: Partial<Coupon>): Promise<{ coupon: Coupon }> =>
+  fetchAPI('/coupons', { method: 'POST', body: JSON.stringify(data) });
+
+export const validateCoupon = (code: string, orderTotal: number, customerId?: string): Promise<CouponValidation> =>
+  fetchAPI('/coupons/validate', { method: 'POST', body: JSON.stringify({ code, orderTotal, customerId }) });
+
+export const deactivateCoupon = (id: string): Promise<{ success: boolean }> =>
+  fetchAPI(`/coupons/${id}`, { method: 'DELETE', body: JSON.stringify({}) });
+
+// ==================== GIFT VOUCHERS ====================
+
+export const getGiftVouchers = (params?: { page?: number; active?: boolean }): Promise<{ vouchers: GiftVoucher[]; total: number }> => {
+  const q = params ? '?' + new URLSearchParams(Object.fromEntries(Object.entries(params).map(([k,v]) => [k, String(v)]))) : '';
+  return fetchAPI(`/gift-vouchers${q}`);
+};
+
+export const issueGiftVoucher = (data: { amount: number; issuedToName?: string; issuedToPhone?: string; issuedToCustomerId?: string; expiresAt?: string }): Promise<{ voucher: GiftVoucher }> =>
+  fetchAPI('/gift-vouchers', { method: 'POST', body: JSON.stringify(data) });
+
+export const checkGiftVoucher = (code: string): Promise<{ valid: boolean; voucher?: GiftVoucher; message?: string }> =>
+  fetchAPI(`/gift-vouchers/${encodeURIComponent(code)}/check`);
+
+export const redeemGiftVoucher = (code: string, amount: number, orderId?: string): Promise<{ success: boolean; redeemedAmount: number; newBalance: number }> =>
+  fetchAPI('/gift-vouchers/redeem', { method: 'POST', body: JSON.stringify({ code, amount, orderId }) });
+
+export const topupGiftVoucher = (code: string, amount: number): Promise<{ success: boolean; newBalance: number }> =>
+  fetchAPI('/gift-vouchers/topup', { method: 'POST', body: JSON.stringify({ code, amount }) });
+
+export const applyCoupon = (couponId: string): Promise<{ success: boolean; usageCount: number }> =>
+  fetchAPI(`/coupons/${couponId}/apply`, { method: 'POST', body: JSON.stringify({}) });
+
+// ==================== WALLET ====================
+
+export const getWalletBalance = (customerId: string): Promise<{ walletBalance: number; customerId: string; name: string }> =>
+  fetchAPI(`/wallet/customers/${customerId}/balance`);
+
+export const topupWallet = (customerId: string, amount: number, paymentRef?: string, remarks?: string): Promise<{ success: boolean; walletBalance: number }> =>
+  fetchAPI(`/wallet/customers/${customerId}/topup`, { method: 'POST', body: JSON.stringify({ amount, paymentRef, remarks }) });
+
+export const deductWallet = (customerId: string, amount: number, orderId?: string): Promise<{ success: boolean; walletBalance: number; deducted: number }> =>
+  fetchAPI(`/wallet/customers/${customerId}/deduct`, { method: 'POST', body: JSON.stringify({ amount, orderId }) });
+
+export const getWalletHistory = (customerId: string, page = 1): Promise<{ walletBalance: number; transactions: WalletTransaction[]; total: number }> =>
+  fetchAPI(`/wallet/customers/${customerId}/history?page=${page}&limit=20`);
 
 // ==================== EXPENSES ====================
 
@@ -2068,6 +2127,48 @@ export const getPurchaseIntelligence = (params?: { from?: string; to?: string })
     vendorContribution: { _id: string; vendorName: string; vendorCode: string; totalSpend: number; grnCount: number; pct: number }[];
     monthlySpend:       { _id: string; totalSpend: number; grnCount: number }[];
   }>(`/inventory-intelligence/purchase-intelligence${poQS(params as Record<string, string | undefined>)}`);
+
+export const getReorderSuggestions = () =>
+  fetchAPI<{
+    suggestions: {
+      ingredientId: string; name: string; unit: string;
+      currentStock: number; lowStockThreshold: number;
+      avgDailyConsumption: number; daysOfStock: number;
+      suggestedQty: number; estimatedCost: number;
+      urgency: 'critical' | 'warning' | 'normal';
+    }[];
+    summary: { totalItems: number; criticalItems: number; estimatedTotal: number };
+  }>('/inventory-intelligence/reorder-suggestions');
+
+export const getExpiryAlerts = (days = 30) =>
+  fetchAPI<{
+    items: {
+      grnId: string; grnNumber: string; ingredientId: string; ingredientName: string;
+      batchNumber: string; expiryDate: string; daysUntilExpiry: number;
+      quantity: number; unit: string; value: number;
+      severity: 'critical' | 'warning' | 'notice';
+    }[];
+    summary: { total: number; critical: number; warning: number; notice: number; totalValue: number };
+  }>(`/inventory-intelligence/expiry-alerts?days=${days}`);
+
+// ── Purchase Invoices ─────────────────────────────────────────────────────────
+
+export const getPurchaseInvoices = (params?: { page?: number; status?: string; vendorId?: string; from?: string; to?: string }) =>
+  fetchAPI<{ invoices: Record<string, any>[]; total: number }>(
+    `/purchase-invoices${poQS(params as Record<string, string | number | undefined>)}`
+  );
+
+export const createPurchaseInvoice = (data: Record<string, any>) =>
+  fetchAPI<{ invoice: Record<string, any> }>('/purchase-invoices', { method: 'POST', body: JSON.stringify(data) });
+
+export const getPurchaseInvoice = (id: string) =>
+  fetchAPI<Record<string, any>>(`/purchase-invoices/${id}`);
+
+export const verifyPurchaseInvoice = (id: string) =>
+  fetchAPI<{ invoice: Record<string, any> }>(`/purchase-invoices/${id}/verify`, { method: 'POST', body: JSON.stringify({}) });
+
+export const markPurchaseInvoicePaid = (id: string, paymentRef: string) =>
+  fetchAPI<{ invoice: Record<string, any> }>(`/purchase-invoices/${id}/mark-paid`, { method: 'POST', body: JSON.stringify({ paymentRef }) });
 
 // ── Payment Gateway & Transactions ───────────────────────────────────────────
 

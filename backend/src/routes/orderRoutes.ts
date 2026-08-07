@@ -624,11 +624,14 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     const txSession = await mongoose.startSession();
     try {
       await txSession.withTransaction(async () => {
+        // Ingredient deduction runs first so we capture actual clamped deltas
+        // and persist them on the order for use during cancellation restoration.
+        const ingredientDeltas = await applyIngredientStockChange(order.items, req.hotelId!, -1, txSession);
+        if (ingredientDeltas.size > 0) order.ingredientDeltas = ingredientDeltas;
         await order.save({ session: txSession });
         if (stockItems.length > 0) {
           await Product.bulkWrite(stockBulkOps as any, { session: txSession });
         }
-        await applyIngredientStockChange(order.items, req.hotelId!, -1, txSession);
       });
     } finally {
       await txSession.endSession();
@@ -763,7 +766,8 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         try {
           await cancelTx.withTransaction(async () => {
             if (bulkOps.length > 0) await Product.bulkWrite(bulkOps as any, { session: cancelTx });
-            await applyIngredientStockChange(existing.items, req.hotelId!, 1, cancelTx);
+            // Pass stored deltas so we restore exactly what was deducted (not full recipe qty)
+            await applyIngredientStockChange(existing.items, req.hotelId!, 1, cancelTx, existing.ingredientDeltas as Map<string, number> | undefined);
           });
         } finally {
           await cancelTx.endSession();

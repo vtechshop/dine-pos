@@ -146,7 +146,7 @@ export interface Order {
     transactionId?: string;
   }>;
   status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
-  orderSource?: 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr';
+  orderSource?: 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr' | 'kiosk';
   isParcel: boolean;
   customerName: string;
   customerPhone: string;
@@ -279,16 +279,89 @@ export interface LoyaltyConfig {
   calculationBase: 'before_gst' | 'after_gst';
 }
 
+export interface DeliveryAddress {
+  _id?: string;
+  label: string;
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  pincode: string;
+  isDefault: boolean;
+}
+
 export interface LoyaltyCustomer {
   _id: string;
   customerId: string;
   name: string;
   phone: string;
+  email?: string | null;
+  birthday?: string | null;      // "MM-DD"
+  anniversary?: string | null;   // "MM-DD"
+  gstCustomer?: boolean;
+  companyName?: string;
+  gstin?: string;
+  deliveryAddresses?: DeliveryAddress[];
+  tags?: string[];
+  notes?: string;
+  marketingOptIn?: boolean;
   loyaltyBalance: number;
+  walletBalance?: number;
   lifetimeSpend: number;
   visitCount: number;
   lastVisitAt: string;
   status: 'active' | 'merged' | 'blocked';
+}
+
+export interface Coupon {
+  _id: string;
+  code: string;
+  description: string;
+  type: 'percent' | 'flat';
+  value: number;
+  minOrderValue: number;
+  maxDiscount: number;
+  validFrom: string;
+  validUntil: string | null;
+  usageLimit: number;
+  perCustomerLimit: number;
+  usageCount: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CouponValidation {
+  valid: boolean;
+  couponId?: string;
+  code?: string;
+  description?: string;
+  type?: 'percent' | 'flat';
+  value?: number;
+  discountAmount?: number;
+  finalAmount?: number;
+  message?: string;
+}
+
+export interface GiftVoucher {
+  _id: string;
+  voucherCode: string;
+  originalAmount: number;
+  balance: number;
+  issuedToName: string;
+  issuedToPhone: string;
+  expiresAt: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface WalletTransaction {
+  _id: string;
+  type: 'credit' | 'debit';
+  source: 'topup' | 'redemption' | 'refund' | 'adjustment' | 'expiry';
+  amount: number;
+  balanceAfter: number;
+  remarks: string;
+  createdAt: string;
 }
 
 export interface LoyaltyTransaction {
@@ -850,7 +923,15 @@ export type RootStackParamList = {
     orderId?: string;
     orderNumber?: string;
     grandTotal: number;
+    promos?: {
+      couponId?: string;
+      giftVoucherCode?: string;
+      giftVoucherAmount?: number;
+      walletCustomerId?: string;
+      walletAmount?: number;
+    };
   };
+  PurchaseInvoices: undefined;
   AIHome: undefined;
   MorningBrief: undefined;
   AIReports: undefined;
@@ -862,6 +943,8 @@ export type RootStackParamList = {
   PurchaseAssistant: undefined;
   AIMenuImport: undefined;
   BulkImageAssign: undefined;
+  Coupons: undefined;
+  GiftVouchers: undefined;
 };
 
 export type TabParamList = {

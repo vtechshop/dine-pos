@@ -174,7 +174,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
     // Process items, accumulate PO receivedQty
     const processedItems: Array<Record<string, unknown>> = [];
-    const inventoryOps: Array<() => Promise<unknown>> = [];
+    const inventoryOps: Array<{ ingredientId: mongoose.Types.ObjectId; acceptedQty: number }> = [];
 
     for (const raw of items) {
       const receivedQty  = Math.max(0, Number(raw.receivedQty) || 0);
@@ -218,9 +218,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       if (acceptedQty > 0) {
         if (raw.ingredientId) {
           const iId = new mongoose.Types.ObjectId(String(raw.ingredientId));
-          inventoryOps.push(() =>
-            Ingredient.updateOne({ _id: iId, hotelId: req.hotelId }, { $inc: { currentStock: acceptedQty } }),
-          );
+          inventoryOps.push({ ingredientId: iId, acceptedQty });
         }
         // Product.stock update omitted — product stock is managed through Ingredient recipes
         // in this system; PO items use productId only as a reference, not a finished-goods counter
@@ -235,86 +233,109 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const anyReceived = po.items.some(pi => (pi.receivedQty || 0) > 0);
     if (allReceived)       po.status = 'received';
     else if (anyReceived)  po.status = 'partially_received';
-    await po.save();
-
-    // Create GRN
-    const grn = await GRN.create({
-      hotelId:       req.hotelId,
-      grnNumber,
-      poId:          po._id,
-      poNumber:      po.poNumber,
-      vendorId:      po.vendorId,
-      vendorSnapshot: po.vendorSnapshot,
-      receiveDate:   receiveDate ? new Date(String(receiveDate)) : new Date(),
-      status:        allReceived ? 'completed' : 'partial',
-      items:         processedItems,
-      notes:         String(notes || ''),
-      receivedBy:    String(req.cashierId || req.waiterId || ''),
-      cancelReason:  '',
-      isDeleted:     false,
-    });
-
-    // Fire inventory updates in parallel
-    await Promise.all(inventoryOps.map(fn => fn()));
-
-    // WAC (weighted average cost) update: recalculate costPerUnit for each received ingredient
-    const wacOps = processedItems
-      .filter(item => item.ingredientId && (item.purchasePrice as number) > 0)
-      .map(async (item) => {
-        const accepted = Math.max(0,
-          (item.receivedQty  as number) -
-          (item.damagedQty   as number) -
-          (item.rejectedQty  as number),
-        );
-        if (accepted <= 0) return;
-        const iId = item.ingredientId as mongoose.Types.ObjectId;
-        const ing = await Ingredient.findOne({ _id: iId, hotelId: req.hotelId }).select('costPerUnit currentStock');
-        if (!ing || ing.currentStock <= 0) return;
-        const prevStock = Math.max(0, ing.currentStock - accepted);
-        const newCost   = (prevStock * ing.costPerUnit + accepted * (item.purchasePrice as number)) / ing.currentStock;
-        if (!isNaN(newCost) && newCost > 0) {
-          await Ingredient.updateOne(
-            { _id: iId, hotelId: req.hotelId },
-            { $set: { costPerUnit: +newCost.toFixed(4) } },
-          );
-        }
-      });
-    await Promise.all(wacOps);
-
-    // Vendor ledger: GRN increases outstanding (accepted qty × purchase price)
+    // grnValue is pure arithmetic — calculated before entering the transaction
     const grnValue = processedItems.reduce((sum, item) => {
       const accepted = Math.max(0, (item.receivedQty as number) - (item.rejectedQty as number));
       return sum + accepted * ((item.purchasePrice as number) || 0);
     }, 0);
 
-    if (grnValue > 0) {
-      const updatedVendor = await Vendor.findByIdAndUpdate(
-        grn.vendorId,
-        { $inc: { currentOutstanding: grnValue } },
-        { new: true },
-      );
-      await VendorLedgerEntry.create({
-        hotelId:         req.hotelId,
-        vendorId:        grn.vendorId,
-        entryType:       'grn',
-        referenceId:     grn._id,
-        referenceNumber: grnNumber,
-        debit:           grnValue,
-        credit:          0,
-        runningBalance:  updatedVendor?.currentOutstanding ?? grnValue,
-        description:     `GRN ${grnNumber} received from ${po.vendorSnapshot.businessName}`,
+    // ── Atomic transaction: PO → GRN → stock → WAC → vendor ledger ───────────
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      // 1. Persist PO receivedQty and status changes
+      await po.save({ session });
+
+      // 2. Create the GRN document
+      const [grn] = await GRN.create([{
+        hotelId:        req.hotelId,
+        grnNumber,
+        poId:           po._id,
+        poNumber:       po.poNumber,
+        vendorId:       po.vendorId,
+        vendorSnapshot: po.vendorSnapshot,
+        receiveDate:    receiveDate ? new Date(String(receiveDate)) : new Date(),
+        status:         allReceived ? 'completed' : 'partial',
+        items:          processedItems,
+        notes:          String(notes || ''),
+        receivedBy:     String(req.cashierId || req.waiterId || ''),
+        cancelReason:   '',
+        isDeleted:      false,
+      }], { session });
+
+      // 3. Ingredient stock increments
+      if (inventoryOps.length > 0) {
+        await Ingredient.bulkWrite(
+          inventoryOps.map(({ ingredientId, acceptedQty }) => ({
+            updateOne: {
+              filter: { _id: ingredientId, hotelId: req.hotelId },
+              update: { $inc: { currentStock: acceptedQty } },
+            },
+          })),
+          { session },
+        );
+      }
+
+      // 4. WAC — reads post-increment stock via session so values are consistent
+      for (const item of processedItems) {
+        if (!item.ingredientId || !((item.purchasePrice as number) > 0)) continue;
+        const accepted = Math.max(0,
+          (item.receivedQty as number) - (item.damagedQty as number) - (item.rejectedQty as number),
+        );
+        if (accepted <= 0) continue;
+        const wacId = item.ingredientId as mongoose.Types.ObjectId;
+        const ing = await Ingredient.findOne({ _id: wacId, hotelId: req.hotelId })
+          .select('costPerUnit currentStock')
+          .session(session);
+        if (!ing || ing.currentStock <= 0) continue;
+        const prevStock = Math.max(0, ing.currentStock - accepted);
+        const newCost   = (prevStock * ing.costPerUnit + accepted * (item.purchasePrice as number)) / ing.currentStock;
+        if (!isNaN(newCost) && newCost > 0) {
+          await Ingredient.updateOne(
+            { _id: wacId, hotelId: req.hotelId },
+            { $set: { costPerUnit: +newCost.toFixed(4) } },
+            { session },
+          );
+        }
+      }
+
+      // 5. Vendor outstanding and ledger entry
+      if (grnValue > 0) {
+        const updatedVendor = await Vendor.findByIdAndUpdate(
+          grn.vendorId,
+          { $inc: { currentOutstanding: grnValue } },
+          { new: true, session },
+        );
+        await VendorLedgerEntry.create([{
+          hotelId:         req.hotelId,
+          vendorId:        grn.vendorId,
+          entryType:       'grn',
+          referenceId:     grn._id,
+          referenceNumber: grnNumber,
+          debit:           grnValue,
+          credit:          0,
+          runningBalance:  updatedVendor?.currentOutstanding ?? grnValue,
+          description:     `GRN ${grnNumber} received from ${po.vendorSnapshot.businessName}`,
+        }], { session });
+      }
+
+      await session.commitTransaction();
+
+      logAudit(req, 'grn.created', 'grn', String(grn._id), {
+        grnNumber,
+        poNumber: po.poNumber,
+        grnStatus: grn.status,
+        newPOStatus: po.status,
+        itemCount: items.length,
       });
+
+      return res.status(201).json(grn);
+    } catch (err) {
+      try { await session.abortTransaction(); } catch { /* ignore secondary error */ }
+      throw err;
+    } finally {
+      await session.endSession();
     }
-
-    logAudit(req, 'grn.created', 'grn', String(grn._id), {
-      grnNumber,
-      poNumber: po.poNumber,
-      grnStatus: grn.status,
-      newPOStatus: po.status,
-      itemCount: items.length,
-    });
-
-    return res.status(201).json(grn);
   } catch (err) {
     return sendError(res, 500, 'Failed to create GRN', err);
   }
@@ -331,6 +352,27 @@ router.post('/:id/cancel', async (req: AuthRequest, res: Response) => {
     grn.status = 'cancelled';
     grn.cancelReason = String(req.body.reason || '');
     await grn.save();
+
+    // Reverse ingredient stock incremented at GRN creation
+    const stockReverseOps = (grn.items as any[])
+      .filter((item) => item.ingredientId)
+      .map((item) => {
+        const accepted = Math.max(
+          0,
+          (item.receivedQty || 0) - (item.damagedQty || 0) - (item.rejectedQty || 0),
+        );
+        if (accepted <= 0) return null;
+        return {
+          updateOne: {
+            filter: { _id: item.ingredientId, hotelId: req.hotelId },
+            update: { $inc: { currentStock: -accepted } },
+          },
+        };
+      })
+      .filter(Boolean);
+    if (stockReverseOps.length > 0) {
+      await Ingredient.bulkWrite(stockReverseOps as Parameters<typeof Ingredient.bulkWrite>[0]);
+    }
 
     // Reverse any ledger entry created for this GRN
     const grnLedger = await VendorLedgerEntry.findOne({

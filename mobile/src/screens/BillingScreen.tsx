@@ -86,6 +86,16 @@ const BillingScreen: React.FC = () => {
   const [modifierPicker, setModifierPicker] = useState<{ product: Product; effectivePrice: number; variantId?: string; variantName?: string } | null>(null);
   const [modSelections, setModSelections] = useState<Record<string, string[]>>({});
 
+  // Promo state
+  const [couponCode,     setCouponCode]     = useState('');
+  const [appliedCoupon,  setAppliedCoupon]  = useState<{ couponId: string; code: string; discountAmount: number; description: string } | null>(null);
+  const [couponLoading,  setCouponLoading]  = useState(false);
+  const [voucherCode,    setVoucherCode]    = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<{ voucherCode: string; balance: number; redeemAmount: number } | null>(null);
+  const [voucherLoading, setVoucherLoading] = useState(false);
+  const [walletInfo,     setWalletInfo]     = useState<{ customerId: string; walletBalance: number } | null>(null);
+  const [useWallet,      setUseWallet]      = useState(false);
+
   const openModifiersOrAdd = (product: Product, effectivePrice: number, variantId?: string, variantName?: string) => {
     const mgs = (product.modifierGroups || []).filter(g => g.isActive);
     if (mgs.length > 0) {
@@ -203,6 +213,53 @@ const BillingScreen: React.FC = () => {
     setDiscount({ type: discountType, value: val });
   };
 
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) return;
+    const preTax = cart.subtotal + cart.taxTotal;
+    setCouponLoading(true);
+    try {
+      const result = await api.validateCoupon(code, preTax, undefined);
+      if (result.valid && result.couponId) {
+        setAppliedCoupon({ couponId: String(result.couponId), code: result.code ?? code, discountAmount: result.discountAmount ?? 0, description: result.description ?? '' });
+      } else {
+        showAlert('Invalid Coupon', result.message ?? 'Coupon could not be applied');
+      }
+    } catch (e: any) { showAlert('Coupon Error', e?.message ?? 'Could not validate coupon'); }
+    finally { setCouponLoading(false); }
+  };
+
+  const handleCheckVoucher = async () => {
+    const code = voucherCode.trim().toUpperCase();
+    if (!code) return;
+    setVoucherLoading(true);
+    try {
+      const result = await api.checkGiftVoucher(code);
+      if (result.valid && result.voucher) {
+        const maxRedeem = Math.min(result.voucher.balance, cart.subtotal + cart.taxTotal);
+        setAppliedVoucher({ voucherCode: code, balance: result.voucher.balance, redeemAmount: maxRedeem });
+      } else {
+        showAlert('Invalid Voucher', result.message ?? 'Voucher not found or inactive');
+      }
+    } catch (e: any) { showAlert('Voucher Error', e?.message ?? 'Could not check voucher'); }
+    finally { setVoucherLoading(false); }
+  };
+
+  const handleLoadWallet = async () => {
+    const phone = customerPhone.replace(/\D/g, '').replace(/^0+/, '');
+    if (phone.length < 10) { showAlert('Phone Required', 'Enter a valid 10-digit phone number first'); return; }
+    try {
+      const results = await api.getLoyaltyCustomers({ phone });
+      const customer = results.customers?.[0];
+      if (customer && customer.walletBalance !== undefined) {
+        setWalletInfo({ customerId: customer.customerId, walletBalance: customer.walletBalance });
+        setUseWallet(true);
+      } else {
+        showAlert('Not Found', 'No wallet found for this phone number');
+      }
+    } catch (e: any) { showAlert('Wallet Error', e?.message ?? 'Could not load wallet'); }
+  };
+
   const getChannelPrice = (product: Product): number => {
     const cp = product.channelPrices;
     if (!cp) return product.price;
@@ -261,13 +318,17 @@ Thank you for dining with us! 🍽️`;
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items first.'); return; }
     if (!cart.customerName.trim()) { showAlert('Name Required', 'Enter customer name before placing the order.'); return; }
     if (!customerPhone.trim()) { showAlert('Phone Required', 'Enter customer phone number before placing the order.'); return; }
-    // Compute discount from input directly so we don't rely on async state update
-    const discountVal = parseFloat(discountInput) || 0;
-    const preTax = cart.subtotal + cart.taxTotal;
-    const discountAmount = discountVal > 0
+    // Compute all deductions inline so we don't rely on async state updates
+    const discountVal       = parseFloat(discountInput) || 0;
+    const preTax            = cart.subtotal + cart.taxTotal;
+    const manualDiscount    = discountVal > 0
       ? (discountType === 'percent' ? (preTax * discountVal) / 100 : Math.min(discountVal, preTax))
       : 0;
-    const finalGrandTotal = Math.max(0, preTax - discountAmount);
+    const couponDiscount    = appliedCoupon?.discountAmount ?? 0;
+    const voucherRedeem     = appliedVoucher?.redeemAmount  ?? 0;
+    const walletDeduct      = useWallet && walletInfo ? Math.min(walletInfo.walletBalance, Math.max(0, preTax - manualDiscount - couponDiscount - voucherRedeem)) : 0;
+    const discountAmount    = manualDiscount + couponDiscount + voucherRedeem + walletDeduct;
+    const finalGrandTotal   = Math.max(0, preTax - discountAmount);
     applyDiscount();
 
     const isOrderParcel = ['swiggy', 'zomato', 'takeaway'].includes(orderSource);
@@ -306,13 +367,19 @@ Thank you for dining with us! 🍽️`;
       offlineId,
     };
     setPendingOrder(orderData as Record<string, unknown>);
-    navigation.navigate('PaymentScreen', { mode: 'billing', grandTotal: finalGrandTotal });
+    const promos: { couponId?: string; giftVoucherCode?: string; giftVoucherAmount?: number; walletCustomerId?: string; walletAmount?: number } = {};
+    if (appliedCoupon?.couponId) promos.couponId = appliedCoupon.couponId;
+    if (appliedVoucher && appliedVoucher.redeemAmount > 0) { promos.giftVoucherCode = appliedVoucher.voucherCode; promos.giftVoucherAmount = appliedVoucher.redeemAmount; }
+    if (walletDeduct > 0 && walletInfo) { promos.walletCustomerId = walletInfo.customerId; promos.walletAmount = walletDeduct; }
+    navigation.navigate('PaymentScreen', { mode: 'billing', grandTotal: finalGrandTotal, promos: Object.keys(promos).length ? promos : undefined });
   };
 
   const handleRazorpayFlow = () => {
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items first.'); return; }
     if (!cart.customerName.trim()) { showAlert('Name Required', 'Enter customer name before placing the order.'); return; }
     if (!customerPhone.trim()) { showAlert('Phone Required', 'Enter customer phone number before placing the order.'); return; }
+    if (placing) return; // P0-4: guard against double-tap
+    setPlacing(true);    // P0-4: disable both buttons while Razorpay flow is in flight
     applyDiscount();
     handleRazorpayCheckout();
   };
@@ -422,6 +489,10 @@ Thank you for dining with us! 🍽️`;
       clearCart();
       setDiscountInput('');
       setDiscount({ type: 'percent', value: 0 });
+      // Reset promos
+      setCouponCode(''); setAppliedCoupon(null);
+      setVoucherCode(''); setAppliedVoucher(null);
+      setWalletInfo(null); setUseWallet(false);
     } catch (e: any) {
       const desc: string = e?.description ?? e?.message ?? 'Payment failed or cancelled.';
       if (e?.code !== 'USER_CANCEL') {
@@ -770,6 +841,89 @@ Thank you for dining with us! 🍽️`;
               </View>
             )}
 
+            {/* Coupon */}
+            {cart.items.length > 0 && (
+              <View style={styles.promoRow}>
+                {appliedCoupon ? (
+                  <View style={styles.promoApplied}>
+                    <MaterialIcons name="local-offer" size={14} color={Colors.success} />
+                    <Text style={styles.promoAppliedText}>{appliedCoupon.code} −{fmt(appliedCoupon.discountAmount)}</Text>
+                    <TouchableOpacity onPress={() => { setAppliedCoupon(null); setCouponCode(''); }}>
+                      <MaterialIcons name="close" size={16} color={Colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.promoInputRow}>
+                    <TextInput
+                      style={styles.promoInput}
+                      placeholder="Coupon code"
+                      placeholderTextColor={Colors.textMuted}
+                      value={couponCode}
+                      onChangeText={v => setCouponCode(v.toUpperCase())}
+                      autoCapitalize="characters"
+                    />
+                    <TouchableOpacity style={styles.promoBtn} onPress={handleApplyCoupon} disabled={couponLoading || !couponCode.trim()}>
+                      {couponLoading ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.promoBtnText}>Apply</Text>}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Gift Voucher */}
+            {cart.items.length > 0 && (
+              <View style={styles.promoRow}>
+                {appliedVoucher ? (
+                  <View style={styles.promoApplied}>
+                    <MaterialIcons name="card-giftcard" size={14} color={Colors.success} />
+                    <Text style={styles.promoAppliedText}>{appliedVoucher.voucherCode} −{fmt(appliedVoucher.redeemAmount)}</Text>
+                    <TouchableOpacity onPress={() => { setAppliedVoucher(null); setVoucherCode(''); }}>
+                      <MaterialIcons name="close" size={16} color={Colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.promoInputRow}>
+                    <TextInput
+                      style={styles.promoInput}
+                      placeholder="Gift voucher code"
+                      placeholderTextColor={Colors.textMuted}
+                      value={voucherCode}
+                      onChangeText={v => setVoucherCode(v.toUpperCase())}
+                      autoCapitalize="characters"
+                    />
+                    <TouchableOpacity style={styles.promoBtn} onPress={handleCheckVoucher} disabled={voucherLoading || !voucherCode.trim()}>
+                      {voucherLoading ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.promoBtnText}>Check</Text>}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Wallet */}
+            {cart.items.length > 0 && (
+              <View style={styles.promoRow}>
+                {walletInfo ? (
+                  <View style={styles.promoApplied}>
+                    <MaterialIcons name="account-balance-wallet" size={14} color={useWallet ? Colors.success : Colors.textMuted} />
+                    <Text style={styles.promoAppliedText}>
+                      Wallet {fmt(walletInfo.walletBalance)} {useWallet ? '(will deduct)' : '(tap to use)'}
+                    </Text>
+                    <TouchableOpacity onPress={() => setUseWallet(v => !v)}>
+                      <MaterialIcons name={useWallet ? 'toggle-on' : 'toggle-off'} size={22} color={useWallet ? Colors.success : Colors.textMuted} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => { setWalletInfo(null); setUseWallet(false); }} style={{ marginLeft: 4 }}>
+                      <MaterialIcons name="close" size={16} color={Colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={styles.promoInputRow} onPress={handleLoadWallet}>
+                    <MaterialIcons name="account-balance-wallet" size={16} color={Colors.textMuted} />
+                    <Text style={[styles.promoInput, { color: Colors.textMuted, lineHeight: 34 }]}>Load customer wallet</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
             {/* Note */}
             {cart.items.length > 0 && (
               <View style={styles.noteRow}>
@@ -796,13 +950,43 @@ Thank you for dining with us! 🍽️`;
               </View>
               {cart.discountAmount > 0 && (
                 <View style={styles.totalRow}>
-                  <Text style={[styles.totalLabel, { color: Colors.success }]}>Discount</Text>
+                  <Text style={[styles.totalLabel, { color: Colors.success }]}>Manual Discount</Text>
                   <Text style={[styles.totalVal, { color: Colors.success }]}>−{fmt(cart.discountAmount)}</Text>
                 </View>
               )}
+              {appliedCoupon && (
+                <View style={styles.totalRow}>
+                  <Text style={[styles.totalLabel, { color: Colors.success }]}>Coupon ({appliedCoupon.code})</Text>
+                  <Text style={[styles.totalVal, { color: Colors.success }]}>−{fmt(appliedCoupon.discountAmount)}</Text>
+                </View>
+              )}
+              {appliedVoucher && appliedVoucher.redeemAmount > 0 && (
+                <View style={styles.totalRow}>
+                  <Text style={[styles.totalLabel, { color: Colors.success }]}>Gift Voucher</Text>
+                  <Text style={[styles.totalVal, { color: Colors.success }]}>−{fmt(appliedVoucher.redeemAmount)}</Text>
+                </View>
+              )}
+              {useWallet && walletInfo && (() => {
+                const preTax = cart.subtotal + cart.taxTotal;
+                const couponDiscount = appliedCoupon?.discountAmount ?? 0;
+                const voucherRedeem = appliedVoucher?.redeemAmount ?? 0;
+                const walletDeduct = Math.min(walletInfo.walletBalance, Math.max(0, preTax - cart.discountAmount - couponDiscount - voucherRedeem));
+                return walletDeduct > 0 ? (
+                  <View style={styles.totalRow}>
+                    <Text style={[styles.totalLabel, { color: Colors.success }]}>Wallet</Text>
+                    <Text style={[styles.totalVal, { color: Colors.success }]}>−{fmt(walletDeduct)}</Text>
+                  </View>
+                ) : null;
+              })()}
               <View style={[styles.totalRow, styles.grandRow]}>
                 <Text style={styles.grandLabel}>TOTAL</Text>
-                <Text style={styles.grandVal}>{fmt(cart.grandTotal)}</Text>
+                <Text style={styles.grandVal}>{(() => {
+                  const preTax = cart.subtotal + cart.taxTotal;
+                  const couponDiscount = appliedCoupon?.discountAmount ?? 0;
+                  const voucherRedeem = appliedVoucher?.redeemAmount ?? 0;
+                  const walletDeduct = useWallet && walletInfo ? Math.min(walletInfo.walletBalance, Math.max(0, preTax - cart.discountAmount - couponDiscount - voucherRedeem)) : 0;
+                  return fmt(Math.max(0, preTax - cart.discountAmount - couponDiscount - voucherRedeem - walletDeduct));
+                })()}</Text>
               </View>
             </View>
 
@@ -1301,6 +1485,15 @@ const styles = StyleSheet.create({
     color: Colors.text, fontSize: FontSize.md,
     borderWidth: 1, borderColor: Colors.border,
   },
+
+  // Promo rows (coupon / gift voucher / wallet)
+  promoRow: { paddingHorizontal: Spacing.md, paddingVertical: 4 },
+  promoInputRow: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.card, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.border, paddingLeft: Spacing.sm },
+  promoInput: { flex: 1, paddingVertical: 7, fontSize: FontSize.sm, color: Colors.text },
+  promoBtn: { backgroundColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: 8, borderRadius: BorderRadius.md },
+  promoBtnText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.xs },
+  promoApplied: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.success + '15', borderRadius: BorderRadius.md, paddingHorizontal: Spacing.sm, paddingVertical: 6 },
+  promoAppliedText: { flex: 1, fontSize: FontSize.sm, color: Colors.success, fontWeight: '600' },
 
   // Note
   noteRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: Spacing.md, marginBottom: Spacing.sm, backgroundColor: Colors.card, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, borderWidth: 1, borderColor: Colors.border, gap: 6 },

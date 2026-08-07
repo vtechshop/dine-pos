@@ -3,6 +3,22 @@ import mongoose, { Schema, Document } from 'mongoose';
 export type CustomerStatus = 'active' | 'blocked' | 'merged';
 export type CustomerIdentificationMode = 'disabled' | 'name_only' | 'name_mobile';
 
+export interface IDeliveryAddress {
+  label: string;     // 'Home', 'Office', etc.
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  pincode: string;
+  isDefault: boolean;
+}
+
+export interface IFavouriteItem {
+  productId: mongoose.Types.ObjectId | null;
+  productName: string;
+  orderCount: number;
+}
+
 export interface ICustomerProfile extends Document {
   hotelId: mongoose.Types.ObjectId;
   customerId: string;          // human-readable: "CUST-<hotelShortId>-<seq>"
@@ -10,9 +26,19 @@ export interface ICustomerProfile extends Document {
   phone: string | null;        // E.164 format; unique per hotel (sparse)
   email: string | null;
   birthday: string | null;     // "MM-DD" — no year; enables birthday campaign queries
+  anniversary: string | null;  // "MM-DD" — wedding / business anniversary
+  // B2B / GST customer
+  gstCustomer: boolean;
+  companyName: string;
+  gstin: string;               // 15-char GSTIN
+  // Address book
+  deliveryAddresses: IDeliveryAddress[];
+  // Enrichment (denormalised for speed)
+  favouriteItems: IFavouriteItem[];
   tags: string[];
   marketingOptIn: boolean;
   loyaltyBalance: number;      // denormalised from LoyaltyTransaction ledger
+  walletBalance: number;       // prepaid wallet (separate from points)
   lifetimeSpend: number;       // INR; incremented on guest billing
   visitCount: number;          // incremented when a session containing this customer closes
   lastVisitAt: Date | null;
@@ -35,9 +61,31 @@ const CustomerProfileSchema: Schema = new Schema(
                         validator: (v: string | null) => v === null || /^\d{2}-\d{2}$/.test(v),
                         message: 'birthday must be in MM-DD format',
                       }},
+    anniversary:    { type: String, default: null, validate: {
+                        validator: (v: string | null) => v === null || /^\d{2}-\d{2}$/.test(v),
+                        message: 'anniversary must be in MM-DD format',
+                      }},
+    gstCustomer:    { type: Boolean, default: false },
+    companyName:    { type: String, default: '', maxlength: 150, trim: true },
+    gstin:          { type: String, default: '', maxlength: 15, trim: true, uppercase: true },
+    deliveryAddresses: [{
+      label:     { type: String, default: 'Home', maxlength: 50 },
+      line1:     { type: String, default: '', maxlength: 200 },
+      line2:     { type: String, default: '', maxlength: 200 },
+      city:      { type: String, default: '', maxlength: 100 },
+      state:     { type: String, default: '', maxlength: 100 },
+      pincode:   { type: String, default: '', maxlength: 10 },
+      isDefault: { type: Boolean, default: false },
+    }],
+    favouriteItems: [{
+      productId:   { type: Schema.Types.ObjectId, ref: 'Product', default: null },
+      productName: { type: String, default: '', maxlength: 200 },
+      orderCount:  { type: Number, default: 0 },
+    }],
     tags:           [{ type: String, maxlength: 50 }],
     marketingOptIn: { type: Boolean, default: false },
     loyaltyBalance: { type: Number, default: 0, min: 0 },
+    walletBalance:  { type: Number, default: 0, min: 0 },
     lifetimeSpend:  { type: Number, default: 0, min: 0 },
     visitCount:     { type: Number, default: 0, min: 0 },
     lastVisitAt:    { type: Date, default: null },

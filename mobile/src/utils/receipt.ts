@@ -334,7 +334,7 @@ export const generateKOTHTML = (order: KOTOrderInput, settings: Settings): strin
     .map(
       (item) => `
       <tr>
-        <td style="text-align:left; padding:5px 2px; font-weight:bold;">${item.productName}</td>
+        <td style="text-align:left; padding:5px 2px; font-weight:bold;">${escHtml(item.productName)}</td>
         <td style="text-align:right; padding:5px 2px; font-weight:bold;">x${item.quantity}</td>
       </tr>`
     )
@@ -366,13 +366,13 @@ export const generateKOTHTML = (order: KOTOrderInput, settings: Settings): strin
   </head>
   <body>
     <div class="kot-title">KITCHEN ORDER</div>
-    <div class="info">Order: ${order.orderNumber}</div>
-    ${order.tableNumber ? `<div class="info">Table: ${order.tableNumber}</div>` : ''}
+    <div class="info">Order: ${escHtml(order.orderNumber)}</div>
+    ${order.tableNumber ? `<div class="info">Table: ${escHtml(order.tableNumber)}</div>` : ''}
     <div class="info">Time: ${dateStr} ${timeStr}</div>
     <hr class="line">
     <table><tbody>${itemRows}</tbody></table>
     <hr class="line">
-    ${order.notes ? `<div class="notes">Note: ${order.notes}</div>` : ''}
+    ${order.notes ? `<div class="notes">Note: ${escHtml(order.notes)}</div>` : ''}
   </body>
 </html>`;
 };

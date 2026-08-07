@@ -49,12 +49,35 @@ router.post('/placeholder-image', async (req: AuthRequest, res: Response) => {
   if (!sourceUrl || typeof sourceUrl !== 'string') {
     return res.status(400).json({ message: 'sourceUrl is required' });
   }
+
+  // P0-2: SSRF guard — allow only public HTTPS image URLs
+  try {
+    const parsed = new URL(sourceUrl);
+    if (parsed.protocol !== 'https:') {
+      return res.status(400).json({ message: 'Only HTTPS URLs are allowed' });
+    }
+    const h = parsed.hostname.toLowerCase();
+    const PRIVATE = [
+      /^localhost$/, /^127\./, /^10\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./,
+      /^169\.254\./, /^::1$/, /^fc00:/, /^fe80:/, /^0\.0\.0\.0$/,
+      /^::ffff:/i,  // IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1 → loopback)
+    ];
+    if (PRIVATE.some(p => p.test(h))) {
+      return res.status(400).json({ message: 'Private or loopback URLs are not allowed' });
+    }
+  } catch {
+    return res.status(400).json({ message: 'Invalid URL' });
+  }
+
   try {
     const fetchResp = await fetch(sourceUrl);
     if (!fetchResp.ok) throw new Error(`Failed to fetch image: ${fetchResp.status}`);
     const contentType = fetchResp.headers.get('content-type') || '';
     if (!contentType.startsWith('image/')) throw new Error('URL does not point to an image');
+    const contentLength = Number(fetchResp.headers.get('content-length') || 0);
+    if (contentLength > 5 * 1024 * 1024) throw new Error('Remote image exceeds 5 MB size limit');
     const buffer = Buffer.from(await fetchResp.arrayBuffer());
+    if (buffer.length > 5 * 1024 * 1024) throw new Error('Remote image exceeds 5 MB size limit');
 
     const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(

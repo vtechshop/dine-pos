@@ -122,16 +122,12 @@ router.patch('/:id/logout', authMiddleware, requireAdmin, async (req: AuthReques
     const device = await Device.findOne({ _id: req.params.id, hotelId: req.hotelId });
     if (!device) return res.status(404).json({ message: 'Device not found' });
 
-    // Revoke the linked refresh token if we have its hash
+    // Revoke the linked refresh token by matching its hash (RefreshToken.token stores the hash)
     if (device.refreshTokenHash) {
       await RefreshToken.findOneAndUpdate(
-        { hotelId: req.hotelId, revokedAt: null },
+        { token: device.refreshTokenHash, hotelId: req.hotelId, revokedAt: null },
         { revokedAt: new Date() }
       ).catch(() => {});
-      // More precise: revoke by matching hash — we stored hash of the raw token;
-      // RefreshToken stores the raw token so we can't do a direct hash lookup.
-      // Revoke ALL non-revoked tokens for this hotel that were created around device's lastSeen.
-      // Best-effort: revoke the oldest non-revoked token (works when one device = one token).
     }
 
     await Device.findByIdAndUpdate(req.params.id, { isActive: false, isOnline: false });

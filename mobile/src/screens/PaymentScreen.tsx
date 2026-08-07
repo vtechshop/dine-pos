@@ -17,9 +17,15 @@ import {
   cancelOrderAdmin,
   completeOrderPayment,
   completeOrderWithDetails,
+  applyCoupon,
+  redeemGiftVoucher,
+  deductWallet,
   PaymentDetails,
 } from '../services/api';
-import { getPendingOrder, clearPendingOrder } from '../utils/paymentBridge';
+import {
+  getPendingOrder, clearPendingOrder,
+  savePendingUpiPayment, loadPendingUpiPayment, clearPendingUpiPayment,
+} from '../utils/paymentBridge';
 import { printReceipt } from '../utils/receipt';
 import { printKOT } from '../utils/receipt';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
@@ -49,7 +55,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'PaymentScreen'>;
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { mode, orderId, orderNumber, grandTotal } = route.params;
+  const { mode, orderId, orderNumber, grandTotal, promos } = route.params;
   const { settings } = useSettings();
   const { clearCart } = useCart();
   const { top } = useSafeAreaInsets();
@@ -87,6 +93,34 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     }
     return () => { clearPendingOrder(); };
   }, [mode]);
+
+  // UPI crash-gap recovery: if we find a persisted UPI success from a previous
+  // launch, restore the success state so the cashier can complete the order.
+  useEffect(() => {
+    if (mode !== 'billing') return;
+    loadPendingUpiPayment().then(saved => {
+      if (!saved) return;
+      const ageMs = Date.now() - saved.ts;
+      // Discard stale records older than 30 minutes — payment window expired
+      if (ageMs > 30 * 60 * 1000) {
+        clearPendingUpiPayment();
+        return;
+      }
+      if (saved.orderRef === (orderNumber || orderId || 'ORD') && saved.amount === grandTotal) {
+        setMethod('upi_intent');
+        setUpiTxnId(saved.txnId);
+        setUpiStatus('success');
+        Alert.alert(
+          'UPI Payment Recovered',
+          `UPI transaction ${saved.txnId || '(no ID)'} was confirmed before the app closed. Tap Confirm to complete the order.`,
+        );
+      } else {
+        // Different order — stale record from a prior session; discard it
+        clearPendingUpiPayment();
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -126,6 +160,14 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         console.log('[UPI] Status: SUCCESS', { txnId });
         setUpiTxnId(txnId);
         setUpiStatus('success');
+        // Persist so the order can still be confirmed if the app is killed here
+        savePendingUpiPayment({
+          txnId,
+          amount: grandTotal,
+          orderRef: orderRef,
+          ts: Date.now(),
+          payload: pendingOrderRef.current,
+        });
         console.log('[UPI] Payment confirmed — Confirm button now enabled');
       } else if (status === 'FAILURE') {
         console.log('[UPI] Status: FAILURE');
@@ -231,6 +273,18 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         }
         // KOT fires only after payment is confirmed — never on a failed payment
         printKOT(created, settings).catch(() => {});
+        // Order successfully created — UPI pending record is no longer needed
+        clearPendingUpiPayment();
+        // Fire promo deductions fire-and-forget — non-blocking, non-fatal
+        if (promos) {
+          if (promos.couponId) applyCoupon(promos.couponId).catch(() => {});
+          if (promos.giftVoucherCode && promos.giftVoucherAmount) {
+            redeemGiftVoucher(promos.giftVoucherCode, promos.giftVoucherAmount, created._id).catch(() => {});
+          }
+          if (promos.walletCustomerId && promos.walletAmount) {
+            deductWallet(promos.walletCustomerId, promos.walletAmount, created._id).catch(() => {});
+          }
+        }
       } else {
         // Cashier completing an existing order
         await completeOrderPayment(orderId!, method, details);

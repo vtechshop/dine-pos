@@ -12,7 +12,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
-import { Customer } from '../types';
+import { Customer, LoyaltyCustomer } from '../types';
 import { PremiumGate } from '../components/PremiumGate';
 
 type RangeKey = 'today' | 'week' | 'month' | 'all';
@@ -60,6 +60,23 @@ const CustomersScreen: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+
+  // Customer detail modal
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [loyaltyProfile,   setLoyaltyProfile]   = useState<LoyaltyCustomer | null>(null);
+  const [profileLoading,   setProfileLoading]   = useState(false);
+
+  const openCustomerDetail = async (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setLoyaltyProfile(null);
+    setProfileLoading(true);
+    try {
+      const phone = customer.phone.replace(/\D/g, '').replace(/^0+/, '').replace(/^91/, '');
+      const result = await api.getLoyaltyCustomers({ phone });
+      if (result.customers?.length) setLoyaltyProfile(result.customers[0]);
+    } catch { /* loyalty program may not be enabled — silently ignore */ }
+    finally { setProfileLoading(false); }
+  };
 
   // Broadcast state
   const [broadcastMode, setBroadcastMode] = useState(false);
@@ -313,8 +330,8 @@ const CustomersScreen: React.FC = () => {
     const selected = selectedIds.has(item.phone);
     return (
       <TouchableOpacity
-        activeOpacity={broadcastMode ? 0.7 : 1}
-        onPress={broadcastMode ? () => toggleSelect(item.phone) : undefined}
+        activeOpacity={0.7}
+        onPress={broadcastMode ? () => toggleSelect(item.phone) : () => openCustomerDetail(item)}
         style={[styles.card, selected && styles.cardSelected]}
       >
         {broadcastMode && (
@@ -557,6 +574,69 @@ const CustomersScreen: React.FC = () => {
         </View>
       </Modal>
 
+      {/* ── Customer Detail Modal ── */}
+      <Modal visible={!!selectedCustomer} transparent animationType="slide" onRequestClose={() => setSelectedCustomer(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { paddingBottom: (bottom || 0) + Spacing.xl }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.md }}>
+              <Text style={styles.modalTitle}>{selectedCustomer?.customerName || 'Customer'}</Text>
+              <TouchableOpacity onPress={() => setSelectedCustomer(null)} style={{ marginLeft: 'auto' }}>
+                <MaterialIcons name="close" size={24} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ fontSize: FontSize.sm, color: Colors.textMuted, marginBottom: Spacing.md }}>{selectedCustomer?.phone}</Text>
+
+            {/* Order stats */}
+            <View style={{ flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.md }}>
+              <View style={styles.statCard}>
+                <Text style={styles.statVal}>{selectedCustomer?.totalOrders ?? 0}</Text>
+                <Text style={styles.statLabel}>Orders</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statVal}>{fmt(selectedCustomer?.totalSpent ?? 0)}</Text>
+                <Text style={styles.statLabel}>Total Spent</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statVal}>{selectedCustomer?.totalSpent && selectedCustomer?.totalOrders ? fmt(selectedCustomer.totalSpent / selectedCustomer.totalOrders) : fmt(0)}</Text>
+                <Text style={styles.statLabel}>Avg. Order</Text>
+              </View>
+            </View>
+
+            {/* Loyalty & wallet section */}
+            {profileLoading && <ActivityIndicator color={Colors.primary} style={{ marginVertical: Spacing.md }} />}
+            {loyaltyProfile && (
+              <View style={{ gap: Spacing.sm }}>
+                <Text style={{ fontSize: FontSize.sm, fontWeight: '700', color: Colors.text, marginTop: Spacing.sm }}>Loyalty & Wallet</Text>
+                <View style={{ flexDirection: 'row', gap: Spacing.md }}>
+                  <View style={[styles.statCard, { backgroundColor: Colors.primary + '15' }]}>
+                    <Text style={[styles.statVal, { color: Colors.primary }]}>{loyaltyProfile.loyaltyBalance ?? 0}</Text>
+                    <Text style={styles.statLabel}>Points</Text>
+                  </View>
+                  <View style={[styles.statCard, { backgroundColor: Colors.success + '15' }]}>
+                    <Text style={[styles.statVal, { color: Colors.success }]}>{fmt(loyaltyProfile.walletBalance ?? 0)}</Text>
+                    <Text style={styles.statLabel}>Wallet</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statVal}>{loyaltyProfile.visitCount ?? 0}</Text>
+                    <Text style={styles.statLabel}>Visits</Text>
+                  </View>
+                </View>
+                <Text style={{ fontSize: FontSize.xs, color: Colors.textMuted }}>ID: {loyaltyProfile.customerId}</Text>
+              </View>
+            )}
+            {!profileLoading && !loyaltyProfile && (
+              <Text style={{ fontSize: FontSize.sm, color: Colors.textMuted, marginTop: Spacing.sm }}>No loyalty profile linked to this phone number.</Text>
+            )}
+
+            <TouchableOpacity style={styles.waBtn} onPress={() => { setSelectedCustomer(null); if (selectedCustomer) sendWhatsApp(selectedCustomer); }} activeOpacity={0.8}>
+              <MaterialIcons name="chat" size={16} color={Colors.white} />
+              <Text style={styles.waBtnText}>Send WhatsApp</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 };
@@ -717,6 +797,14 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.primary + '30',
   },
   msgPreviewText: { fontSize: FontSize.sm, color: Colors.text, lineHeight: 20 },
+
+  // Customer detail modal stat cards
+  statCard: {
+    flex: 1, backgroundColor: Colors.background, borderRadius: BorderRadius.md,
+    padding: Spacing.sm, alignItems: 'center', borderWidth: 1, borderColor: Colors.border,
+  },
+  statVal:   { fontSize: FontSize.md, fontWeight: '800', color: Colors.text },
+  statLabel: { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: 2 },
 });
 
 const CustomersScreenGated: React.FC = () => (

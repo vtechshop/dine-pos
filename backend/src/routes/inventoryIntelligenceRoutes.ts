@@ -6,6 +6,7 @@ import GRN from '../models/GRN';
 import WasteLog from '../models/WasteLog';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { sendError } from '../utils/sendError';
+import Vendor from '../models/Vendor';
 
 const router = Router();
 router.use(authMiddleware);
@@ -641,6 +642,144 @@ router.get('/purchase-intelligence', async (req: AuthRequest, res: Response) => 
     });
   } catch (err) {
     return sendError(res, 500, 'Purchase intelligence failed', err);
+  }
+});
+
+// ── 8. GET /reorder-suggestions ──────────────────────────────────────────────
+
+router.get('/reorder-suggestions', async (req: AuthRequest, res: Response) => {
+  try {
+    const hotelId = new mongoose.Types.ObjectId(req.hotelId);
+
+    // Compute avg daily consumption from last 30 days of orders
+    const since = new Date(Date.now() - 30 * 86_400_000);
+
+    const consumed = await Order.aggregate([
+      { $match: { hotelId, status: { $ne: 'cancelled' }, createdAt: { $gte: since } } },
+      ...cogsStages(hotelId),
+      { $match: { 'ing._id': { $ne: null } } },
+      {
+        $group: {
+          _id:           '$ing._id',
+          totalConsumed: {
+            $sum: { $multiply: [{ $ifNull: ['$prod.recipe.quantity', 0] }, { $ifNull: ['$items.quantity', 0] }] },
+          },
+        },
+      },
+      { $addFields: { avgDailyConsumption: { $divide: ['$totalConsumed', 30] } } },
+    ]).option({ maxTimeMS: 30_000 });
+
+    const consumedMap = new Map<string, number>(
+      consumed.map((c: { _id: unknown; avgDailyConsumption: number }) => [String(c._id), c.avgDailyConsumption]),
+    );
+
+    // Get all ingredients with low stock or below threshold
+    const ingredients = await Ingredient.find({ hotelId }).lean();
+
+    const suggestions = ingredients
+      .map(ing => {
+        const avgDaily  = consumedMap.get(String(ing._id)) ?? 0;
+        const daysLeft  = avgDaily > 0 ? Math.floor(ing.currentStock / avgDaily) : null;
+        const threshold = ing.lowStockThreshold ?? 0;
+        const needsReorder = ing.currentStock <= threshold || (daysLeft !== null && daysLeft <= 7);
+
+        return {
+          ingredientId:    String(ing._id),
+          name:            ing.name,
+          unit:            ing.unit,
+          currentStock:    round2(ing.currentStock),
+          lowStockThreshold: threshold,
+          costPerUnit:     round2(ing.costPerUnit ?? 0),
+          avgDailyConsumption: round2(avgDaily),
+          daysOfStock:     daysLeft,
+          needsReorder,
+          suggestedQty:    avgDaily > 0 ? round2(Math.max(avgDaily * 14 - ing.currentStock, 0)) : 0,
+          estimatedCost:   avgDaily > 0 ? round2(Math.max(avgDaily * 14 - ing.currentStock, 0) * (ing.costPerUnit ?? 0)) : 0,
+        };
+      })
+      .filter(s => s.needsReorder)
+      .sort((a, b) => (a.daysOfStock ?? 999) - (b.daysOfStock ?? 999));
+
+    return res.json({
+      suggestions,
+      summary: {
+        totalItems:      suggestions.length,
+        criticalItems:   suggestions.filter(s => s.currentStock <= 0).length,
+        estimatedTotal:  round2(suggestions.reduce((sum, s) => sum + s.estimatedCost, 0)),
+      },
+    });
+  } catch (err) {
+    return sendError(res, 500, 'Reorder suggestions failed', err);
+  }
+});
+
+// ── 9. GET /expiry-alerts?days= ───────────────────────────────────────────────
+
+router.get('/expiry-alerts', async (req: AuthRequest, res: Response) => {
+  try {
+    const hotelId = new mongoose.Types.ObjectId(req.hotelId);
+    const days    = Math.min(90, Math.max(1, parseInt(req.query.days as string || '30', 10)));
+    const until   = new Date(Date.now() + days * 86_400_000);
+
+    const items = await GRN.aggregate([
+      {
+        $match: {
+          hotelId,
+          isDeleted: false,
+          status:    { $in: ['completed', 'partial'] },
+          'items.expiryDate': { $ne: null, $lte: until, $gte: new Date() },
+        },
+      },
+      { $unwind: '$items' },
+      { $match: { 'items.expiryDate': { $ne: null, $lte: until, $gte: new Date() } } },
+      {
+        $project: {
+          grnNumber:     1,
+          receiveDate:   1,
+          vendorId:      1,
+          vendorSnapshot: 1,
+          productName:   '$items.productName',
+          batchNumber:   '$items.batchNumber',
+          receivedQty:   '$items.receivedQty',
+          unit:          '$items.unit',
+          expiryDate:    '$items.expiryDate',
+          purchasePrice: '$items.purchasePrice',
+          daysUntilExpiry: {
+            $divide: [{ $subtract: ['$items.expiryDate', new Date()] }, 86_400_000],
+          },
+          value: { $multiply: ['$items.receivedQty', '$items.purchasePrice'] },
+        },
+      },
+      { $sort: { expiryDate: 1 } },
+    ]).option({ maxTimeMS: 30_000 });
+
+    const now = new Date();
+    const result = items.map((i: any) => ({
+      grnNumber:       i.grnNumber,
+      vendorName:      i.vendorSnapshot?.businessName || '',
+      productName:     i.productName,
+      batchNumber:     i.batchNumber || '',
+      receivedQty:     round2(i.receivedQty),
+      unit:            i.unit,
+      expiryDate:      i.expiryDate ? new Date(i.expiryDate).toISOString().slice(0, 10) : '',
+      daysUntilExpiry: Math.round(i.daysUntilExpiry),
+      value:           round2(i.value),
+      severity:        i.daysUntilExpiry <= 3 ? 'critical' : i.daysUntilExpiry <= 7 ? 'warning' : 'notice',
+    }));
+
+    return res.json({
+      lookAheadDays: days,
+      asOf:          now.toISOString().slice(0, 10),
+      items:         result,
+      summary: {
+        total:    result.length,
+        critical: result.filter((i: any) => i.severity === 'critical').length,
+        warning:  result.filter((i: any) => i.severity === 'warning').length,
+        totalValue: round2(result.reduce((s: number, i: any) => s + i.value, 0)),
+      },
+    });
+  } catch (err) {
+    return sendError(res, 500, 'Expiry alerts failed', err);
   }
 });
 

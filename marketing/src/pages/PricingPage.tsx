@@ -1,4 +1,4 @@
-import { CheckCircle2, Printer } from 'lucide-react';
+import { CheckCircle2, Printer, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePageSEO } from '../hooks/usePageSEO';
 
@@ -7,35 +7,71 @@ const PROFESSIONAL_FEATURES = [
   '1 Outlet',
   'Unlimited Billing',
   'Unlimited Products',
+  // ── Core POS
+  'POS Billing (Web + Android)',
+  'Table Management & Reservations',
   'QR Ordering',
+  'Kiosk Ordering',
   'Kitchen Display System',
-  'Kitchen Printing',
+  'Kitchen & Receipt Printing',
+  'Bluetooth Printing',
+  'Customer Display Screen',
+  // ── Menu
+  'AI Menu Import',
+  'Product Image Management',
+  'Modifier Groups',
+  // ── Customers
+  'Loyalty & CRM',
+  'Customer Wallet',
+  'Gift Vouchers',
+  'Coupon Codes',
+  // ── Inventory & Supply Chain
   'Inventory Management',
-  'Vendor Management',
-  'Purchase Orders',
-  'Goods Receive Note (GRN)',
-  'Vendor Ledger',
-  'Food Cost & COGS Reports',
+  'Recipe Costing',
+  'Wastage Tracking',
   'Inventory Intelligence',
+  'Vendor Management',
+  'Purchase Orders & GRN',
+  'Vendor Ledger',
+  // ── Finance
+  'Expense Tracking',
+  'P&L Dashboard',
+  'Menu Profitability',
+  // ── Reports
   'Reports & Analytics',
-  'Swiggy Integration',
-  'Zomato Integration',
-  'Mobile App',
+  'GST Billing',
+  'Export to CSV',
+  // ── AI Suite
+  'AI Business Intelligence',
+  'AI Forecasting',
+  'AI Alerts & Recommendations',
+  'AI Chat',
+  'Morning Brief',
+  // ── Platform
+  'Android POS App',
+  'Role-based Access',
+  'Audit Logs',
+  'Device Activation',
   'Web Dashboard',
+  'Real-time Sync',
+  // ── Support
   'Free Installation',
   'Free Training',
   'Phone & WhatsApp Support',
 ];
 
+const COMING_SOON_FEATURES = [
+  'Shift Management',
+  'Offline Mode',
+];
+
 const ENTERPRISE_FEATURES = [
+  'All Professional features',
   'Unlimited Outlets',
-  'Multi Branch',
-  'Central Dashboard',
-  'Enterprise Reports',
-  'Custom Integrations',
+  'Multi-outlet Management',
   'Priority Support',
-  'Free Installation',
-  'Free Training',
+  'Custom Onboarding',
+  'SLA Agreement',
 ];
 
 const SUITABLE_FOR = [
@@ -60,12 +96,16 @@ const FAQ_ITEMS = [
     q: 'Is there a setup or installation fee?',
     a: 'No. Installation, configuration, and staff training are all included free with every plan.',
   },
+  {
+    q: 'What about features listed as coming soon?',
+    a: 'Shift Management and Offline Mode are actively being built. When they ship, every existing Professional subscriber gets access automatically — no upgrade fee.',
+  },
 ];
 
 export function PricingPage() {
   usePageSEO(
     'Pricing — Dine POS',
-    'Dine POS annual pricing — ₹12,000/year per outlet. No monthly charges. Includes free dual thermal printer, free installation, and training.',
+    'Dine POS annual pricing — ₹12,000/year per outlet. No monthly charges. Includes AI menu import, kiosk ordering, Android POS app, free dual thermal printer, free installation, and training.',
   );
   return (
     <div>
@@ -82,11 +122,7 @@ export function PricingPage() {
         <div className="grid gap-6 md:grid-cols-2">
 
           {/* ── Professional ──────────────────────────────── */}
-          <div className="relative flex flex-col rounded-2xl border border-[#E8380D] ring-1 ring-[#E8380D] bg-white p-7 shadow-sm">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#E8380D] px-4 py-0.5 text-xs font-bold text-white">
-              Most Popular
-            </div>
-
+          <div className="flex flex-col rounded-2xl border border-[#E8380D] ring-1 ring-[#E8380D] bg-white p-7 shadow-sm">
             <div className="mb-1 text-sm font-semibold uppercase tracking-widest text-gray-400">
               Professional
             </div>
@@ -122,6 +158,11 @@ export function PricingPage() {
 
             <div className="my-5 border-t border-gray-100" />
 
+            {/* Live now */}
+            <p className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-green-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              Live now
+            </p>
             <ul className="mb-5 flex-1 space-y-2.5">
               {PROFESSIONAL_FEATURES.map(label => (
                 <li key={label} className="flex items-center gap-2 text-sm">
@@ -130,6 +171,22 @@ export function PricingPage() {
                 </li>
               ))}
             </ul>
+
+            {/* Coming soon */}
+            <div className="mb-5 rounded-xl border border-dashed border-amber-200 bg-amber-50 p-4">
+              <p className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-amber-700">
+                <Clock size={12} />
+                Coming soon — included when ready
+              </p>
+              <ul className="space-y-1.5">
+                {COMING_SOON_FEATURES.map(label => (
+                  <li key={label} className="flex items-center gap-2 text-sm text-amber-800">
+                    <span className="shrink-0 text-amber-400">→</span>
+                    {label}
+                  </li>
+                ))}
+              </ul>
+            </div>
 
             {/* Free Printer premium badge */}
             <div className="mb-5 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
@@ -165,7 +222,7 @@ export function PricingPage() {
             </div>
 
             <p className="mt-2 text-sm text-gray-500">
-              For restaurant chains and franchises.
+              For restaurant chains, hotels, and franchises with multiple outlets.
             </p>
 
             <div className="my-5 border-t border-gray-100" />

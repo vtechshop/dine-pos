@@ -22,11 +22,11 @@ const FAQ_GROUPS: { heading: string; items: FAQItem[] }[] = [
       },
       {
         q: 'How long does setup take?',
-        a: 'Most restaurants are live within one day. Menu import via CSV makes the initial setup fast. We also offer assisted onboarding.',
+        a: 'Most restaurants are live within one day. AI Menu Import lets you upload a photo or PDF of your existing menu — Gemini AI extracts every item automatically. No manual typing required. We also offer assisted onboarding.',
       },
       {
         q: 'Do I need to install anything?',
-        a: 'No. Dine POS is browser-based — it runs on any device with Chrome, Safari, or Edge. No app downloads, no Windows-only software.',
+        a: 'Dine POS runs as a web app on any browser — no installation needed for the management dashboard. For the POS counter and waiter flow, a native Android app is available on any tablet or phone, giving you Bluetooth printing and camera support.',
       },
     ],
   },

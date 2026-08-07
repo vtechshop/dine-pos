@@ -1182,6 +1182,9 @@ const SettingsScreen: React.FC = () => {
               { label: 'Receive Goods',     sub: 'Record stock receipts & GRNs',      icon: 'inventory'               as const, nav: 'GoodsReceive'    as const },
               { label: 'Vendor Ledger',         sub: 'Payments & outstanding balances',   icon: 'account-balance-wallet'  as const, nav: 'VendorLedger'             as const },
               { label: 'Stock Intelligence',    sub: 'Waste, costs, vendor & movement',   icon: 'analytics'               as const, nav: 'InventoryIntelligence'    as const },
+              { label: 'Coupons',               sub: 'Create & manage discount codes',    icon: 'local-offer'             as const, nav: 'Coupons'                  as const },
+              { label: 'Gift Vouchers',         sub: 'Issue & redeem gift vouchers',      icon: 'card-giftcard'           as const, nav: 'GiftVouchers'             as const },
+              { label: 'Purchase Invoices',     sub: 'Track supplier invoices & payments', icon: 'receipt-long'            as const, nav: 'PurchaseInvoices'         as const },
               { label: 'Payment Settings',      sub: 'Gateways, transactions & refunds',  icon: 'credit-card'             as const, nav: 'PaymentSettings'         as const },
             ].map((item) => (
               <TouchableOpacity
@@ -1241,7 +1244,7 @@ const SettingsScreen: React.FC = () => {
         {/* Kiosk Device Lock */}
         <View style={[styles.seedSection, { marginTop: Spacing.sm }]}>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Kiosk Device</Text>
+            <Text style={styles.sectionHeader}>Kiosk Device</Text>
             <Text style={[styles.label, { marginBottom: Spacing.sm, color: Colors.textMuted }]}>
               {kioskLockedId
                 ? `This device is locked to serve customers for this hotel. Staff login/logout will not change the customer menu.`

@@ -25,6 +25,7 @@ const SOURCE_CONFIG: Record<OrderSource, { label: string; emoji: string; color: 
   swiggy:     { label: 'Swiggy',   emoji: '🛵', color: '#FC8019' },
   zomato:     { label: 'Zomato',   emoji: '🍕', color: '#E23744' },
   qr:         { label: 'QR',       emoji: '📲', color: Colors.upi },
+  kiosk:      { label: 'Kiosk',   emoji: '🖥️', color: Colors.textSecondary },
 };
 
 const SOURCE_FILTER_OPTIONS = [

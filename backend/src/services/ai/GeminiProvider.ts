@@ -106,14 +106,17 @@ export class GeminiProvider implements AIProvider {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const result = await model.generateContent({
-        contents: [
-          {
-            role: 'user',
-            parts: [imagePart, { text: EXTRACTION_PROMPT }],
-          },
-        ],
-      });
+      const result = await model.generateContent(
+        {
+          contents: [
+            {
+              role: 'user',
+              parts: [imagePart, { text: EXTRACTION_PROMPT }],
+            },
+          ],
+        },
+        { signal: controller.signal },
+      );
       clearTimeout(timer);
 
       const raw  = result.response.text();

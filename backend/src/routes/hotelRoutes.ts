@@ -177,7 +177,7 @@ router.post('/reset-request', async (req: Request, res: Response) => {
 router.get('/reset-status/:phone', async (req: Request, res: Response) => {
   try {
     const hotel = await Hotel.findOne({ phone: req.params.phone }).select(
-      'hotelName status adminId resetRequested resetRequestedAt resetFulfilledAt'
+      'hotelName status resetRequested resetRequestedAt resetFulfilledAt'
     );
     if (!hotel) return res.status(404).json({ message: 'No hotel found' });
     return res.json(hotel);

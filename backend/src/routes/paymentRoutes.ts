@@ -189,6 +189,13 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
     const order = await Order.findOne({ _id: orderId, hotelId: req.hotelId });
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
+    // P0-1: Prevent client-controlled over-payment — amount must not exceed order total
+    if (amount > order.grandTotal + 1) {
+      return res.status(400).json({
+        message: `Payment amount ₹${amount.toFixed(2)} exceeds order total ₹${order.grandTotal.toFixed(2)}`,
+      });
+    }
+
     // Find active gateway
     const gatewayConfig = await PaymentGatewayConfig.findOne({ hotelId: req.hotelId, isActive: true, isDeleted: false });
     if (!gatewayConfig) {
@@ -319,62 +326,106 @@ router.post('/verify', async (req: AuthRequest, res: Response) => {
 
 router.post('/:id/refund', async (req: AuthRequest, res: Response) => {
   try {
-    const payment = await Payment.findOne({ _id: req.params.id, hotelId: req.hotelId });
-    if (!payment) return res.status(404).json({ message: 'Payment not found' });
+    // Read snapshot for validation and gateway lookup (not the authoritative balance)
+    const snapshot = await Payment.findOne({ _id: req.params.id, hotelId: req.hotelId });
+    if (!snapshot) return res.status(404).json({ message: 'Payment not found' });
 
-    if (!['success', 'partial_refunded'].includes(payment.status)) {
-      return res.status(400).json({ message: `Cannot refund a payment with status '${payment.status}'` });
+    if (!['success', 'partial_refunded'].includes(snapshot.status)) {
+      return res.status(400).json({ message: `Cannot refund a payment with status '${snapshot.status}'` });
     }
 
     const { amount, reason } = req.body as { amount: number; reason?: string };
     if (!amount || amount <= 0) return res.status(400).json({ message: 'amount (> 0 in rupees) is required' });
 
-    const amountPaise  = Math.round(amount * 100);
-    const maxRefund    = payment.amount - payment.refundedAmount;
-
+    const amountPaise = Math.round(amount * 100);
+    const maxRefund   = snapshot.amount - snapshot.refundedAmount;
     if (amountPaise > maxRefund) {
       return res.status(400).json({ message: `Maximum refundable amount is ₹${(maxRefund / 100).toFixed(2)}` });
     }
 
-    const gatewayConfig = await PaymentGatewayConfig.findOne({ hotelId: req.hotelId, gatewayType: payment.gatewayType, isDeleted: false });
+    const gatewayConfig = await PaymentGatewayConfig.findOne({ hotelId: req.hotelId, gatewayType: snapshot.gatewayType, isDeleted: false });
+    const localRefundId = `REF-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
-    if (!gatewayConfig || !GatewayFactory.isRegistered(payment.gatewayType as Parameters<typeof GatewayFactory.isRegistered>[0])) {
-      // Record refund as pending (to be processed manually or when SDK is integrated)
-      const refundId = `REF-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-      payment.refunds.push({ refundId, amount: amountPaise, reason: reason ?? '', initiatedBy: req.hotelId ?? 'system', refundedAt: new Date(), gatewayResponse: {} });
-      payment.refundedAmount += amountPaise;
-      payment.refundStatus    = payment.refundedAmount >= payment.amount ? 'full' : 'partial';
-      payment.status          = payment.refundedAmount >= payment.amount ? 'refunded' : 'partial_refunded';
-      await payment.save();
-
-      logAudit(req, 'refund_initiated', 'Payment', String(payment._id), { refundId, amount, status: 'pending_gateway' });
-      return res.json({
-        refundId,
-        status:            'pending',
-        message:           `Refund recorded. Gateway '${payment.gatewayType}' SDK needs to be integrated to process it.`,
-        payment:           { ...payment.toObject(), amount: +((payment.amount / 100).toFixed(2)), refundedAmount: +((payment.refundedAmount / 100).toFixed(2)) },
+    // Acquire advisory lock BEFORE calling the gateway.
+    // Prevents the race where gateway fires but the DB write fails (e.g., concurrent refund).
+    // Filter matches exact refundedAmount so two concurrent requests can't both acquire.
+    const locked = await Payment.findOneAndUpdate(
+      {
+        _id:              snapshot._id,
+        hotelId:          req.hotelId,
+        status:           { $in: ['success', 'partial_refunded'] },
+        refundedAmount:   snapshot.refundedAmount,
+        refundInProgress: { $ne: true },
+      },
+      { $set: { refundInProgress: true } },
+      { new: true },
+    );
+    if (!locked) {
+      return res.status(409).json({
+        message: 'Refund rejected: a concurrent refund is in progress or the balance changed. Refresh and retry.',
       });
     }
 
-    try {
-      const gateway = GatewayFactory.create(gatewayConfig);
-      const result = await gateway.initiateRefund({ gatewayTransactionId: payment.gatewayTransactionId, amount: amountPaise, reason });
+    let gatewayRefundId: string | null = null;
+    let gatewayStatus:   string | null = null;
+    let gatewayResponse: unknown       = {};
 
-      payment.refunds.push({ refundId: result.refundId, amount: amountPaise, reason: reason ?? '', initiatedBy: req.hotelId ?? 'system', refundedAt: new Date(), gatewayResponse: result.gatewayResponse });
-      payment.refundedAmount += amountPaise;
-      payment.refundStatus    = payment.refundedAmount >= payment.amount ? 'full' : 'partial';
-      payment.status          = payment.refundedAmount >= payment.amount ? 'refunded' : 'partial_refunded';
-      await payment.save();
-
-      logAudit(req, 'refund_initiated', 'Payment', String(payment._id), { refundId: result.refundId, amount });
-      return res.json({
-        refundId:  result.refundId,
-        status:    result.status,
-        payment:   { ...payment.toObject(), amount: +((payment.amount / 100).toFixed(2)), refundedAmount: +((payment.refundedAmount / 100).toFixed(2)) },
-      });
-    } catch (e) {
-      return sendError(res, 502, 'Refund failed: ' + (e as Error).message);
+    if (gatewayConfig && GatewayFactory.isRegistered(snapshot.gatewayType as Parameters<typeof GatewayFactory.isRegistered>[0])) {
+      try {
+        const gateway = GatewayFactory.create(gatewayConfig);
+        const result  = await gateway.initiateRefund({ gatewayTransactionId: snapshot.gatewayTransactionId, amount: amountPaise, reason });
+        gatewayRefundId = result.refundId;
+        gatewayStatus   = result.status;
+        gatewayResponse = result.gatewayResponse;
+      } catch (e) {
+        // Gateway failed — release the lock so a retry is possible
+        await Payment.updateOne({ _id: locked._id }, { $set: { refundInProgress: false } }).catch(() => {});
+        return sendError(res, 502, 'Refund failed: ' + (e as Error).message);
+      }
     }
+
+    const actualRefundId = gatewayRefundId ?? localRefundId;
+    const newRefunded    = locked.refundedAmount + amountPaise;
+    const newRefStatus   = newRefunded >= locked.amount ? 'full'     : 'partial';
+    const newPayStatus   = newRefunded >= locked.amount ? 'refunded' : 'partial_refunded';
+
+    const refundEntry = {
+      refundId:        actualRefundId,
+      amount:          amountPaise,
+      reason:          reason ?? '',
+      initiatedBy:     req.hotelId ?? 'system',
+      refundedAt:      new Date(),
+      gatewayResponse,
+    };
+
+    // Commit: we hold the lock so no concurrent refund can interfere
+    const updated = await Payment.findOneAndUpdate(
+      { _id: locked._id, refundInProgress: true },
+      {
+        $inc:  { refundedAmount: amountPaise },
+        $push: { refunds: refundEntry },
+        $set:  { refundStatus: newRefStatus, status: newPayStatus, refundInProgress: false },
+      },
+      { new: true },
+    );
+    if (!updated) {
+      // Extremely unlikely — lock was somehow broken; release and surface error
+      await Payment.updateOne({ _id: locked._id }, { $set: { refundInProgress: false } }).catch(() => {});
+      return res.status(500).json({ message: 'Refund commit failed. Check payment status and retry.' });
+    }
+
+    const isPendingGateway = !gatewayRefundId;
+    logAudit(req, 'refund_initiated', 'Payment', String(updated._id), {
+      refundId: actualRefundId, amount,
+      status:   isPendingGateway ? 'pending_gateway' : 'processed',
+    });
+
+    return res.json({
+      refundId: actualRefundId,
+      status:   gatewayStatus ?? 'pending',
+      ...(isPendingGateway && { message: `Refund recorded. Gateway '${snapshot.gatewayType}' SDK needs to be integrated to process it.` }),
+      payment:  { ...updated.toObject(), amount: +((updated.amount / 100).toFixed(2)), refundedAmount: +((updated.refundedAmount / 100).toFixed(2)) },
+    });
   } catch (err) {
     return sendError(res, 500, 'Failed to initiate refund', err);
   }

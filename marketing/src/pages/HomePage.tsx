@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { usePageSEO } from '../hooks/usePageSEO';
 import {
-  Zap, LayoutGrid, Package, Printer, Smartphone, Sparkles,
+  Zap, LayoutGrid, Package, Printer, Sparkles,
   ChevronRight, CheckCircle2, Star, Check,
   Utensils, Coffee, Cake, Flame, Truck, Wine,
   UtensilsCrossed, Building, ShoppingBag, IceCream, ChefHat,
-  Monitor, TrendingUp, Globe, Users,
-  BarChart3, ArrowRight,
+  Monitor, TrendingUp, Globe, FileText, Tablet,
+  BarChart3, ArrowRight, Bluetooth, Smartphone,
+  Brain, CreditCard,
 } from 'lucide-react';
 
 // ── Hero ──────────────────────────────────────────────────────────────────────
@@ -22,16 +23,16 @@ function Hero() {
       />
       <div className="relative mx-auto max-w-4xl text-center">
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-orange-800/40 bg-orange-900/30 px-4 py-1.5 text-xs font-semibold text-orange-300">
-          <Star size={12} className="text-[#E8380D]" />
-          Trusted by 500+ restaurants across India
+          <Zap size={12} className="text-[#E8380D]" />
+          Now onboarding founding restaurants — personal setup included
         </div>
         <h1 className="mb-5 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
           The Complete POS for{' '}
           <span className="text-[#E8380D]">Modern Restaurants</span>
         </h1>
         <p className="mx-auto mb-8 max-w-2xl text-lg leading-relaxed text-gray-300">
-          Streamline orders, billing, and inventory — all from one screen.
-          Built for dine-in, takeaway, and cloud kitchens.
+          Billing, AI menu import, loyalty & CRM, vendor management, inventory intelligence,
+          and AI analytics — all in one system built for Indian restaurants.
         </p>
         <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
@@ -47,26 +48,26 @@ function Hero() {
             See Features <ChevronRight size={16} />
           </Link>
         </div>
-        <p className="mt-5 text-xs text-gray-500">No credit card required · 14-day free trial</p>
+        <p className="mt-5 text-xs text-gray-500">No credit card required · 14-day free trial · ₹0 setup fee</p>
       </div>
     </section>
   );
 }
 
-// ── Stats strip ───────────────────────────────────────────────────────────────
+// ── Honest product stats ───────────────────────────────────────────────────────
 
-const STATS = [
-  { value: '500+',  label: 'Restaurants' },
-  { value: '1M+',   label: 'Orders processed' },
-  { value: '99.9%', label: 'Uptime' },
-  { value: '24/7',  label: 'Support' },
+const PRODUCT_STATS = [
+  { value: '< 2 min', label: 'AI Menu Import' },
+  { value: '14 days', label: 'Free trial' },
+  { value: '₹0',     label: 'Setup fee' },
+  { value: '1 day',  label: 'Go live timeline' },
 ];
 
 function StatsStrip() {
   return (
     <section className="border-b border-gray-100 bg-[#FFF6EE] py-8">
       <div className="mx-auto grid max-w-4xl grid-cols-2 gap-8 px-5 text-center sm:grid-cols-4">
-        {STATS.map(({ value, label }) => (
+        {PRODUCT_STATS.map(({ value, label }) => (
           <div key={label}>
             <div className="text-2xl font-extrabold text-[#E8380D]">{value}</div>
             <div className="mt-0.5 text-xs text-gray-500">{label}</div>
@@ -80,18 +81,18 @@ function StatsStrip() {
 // ── Restaurant types ──────────────────────────────────────────────────────────
 
 const RESTAURANT_TYPES = [
-  { icon: Utensils,       label: 'Restaurant' },
-  { icon: Coffee,         label: 'Café' },
-  { icon: Cake,           label: 'Bakery' },
-  { icon: Flame,          label: 'Cloud Kitchen' },
-  { icon: Truck,          label: 'Food Truck' },
-  { icon: Wine,           label: 'Bar & Pub' },
-  { icon: UtensilsCrossed,label: 'Fine Dining' },
-  { icon: Building,       label: 'Hotel' },
-  { icon: ShoppingBag,    label: 'QSR' },
-  { icon: Package,        label: 'Sweet Shop' },
-  { icon: IceCream,       label: 'Ice Cream' },
-  { icon: ChefHat,        label: 'Tiffin Centre' },
+  { icon: Utensils,        label: 'Restaurant' },
+  { icon: Coffee,          label: 'Café' },
+  { icon: Cake,            label: 'Bakery' },
+  { icon: Flame,           label: 'Cloud Kitchen' },
+  { icon: Truck,           label: 'Food Truck' },
+  { icon: Wine,            label: 'Bar & Pub' },
+  { icon: UtensilsCrossed, label: 'Fine Dining' },
+  { icon: Building,        label: 'Hotel' },
+  { icon: ShoppingBag,     label: 'QSR' },
+  { icon: Package,         label: 'Sweet Shop' },
+  { icon: IceCream,        label: 'Ice Cream' },
+  { icon: ChefHat,         label: 'Tiffin Centre' },
 ];
 
 function RestaurantTypes() {
@@ -124,12 +125,51 @@ function RestaurantTypes() {
 // ── Feature highlights ────────────────────────────────────────────────────────
 
 const FEATURES = [
-  { icon: Zap,        title: 'Instant Order Entry',     desc: 'Take orders table-by-table or guest-by-guest with a keyboard-first interface. Zero training needed.' },
-  { icon: LayoutGrid, title: 'Smart Table Management',  desc: 'Visual table grid shows live status, occupied guests, and running totals at a glance.' },
-  { icon: Package,    title: 'Menu & Inventory',        desc: 'Manage products, categories, and ingredient stock. Get low-stock alerts before you run out.' },
-  { icon: Sparkles,   title: 'AI Intelligence',          desc: 'Morning briefings, sales forecasts, smart recommendations, and a purchase assistant — powered by AI.' },
-  { icon: Printer,    title: 'Kitchen Printing',        desc: 'Auto-print KOTs to your kitchen printer the moment an order is placed.' },
-  { icon: Smartphone, title: 'Works on Any Device',     desc: 'Web-based POS runs on desktop, tablet, and mobile. No app installation needed.' },
+  {
+    icon: Zap,
+    title: 'Instant Order Entry',
+    desc: 'Take orders table-by-table or guest-by-guest with a keyboard-first interface. Zero training needed.',
+  },
+  {
+    icon: Sparkles,
+    title: 'AI Menu Import',
+    desc: 'Upload a photo or PDF of your existing menu. Gemini AI extracts every dish, price, and category — live in under 2 minutes.',
+  },
+  {
+    icon: CreditCard,
+    title: 'Loyalty, Wallet & CRM',
+    desc: 'Customer profiles, loyalty points, wallet credit, and coupon codes — turn first-time visitors into regulars at the billing counter.',
+  },
+  {
+    icon: LayoutGrid,
+    title: 'Smart Table Management',
+    desc: 'Visual table grid shows live status, occupied guests, running totals, and table reservations at a glance.',
+  },
+  {
+    icon: Brain,
+    title: 'AI Business Intelligence',
+    desc: 'Gemini analyses yesterday\'s orders, flags anomalies, and delivers a daily morning brief with action items before your first order.',
+  },
+  {
+    icon: Truck,
+    title: 'Vendor & Supply Chain',
+    desc: 'Raise purchase orders, log GRN receipts, track vendor ledgers, and manage expense entries — fully integrated with inventory.',
+  },
+  {
+    icon: Globe,
+    title: 'QR & Kiosk Ordering',
+    desc: 'Customers scan a QR to self-order from their phone, or walk up to a kiosk tablet. Both feed directly to your kitchen.',
+  },
+  {
+    icon: Printer,
+    title: 'Kitchen Display & Printing',
+    desc: 'Real-time kitchen screen and auto-print KOTs. Bluetooth, WiFi, and USB thermal printers supported.',
+  },
+  {
+    icon: Smartphone,
+    title: 'Android POS App',
+    desc: 'Native Android app for billing, waiter ordering, and kitchen display. Works on any affordable tablet.',
+  },
 ];
 
 function FeatureHighlights() {
@@ -169,7 +209,7 @@ const TOURS = [
     icon: Zap,
     headline: 'Bill in seconds, not minutes',
     description: 'Keyboard-first POS with smart product search, split payments, multi-mode billing, GST auto-calculation and instant KOT printing.',
-    points: ['Split & merge bills', 'Multiple payment modes', 'GST auto-calculation', 'Instant KOT printing', 'Discount & promo engine'],
+    points: ['Split & merge bills', 'Multiple payment modes', 'GST auto-calculation', 'Instant KOT printing', 'Discount engine'],
     visual: (
       <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-md">
         <div className="mb-4 flex items-center justify-between">
@@ -185,19 +225,11 @@ const TOURS = [
           ))}
         </div>
         <div className="border-t border-gray-100 pt-3 space-y-1">
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>Subtotal</span><span>₹580</span>
-          </div>
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>GST (5%)</span><span>₹29</span>
-          </div>
-          <div className="flex justify-between text-sm font-bold mt-1">
-            <span>Total</span><span className="text-[#E8380D]">₹609</span>
-          </div>
+          <div className="flex justify-between text-xs text-gray-500"><span>Subtotal</span><span>₹580</span></div>
+          <div className="flex justify-between text-xs text-gray-500"><span>GST (5%)</span><span>₹29</span></div>
+          <div className="flex justify-between text-sm font-bold mt-1"><span>Total</span><span className="text-[#E8380D]">₹609</span></div>
         </div>
-        <button className="mt-4 w-full rounded-xl bg-[#E8380D] py-2.5 text-sm font-bold text-white">
-          Collect Payment
-        </button>
+        <button className="mt-4 w-full rounded-xl bg-[#E8380D] py-2.5 text-sm font-bold text-white">Collect Payment</button>
       </div>
     ),
   },
@@ -206,7 +238,7 @@ const TOURS = [
     icon: Monitor,
     headline: 'Zero missed orders',
     description: 'Real-time kitchen display replaces printed KOTs. Orders appear the moment they are placed, with visual timers that flag delays before they escalate.',
-    points: ['Real-time order feed', 'Delay alert timers', 'Course-wise tracking', 'Multi-station support', 'Audio alerts'],
+    points: ['Real-time order feed', 'Delay alert timers', 'Multi-station support', 'Audio alerts', 'Mark orders ready'],
     visual: (
       <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
         <div className="mb-3 flex items-center justify-between">
@@ -233,20 +265,132 @@ const TOURS = [
     ),
   },
   {
+    label: 'QR Ordering',
+    icon: Globe,
+    headline: 'Guests order. Kitchen gets it. You smile.',
+    description: 'Scan-to-menu on every table. No app download. Orders land directly in the POS and kitchen display. Reduce waiter dependency during rush hours.',
+    points: ['No-app QR menu', 'Live order sync to POS', 'Table-mapped ordering', 'Customisable digital menu', 'Real-time updates'],
+    visual: (
+      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-md flex flex-col items-center gap-4">
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide self-start">Table QR Code</p>
+        <div className="h-32 w-32 rounded-2xl bg-gray-900 flex items-center justify-center relative overflow-hidden">
+          <div className="grid grid-cols-7 gap-px p-2 opacity-90">
+            {Array.from({ length: 49 }, (_, i) => {
+              const pattern = [1,1,1,1,1,1,1,1,0,0,0,0,0,1,1,0,1,1,1,0,1,1,0,1,0,1,0,1,1,0,1,1,1,0,1,1,0,0,0,0,0,1,1,1,1,1,1,1,1,1];
+              return (
+                <div key={i} className={`h-2.5 w-2.5 rounded-[1px] ${(pattern[i] ?? (i % 3 === 0 ? 1 : 0)) ? 'bg-white' : 'bg-gray-900'}`} />
+              );
+            })}
+          </div>
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-bold text-gray-900">Table 7 · Dine In</p>
+          <p className="text-xs text-gray-400 mt-0.5">Scan to view menu & order</p>
+        </div>
+        <div className="w-full rounded-xl bg-green-50 border border-green-100 p-3 text-center">
+          <p className="text-xs font-semibold text-green-700">3 new orders received via QR</p>
+        </div>
+      </div>
+    ),
+  },
+  {
+    label: 'AI Import',
+    icon: Sparkles,
+    headline: 'Your entire menu live in 2 minutes',
+    description: 'Upload a photo or PDF of your existing menu. Gemini AI reads every dish, price, and category — then imports it directly into your POS. No manual typing.',
+    points: ['Photo or PDF upload', 'AI extracts names, prices, categories', 'One-click import to your menu', 'Review & edit before going live', 'Works on handwritten menus'],
+    visual: (
+      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-md">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-purple-50 flex items-center justify-center">
+            <Sparkles size={20} className="text-purple-600" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-gray-900">AI Menu Import</p>
+            <p className="text-xs text-gray-400">Powered by Gemini AI</p>
+          </div>
+          <span className="ml-auto flex h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+        </div>
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-xs font-black text-red-500">PDF</div>
+          <div>
+            <p className="text-xs font-semibold text-gray-700">hotel_menu_2024.pdf</p>
+            <p className="text-xs text-gray-400">Uploaded · 2.4 MB</p>
+          </div>
+          <span className="ml-auto text-xs font-bold text-green-600">✓ Done</span>
+        </div>
+        <div className="space-y-2 mb-4">
+          {[
+            { cat: 'Starters',    count: '8 items' },
+            { cat: 'Main Course', count: '14 items' },
+            { cat: 'Breads',      count: '6 items' },
+            { cat: 'Beverages',   count: '12 items' },
+          ].map(({ cat, count }) => (
+            <div key={cat} className="flex items-center justify-between rounded-lg bg-green-50 px-3 py-1.5">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={12} className="text-green-500" />
+                <span className="text-xs font-medium text-gray-700">{cat}</span>
+              </div>
+              <span className="text-xs font-semibold text-green-700">{count} extracted</span>
+            </div>
+          ))}
+        </div>
+        <button className="w-full rounded-xl bg-[#E8380D] py-2.5 text-sm font-bold text-white">
+          Import 40 items to menu →
+        </button>
+      </div>
+    ),
+  },
+  {
+    label: 'Kiosk',
+    icon: Tablet,
+    headline: 'Let customers order themselves',
+    description: 'Turn any Android tablet into a self-service kiosk. Customers browse the menu, add items, and pay via UPI — no waiter needed. Orders go straight to the kitchen.',
+    points: ['Customer self-order interface', 'UPI & cash payment options', 'Orders go straight to Kitchen Display', 'Works on any Android tablet', 'No customer app download needed'],
+    visual: (
+      <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+        <div className="mb-4 text-center">
+          <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Self-Order Kiosk</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5 mb-4">
+          {[
+            { name: 'Chicken Biryani', price: '₹180', emoji: '🍛' },
+            { name: 'Veg Thali',       price: '₹120', emoji: '🥘' },
+            { name: 'Butter Naan',     price: '₹40',  emoji: '🫓' },
+            { name: 'Mango Lassi',     price: '₹60',  emoji: '🥤' },
+          ].map(item => (
+            <div key={item.name} className="rounded-xl bg-gray-800 p-3">
+              <div className="text-2xl mb-1">{item.emoji}</div>
+              <p className="text-xs font-semibold text-white leading-tight">{item.name}</p>
+              <p className="text-xs font-bold text-[#E8380D] mt-0.5">{item.price}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mb-3 flex justify-between rounded-xl bg-gray-800 px-3 py-2">
+          <span className="text-xs text-gray-400">Cart · 2 items</span>
+          <span className="text-xs font-bold text-white">₹220</span>
+        </div>
+        <button className="w-full rounded-xl bg-[#E8380D] py-2.5 text-center text-sm font-bold text-white">
+          Pay ₹220 via UPI
+        </button>
+      </div>
+    ),
+  },
+  {
     label: 'Inventory',
     icon: Package,
     headline: 'Know what runs low before it runs out',
-    description: 'Track raw materials and finished goods, set reorder alerts, reduce wastage and see live cost-per-dish. Food cost under control, always.',
-    points: ['Ingredient-level tracking', 'Low-stock alerts', 'Recipe costing', 'Wastage reports', 'Purchase orders'],
+    description: 'Track raw materials and finished goods, set reorder alerts, and see cost-per-ingredient. Inventory under control, always.',
+    points: ['Ingredient-level tracking', 'Low-stock alerts', 'Recipe costing', 'Cost-per-unit tracking', 'Restock history'],
     visual: (
       <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-md">
         <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Stock Levels</p>
         <div className="space-y-4">
           {[
-            { name: 'Chicken', qty: '3.2 kg', pct: 32, warn: true  },
-            { name: 'Basmati Rice', qty: '18 kg', pct: 75, warn: false },
-            { name: 'Tomatoes', qty: '1.1 kg', pct: 14, warn: true  },
-            { name: 'Oil', qty: '4 L', pct: 55, warn: false },
+            { name: 'Chicken',     qty: '3.2 kg', pct: 32, warn: true  },
+            { name: 'Basmati Rice',qty: '18 kg',  pct: 75, warn: false },
+            { name: 'Tomatoes',    qty: '1.1 kg', pct: 14, warn: true  },
+            { name: 'Oil',         qty: '4 L',    pct: 55, warn: false },
           ].map(({ name, qty, pct, warn }) => (
             <div key={name}>
               <div className="flex justify-between text-xs mb-1">
@@ -254,10 +398,7 @@ const TOURS = [
                 <span className={warn ? 'text-red-500' : 'text-gray-400'}>{qty}</span>
               </div>
               <div className="h-2 rounded-full bg-gray-100">
-                <div
-                  className={`h-2 rounded-full transition-all ${warn ? 'bg-red-500' : 'bg-[#E8380D]'}`}
-                  style={{ width: `${pct}%` }}
-                />
+                <div className={`h-2 rounded-full ${warn ? 'bg-red-500' : 'bg-[#E8380D]'}`} style={{ width: `${pct}%` }} />
               </div>
             </div>
           ))}
@@ -272,20 +413,20 @@ const TOURS = [
     label: 'Reports',
     icon: BarChart3,
     headline: 'Every number you need, one dashboard',
-    description: 'Sales by item, category, shift, or day. Profit & loss, top sellers, voids, discounts — full visibility with no manual entry.',
-    points: ['Sales by category', 'Shift-wise reports', 'P&L overview', 'GST summary', 'Export to Excel'],
+    description: 'Sales by item, category, and day. Tax collected, payment method breakdown — full visibility with no manual entry.',
+    points: ['Sales by category', 'Payment method breakdown', 'GST tax report', 'Export to CSV', 'Daily revenue summary'],
     visual: (
       <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-md">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-bold text-gray-900">Today's Sales</p>
-          <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">↑ 18% vs yesterday</span>
+          <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-600">↑ 18% vs yesterday</span>
         </div>
         <div className="space-y-3">
           {[
-            { label: 'Biryani',     value: 38, amount: '₹7,600' },
-            { label: 'Starters',    value: 27, amount: '₹5,400' },
-            { label: 'Breads',      value: 20, amount: '₹4,000' },
-            { label: 'Beverages',   value: 15, amount: '₹3,000' },
+            { label: 'Biryani',   value: 38, amount: '₹7,600' },
+            { label: 'Starters',  value: 27, amount: '₹5,400' },
+            { label: 'Breads',    value: 20, amount: '₹4,000' },
+            { label: 'Beverages', value: 15, amount: '₹3,000' },
           ].map(({ label, value, amount }) => (
             <div key={label}>
               <div className="flex justify-between text-xs mb-1">
@@ -310,62 +451,121 @@ const TOURS = [
     ),
   },
   {
-    label: 'CRM',
-    icon: Users,
-    headline: 'Turn regulars into loyal fans',
-    description: 'Capture every customer at checkout. Track visits, spending and preferences. Send targeted promotions that convert.',
-    points: ['Customer profiles', 'Visit & spend history', 'Loyalty points', 'WhatsApp promotions', 'Birthday offers'],
+    label: 'Loyalty & CRM',
+    icon: CreditCard,
+    headline: 'Turn walk-ins into regulars',
+    description: 'Every customer gets a profile. Earn loyalty points on every bill, redeem via wallet credit, send coupon codes, and issue gift vouchers — all managed from the billing counter.',
+    points: ['Customer profiles & visit history', 'Loyalty points on every bill', 'Wallet credit & redemption', 'Coupon codes & gift vouchers', 'Spend analytics per customer'],
     visual: (
       <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-md">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center text-sm font-bold text-[#E8380D]">AR</div>
-          <div>
-            <p className="text-sm font-bold text-gray-900">Arun Rajan</p>
-            <p className="text-xs text-gray-400">+91 98765 43210</p>
+        <div className="mb-4 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-pink-50 flex items-center justify-center">
+            <CreditCard size={20} className="text-pink-600" />
           </div>
-          <span className="ml-auto text-xs font-semibold bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded-full">⭐ VIP</span>
+          <div>
+            <p className="text-sm font-bold text-gray-900">Priya Sharma</p>
+            <p className="text-xs text-gray-400">Member since Aug 2024 · 14 visits</p>
+          </div>
+          <span className="ml-auto rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">Gold</span>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-center mb-4">
-          {[['23', 'Visits'], ['₹18,420', 'Spent'], ['460 pts', 'Loyalty']].map(([v, l]) => (
-            <div key={l} className="rounded-lg bg-gray-50 py-2">
-              <p className="text-sm font-bold text-gray-900">{v}</p>
-              <p className="text-[10px] text-gray-400">{l}</p>
+        <div className="mb-4 grid grid-cols-3 gap-2 text-center">
+          {[['₹1,240', 'Wallet'], ['620', 'Points'], ['₹8,400', 'Spent']].map(([v, l]) => (
+            <div key={l} className="rounded-lg bg-[#FFF6EE] py-2">
+              <p className="text-sm font-bold text-[#E8380D]">{v}</p>
+              <p className="text-[10px] text-gray-500">{l}</p>
             </div>
           ))}
         </div>
-        <div className="rounded-xl bg-orange-50 border border-orange-100 p-3">
-          <p className="text-xs font-semibold text-[#E8380D] mb-1">Birthday offer active</p>
-          <p className="text-xs text-gray-500">15% off on next visit — valid till 28 Jul</p>
+        <div className="space-y-2 mb-4">
+          {[
+            { label: 'Last visit', value: 'Yesterday · ₹480' },
+            { label: 'Favourite', value: 'Chicken Biryani' },
+            { label: 'Active coupon', value: '10% off next bill' },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex justify-between text-xs">
+              <span className="text-gray-400">{label}</span>
+              <span className="font-semibold text-gray-700">{value}</span>
+            </div>
+          ))}
+        </div>
+        <button className="w-full rounded-xl bg-[#E8380D] py-2.5 text-sm font-bold text-white">
+          Apply ₹1,240 Wallet Credit
+        </button>
+      </div>
+    ),
+  },
+  {
+    label: 'Vendor & Supply',
+    icon: Truck,
+    headline: 'Full supply chain, zero spreadsheets',
+    description: 'Create purchase orders, record GRN receipts, track vendor-wise balances, and log daily expenses. Every rupee from supplier to kitchen is accounted for.',
+    points: ['Vendor master & contact list', 'Purchase orders with line items', 'GRN receipt & stock update', 'Vendor ledger & outstanding balance', 'Expense tracking & P&L dashboard'],
+    visual: (
+      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-md">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Purchase Order #PO-0042</p>
+          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Pending GRN</span>
+        </div>
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-50">
+            <Truck size={14} className="text-[#E8380D]" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-800">Sri Balaji Traders</p>
+            <p className="text-[10px] text-gray-400">Delivery: Today before 10 AM</p>
+          </div>
+        </div>
+        <div className="space-y-1.5 mb-3">
+          {[['Chicken (kg)', '20', '₹220', '₹4,400'], ['Tomatoes (kg)', '15', '₹40', '₹600'], ['Oil (L)', '10', '₹130', '₹1,300']].map(([item, qty, rate, total]) => (
+            <div key={item} className="grid grid-cols-4 gap-1 rounded-lg bg-gray-50 px-2 py-1.5 text-[10px]">
+              <span className="col-span-2 font-medium text-gray-700">{item}</span>
+              <span className="text-center text-gray-500">{qty} × {rate}</span>
+              <span className="text-right font-bold text-gray-800">{total}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-between rounded-xl bg-[#FFF6EE] px-3 py-2 text-sm">
+          <span className="font-semibold text-gray-700">Total</span>
+          <span className="font-extrabold text-[#E8380D]">₹6,300</span>
         </div>
       </div>
     ),
   },
   {
-    label: 'QR Ordering',
-    icon: Globe,
-    headline: 'Guests order. Kitchen gets it. You smile.',
-    description: 'Scan-to-menu on every table. No app download. Orders land directly in the POS. Reduce waiter dependency during rush hours.',
-    points: ['No-app QR menu', 'Live order sync to POS', 'Table-mapped ordering', 'Customisable digital menu', 'Real-time updates'],
+    label: 'AI Analytics',
+    icon: Brain,
+    headline: 'Insights before your first order',
+    description: 'Every morning Gemini analyses the previous day\'s orders, flags anomalies, forecasts demand, and delivers a plain-English brief with specific actions your team can act on immediately.',
+    points: ['Daily AI morning brief', 'Sales anomaly detection', 'Demand forecasting by category', 'Menu profitability analysis', 'Actionable recommendations'],
     visual: (
-      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-md flex flex-col items-center gap-4">
-        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide self-start">Table QR Code</p>
-        <div className="h-32 w-32 rounded-2xl bg-gray-900 flex items-center justify-center relative overflow-hidden">
-          {/* QR code visual pattern */}
-          <div className="grid grid-cols-7 gap-px p-2 opacity-90">
-            {Array.from({ length: 49 }, (_, i) => {
-              const pattern = [1,1,1,1,1,1,1,1,0,0,0,0,0,1,1,0,1,1,1,0,1,1,0,1,0,1,0,1,1,0,1,1,1,0,1,1,0,0,0,0,0,1,1,1,1,1,1,1,1,1];
-              return (
-                <div key={i} className={`h-2.5 w-2.5 rounded-[1px] ${(pattern[i] ?? Math.random() > 0.5 ? 1 : 0) ? 'bg-white' : 'bg-gray-900'}`} />
-              );
-            })}
+      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-md">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50">
+            <Brain size={20} className="text-purple-600" />
           </div>
+          <div>
+            <p className="text-sm font-bold text-gray-900">Morning Brief · Today</p>
+            <p className="text-xs text-gray-400">Generated by Gemini AI · 6:30 AM</p>
+          </div>
+          <span className="ml-auto flex h-2 w-2 rounded-full bg-green-400 animate-pulse" />
         </div>
-        <div className="text-center">
-          <p className="text-sm font-bold text-gray-900">Table 7 · Dine In</p>
-          <p className="text-xs text-gray-400 mt-0.5">Scan to view menu & order</p>
+        <div className="space-y-2.5">
+          {[
+            { type: 'insight', text: 'Yesterday revenue ₹48,200 — up 18% vs last Thursday. Biryani drove 38% of sales.' },
+            { type: 'alert',   text: 'Chicken stock projected to run out by 2 PM today based on yesterday\'s consumption rate.' },
+            { type: 'tip',     text: 'Mango Lassi has 68% margin. Consider featuring it in QR menu today.' },
+          ].map(({ type, text }) => (
+            <div key={text} className={`rounded-xl p-3 text-xs leading-relaxed ${type === 'alert' ? 'bg-red-50 text-red-700' : type === 'tip' ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-700'}`}>
+              <span className="mr-1 font-bold">
+                {type === 'alert' ? '⚠' : type === 'tip' ? '💡' : '📊'}
+              </span>
+              {text}
+            </div>
+          ))}
         </div>
-        <div className="w-full rounded-xl bg-green-50 border border-green-100 p-3 text-center">
-          <p className="text-xs font-semibold text-green-700">3 new orders received via QR</p>
+        <div className="mt-4 flex justify-between rounded-xl bg-purple-50 px-3 py-2 text-xs">
+          <span className="text-purple-600 font-semibold">AI Confidence</span>
+          <span className="font-bold text-purple-700">High · Based on 134 orders</span>
         </div>
       </div>
     ),
@@ -385,7 +585,6 @@ function ProductTour() {
           <p className="mt-3 text-gray-500">Explore each module below.</p>
         </div>
 
-        {/* Tab buttons */}
         <div role="tablist" aria-label="Product tour" className="mb-10 flex flex-wrap justify-center gap-2">
           {TOURS.map((t, i) => (
             <button
@@ -405,9 +604,7 @@ function ProductTour() {
           ))}
         </div>
 
-        {/* Content */}
         <div className="grid gap-12 lg:grid-cols-2 lg:gap-16 items-center">
-          {/* Left: copy */}
           <div className="space-y-6">
             <h3 className="text-2xl font-bold text-gray-900 sm:text-3xl">{tour.headline}</h3>
             <p className="text-gray-500 leading-relaxed">{tour.description}</p>
@@ -428,8 +625,6 @@ function ProductTour() {
               See {tour.label} live <ArrowRight size={14} />
             </Link>
           </div>
-
-          {/* Right: visual */}
           <div className="w-full max-w-sm mx-auto lg:max-w-none">{tour.visual}</div>
         </div>
       </div>
@@ -440,12 +635,12 @@ function ProductTour() {
 // ── Why DinePOS ───────────────────────────────────────────────────────────────
 
 const WHY = [
-  { icon: Zap,      title: 'Bill 3× Faster',          desc: 'Smart product search, quick-add and saved orders make billing faster than any manual system.' },
-  { icon: Package,  title: 'Cut Food Waste',           desc: 'Real-time inventory with recipe-level costing alerts your team before stock runs critical.' },
-  { icon: TrendingUp, title: 'More Table Turns',       desc: 'Kitchen display + captain app eliminate delays. Faster service means more covers per shift.' },
-  { icon: BarChart3,  title: 'Reports in Seconds',     desc: 'Daily sales, top sellers, shift summaries and GST reports — one tap. No spreadsheets.' },
-  { icon: Globe,    title: 'Multi-Branch Control',     desc: 'Manage every outlet from one dashboard. Live sales, staff and inventory across locations.' },
-  { icon: Users,    title: 'Free Setup & Training',     desc: 'Our team installs, configures, and trains your staff — at no extra cost. Most restaurants go live the same day.' },
+  { icon: Zap,        title: 'Fast Billing Interface',     desc: 'Keyboard-first search, touch quick-add, barcode scanning, and modifier groups — every item added from a searchable menu without scrolling.' },
+  { icon: CreditCard, title: 'Loyalty, Wallet & CRM',      desc: 'Customer profiles with loyalty points at billing, wallet credit, coupon codes, and gift vouchers — all accessible from the payment screen.' },
+  { icon: TrendingUp, title: 'P&L Dashboard & Expenses',   desc: 'Log expenses by category, see revenue vs COGS, and drill into margin per dish. Finance dashboard built in — no separate spreadsheets.' },
+  { icon: Brain,      title: 'AI Morning Brief & Analytics', desc: 'Gemini reads your daily order data and delivers a morning brief with observations, anomaly flags, and sales trends before your first order.' },
+  { icon: Sparkles,   title: 'AI Menu Import',              desc: 'Upload a photo or PDF of your existing menu. Gemini extracts every dish, price, and category and imports directly into your POS.' },
+  { icon: Star,       title: 'Free Setup & Training',       desc: 'Our team installs, configures, and trains your staff — at no extra cost. Most restaurants go live the same day.' },
 ];
 
 function WhyDinePOS() {
@@ -454,8 +649,8 @@ function WhyDinePOS() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-12 text-center">
           <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#E8380D]">Why DinePOS</p>
-          <h2 className="text-3xl font-bold text-gray-900">Real business results</h2>
-          <p className="mt-3 text-gray-500">Not a feature list. Outcomes that move your bottom line.</p>
+          <h2 className="text-3xl font-bold text-gray-900">Built for how restaurants actually work</h2>
+          <p className="mt-3 text-gray-500">Every feature exists because a restaurant owner asked for it.</p>
         </div>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {WHY.map(({ icon: Icon, title, desc }) => (
@@ -475,17 +670,68 @@ function WhyDinePOS() {
   );
 }
 
-// ── Full feature grid ──────────────────────────────────────────────────────────
+// ── Full feature grid ─────────────────────────────────────────────────────────
 
 const ALL_FEATURES = [
-  'POS Billing', 'KOT Printing', 'Table Management', 'Kitchen Display',
-  'Inventory Tracking', 'Recipe Costing', 'QR Menu', 'Captain App',
-  'Owner App', 'Customer Display', 'CRM & Loyalty', 'GST Billing',
-  'Reports & Analytics', 'Multi-Branch', 'Cloud Backup', 'Loyalty Points',
-  'Coupons & Offers', 'Expense Tracking', 'Staff Management', 'Role Permissions',
-  'Audit Logs', 'Integrations', 'Aggregator Orders', 'Reservations',
-  'AI Morning Brief', 'AI Forecasting', 'AI Recommendations', 'Purchase Assistant',
-  'Vendor Management', 'Purchase Orders', 'GRN & Receiving', 'Modifier Groups',
+  // Ordering & Tables
+  'POS Billing',
+  'KOT Printing',
+  'Table Management',
+  'Table Reservations',
+  'QR Menu Ordering',
+  'Kiosk Ordering',
+  'Captain / Waiter App',
+  // Kitchen
+  'Kitchen Display System',
+  'Receipt Printing',
+  'Bluetooth Printing',
+  // AI & Menu
+  'AI Menu Import',
+  'AI Business Intelligence',
+  'AI Forecasting',
+  'AI Alerts & Recommendations',
+  'AI Chat',
+  'Morning Brief',
+  'Product Image Management',
+  'Modifier Groups',
+  // Customers
+  'Loyalty & CRM',
+  'Customer Wallet',
+  'Gift Vouchers',
+  'Coupon Codes',
+  // Inventory
+  'Inventory Tracking',
+  'Recipe Costing',
+  'Low-stock Alerts',
+  'Wastage Tracking',
+  'Inventory Intelligence',
+  'Stock Turnover Analysis',
+  // Supply Chain
+  'Vendor Management',
+  'Purchase Orders',
+  'Goods Receive Notes (GRN)',
+  'Vendor Ledger',
+  // Finance & Reporting
+  'Expense Tracking',
+  'P&L Dashboard',
+  'Menu Profitability',
+  'Reports & Analytics',
+  'GST Billing',
+  'Export to CSV',
+  // Payments
+  'UPI Payments',
+  'Razorpay Checkout',
+  'Split Payments',
+  // Operations
+  'Customer Display Screen',
+  'Owner App',
+  'Android POS App',
+  // Platform
+  'Device Activation',
+  'Role Permissions',
+  'Audit Logs',
+  'Real-time Sync',
+  'Trial & Subscription',
 ];
 
 function FeatureGrid() {
@@ -495,7 +741,7 @@ function FeatureGrid() {
         <div className="mb-12 text-center">
           <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#E8380D]">Features</p>
           <h2 className="text-3xl font-bold text-gray-900">Everything included, no extras</h2>
-          <p className="mt-3 text-gray-500">32 modules. One subscription. Nothing hidden.</p>
+          <p className="mt-3 text-gray-500">One subscription. Nothing hidden.</p>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {ALL_FEATURES.map(f => (
@@ -521,23 +767,17 @@ function FeatureGrid() {
 // ── Integrations ──────────────────────────────────────────────────────────────
 
 const INTEGRATIONS = [
-  { name: 'Razorpay',   cat: 'Payments' },
-  { name: 'PhonePe',    cat: 'Payments' },
-  { name: 'Google Pay', cat: 'Payments' },
-  { name: 'Paytm',      cat: 'Payments' },
-  { name: 'WhatsApp',   cat: 'Communication' },
-  { name: 'Swiggy',     cat: 'Delivery' },
-  { name: 'Zomato',     cat: 'Delivery' },
-  { name: 'ONDC',       cat: 'Delivery' },
-  { name: 'Tally',      cat: 'Accounting' },
-  { name: 'Zoho Books', cat: 'Accounting' },
+  { name: 'Razorpay',  cat: 'Payments',     badge: 'Live' },
+  { name: 'UPI / QR',  cat: 'Payments',     badge: 'Live' },
+  { name: 'Swiggy',    cat: 'Aggregators',  badge: 'Beta' },
+  { name: 'Zomato',    cat: 'Aggregators',  badge: 'Beta' },
 ];
 
+const COMING_SOON = ['WhatsApp', 'Tally'];
+
 const CAT_COLOR: Record<string, string> = {
-  Payments:      'bg-blue-50 text-blue-600',
-  Communication: 'bg-green-50 text-green-600',
-  Delivery:      'bg-orange-50 text-[#E8380D]',
-  Accounting:    'bg-purple-50 text-purple-600',
+  Payments:    'bg-blue-50 text-blue-600',
+  Aggregators: 'bg-orange-50 text-orange-600',
 };
 
 function Integrations() {
@@ -546,26 +786,42 @@ function Integrations() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-12 text-center">
           <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#E8380D]">Integrations</p>
-          <h2 className="text-3xl font-bold text-gray-900">Connects to the tools you already use</h2>
-          <p className="mt-3 text-gray-500">Payments, delivery platforms, accounting software — all in sync.</p>
+          <h2 className="text-3xl font-bold text-gray-900">Payments & hardware, ready on day one</h2>
+          <p className="mt-3 text-gray-500">More integrations are actively being built.</p>
         </div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {INTEGRATIONS.map(({ name, cat }) => (
+
+        {/* Live integrations */}
+        <div className="mb-8 flex flex-wrap justify-center gap-4">
+          {INTEGRATIONS.map(({ name, cat, badge }) => (
             <div
               key={name}
-              className="flex flex-col items-center gap-3 rounded-2xl border border-[#EBD8C8] bg-white p-5 text-center shadow-sm hover:shadow-md transition-shadow"
+              className="flex items-center gap-3 rounded-2xl border border-[#EBD8C8] bg-white px-5 py-4 shadow-sm"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-50 text-sm font-black text-gray-700">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-50 text-sm font-black text-gray-700">
                 {name.slice(0, 2).toUpperCase()}
               </div>
               <div>
                 <p className="text-sm font-semibold text-gray-900">{name}</p>
-                <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${CAT_COLOR[cat]}`}>{cat}</span>
+                <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${CAT_COLOR[cat]}`}>{cat}</span>
               </div>
+              <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold ${badge === 'Beta' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>{badge}</span>
             </div>
           ))}
         </div>
-        <p className="mt-8 text-center text-sm text-gray-400">+ Hardware: Epson, TVS, Posiflex printers · Barcode scanners · Cash drawers</p>
+
+        {/* Coming soon */}
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-6 text-center">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400">Coming soon</p>
+          <div className="flex flex-wrap justify-center gap-3">
+            {COMING_SOON.map(name => (
+              <span key={name} className="rounded-full border border-gray-200 bg-gray-50 px-4 py-1.5 text-sm font-medium text-gray-500">
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <p className="mt-6 text-center text-sm text-gray-400">Hardware: Epson, TVS, Posiflex printers · Bluetooth thermal printers · Cash drawers</p>
       </div>
     </section>
   );
@@ -574,9 +830,9 @@ function Integrations() {
 // ── How it works ──────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { n: '01', title: 'Sign up & configure',   desc: 'Register your restaurant, add your menu, set table layout.' },
-  { n: '02', title: 'Train in 30 minutes',   desc: 'Intuitive interface — your staff learns it in one shift.' },
-  { n: '03', title: 'Start taking orders',   desc: 'Go live the same day. Print receipts, track billing, run reports.' },
+  { n: '01', title: 'Sign up & configure',  desc: 'Register your restaurant, upload your menu (or let AI import it), set up table layout.' },
+  { n: '02', title: 'Train in 30 minutes',  desc: 'Intuitive interface — your staff learns it in one shift.' },
+  { n: '03', title: 'Start taking orders',  desc: 'Go live the same day. Print receipts, track billing, run reports.' },
 ];
 
 function HowItWorks() {
@@ -585,7 +841,7 @@ function HowItWorks() {
       <div className="mx-auto max-w-4xl">
         <div className="mb-12 text-center">
           <h2 className="text-3xl font-bold text-gray-900">Up and running in one day</h2>
-          <p className="mt-3 text-gray-500">No installation. No IT team. Just a browser.</p>
+          <p className="mt-3 text-gray-500">No IT team. Just a browser and an Android tablet.</p>
         </div>
         <div className="relative flex flex-col gap-8 md:flex-row">
           {STEPS.map(({ n, title, desc }, i) => (
@@ -609,136 +865,40 @@ function HowItWorks() {
   );
 }
 
-// ── Testimonials ──────────────────────────────────────────────────────────────
+// ── Founding restaurant offer ─────────────────────────────────────────────────
 
-const TESTIMONIALS = [
-  {
-    name:  'Rajesh Kumar',
-    role:  'Owner, Spice Garden Restaurant',
-    city:  'Chennai',
-    quote: 'Dine POS cut our billing time in half. The table management alone is worth every rupee.',
-  },
-  {
-    name:  'Priya Nair',
-    role:  'Manager, The Coastal Kitchen',
-    city:  'Kochi',
-    quote: 'The kitchen printer integration works flawlessly. No more lost KOTs, no more arguments.',
-  },
-  {
-    name:  'Mohammed Salim',
-    role:  'Owner, Biryani House',
-    city:  'Coimbatore',
-    quote: 'We run 3 outlets on one account. The daily reports help me compare performance instantly.',
-  },
+const FOUNDING_PERKS = [
+  { title: 'Personal Setup',   desc: 'Our team configures your menu, tables, and printers on-site. You don\'t touch a config file.' },
+  { title: 'Direct Support',   desc: 'Reach us directly on WhatsApp — not a ticket queue. Real response from the people who built it.' },
+  { title: 'Founding Price',   desc: '₹12,000/year locked in for the lifetime of your subscription. Price won\'t change as we grow.' },
 ];
 
-function Testimonials() {
+function FoundingOffer() {
   return (
     <section className="bg-[#FFF6EE] py-20 px-5">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-12 text-center">
-          <h2 className="text-3xl font-bold text-gray-900">Loved by restaurant owners</h2>
+      <div className="mx-auto max-w-3xl text-center">
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-1.5 text-xs font-semibold text-[#E8380D]">
+          <Star size={12} className="fill-[#E8380D] text-[#E8380D]" /> Founding Restaurant Offer
         </div>
-        <div className="grid gap-6 md:grid-cols-3">
-          {TESTIMONIALS.map(({ name, role, city, quote }) => (
-            <div key={name} className="rounded-2xl border border-[#EBD8C8] bg-white p-6 shadow-sm">
-              <div className="mb-4 flex gap-1">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} size={14} className="fill-[#E8380D] text-[#E8380D]" />
-                ))}
-              </div>
-              <p className="mb-5 text-sm leading-relaxed text-gray-600">"{quote}"</p>
-              <div>
-                <div className="font-semibold text-gray-900">{name}</div>
-                <div className="text-xs text-gray-400">{role} · {city}</div>
-              </div>
+        <h2 className="text-3xl font-bold text-gray-900">Be among our first restaurants</h2>
+        <p className="mx-auto mt-4 max-w-xl text-gray-500">
+          We're personally onboarding our first batch of restaurants. You get direct access to the team — for setup, training, and any questions.
+        </p>
+        <div className="mt-8 grid gap-4 sm:grid-cols-3">
+          {FOUNDING_PERKS.map(({ title, desc }) => (
+            <div key={title} className="rounded-2xl border border-[#EBD8C8] bg-white p-5 text-left shadow-sm">
+              <p className="mb-2 font-semibold text-gray-900">{title}</p>
+              <p className="text-sm leading-relaxed text-gray-500">{desc}</p>
             </div>
           ))}
         </div>
-      </div>
-    </section>
-  );
-}
-
-// ── ROI calculator ────────────────────────────────────────────────────────────
-
-function ROICalculator() {
-  const [orders, setOrders]   = useState(80);
-  const [avgBill, setAvgBill] = useState(350);
-  const [tables, setTables]   = useState(20);
-
-  const extraOrders   = Math.round(orders * 0.15);
-  const revenueGain   = extraOrders * avgBill * 30;
-  const timeSaved     = Math.round(orders * 0.5);
-  const labourSaved   = Math.round(timeSaved * 4 * 30);
-
-  function Slider({ label, value, min, max, step, unit, onChange }: {
-    label: string; value: number; min: number; max: number; step: number; unit: string;
-    onChange: (v: number) => void;
-  }) {
-    const id = `roi-${label.toLowerCase().replace(/\s+/g, '-')}`;
-    return (
-      <div className="space-y-2">
-        <div className="flex justify-between text-sm">
-          <label htmlFor={id} className="font-medium text-gray-700">{label}</label>
-          <span className="font-bold text-[#E8380D]" aria-live="polite">{unit}{value.toLocaleString('en-IN')}</span>
-        </div>
-        <input
-          id={id}
-          type="range" min={min} max={max} step={step} value={value}
-          onChange={e => onChange(Number(e.target.value))}
-          className="w-full accent-[#E8380D]"
-          aria-label={label}
-        />
-        <div className="flex justify-between text-xs text-gray-400" aria-hidden="true">
-          <span>{unit}{min}</span><span>{unit}{max}</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <section className="bg-white py-20 px-5">
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-12 text-center">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#E8380D]">ROI Calculator</p>
-          <h2 className="text-3xl font-bold text-gray-900">See what DinePOS is worth to you</h2>
-          <p className="mt-3 text-gray-500">Adjust the sliders to match your restaurant.</p>
-        </div>
-        <div className="rounded-3xl border border-gray-100 bg-white shadow-xl overflow-hidden">
-          <div className="grid md:grid-cols-2">
-            {/* Inputs */}
-            <div className="p-8 space-y-8 border-b border-gray-100 md:border-b-0 md:border-r">
-              <p className="text-sm font-bold text-gray-500 uppercase tracking-wide">Your Restaurant</p>
-              <Slider label="Orders per day"     value={orders}  min={20}  max={500} step={10}  unit=""  onChange={setOrders} />
-              <Slider label="Average bill value" value={avgBill} min={100} max={2000} step={50} unit="₹" onChange={setAvgBill} />
-              <Slider label="Number of tables"   value={tables}  min={5}   max={100} step={5}   unit=""  onChange={setTables} />
-            </div>
-            {/* Outputs */}
-            <div className="p-8 bg-[#1C0800] text-white space-y-6">
-              <p className="text-sm font-bold text-gray-400 uppercase tracking-wide">Your Monthly Gain</p>
-              <div className="space-y-4">
-                {[
-                  { label: 'Extra orders/day (15% faster billing)', value: `+${extraOrders} orders` },
-                  { label: 'Revenue increase',                      value: `+₹${revenueGain.toLocaleString('en-IN')}` },
-                  { label: 'Time saved per day',                    value: `${timeSaved} min` },
-                  { label: 'Labour cost saved',                     value: `₹${labourSaved.toLocaleString('en-IN')}` },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex items-center justify-between border-b border-white/10 pb-4 last:border-0 last:pb-0">
-                    <p className="text-sm text-gray-400 max-w-[55%]">{label}</p>
-                    <p className="text-lg font-black text-[#E8380D]">{value}</p>
-                  </div>
-                ))}
-              </div>
-              <Link
-                to="/book-demo"
-                className="mt-2 block w-full rounded-xl bg-[#E8380D] py-3 text-center text-sm font-bold text-white hover:bg-[#C93008] transition-colors"
-              >
-                Book a Free Demo
-              </Link>
-            </div>
-          </div>
-        </div>
+        <Link
+          to="/book-demo"
+          className="mt-8 inline-flex items-center gap-2 rounded-xl bg-[#E8380D] px-8 py-3.5 text-sm font-semibold text-white hover:bg-[#C93008] transition-colors"
+        >
+          Book Your Demo <ArrowRight size={14} />
+        </Link>
+        <p className="mt-4 text-xs text-gray-400">Limited spots · First come, first served</p>
       </div>
     </section>
   );
@@ -748,7 +908,7 @@ function ROICalculator() {
 
 const INCLUSIONS = [
   'Full POS access', 'Unlimited products', 'Kitchen printing',
-  'Daily reports', 'Email support', 'No setup fee',
+  'Daily reports', 'WhatsApp support', 'No setup fee',
 ];
 
 function CTABanner() {
@@ -788,7 +948,7 @@ function CTABanner() {
 export function HomePage() {
   usePageSEO(
     'Dine POS — Restaurant POS System',
-    'The complete point-of-sale system for modern restaurants. Streamline orders, billing, and inventory — all from one screen. Trusted by 500+ restaurants across India.',
+    'The complete point-of-sale system for modern Indian restaurants. AI menu import, QR ordering, kiosk, kitchen display, and Android POS — all in one. 14-day free trial.',
   );
   return (
     <>
@@ -801,8 +961,7 @@ export function HomePage() {
       <FeatureGrid />
       <Integrations />
       <HowItWorks />
-      <Testimonials />
-      <ROICalculator />
+      <FoundingOffer />
       <CTABanner />
     </>
   );

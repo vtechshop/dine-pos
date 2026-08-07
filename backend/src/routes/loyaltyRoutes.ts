@@ -157,7 +157,7 @@ router.get('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: Re
         .sort({ lastVisitAt: -1 })
         .skip(skip)
         .limit(limitNum)
-        .select('customerId name phone loyaltyBalance lifetimeSpend visitCount lastVisitAt status'),
+        .select('customerId name phone loyaltyBalance walletBalance lifetimeSpend visitCount lastVisitAt status'),
       CustomerProfile.countDocuments(filter),
     ]);
 
@@ -174,9 +174,10 @@ router.get('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: Re
 // ────────────────────────────────────────────────────────────────────────────────
 router.post('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { name, phone, email, birthday } = req.body as {
-      name?: string; phone?: string; email?: string; birthday?: string;
-    };
+    const {
+      name, phone, email, birthday, anniversary,
+      gstCustomer, companyName, gstin, tags, notes, marketingOptIn,
+    } = req.body as Record<string, any>;
 
     const cleanName = String(name ?? '').trim().slice(0, 100);
     if (!cleanName) {
@@ -212,7 +213,15 @@ router.post('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: R
       phone:        normalizedPhone,
       email:        email ? String(email).trim().slice(0, 200) : undefined,
       birthday:     birthday ? String(birthday).trim().slice(0, 5) : undefined,
+      anniversary:  anniversary ? String(anniversary).trim().slice(0, 5) : undefined,
+      gstCustomer:  Boolean(gstCustomer),
+      companyName:  companyName ? String(companyName).trim().slice(0, 150) : '',
+      gstin:        gstin ? String(gstin).trim().toUpperCase().slice(0, 15) : '',
+      tags:         Array.isArray(tags) ? tags.map(String).slice(0, 10) : [],
+      notes:        notes ? String(notes).trim().slice(0, 1000) : '',
+      marketingOptIn: Boolean(marketingOptIn),
       loyaltyBalance: 0,
+      walletBalance:  0,
       lifetimeSpend:  0,
       visitCount:     0,
       status:         'active',
@@ -225,6 +234,45 @@ router.post('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: R
       return;
     }
     sendError(res, 500, 'Failed to create customer', err);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// PATCH /api/loyalty/customers/:customerId
+// Update mutable fields of a customer profile.
+// RBAC: cashier | admin
+// ────────────────────────────────────────────────────────────────────────────────
+router.patch('/customers/:customerId', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const customer = await resolveCustomer(req.params.customerId, req.hotelId!);
+    if (!customer) { res.status(404).json({ message: 'Customer not found' }); return; }
+    if (customer.status === 'merged') { res.status(409).json({ message: 'Cannot edit a merged customer record' }); return; }
+
+    const allowed = [
+      'name', 'email', 'birthday', 'anniversary',
+      'gstCustomer', 'companyName', 'gstin',
+      'tags', 'notes', 'marketingOptIn',
+      'deliveryAddresses',
+    ] as const;
+
+    let changed = false;
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) {
+        (customer as any)[key] = req.body[key];
+        changed = true;
+      }
+    }
+
+    if (!changed) { res.status(400).json({ message: 'No valid fields to update' }); return; }
+
+    await customer.save();
+    res.json({ customer });
+  } catch (err: any) {
+    if (err.name === 'ValidationError') {
+      res.status(400).json({ message: err.message });
+      return;
+    }
+    sendError(res, 500, 'Failed to update customer', err);
   }
 });
 

@@ -80,6 +80,9 @@ import StaffKitchenScreen from '../screens/ai/StaffKitchenScreen';
 import PurchaseAssistantScreen from '../screens/ai/PurchaseAssistantScreen';
 import AIMenuImportScreen from '../screens/ai/AIMenuImportScreen';
 import BulkImageAssignScreen from '../screens/ai/BulkImageAssignScreen';
+import CouponScreen from '../screens/CouponScreen';
+import GiftVoucherScreen from '../screens/GiftVoucherScreen';
+import PurchaseInvoiceScreen from '../screens/PurchaseInvoiceScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<TabParamList>();
@@ -320,6 +323,9 @@ const AppNavigator = () => {
             <Stack.Screen name="PurchaseAssistant" component={PurchaseAssistantScreen} options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="AIMenuImport"      component={AIMenuImportScreen}      options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="BulkImageAssign"  component={BulkImageAssignScreen}  options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="Coupons"        component={CouponScreen}       options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Coupons',       headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="GiftVouchers"      component={GiftVoucherScreen}      options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Gift Vouchers',      headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="PurchaseInvoices"  component={PurchaseInvoiceScreen}  options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Purchase Invoices', headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen
               name="AddProduct"
               component={AddProductScreen}
