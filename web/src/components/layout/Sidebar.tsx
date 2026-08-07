@@ -1,42 +1,16 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard,
-  ShoppingCart,
-  LayoutGrid,
-  Users,
-  Package,
-  Archive,
-  BarChart2,
-  Settings,
-  CalendarDays,
-  ChefHat,
-  CreditCard,
-  Truck,
-  Link2,
-  RefreshCw,
-  Layers,
-  Store,
-  ShoppingBag,
-  ClipboardList,
-  Wallet,
-  TrendingUp,
-  Sparkles,
-  X,
-  Bot,
-  Sunrise,
-  FileBarChart,
-  MessageSquare,
-  Bell,
-  Lightbulb,
-  ScanLine,
-  Tag,
-  Gift,
-  Shield,
+  LayoutDashboard, ShoppingCart, LayoutGrid, Users, Package, Archive, BarChart2,
+  Settings, CalendarDays, ChefHat, CreditCard, Truck, Link2, RefreshCw, Layers,
+  Store, ShoppingBag, ClipboardList, Wallet, TrendingUp, Sparkles, X, Bot, Sunrise,
+  FileBarChart, MessageSquare, Bell, Lightbulb, ScanLine, Tag, Gift, Shield,
+  Plus, PauseCircle, Search, Printer,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useCashier, type CashierTab } from '../../context/CashierContext';
 
-// ── Nav item types ─────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 interface NavItem {
   to:    string;
@@ -50,7 +24,14 @@ interface NavGroup {
   items:    NavItem[];
 }
 
-// ── Navigation structure ───────────────────────────────────────────────────────
+interface PosNavItem {
+  key:   CashierTab;
+  icon:  LucideIcon;
+  label: string;
+  hint?: string;
+}
+
+// ── Admin navigation ───────────────────────────────────────────────────────────
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -61,22 +42,20 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/customers',    icon: Users,           label: 'Customers', hint: 'F4' },
       { to: '/products',     icon: Package,         label: 'Products' },
       { to: '/modifiers',    icon: Layers,          label: 'Modifiers' },
-      { to: '/vendors',         icon: Store,       label: 'Vendors' },
-      { to: '/purchase-orders', icon: ShoppingBag,   label: 'Purchase Orders' },
-      { to: '/grn',             icon: ClipboardList, label: 'Receive Goods' },
-      { to: '/vendor-ledger',   icon: Wallet,        label: 'Vendor Ledger' },
-      { to: '/coupons',         icon: Tag,           label: 'Coupons' },
-      { to: '/gift-vouchers',   icon: Gift,          label: 'Gift Vouchers' },
-      { to: '/inventory',              icon: Archive,     label: 'Inventory' },
-      { to: '/inventory-intelligence', icon: TrendingUp,  label: 'Stock Intel' },
-      { to: '/payments',               icon: CreditCard,  label: 'Payments' },
-      { to: '/reports',                icon: BarChart2,   label: 'Reports' },
-      { to: '/audit-logs',   icon: Shield,          label: 'Audit Logs' },
-      { to: '/settings',     icon: Settings,        label: 'Settings' },
-      { to: '/reservations', icon: CalendarDays,    label: 'Reservations' },
-      { to: '/kitchen',      icon: ChefHat,         label: 'Kitchen' },
-      // Cashier-only operational hub — hidden from admin and other staff
-      { to: '/cashier',      icon: CreditCard,      label: 'Cashier Ops', hint: 'F2' },
+      { to: '/vendors',          icon: Store,        label: 'Vendors' },
+      { to: '/purchase-orders',  icon: ShoppingBag,  label: 'Purchase Orders' },
+      { to: '/grn',              icon: ClipboardList, label: 'Receive Goods' },
+      { to: '/vendor-ledger',    icon: Wallet,        label: 'Vendor Ledger' },
+      { to: '/coupons',          icon: Tag,           label: 'Coupons' },
+      { to: '/gift-vouchers',    icon: Gift,          label: 'Gift Vouchers' },
+      { to: '/inventory',              icon: Archive,    label: 'Inventory' },
+      { to: '/inventory-intelligence', icon: TrendingUp, label: 'Stock Intel' },
+      { to: '/payments',               icon: CreditCard, label: 'Payments' },
+      { to: '/reports',    icon: BarChart2,   label: 'Reports' },
+      { to: '/audit-logs', icon: Shield,      label: 'Audit Logs' },
+      { to: '/settings',   icon: Settings,    label: 'Settings' },
+      { to: '/reservations', icon: CalendarDays, label: 'Reservations' },
+      { to: '/kitchen',    icon: ChefHat,     label: 'Kitchen' },
     ],
   },
   {
@@ -96,46 +75,56 @@ const NAV_GROUPS: NavGroup[] = [
   {
     heading: 'AI Platform',
     items: [
-      { to: '/ai',              icon: Bot,         label: 'AI Dashboard'   },
-      { to: '/ai/brief',        icon: Sunrise,      label: 'Morning Brief'  },
-      { to: '/ai/reports',      icon: FileBarChart, label: 'AI Reports'     },
-      { to: '/ai/chat',         icon: MessageSquare,label: 'AI Chat'        },
-      { to: '/ai/forecast',     icon: TrendingUp,   label: 'Forecast'       },
-      { to: '/ai/alerts',       icon: Bell,         label: 'Alerts'         },
-      { to: '/ai/recommendations', icon: Lightbulb, label: 'Recommendations'},
-      { to: '/ai/purchase',     icon: ScanLine,     label: 'Purchase AI'    },
+      { to: '/ai',                  icon: Bot,          label: 'AI Dashboard'    },
+      { to: '/ai/brief',            icon: Sunrise,       label: 'Morning Brief'   },
+      { to: '/ai/reports',          icon: FileBarChart,  label: 'AI Reports'      },
+      { to: '/ai/chat',             icon: MessageSquare, label: 'AI Chat'         },
+      { to: '/ai/forecast',         icon: TrendingUp,    label: 'Forecast'        },
+      { to: '/ai/alerts',           icon: Bell,          label: 'Alerts'          },
+      { to: '/ai/recommendations',  icon: Lightbulb,     label: 'Recommendations' },
+      { to: '/ai/purchase',         icon: ScanLine,      label: 'Purchase AI'     },
     ],
   },
 ];
 
-// Routes visible only to the admin role (cashier sees none of these)
-const ADMIN_ONLY_ROUTES = new Set([
-  '/dashboard', '/tables', '/kitchen',
-  '/orders', '/customers', '/products', '/modifiers', '/vendors', '/purchase-orders', '/grn',
-  '/vendor-ledger', '/coupons', '/gift-vouchers', '/audit-logs',
-  '/inventory', '/inventory-intelligence', '/payments',
-  '/reports', '/settings', '/reservations',
-  '/online-orders', '/integrations', '/menu-sync',
-  '/ai-menu-import',
-  '/ai', '/ai/brief', '/ai/reports', '/ai/chat', '/ai/forecast',
-  '/ai/alerts', '/ai/recommendations', '/ai/purchase',
-]);
+// ── Cashier POS nav (drives CashierPage tabs via context) ─────────────────────
 
-// Routes visible only to the cashier role
-const CASHIER_ONLY_ROUTES = new Set(['/cashier']);
+const POS_NAV: PosNavItem[] = [
+  { key: 'dashboard',     icon: LayoutDashboard, label: 'POS'            },
+  { key: 'new-order',     icon: Plus,            label: 'New Order',     hint: 'Ctrl+N' },
+  { key: 'pending',       icon: CreditCard,      label: 'Pending Bills', hint: 'F6'     },
+  { key: 'hold',          icon: PauseCircle,     label: 'Hold Bills'    },
+  { key: 'tables',        icon: LayoutGrid,      label: 'Tables'        },
+  { key: 'kitchen',       icon: ChefHat,         label: 'Kitchen Queue', hint: 'Ctrl+K' },
+  { key: 'online-orders', icon: Truck,           label: 'Online Orders', hint: 'Ctrl+O' },
+  { key: 'search',        icon: Search,          label: 'Bill Search',   hint: 'Ctrl+F' },
+  { key: 'customers',     icon: Users,           label: 'Customers',     hint: 'F4'     },
+  { key: 'shift',         icon: BarChart2,       label: 'Shift'         },
+  { key: 'drawer',        icon: Wallet,          label: 'Cash Drawer',   hint: 'Ctrl+D' },
+  { key: 'printers',      icon: Printer,         label: 'Printers'      },
+];
 
-// ── Props ─────────────────────────────────────────────────────────────────────
+// ── Kitchen & Waiter minimal navs ─────────────────────────────────────────────
+
+const KITCHEN_NAV: NavItem[] = [
+  { to: '/kitchen', icon: ChefHat, label: 'Kitchen Display' },
+];
+
+const WAITER_NAV: NavItem[] = [
+  { to: '/tables', icon: LayoutGrid, label: 'Tables' },
+];
+
+// ── Props ──────────────────────────────────────────────────────────────────────
 
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Shared NavLink row ─────────────────────────────────────────────────────────
 
 function NavItemRow({ item }: { item: NavItem }) {
   const { to, icon: Icon, label, hint } = item;
-
   return (
     <NavLink
       to={to}
@@ -162,14 +151,101 @@ function NavItemRow({ item }: { item: NavItem }) {
   );
 }
 
+// ── Component ──────────────────────────────────────────────────────────────────
+
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
-  const { role }  = useAuth();
-  const isAdmin   = role === 'admin';
+  const { role }                    = useAuth();
+  const navigate                    = useNavigate();
+  const { activeTab, setActiveTab } = useCashier();
+
   const isCashier = role === 'cashier';
+  const isKitchen = role === 'kitchen';
+  const isWaiter  = role === 'waiter';
+
+  // ── Role-specific nav content ────────────────────────────────────────────────
+
+  const navContent = (() => {
+    // Cashier → full POS sidebar (tabs drive CashierPage via context)
+    if (isCashier) {
+      return (
+        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5" onClick={onClose}>
+          {POS_NAV.map(item => {
+            const Icon    = item.icon;
+            const isActive = activeTab === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => { setActiveTab(item.key); navigate('/cashier'); }}
+                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+                  isActive
+                    ? 'bg-brand text-white'
+                    : 'text-white/50 hover:bg-white/[0.08] hover:text-white'
+                }`}
+              >
+                <Icon size={16} />
+                <span className="flex-1 text-left">{item.label}</span>
+                {item.hint && (
+                  <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-orange-200' : 'text-white/25'}`}>
+                    {item.hint}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      );
+    }
+
+    // Kitchen → only Kitchen Display
+    if (isKitchen) {
+      return (
+        <nav className="flex-1 overflow-y-auto px-2 py-3" onClick={onClose}>
+          <ul className="space-y-0.5">
+            {KITCHEN_NAV.map(item => (
+              <li key={item.to}><NavItemRow item={item} /></li>
+            ))}
+          </ul>
+        </nav>
+      );
+    }
+
+    // Waiter → Tables
+    if (isWaiter) {
+      return (
+        <nav className="flex-1 overflow-y-auto px-2 py-3" onClick={onClose}>
+          <ul className="space-y-0.5">
+            {WAITER_NAV.map(item => (
+              <li key={item.to}><NavItemRow item={item} /></li>
+            ))}
+          </ul>
+        </nav>
+      );
+    }
+
+    // Admin → full nav
+    return (
+      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4" onClick={onClose}>
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={gi}>
+            {group.heading && (
+              <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-white/25">
+                {group.heading}
+              </p>
+            )}
+            <ul className="space-y-0.5">
+              {group.items.map(item => (
+                <li key={item.to}><NavItemRow item={item} /></li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </nav>
+    );
+  })();
 
   return (
     <>
-      {/* Mobile backdrop — click to close */}
+      {/* Mobile backdrop */}
       {isOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 md:hidden"
@@ -195,33 +271,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           </button>
         </div>
 
-        {/* Nav — onClick closes sidebar on mobile after navigating */}
-        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4" onClick={onClose}>
-          {NAV_GROUPS.map((group, gi) => {
-            const visibleItems = (() => {
-              if (isAdmin)   return group.items.filter(i => !CASHIER_ONLY_ROUTES.has(i.to));
-              if (isCashier) return group.items.filter(i => !ADMIN_ONLY_ROUTES.has(i.to));
-              return group.items.filter(i => !ADMIN_ONLY_ROUTES.has(i.to) && !CASHIER_ONLY_ROUTES.has(i.to));
-            })();
-            if (visibleItems.length === 0) return null;
-            return (
-              <div key={gi}>
-                {group.heading && (
-                  <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-white/25">
-                    {group.heading}
-                  </p>
-                )}
-                <ul className="space-y-0.5">
-                  {visibleItems.map(item => (
-                    <li key={item.to}>
-                      <NavItemRow item={item} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </nav>
+        {navContent}
 
         <div className="border-t border-white/10 px-4 py-3">
           <p className="text-[10px] text-white/20">Dine POS Web · v1.0</p>
