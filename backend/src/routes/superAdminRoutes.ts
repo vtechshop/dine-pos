@@ -99,8 +99,9 @@ router.get('/hotels', superAdminAuth, async (req: Request, res: Response) => {
         .select('-adminPasswordHash')
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
-        .limit(limit),
-      Hotel.countDocuments(filter),
+        .limit(limit)
+        .maxTimeMS(10_000),
+      Hotel.countDocuments(filter).maxTimeMS(10_000),
     ]);
 
     return res.json({ hotels, total, page, limit, pages: Math.ceil(total / limit) || 1 });
