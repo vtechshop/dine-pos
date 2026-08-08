@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import HourlyMetrics from '../models/HourlyMetrics';
 import DailySnapshot from '../models/DailySnapshot';
 import JobRegistry from '../models/JobRegistry';
@@ -28,7 +29,7 @@ const saAuth = (req: Request, res: Response, next: NextFunction): void => {
 // ─── GET /api/ai/metrics/today ────────────────────────────────────────────────
 // Returns today's running revenue + order count.
 // Reads from Redis hot cache first; falls back to MongoDB hourly metrics sum.
-router.get('/metrics/today', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/metrics/today', authMiddleware, requireFeature('ai'), async (req: AuthRequest, res: Response) => {
   try {
     const hotelId = req.hotelId!;
 

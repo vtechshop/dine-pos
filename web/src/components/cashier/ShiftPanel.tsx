@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react';
-import { Clock, TrendingUp, Wallet, DollarSign, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { Clock, TrendingUp, Wallet, DollarSign, FileText, ChevronDown, ChevronUp, History } from 'lucide-react';
 import { useCashier } from '../../context/CashierContext';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
-import { fetchDailyReport } from '../../api/dashboard';
+import { apiGetActiveShiftStats, type ShiftStats } from '../../api/shifts';
 import { Spinner } from '../ui/Spinner';
-import type { DailyReport } from '../../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -29,8 +28,8 @@ function RunningShift({ nowMs }: { nowMs: number }) {
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
 
-  const [report, setReport] = useState<DailyReport | null>(null);
-  const [reportLoading, setReportLoading] = useState(true);
+  const [stats, setStats] = useState<ShiftStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [showClose, setShowClose] = useState(false);
   const [actualCash, setActualCash] = useState('');
   const [closingNote, setClosingNote] = useState('');
@@ -39,12 +38,12 @@ function RunningShift({ nowMs }: { nowMs: number }) {
 
   const load = useCallback(async () => {
     let cancelled = false;
-    setReportLoading(true);
+    setStatsLoading(true);
     try {
-      const r = await fetchDailyReport();
-      if (!cancelled) setReport(r);
+      const r = await apiGetActiveShiftStats();
+      if (!cancelled) setStats(r);
     } catch { /* non-fatal */ } finally {
-      if (!cancelled) setReportLoading(false);
+      if (!cancelled) setStatsLoading(false);
     }
     return () => { cancelled = true; };
   }, []);
@@ -57,7 +56,9 @@ function RunningShift({ nowMs }: { nowMs: number }) {
 
   if (!shift) return null;
 
-  const expectedCash = (report?.paymentBreakdown?.cash ?? 0) + shift.openingCash;
+  // expectedCash = openingCash + cashSales + cashIn - cashOut = drawerBalance + cashSales
+  const cashSales = stats?.cashSales ?? 0;
+  const expectedCash = drawerBalance + cashSales;
   const actual = parseFloat(actualCash) || 0;
   const difference = actual - expectedCash;
 
@@ -94,15 +95,15 @@ function RunningShift({ nowMs }: { nowMs: number }) {
         </div>
       </div>
 
-      {/* Revenue stats */}
-      {reportLoading ? (
+      {/* Revenue stats — shift-scoped (completed orders only) */}
+      {statsLoading ? (
         <div className="flex justify-center py-6"><Spinner /></div>
-      ) : report ? (
+      ) : stats ? (
         <div className="grid grid-cols-2 gap-3">
-          <StatBox label="Cash Sales" value={fmtINR(sym, report.paymentBreakdown?.cash ?? 0)} icon={<Wallet size={14} />} />
-          <StatBox label="Online Sales" value={fmtINR(sym, (report.paymentBreakdown?.upi ?? 0) + (report.paymentBreakdown?.card ?? 0))} icon={<TrendingUp size={14} />} />
-          <StatBox label="Total Bills" value={String(report.totalOrders)} icon={<FileText size={14} />} />
-          <StatBox label="Total Sales" value={fmtINR(sym, report.totalSales)} icon={<DollarSign size={14} />} accent />
+          <StatBox label="Cash Sales" value={fmtINR(sym, stats.cashSales)} icon={<Wallet size={14} />} />
+          <StatBox label="Online Sales" value={fmtINR(sym, stats.upiSales + stats.cardSales)} icon={<TrendingUp size={14} />} />
+          <StatBox label="Total Bills" value={String(stats.totalOrders)} icon={<FileText size={14} />} />
+          <StatBox label="Total Sales" value={fmtINR(sym, stats.totalSales)} icon={<DollarSign size={14} />} accent />
         </div>
       ) : null}
 
@@ -191,14 +192,21 @@ function RunningShift({ nowMs }: { nowMs: number }) {
 // ── Sub-component: shift summary (after close) ────────────────────────────────
 
 function ShiftSummary() {
-  const { shift, clearDrawerMovements } = useCashier();
+  const { shift, clearDrawerMovements, setActiveTab, setSelectedShiftId } = useCashier();
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
 
   if (!shift || shift.status !== 'closed') return null;
 
+  const diff = shift.difference ?? 0;
+
   function startNewShift() {
     clearDrawerMovements();
+  }
+
+  function viewZReport() {
+    setSelectedShiftId(shift!.id);
+    setActiveTab('z-report');
   }
 
   return (
@@ -216,17 +224,58 @@ function ShiftSummary() {
         <p className="text-xs font-semibold uppercase tracking-wide text-ink/40">Shift Summary</p>
         <Row label="Cashier" value={shift.cashierName} />
         <Row label="Opening Cash" value={fmtINR(sym, shift.openingCash)} />
+        {shift.cashSales !== undefined && (
+          <Row label="Cash Sales" value={fmtINR(sym, shift.cashSales)} />
+        )}
+        {shift.cashIn !== undefined && shift.cashIn > 0 && (
+          <Row label="Cash In" value={fmtINR(sym, shift.cashIn)} />
+        )}
+        {shift.cashOut !== undefined && shift.cashOut > 0 && (
+          <Row label="Cash Out" value={fmtINR(sym, shift.cashOut)} />
+        )}
+        {shift.expectedCash !== undefined && (
+          <Row label="Expected Cash" value={fmtINR(sym, shift.expectedCash)} />
+        )}
         {shift.actualCash !== undefined && (
-          <Row label="Closing Cash" value={fmtINR(sym, shift.actualCash)} />
+          <Row label="Actual Cash" value={fmtINR(sym, shift.actualCash)} />
         )}
         {shift.difference !== undefined && (
           <Row
-            label="Difference"
-            value={`${shift.difference >= 0 ? '+' : '−'}${fmtINR(sym, Math.abs(shift.difference))}`}
-            valueClass={shift.difference < 0 ? 'text-red-500 font-semibold' : 'text-emerald-600 font-semibold'}
+            label={diff > 0 ? 'Excess' : diff < 0 ? 'Shortage' : 'Difference'}
+            value={`${diff >= 0 ? '+' : '−'}${fmtINR(sym, Math.abs(diff))}`}
+            valueClass={diff < 0 ? 'text-red-500 font-semibold' : diff > 0 ? 'text-emerald-600 font-semibold' : 'text-ink/50'}
           />
         )}
+        {shift.totalSales !== undefined && (
+          <>
+            <div className="my-0.5 border-t border-border" />
+            <Row label="Total Sales" value={fmtINR(sym, shift.totalSales)} />
+            {shift.totalOrders !== undefined && (
+              <Row label="Total Orders" value={String(shift.totalOrders)} />
+            )}
+          </>
+        )}
         {shift.closingNote && <Row label="Note" value={shift.closingNote} />}
+      </div>
+
+      {/* Z-Report + History actions */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={viewZReport}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-canvas px-3 py-2 text-xs font-medium text-ink transition hover:bg-mist"
+        >
+          <FileText size={13} />
+          Z-Report
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('shift-history')}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-canvas px-3 py-2 text-xs font-medium text-ink transition hover:bg-mist"
+        >
+          <History size={13} />
+          History
+        </button>
       </div>
 
       <button

@@ -16,6 +16,7 @@ import { useSettings } from '../context/SettingsContext';
 import { OfflineIndicator } from '../components/OfflineIndicator';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import TrialBanner from '../components/TrialBanner';
 import { printKOT } from '../utils/receipt';
 import { setupNotifications, notifyChatMessage } from '../utils/notifications';
@@ -39,6 +40,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { settings, refreshSettings } = useSettings();
   const { logout } = useAuth();
   const { clearCart } = useCart();
+  const { flags } = useFeatureFlags();
   const { top } = useSafeAreaInsets();
   const { increment: incAdminBadge } = useBadgeCount(BADGE_KEYS.adminOrders);
   const { showToast } = useGlobalToast();
@@ -356,7 +358,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         )}
 
         {/* ── Low Ingredient Stock Alert ── */}
-        {lowIngredientCount > 0 && (
+        {flags.ingredients && lowIngredientCount > 0 && (
           <TouchableOpacity
             style={[styles.alertBanner, { backgroundColor: Colors.ingredient }]}
             onPress={() => navigation.navigate('Ingredients' as any)}
@@ -425,7 +427,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         )}
 
         {/* ── Delivery Stats Row (Swiggy + Zomato) ── */}
-        {(deliveryToday.swiggy > 0 || deliveryToday.zomato > 0) && (
+        {flags.aggregator && (deliveryToday.swiggy > 0 || deliveryToday.zomato > 0) && (
           <View style={styles.deliveryRow}>
             <TouchableOpacity
               style={[styles.deliveryCard, { borderColor: Colors.swiggy + '40' }]}
@@ -456,16 +458,16 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           {[
             { label: 'New Bill',       icon: 'receipt' as const,            color: Colors.primary,       bg: Colors.primaryBg,             nav: 'Billing' },
             { label: 'Orders',         icon: 'receipt-long' as const,       color: Colors.success,       bg: Colors.successBg,             nav: 'Orders' },
-            { label: 'Online Orders',  icon: 'delivery-dining' as const,    color: Colors.swiggy,        bg: Colors.swiggyBg,               nav: 'OnlineOrders' },
+            { label: 'Online Orders',  icon: 'delivery-dining' as const,    color: Colors.swiggy,        bg: Colors.swiggyBg,               nav: 'OnlineOrders',  show: flags.aggregator },
             { label: 'Products',       icon: 'inventory' as const,          color: Colors.warning,       bg: Colors.warningBg,             nav: 'Products' },
-            { label: 'Reports',        icon: 'bar-chart' as const,          color: Colors.info,          bg: Colors.infoBg,                nav: 'Reports' },
-            { label: 'Floor Map',      icon: 'table-restaurant' as const,   color: Colors.accent,        bg: Colors.accentBg,              nav: 'TableLayout' },
-            { label: 'Bookings',       icon: 'event-available' as const,    color: Colors.bookings,      bg: Colors.bookingsBg,             nav: 'Reservations' },
+            { label: 'Reports',        icon: 'bar-chart' as const,          color: Colors.info,          bg: Colors.infoBg,                nav: 'Reports',       show: flags.reports !== false },
+            { label: 'Floor Map',      icon: 'table-restaurant' as const,   color: Colors.accent,        bg: Colors.accentBg,              nav: 'TableLayout',   show: flags.tables !== false },
+            { label: 'Bookings',       icon: 'event-available' as const,    color: Colors.bookings,      bg: Colors.bookingsBg,             nav: 'Reservations',  show: flags.reservations !== false },
             { label: 'Customers',      icon: 'people' as const,             color: Colors.whatsApp,      bg: Colors.whatsAppBg,             nav: 'Customers' },
-            { label: 'Ingredients',    icon: 'kitchen' as const,            color: Colors.ingredient,    bg: Colors.ingredientBg,           nav: 'Ingredients' },
-            { label: 'Expenses',       icon: 'account-balance-wallet' as const, color: Colors.danger,   bg: Colors.dangerBg,              nav: 'Expenses' },
+            { label: 'Ingredients',    icon: 'kitchen' as const,            color: Colors.ingredient,    bg: Colors.ingredientBg,           nav: 'Ingredients',   show: flags.ingredients },
+            { label: 'Expenses',       icon: 'account-balance-wallet' as const, color: Colors.danger,   bg: Colors.dangerBg,              nav: 'Expenses',      show: flags.expenses !== false },
             { label: 'Settings',       icon: 'settings' as const,           color: Colors.textSecondary, bg: Colors.elevated,              nav: 'Settings' },
-          ].map((a, i) => (
+          ].filter(a => (a as any).show !== false).map((a, i) => (
             <TouchableOpacity
               key={i}
               style={styles.actionCard}

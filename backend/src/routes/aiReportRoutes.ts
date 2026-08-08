@@ -1,11 +1,13 @@
 import { Router, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { buildDailyReport } from '../services/dailyReport';
 import { buildExecutiveDashboard } from '../services/executiveDashboard';
 import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requireFeature('ai'));
 
 // ─── GET /api/ai/report/:date ─────────────────────────────────────────────────
 // Returns the AI-enhanced daily business report for a completed day.

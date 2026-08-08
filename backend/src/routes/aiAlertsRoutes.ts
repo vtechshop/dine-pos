@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { computeAlerts } from '../services/alertEngine';
 import { buildRecommendations } from '../services/recommendationEngine';
 import {
@@ -13,6 +14,7 @@ import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requireFeature('ai'));
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 

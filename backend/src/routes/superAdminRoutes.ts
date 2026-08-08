@@ -266,6 +266,7 @@ router.put('/hotels/:id/activate', superAdminAuth, async (req: Request, res: Res
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
+    logAuditRaw({ hotelId: req.params.id, action: 'hotel.activated', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} activated`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -277,6 +278,7 @@ router.put('/hotels/:id/expire', superAdminAuth, async (req: Request, res: Respo
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
+    logAuditRaw({ hotelId: req.params.id, action: 'hotel.expired', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} marked as expired`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -307,13 +309,19 @@ router.put('/hotels/:id/credentials', superAdminAuth, async (req: Request, res: 
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
+    logAuditRaw({ hotelId: req.params.id, action: 'hotel.credentials_updated', targetType: 'hotel', targetId: req.params.id, metadata: { adminId: hotel.adminId }, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} approved and credentials set`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
+const ALLOWED_PREMIUM_PLANS = ['free', 'pro', 'enterprise', 'trial'];
+
 router.put('/hotels/:id/premium', superAdminAuth, async (req: Request, res: Response) => {
   try {
     const { isPremium, premiumPlan, premiumExpiry, trialDays } = req.body;
+    if (isPremium && premiumPlan && !ALLOWED_PREMIUM_PLANS.includes(String(premiumPlan))) {
+      return res.status(400).json({ message: `Invalid premiumPlan. Allowed: ${ALLOWED_PREMIUM_PLANS.join(', ')}` });
+    }
     const update: any = {
       isPremium: !!isPremium,
       premiumPlan: isPremium ? (premiumPlan || 'pro') : 'free',
@@ -329,6 +337,7 @@ router.put('/hotels/:id/premium', superAdminAuth, async (req: Request, res: Resp
     const hotel = await Hotel.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
+    logAuditRaw({ hotelId: req.params.id, action: 'hotel.premium_updated', targetType: 'hotel', targetId: req.params.id, metadata: { isPremium: !!isPremium, premiumPlan: update.premiumPlan }, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} plan updated`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -358,6 +367,7 @@ router.put('/hotels/:id/trial', superAdminAuth, async (req: Request, res: Respon
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
+    logAuditRaw({ hotelId: req.params.id, action: 'hotel.trial_started', targetType: 'hotel', targetId: req.params.id, metadata: { days, trialEndDate: trialEndDate.toISOString() }, ip: req.ip });
     return res.json({
       message: `${hotel.hotelName} trial started for ${days} days (until ${trialEndDate.toLocaleDateString('en-IN')})`,
       hotel,
@@ -392,6 +402,7 @@ router.put('/hotels/:id/extend-trial', superAdminAuth, async (req: Request, res:
     );
     if (!updated) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
+    logAuditRaw({ hotelId: req.params.id, action: 'hotel.trial_extended', targetType: 'hotel', targetId: req.params.id, metadata: { addDays, newEnd: newEnd.toISOString() }, ip: req.ip });
     return res.json({
       message: `Trial extended by ${addDays} days (until ${newEnd.toLocaleDateString('en-IN')})`,
       hotel: updated,
@@ -427,6 +438,7 @@ router.put('/hotels/:id/plan', superAdminAuth, async (req: Request, res: Respons
     );
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
+    logAuditRaw({ hotelId: req.params.id, action: 'hotel.plan_updated', targetType: 'hotel', targetId: req.params.id, metadata: { plan, days, subscriptionEndDate: subscriptionEndDate.toISOString() }, ip: req.ip });
     return res.json({
       message: `${hotel.hotelName} converted to ${plan} plan (${days} days, until ${subscriptionEndDate.toLocaleDateString('en-IN')})`,
       hotel,
@@ -600,10 +612,15 @@ router.get('/notifications', superAdminAuth, async (_req: Request, res: Response
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
+const ALLOWED_NOTIFICATION_TYPES = ['info', 'warning', 'error', 'success'];
+
 router.post('/notifications', superAdminAuth, async (req: Request, res: Response) => {
   try {
     const { title, message, type, targetHotels, expiresInDays } = req.body;
     if (!title?.trim() || !message?.trim()) return res.status(400).json({ message: 'Title and message required' });
+    if (type && !ALLOWED_NOTIFICATION_TYPES.includes(String(type))) {
+      return res.status(400).json({ message: `Invalid notification type. Allowed: ${ALLOWED_NOTIFICATION_TYPES.join(', ')}` });
+    }
 
     let expiresAt: Date | null = null;
     if (expiresInDays && expiresInDays > 0) {
@@ -619,6 +636,7 @@ router.post('/notifications', superAdminAuth, async (req: Request, res: Response
       expiresAt,
       createdBy:    'superadmin',
     });
+    logAuditRaw({ hotelId: 'superadmin', action: 'notification.created', targetType: 'notification', targetId: String((notification as any)._id), metadata: { title: title.trim(), type: type || 'info' } });
     return res.status(201).json({ message: 'Notification broadcast sent', notification });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -626,6 +644,7 @@ router.post('/notifications', superAdminAuth, async (req: Request, res: Response
 router.delete('/notifications/:id', superAdminAuth, async (req: Request, res: Response) => {
   try {
     await Notification.findByIdAndUpdate(req.params.id, { isActive: false });
+    logAuditRaw({ hotelId: 'superadmin', action: 'notification.deactivated', targetType: 'notification', targetId: req.params.id });
     return res.json({ message: 'Notification deactivated' });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -652,6 +671,7 @@ router.put('/remote-config', superAdminAuth, async (req: Request, res: Response)
       if (req.body[key] !== undefined) update[key] = req.body[key];
     }
     let config = await RemoteConfig.findOneAndUpdate({}, { $set: update }, { new: true, upsert: true });
+    logAuditRaw({ hotelId: 'superadmin', action: 'remote_config.updated', targetType: 'remote_config', targetId: String((config as any)?._id ?? 'singleton'), metadata: update });
     return res.json({ message: 'Remote config updated', config });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -1283,6 +1303,7 @@ router.patch('/leads/:id', superAdminAuth, async (req: Request, res: Response) =
       { new: true },
     ).lean();
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
+    logAuditRaw({ hotelId: 'superadmin', action: 'lead.updated', targetType: 'lead', targetId: req.params.id, metadata: update });
     return res.json({ lead });
   } catch (err) { return sendError(res, 500, 'Server error', err); }
 });
@@ -1310,6 +1331,7 @@ router.delete('/leads/:id', superAdminAuth, async (req: Request, res: Response) 
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid lead ID' });
     const lead = await Lead.findByIdAndDelete(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
+    logAuditRaw({ hotelId: 'superadmin', action: 'lead.deleted', targetType: 'lead', targetId: req.params.id });
     return res.json({ message: 'Lead deleted' });
   } catch (err) { return sendError(res, 500, 'Server error', err); }
 });

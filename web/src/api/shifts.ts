@@ -99,3 +99,15 @@ export function apiGetShiftHistory(
 export function apiGetShift(id: string): Promise<{ shift: ShiftData }> {
   return shiftFetch(`/${id}`);
 }
+
+export interface ShiftStats {
+  totalOrders: number;
+  totalSales: number;
+  cashSales: number;
+  upiSales: number;
+  cardSales: number;
+}
+
+export function apiGetActiveShiftStats(): Promise<ShiftStats> {
+  return shiftFetch('/active/stats');
+}

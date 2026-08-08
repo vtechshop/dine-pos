@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { buildAnomalyReport } from '../services/anomalyDetector';
 import { buildStaffAnalytics } from '../services/staffAnalytics';
 import { buildKitchenAnalytics } from '../services/kitchenAnalytics';
@@ -14,6 +15,7 @@ import { sendError } from '../utils/sendError';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('ai'));
 
 // ─── GET /api/ai/analytics/anomalies ─────────────────────────────────────────
 // Fraud & anomaly detection report for today.

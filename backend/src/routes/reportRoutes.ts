@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import Order from '../models/Order';
 import Settings from '../models/Settings';
 import mongoose from 'mongoose';
@@ -10,6 +11,7 @@ import { logger } from '../utils/logger';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('reports'));
 
 // IST = UTC+05:30. Convert a YYYY-MM-DD string to the correct UTC Date for that
 // day's start (00:00:00 IST) or end (23:59:59.999 IST) so MongoDB $match

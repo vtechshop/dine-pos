@@ -5,12 +5,14 @@ import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
 import Order from '../models/Order';
 import GatewayFactory from '../services/payment/GatewayFactory';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { sendError } from '../utils/sendError';
 import { logAudit } from '../utils/audit';
 
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('payment'));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

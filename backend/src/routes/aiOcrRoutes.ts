@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import OcrJob from '../models/OcrJob';
 import { validateFileBuffer } from '../services/ocrPipeline';
 import {
@@ -15,6 +16,7 @@ import { sendError } from '../utils/sendError';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin); // only admin users can import invoices
+router.use(requireFeature('ai'));
 
 // Multer: in-memory, max 10MB, single file
 const upload = multer({

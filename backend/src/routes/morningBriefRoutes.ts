@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import MorningBrief from '../models/MorningBrief';
 import { buildMorningBrief } from '../services/morningBriefBuilder';
 import {
@@ -11,6 +12,7 @@ import { sendError } from '../utils/sendError';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('ai'));
 
 // ─── GET /api/ai/morning-brief ────────────────────────────────────────────────
 // Returns the latest available morning brief (most recent date).

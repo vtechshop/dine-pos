@@ -4,7 +4,7 @@ import {
   Settings, CalendarDays, ChefHat, CreditCard, Truck, Link2, RefreshCw, Layers,
   Store, ShoppingBag, ClipboardList, Wallet, TrendingUp, Sparkles, X, Bot, Sunrise,
   FileBarChart, MessageSquare, Bell, Lightbulb, ScanLine, Tag, Gift, Shield,
-  Plus, PauseCircle, Search, Printer, UserCircle,
+  Plus, PauseCircle, Search, Printer, UserCircle, History,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -100,6 +100,7 @@ const POS_NAV: PosNavItem[] = [
   { key: 'search',        icon: Search,          label: 'Bill Search',   hint: 'Ctrl+F' },
   { key: 'customers',     icon: Users,           label: 'Customers',     hint: 'F4'     },
   { key: 'shift',         icon: BarChart2,       label: 'Shift'         },
+  { key: 'shift-history', icon: History,         label: 'Shift History'  },
   { key: 'drawer',        icon: Wallet,          label: 'Cash Drawer',   hint: 'Ctrl+D' },
   { key: 'printers',      icon: Printer,         label: 'Printers'      },
   { key: 'profile',       icon: UserCircle,      label: 'Profile'       },

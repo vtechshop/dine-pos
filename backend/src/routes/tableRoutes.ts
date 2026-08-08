@@ -2,11 +2,13 @@ import { Router, Response } from 'express';
 import Table from '../models/Table';
 import TableSession from '../models/TableSession';
 import { authMiddleware, requireAdmin, requireWaiterOrCashierOrAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requireFeature('tables'));
 // requireAdmin is applied per write-route — all authenticated roles can read tables (waiter/kitchen need to see layout)
 
 // GET all tables for hotel — waiter, kitchen, cashier, admin all need to read tables

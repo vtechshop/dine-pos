@@ -17,6 +17,7 @@ import mongoose from 'mongoose';
 import {
   authMiddleware, requireAdmin, requireCashierOrAdmin, AuthRequest,
 } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { sendError } from '../utils/sendError';
 import CustomerProfile from '../models/CustomerProfile';
 import WalletTransaction from '../models/WalletTransaction';
@@ -24,6 +25,7 @@ import { logAudit } from '../utils/audit';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requireFeature('customerDatabase'));
 
 async function resolveCustomer(customerId: string, hotelId: string) {
   const hotelObjId = new mongoose.Types.ObjectId(hotelId);

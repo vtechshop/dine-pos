@@ -25,7 +25,9 @@ export type CashierTab =
   | 'customers'
   | 'printers'
   | 'profile'
-  | 'permissions';
+  | 'permissions'
+  | 'shift-history'
+  | 'z-report';
 
 export interface OrderPrefill {
   orderType: 'dine-in' | 'takeaway' | 'delivery';
@@ -59,6 +61,15 @@ export interface ShiftState {
   actualCash?: number;
   difference?: number;
   closingNote?: string;
+  // Backend-populated fields (present after API close)
+  expectedCash?: number;
+  cashSales?: number;
+  upiSales?: number;
+  cardSales?: number;
+  totalSales?: number;
+  totalOrders?: number;
+  cashIn?: number;
+  cashOut?: number;
 }
 
 export interface HeldBill {
@@ -133,6 +144,8 @@ interface CashierContextValue {
   shift: ShiftState | null;
   openShift: (data: Omit<ShiftState, 'id' | 'status'>) => void;
   closeShift: (actualCash: number, note: string) => void;
+  selectedShiftId: string | null;
+  setSelectedShiftId: (id: string | null) => void;
 
   // Held bills
   heldBills: HeldBill[];
@@ -194,6 +207,10 @@ export function CashierProvider({ children }: { children: ReactNode }) {
     } catch { return []; }
   });
 
+  // Keep a ref so replayOfflineShift can read movements without a stale closure
+  const drawerMovementsRef = useRef(drawerMovements);
+  useEffect(() => { drawerMovementsRef.current = drawerMovements; }, [drawerMovements]);
+
   // ── Persist to localStorage ───────────────────────────────────────────────
   useEffect(() => {
     if (!shiftKey) return;
@@ -209,12 +226,155 @@ export function CashierProvider({ children }: { children: ReactNode }) {
     if (drawerKey) localStorage.setItem(drawerKey, JSON.stringify(drawerMovements));
   }, [drawerMovements, drawerKey]);
 
+  // ── Replay an offline-opened shift once connectivity returns ─────────────
+  // A shift opened while offline never reaches the DB (apiOpenShift fails and
+  // the optimistic update leaves shift.id as a temp "shift_<ms>" string).
+  // This callback detects that state, creates the shift in the DB, then
+  // replays any drawer movements that are also stuck with temp IDs.
+  const replayOfflineShift = useCallback(async () => {
+    if (!hotelId || shiftApiIdRef.current) return;
+
+    const raw = localStorage.getItem(`pos_shift_${hotelId}`);
+    if (!raw) return;
+    let local: ShiftState;
+    try { local = JSON.parse(raw) as ShiftState; } catch { return; }
+    // Only replay shifts that still hold a temp ID (never reached the DB)
+    if (!local.id.startsWith('shift_')) return;
+
+    if (local.status === 'open') {
+      // ── Branch 1: opened offline, still open ──────────────────────────────
+      try {
+        let apiId: string;
+        try {
+          const { shift: s } = await apiOpenShift({
+            cashierName: local.cashierName,
+            cashierId:   local.cashierId,
+            openedAt:    local.openedAt,
+            openingCash: local.openingCash,
+            openingNote: local.openingNote,
+          });
+          apiId = s._id;
+        } catch {
+          // Either still offline or got 409 (shift created on another device/tab).
+          // Try to fetch the active shift — if that succeeds we have the real ID.
+          const { shift: active } = await apiGetActiveShift();
+          if (!active) return;
+          apiId = active._id;
+        }
+
+        shiftApiIdRef.current = apiId;
+        setShift(prev => prev ? { ...prev, id: apiId } : null);
+
+        // Replay offline drawer movements (those still holding temp IDs)
+        const offline = drawerMovementsRef.current.filter(
+          m => (m.type === 'cash_in' || m.type === 'cash_out') && m.id.startsWith('mov_'),
+        );
+        for (const m of offline) {
+          try {
+            const { movement: saved } = await apiAddMovement(apiId, {
+              type:        m.type as 'cash_in' | 'cash_out',
+              amount:      m.amount,
+              reason:      m.reason,
+              cashierName: m.cashierName,
+            });
+            setDrawerMovements(prev =>
+              prev.map(mv => mv.id === m.id ? { ...mv, id: saved._id } : mv),
+            );
+          } catch { /* keep temp ID — non-fatal */ }
+        }
+      } catch { /* still offline — will retry on next reconnect or mount */ }
+      return;
+    }
+
+    if (local.status === 'closed') {
+      // ── Branch 2: opened AND closed offline ───────────────────────────────
+      // Close data was saved by closeShift() when apiId was null.
+      const closeRaw = localStorage.getItem(`pos_offline_close_${hotelId}`);
+      if (!closeRaw) return; // no close data — nothing to replay
+      let closeData: { actualCash: number; closingNote: string; closedAt: string; movements?: DrawerMovement[] };
+      try { closeData = JSON.parse(closeRaw); } catch { return; }
+
+      try {
+        // Step 1: Create the shift in DB
+        let apiId: string;
+        try {
+          const { shift: s } = await apiOpenShift({
+            cashierName: local.cashierName,
+            cashierId:   local.cashierId,
+            openedAt:    local.openedAt,
+            openingCash: local.openingCash,
+            openingNote: local.openingNote ?? '',
+          });
+          apiId = s._id;
+        } catch {
+          // Either offline or 409 (a prior partial retry already opened this shift).
+          // Try fetching the active shift to recover the orphaned DB shift.
+          try {
+            const { shift: active } = await apiGetActiveShift();
+            if (!active) return;
+            apiId = active._id;
+          } catch {
+            return; // still offline — retain close data for next retry
+          }
+        }
+
+        // Step 2: Replay movements captured at close time (before state was cleared)
+        const movements = closeData.movements ?? [];
+        for (const m of movements) {
+          try {
+            await apiAddMovement(apiId, {
+              type:        m.type as 'cash_in' | 'cash_out',
+              amount:      m.amount,
+              reason:      m.reason,
+              cashierName: m.cashierName,
+            });
+          } catch { /* non-fatal — movements are best-effort */ }
+        }
+
+        // Step 3: Close the shift in DB
+        const { shift: closed } = await apiCloseShift(apiId, closeData.actualCash, closeData.closingNote);
+
+        // All three steps succeeded — clear the pending close record
+        localStorage.removeItem(`pos_offline_close_${hotelId}`);
+        shiftApiIdRef.current = null;
+        setShift({
+          id:           closed._id,
+          cashierName:  closed.cashierName,
+          cashierId:    closed.cashierId,
+          openedAt:     closed.openedAt,
+          openingCash:  closed.openingCash,
+          openingNote:  closed.openingNote,
+          status:       'closed',
+          closedAt:     closed.closedAt ?? undefined,
+          actualCash:   closed.actualCash ?? undefined,
+          difference:   closed.difference ?? undefined,
+          closingNote:  closed.closingNote,
+          expectedCash: closed.expectedCash ?? undefined,
+          cashSales:    closed.cashSales,
+          upiSales:     closed.upiSales,
+          cardSales:    closed.cardSales,
+          totalSales:   closed.totalSales,
+          totalOrders:  closed.totalOrders,
+          cashIn:       closed.cashIn,
+          cashOut:      closed.cashOut,
+        });
+      } catch {
+        // Partial failure (e.g. open succeeded but close failed) — retain the
+        // pending close record so the next reconnect/mount retries from Step 1.
+      }
+    }
+  }, [hotelId]);
+
   // ── Sync active shift from API on mount ───────────────────────────────────
   useEffect(() => {
     if (!hotelId) return;
     apiGetActiveShift()
       .then(({ shift: apiShift }) => {
-        if (!apiShift) return;
+        if (!apiShift) {
+          // No active shift in DB — try to replay an offline-opened shift if one exists
+          void replayOfflineShift();
+          return;
+        }
         shiftApiIdRef.current = apiShift._id;
         const synced: ShiftState = {
           id:          apiShift._id,
@@ -252,10 +412,18 @@ export function CashierProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotelId]);
 
+  // ── Replay offline shift when browser reports connectivity restored ────────
+  useEffect(() => {
+    const handler = () => { void replayOfflineShift(); };
+    window.addEventListener('online', handler);
+    return () => window.removeEventListener('online', handler);
+  }, [replayOfflineShift]);
+
   // ── Cart (in-memory only) ─────────────────────────────────────────────────
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeTab, setActiveTab] = useState<CashierTab>('dashboard');
   const [orderPrefill, setOrderPrefill] = useState<OrderPrefill | null>(null);
+  const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
 
   const addToCart = useCallback((item: Omit<CartItem, 'id'>) => {
     const id = buildCartLineId(item.productId, item.variantId, item.selectedModifiers);
@@ -329,43 +497,65 @@ export function CashierProvider({ children }: { children: ReactNode }) {
   const closeShift = useCallback((actualCash: number, note: string) => {
     const apiId = shiftApiIdRef.current;
 
-    // Optimistic local close
+    // Optimistic local close (difference approximated until API responds)
     setShift(prev => {
       if (!prev) return null;
+      const expectedCash = prev.openingCash; // backend will compute the real value
       return {
         ...prev,
         status: 'closed',
         closedAt: new Date().toISOString(),
         actualCash,
-        difference: actualCash - prev.openingCash,
+        difference: actualCash - expectedCash,
         closingNote: note,
       };
     });
+    setDrawerMovements([]);
 
     if (apiId) {
       apiCloseShift(apiId, actualCash, note)
         .then(({ shift: s }) => {
           shiftApiIdRef.current = null;
           setShift({
-            id:          s._id,
-            cashierName: s.cashierName,
-            cashierId:   s.cashierId,
-            openedAt:    s.openedAt,
-            openingCash: s.openingCash,
-            openingNote: s.openingNote,
-            status:      'closed',
-            closedAt:    s.closedAt ?? undefined,
-            actualCash:  s.actualCash ?? undefined,
-            difference:  s.difference ?? undefined,
-            closingNote: s.closingNote,
+            id:           s._id,
+            cashierName:  s.cashierName,
+            cashierId:    s.cashierId,
+            openedAt:     s.openedAt,
+            openingCash:  s.openingCash,
+            openingNote:  s.openingNote,
+            status:       'closed',
+            closedAt:     s.closedAt ?? undefined,
+            actualCash:   s.actualCash ?? undefined,
+            difference:   s.difference ?? undefined,
+            closingNote:  s.closingNote,
+            expectedCash: s.expectedCash ?? undefined,
+            cashSales:    s.cashSales,
+            upiSales:     s.upiSales,
+            cardSales:    s.cardSales,
+            totalSales:   s.totalSales,
+            totalOrders:  s.totalOrders,
+            cashIn:       s.cashIn,
+            cashOut:      s.cashOut,
           });
         })
         .catch(() => {
           // API offline — localStorage fallback already set
           shiftApiIdRef.current = null;
         });
+    } else if (hotelId) {
+      // No API ID — shift was opened offline and closed before replay could sync.
+      // Capture movements now (before they are cleared from state) and persist
+      // the entire pending close record so replayOfflineShift can complete the
+      // full open→movements→close sequence once connectivity returns.
+      const pendingMovements = drawerMovementsRef.current.filter(
+        m => (m.type === 'cash_in' || m.type === 'cash_out') && m.id.startsWith('mov_'),
+      );
+      localStorage.setItem(
+        `pos_offline_close_${hotelId}`,
+        JSON.stringify({ actualCash, closingNote: note, closedAt: new Date().toISOString(), movements: pendingMovements }),
+      );
     }
-  }, []);
+  }, [hotelId]);
 
   // ── Held bill actions ─────────────────────────────────────────────────────
   // Use a ref so resumeBill always reads the latest list without re-creating the callback
@@ -426,6 +616,7 @@ export function CashierProvider({ children }: { children: ReactNode }) {
       orderPrefill, setOrderPrefill,
       cart, addToCart, removeFromCart, updateQty, updateItemNotes, clearCart,
       shift, openShift, closeShift,
+      selectedShiftId, setSelectedShiftId,
       heldBills, holdBill, resumeBill, deleteHeldBill,
       drawerMovements, addDrawerMovement, clearDrawerMovements, drawerBalance,
     }}>

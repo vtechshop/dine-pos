@@ -85,7 +85,8 @@ const generateCustomerId = async (hotelId: string): Promise<string> => {
 async function validateHotelForQR(
   res: Response,
   hotelId: string,
-  requireTableSessions: boolean
+  requireTableSessions: boolean,
+  requireKiosk = false,
 ): Promise<{ tableSessions: boolean; customerIdentification: CustomerIdentificationMode; qrOrdering: boolean } | null> {
   const entry = await resolveHotelStatus(hotelId);
 
@@ -98,6 +99,11 @@ async function validateHotelForQR(
 
   if (f.qrOrdering === false) {
     res.status(403).json({ code: 'FEATURE_DISABLED', message: 'QR ordering is not enabled for this hotel' });
+    return null;
+  }
+
+  if (requireKiosk && f.kiosk === false) {
+    res.status(403).json({ code: 'FEATURE_DISABLED', message: 'Kiosk mode is not enabled for this hotel' });
     return null;
   }
 
@@ -329,10 +335,11 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     }
 
     // ── Hotel + feature validation ────────────────────────────────────────────
-    const features = await validateHotelForQR(res, hotelId, true);
+    const isKiosk = orderSource === 'kiosk';
+    const features = await validateHotelForQR(res, hotelId, true, isKiosk);
     if (!features) return;
 
-    const validSource = orderSource === 'kiosk' ? 'kiosk' : 'qr';
+    const validSource = isKiosk ? 'kiosk' : 'qr';
 
     let guest: any;
     let rawGuestToken = '';

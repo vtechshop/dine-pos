@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { buildForecast } from '../services/forecastEngine';
 import { buildInventoryPrediction } from '../services/inventoryPredictor';
 import {
@@ -13,6 +14,7 @@ import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requireFeature('ai'));
 
 // ─── GET /api/ai/forecast ─────────────────────────────────────────────────────
 // Full forecast dashboard: revenue (7d + 30d), orders (7d + 30d), peak hours,

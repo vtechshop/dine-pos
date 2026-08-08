@@ -82,6 +82,8 @@ const ShiftSchema = new Schema<IShift>(
 
 // One open shift per hotel at a time — enforced in route logic too
 ShiftSchema.index({ hotelId: 1, status: 1 });
+// DB-level uniqueness: only one open shift per hotel (TOCTOU guard)
+ShiftSchema.index({ hotelId: 1 }, { unique: true, partialFilterExpression: { status: 'open' } });
 // Shift history sorted by date
 ShiftSchema.index({ hotelId: 1, openedAt: -1 });
 

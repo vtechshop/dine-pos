@@ -312,6 +312,8 @@ app.use('/api/devices/heartbeat', _rl(12, 60_000));
 app.use('/api/remote-config', _rl(30, 60_000));
 // Session + guest writes — 60/min per IP (generous for any table-service flow)
 app.use('/api/sessions', _rl(60, 60_000));
+// Super admin panel — 60 req/min per IP (tighter than general API; login has its own 10/15-min limiter inside the route)
+app.use('/api/superadmin', _rl(60, 60_000));
 
 logger.info(process.env.NODE_ENV === 'test' ? 'Rate limiter skipped (NODE_ENV=test)' : 'Rate limiter enabled');
 

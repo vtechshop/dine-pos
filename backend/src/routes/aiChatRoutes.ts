@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import {
   processChat,
   getChatHistory,
@@ -10,6 +11,7 @@ import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requireFeature('ai'));
 
 // ─── POST /api/ai/chat ────────────────────────────────────────────────────────
 // Send a message to the AI business assistant.

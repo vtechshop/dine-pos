@@ -30,6 +30,8 @@ import { KitchenStatusPanel }     from '../components/cashier/KitchenStatusPanel
 import { CashierProfilePanel }    from '../components/cashier/CashierProfilePanel';
 import { PermissionsPanel }       from '../components/cashier/PermissionsPanel';
 import { OnlineOrdersPanel }      from '../components/cashier/OnlineOrdersPanel';
+import { ZReportView }            from '../components/cashier/ZReportView';
+import { ShiftHistoryPanel }      from '../components/cashier/ShiftHistoryPanel';
 import type { DailyReport, PrinterDeviceStatus } from '../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -189,7 +191,7 @@ function NotificationBell() {
 
 export function CashierPage() {
   const navigate = useNavigate();
-  const { activeTab, setActiveTab, heldBills, shift, drawerBalance, cart } = useCashier();
+  const { activeTab, setActiveTab, heldBills, shift, drawerBalance, cart, selectedShiftId } = useCashier();
   const { settings } = useSettings();
   const { logout, hotelId } = useAuth();
   const { connected: socketConnected } = useSocket();
@@ -435,8 +437,10 @@ export function CashierPage() {
         {activeTab === 'search'     && <BillSearchPanel />}
         {activeTab === 'customers'  && <CustomerPanel />}
         {activeTab === 'printers'    && <PrinterPanel />}
-        {activeTab === 'profile'     && <CashierProfilePanel />}
-        {activeTab === 'permissions' && <PermissionsPanel />}
+        {activeTab === 'profile'       && <CashierProfilePanel />}
+        {activeTab === 'permissions'   && <PermissionsPanel />}
+        {activeTab === 'z-report'      && <ZReportView shiftId={selectedShiftId} />}
+        {activeTab === 'shift-history' && <ShiftHistoryPanel />}
       </main>
     </div>
   );

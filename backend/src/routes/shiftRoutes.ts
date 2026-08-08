@@ -41,7 +41,17 @@ router.post('/open', requireCashierOrAdmin, async (req: AuthRequest, res: Respon
 
     logAudit(req, 'shift.opened', 'shift', String(shift._id), { openingCash, cashierName });
     return res.status(201).json({ shift });
-  } catch (error) { return sendError(res, 500, 'Server error', error); }
+  } catch (error: any) {
+    // Partial unique index race: two concurrent opens slipped past the findOne guard
+    if (error?.code === 11000) {
+      const dup = await Shift.findOne({ hotelId: req.hotelId, status: 'open' }).lean();
+      return res.status(409).json({
+        message: 'A shift is already open. Close it before opening a new one.',
+        shiftId: dup?._id ?? null,
+      });
+    }
+    return sendError(res, 500, 'Server error', error);
+  }
 });
 
 // ── GET /api/shifts/active — current open shift for this hotel ────────────────
@@ -53,9 +63,49 @@ router.get('/active', requireCashierOrAdmin, async (req: AuthRequest, res: Respo
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
-// ── GET /api/shifts — shift history (admin only, paginated) ───────────────────
+// ── GET /api/shifts/active/stats — live totals for the current open shift ─────
+// Only counts completed orders so pending/preparing tickets don't inflate cash.
 
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/active/stats', requireCashierOrAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const shift = await Shift.findOne({ hotelId: req.hotelId, status: 'open' }).lean();
+    if (!shift) {
+      return res.json({ totalOrders: 0, totalSales: 0, cashSales: 0, upiSales: 0, cardSales: 0 });
+    }
+
+    const [agg] = await Order.aggregate([
+      {
+        $match: {
+          hotelId:   new mongoose.Types.ObjectId(req.hotelId),
+          status:    { $in: ['completed'] },
+          createdAt: { $gte: shift.openedAt },
+        },
+      },
+      {
+        $group: {
+          _id:         null,
+          totalOrders: { $sum: 1 },
+          totalSales:  { $sum: '$grandTotal' },
+          cashSales:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, '$grandTotal', 0] } },
+          upiSales:    { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi'] },  '$grandTotal', 0] } },
+          cardSales:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card'] }, '$grandTotal', 0] } },
+        },
+      },
+    ]);
+
+    return res.json({
+      totalOrders: agg?.totalOrders ?? 0,
+      totalSales:  agg?.totalSales  ?? 0,
+      cashSales:   agg?.cashSales   ?? 0,
+      upiSales:    agg?.upiSales    ?? 0,
+      cardSales:   agg?.cardSales   ?? 0,
+    });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// ── GET /api/shifts — shift history (cashier or admin, paginated) ─────────────
+
+router.get('/', requireCashierOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = 20;
@@ -158,7 +208,7 @@ router.post('/:id/close', requireCashierOrAdmin, async (req: AuthRequest, res: R
       {
         $match: {
           hotelId: new mongoose.Types.ObjectId(req.hotelId),
-          status: { $nin: ['cancelled'] },
+          status: { $in: ['completed'] },
           createdAt: { $gte: shiftStart, $lte: shiftEnd },
         },
       },

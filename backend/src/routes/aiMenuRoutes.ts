@@ -2,6 +2,7 @@ import { Router, Response }   from 'express';
 import multer                  from 'multer';
 import mongoose                from 'mongoose';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { getAIProvider, ExtractedCategory }          from '../services/ai';
 import Category                from '../models/Category';
 import Product                 from '../models/Product';
@@ -10,6 +11,7 @@ import { logger }              from '../utils/logger';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('ai'));
 
 // ── Multer — in-memory, deleted after use ──────────────────────────────────────
 const ALLOWED_TYPES = new Set([
