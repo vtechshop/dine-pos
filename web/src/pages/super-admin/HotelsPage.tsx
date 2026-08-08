@@ -27,11 +27,12 @@ export function HotelsPage() {
   const [searchParams] = useSearchParams();
   const initialStatus  = searchParams.get('status');
 
-  const [hotels,  setHotels]  = useState<Hotel[]>([]);
-  const [total,   setTotal]   = useState(0);
-  const [pages,   setPages]   = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
+  const [hotels,    setHotels]    = useState<Hotel[]>([]);
+  const [total,     setTotal]     = useState(0);
+  const [pages,     setPages]     = useState(1);
+  const [loading,   setLoading]   = useState(true);
+  const [slowLoad,  setSlowLoad]  = useState(false);
+  const [error,     setError]     = useState<string | null>(null);
   const [tab,     setTab]     = useState<StatusTab>(() =>
     initialStatus && (STATUSES as readonly string[]).includes(initialStatus)
       ? (initialStatus as StatusTab)
@@ -43,7 +44,9 @@ export function HotelsPage() {
 
   const load = useCallback(async (status: StatusTab, q: string, pg: number) => {
     setLoading(true);
+    setSlowLoad(false);
     setError(null);
+    const slowTimer = setTimeout(() => setSlowLoad(true), 5_000);
     try {
       const res = await getHotels({ status: status === 'all' ? undefined : status, search: q || undefined, page: pg });
       setHotels(res.hotels);
@@ -52,6 +55,8 @@ export function HotelsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load hotels');
     } finally {
+      clearTimeout(slowTimer);
+      setSlowLoad(false);
       setLoading(false);
     }
   }, []);
@@ -134,8 +139,13 @@ export function HotelsPage() {
 
       {/* List */}
       {loading && (
-        <div className="flex items-center justify-center py-16">
+        <div className="flex flex-col items-center justify-center gap-3 py-16">
           <Spinner size="lg" />
+          {slowLoad && (
+            <p className="text-sm text-ink/50">
+              Backend is warming up — this can take up to 60 seconds on free tier…
+            </p>
+          )}
         </div>
       )}
 
