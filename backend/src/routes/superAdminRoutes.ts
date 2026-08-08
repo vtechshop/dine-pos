@@ -7,6 +7,7 @@ import os from 'os';
 import mongoose from 'mongoose';
 import Hotel from '../models/Hotel';
 import Order from '../models/Order';
+import TableSession from '../models/TableSession';
 import Device from '../models/Device';
 import Ticket from '../models/Ticket';
 import Subscription from '../models/Subscription';
@@ -22,7 +23,7 @@ import { sendError } from '../utils/sendError';
 import { getPriceForPlan, getDeviceLimitForPlan } from '../utils/planLimits';
 import { logAuditRaw } from '../utils/audit';
 import { logger } from '../utils/logger';
-import { invalidateStatusCache } from '../middleware/auth';
+import { invalidateStatusCache, invalidateMaintenanceCache } from '../middleware/auth';
 import { io } from '../server';
 import { Expo } from 'expo-server-sdk';
 
@@ -613,7 +614,7 @@ router.get('/notifications', superAdminAuth, async (_req: Request, res: Response
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
-const ALLOWED_NOTIFICATION_TYPES = ['info', 'warning', 'error', 'success'];
+const ALLOWED_NOTIFICATION_TYPES = ['info', 'warning', 'maintenance', 'update', 'success'];
 
 router.post('/notifications', superAdminAuth, async (req: Request, res: Response) => {
   try {
@@ -638,6 +639,27 @@ router.post('/notifications', superAdminAuth, async (req: Request, res: Response
       createdBy:    'superadmin',
     });
     logAuditRaw({ hotelId: 'superadmin', action: 'notification.created', targetType: 'notification', targetId: String((notification as any)._id), metadata: { title: title.trim(), type: type || 'info' } });
+
+    // Real-time delivery via Socket.IO
+    const notifPayload = {
+      notification: {
+        _id:       (notification as any)._id,
+        title:     notification.title,
+        message:   notification.message,
+        type:      notification.type,
+        createdAt: (notification as any).createdAt,
+        isRead:    false,
+      },
+    };
+    const targets = notification.targetHotels as any[];
+    if (targets.length === 0) {
+      io.emit('new_broadcast', notifPayload);
+    } else {
+      for (const hId of targets) {
+        io.to(`hotel_${String(hId)}`).emit('new_broadcast', notifPayload);
+      }
+    }
+
     return res.status(201).json({ message: 'Notification broadcast sent', notification });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -673,6 +695,15 @@ router.put('/remote-config', superAdminAuth, async (req: Request, res: Response)
     }
     let config = await RemoteConfig.findOneAndUpdate({}, { $set: update }, { new: true, upsert: true });
     logAuditRaw({ hotelId: 'superadmin', action: 'remote_config.updated', targetType: 'remote_config', targetId: String((config as any)?._id ?? 'singleton'), metadata: update });
+
+    if (update.maintenanceMode !== undefined) {
+      invalidateMaintenanceCache();
+      io.emit('maintenance_update', {
+        active:  Boolean(update.maintenanceMode),
+        message: String(update.maintenanceMessage ?? (config as any)?.maintenanceMessage ?? ''),
+      });
+    }
+
     return res.json({ message: 'Remote config updated', config });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -773,6 +804,8 @@ router.get('/dashboard', superAdminAuth, async (_req: Request, res: Response) =>
       remoteConfig,
       mongoState,
       redisState,
+      liveOrderCount,
+      activeSessionCount,
     ] = await Promise.all([
       // ── Row 1 ──
       Hotel.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
@@ -837,6 +870,10 @@ router.get('/dashboard', superAdminAuth, async (_req: Request, res: Response) =>
       // ── System health ──
       Promise.resolve(mongoose.connection.readyState),
       redisHealthCheck(),
+
+      // ── Live monitoring counts (fail-safe: return null on error) ──
+      Order.countDocuments({ status: { $in: ['pending', 'preparing', 'ready', 'served'] } }).catch(() => null as number | null),
+      TableSession.countDocuments({ status: 'open' }).catch(() => null as number | null),
     ]);
 
     // Build hotel status map
@@ -907,6 +944,8 @@ router.get('/dashboard', superAdminAuth, async (_req: Request, res: Response) =>
           uptimeSeconds:  Math.round(process.uptime()),
           loadAvg:        dl1,
           socketClients:  io.engine.clientsCount,
+          liveOrders:     liveOrderCount,
+          activeSessions: activeSessionCount,
         };
       })(),
       appVersions: {
@@ -1452,6 +1491,63 @@ router.get('/analytics/revenue', superAdminAuth, async (req: Request, res: Respo
       avgOrdersPerHotel: activeHotels > 0 ? Math.round(totalOrd / activeHotels) : 0,
       activeHotels,
     });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// ── Completed-Order Daily Trends ─────────────────────────────────────────────
+//
+// GET /api/superadmin/analytics/completed-trends
+//
+// Returns 30 consecutive UTC date buckets (today − 29 days → today) of
+// completed-order revenue (grandTotal) and order counts across all hotels.
+// Only status:'completed' orders are counted — these are paid/settled orders
+// per the existing order lifecycle (pending→preparing→ready→served→completed).
+// Missing days are zero-filled on the backend so the client always receives
+// exactly 30 points.
+//
+router.get('/analytics/completed-trends', superAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    // Start of today minus 29 days (UTC midnight) → 30-day window
+    const from = new Date(Date.now() - 29 * 86_400_000);
+    from.setUTCHours(0, 0, 0, 0);
+
+    const raw = await Order.aggregate([
+      { $match: { status: 'completed', createdAt: { $gte: from } } },
+      {
+        $group: {
+          _id: {
+            y: { $year:       '$createdAt' },
+            m: { $month:      '$createdAt' },
+            d: { $dayOfMonth: '$createdAt' },
+          },
+          revenue: { $sum: '$grandTotal' },
+          orders:  { $sum: 1 },
+        },
+      },
+      { $sort: { '_id.y': 1, '_id.m': 1, '_id.d': 1 } },
+    ]);
+
+    // Build map keyed by 'YYYY-MM-DD' (UTC)
+    const dataMap = new Map<string, { revenue: number; orders: number }>(
+      (raw as any[]).map((r: any) => [
+        `${r._id.y}-${String(r._id.m).padStart(2, '0')}-${String(r._id.d).padStart(2, '0')}`,
+        { revenue: Math.round(r.revenue), orders: r.orders as number },
+      ]),
+    );
+
+    // Zero-fill all 30 UTC date buckets
+    const points: { date: string; revenue: number; orders: number }[] = [];
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(from.getTime() + i * 86_400_000);
+      const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+      const entry = dataMap.get(dateStr);
+      points.push({ date: dateStr, revenue: entry?.revenue ?? 0, orders: entry?.orders ?? 0 });
+    }
+
+    const totalRevenue = points.reduce((s, p) => s + p.revenue, 0);
+    const totalOrders  = points.reduce((s, p) => s + p.orders,  0);
+
+    return res.json({ points, totalRevenue, totalOrders });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 

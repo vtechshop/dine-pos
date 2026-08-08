@@ -272,5 +272,7 @@ OrderSchema.index({ hotelId: 1, status: 1, createdAt: -1, completedAt: 1 });
 // The existing { hotelId:1, status:1, createdAt:-1 } covers status but not cashierId,
 // leaving the cashierId predicate as an in-memory post-scan filter.
 OrderSchema.index({ hotelId: 1, cashierId: 1, createdAt: -1 }, { sparse: true });
+// Cross-tenant status count for Super Admin live monitoring (no hotelId filter)
+OrderSchema.index({ status: 1 });
 
 export default mongoose.model<IOrder>('Order', OrderSchema);

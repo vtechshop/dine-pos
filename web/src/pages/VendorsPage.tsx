@@ -98,7 +98,7 @@ function OutstandingBar({
         <span>{fmtCur(outstanding, sym)} used</span>
         <span>of {fmtCur(limit, sym)}</span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink/8">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink/[0.08]">
         <div
           className={`h-1.5 rounded-full transition-all ${danger ? 'bg-red-500' : warn ? 'bg-amber-500' : 'bg-brand'}`}
           style={{ width: `${pct}%` }}
@@ -403,7 +403,7 @@ function VendorDetail({
   const ptLabel = PAYMENT_TERMS.find(t => t.id === vendor.paymentTerms)?.label ?? vendor.paymentTerms;
 
   return (
-    <div className="flex w-full max-w-sm flex-col border-l border-border bg-canvas shadow-xl">
+    <div className="absolute inset-0 z-20 flex flex-col border-l border-border bg-canvas shadow-xl sm:relative sm:inset-auto sm:w-full sm:max-w-sm">
       {/* Header */}
       <div className="flex items-start justify-between border-b border-border px-5 py-4">
         <div className="flex-1 min-w-0">
@@ -840,7 +840,7 @@ export function VendorsPage() {
       </div>
 
       {/* ── Main content ── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="relative flex flex-1 overflow-hidden">
         <div className="flex-1 overflow-y-auto bg-mist">
 
           {/* ════════ VENDORS LIST ════════ */}

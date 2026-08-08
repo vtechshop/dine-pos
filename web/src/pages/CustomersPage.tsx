@@ -224,7 +224,7 @@ export function CustomersPage() {
 
         {/* Toolbar — customers tab only */}
         {activeTab === 'customers' && (
-          <div className="flex items-center gap-2 px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
             <div className="relative">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/30" />
               <input
@@ -288,8 +288,8 @@ export function CustomersPage() {
       {/* ── Content ── */}
       {activeTab === 'customers' ? (
         <div className="flex flex-1 overflow-hidden">
-          {/* Left panel: customer list */}
-          <div className="flex w-80 shrink-0 flex-col overflow-hidden border-r border-border bg-canvas">
+          {/* Left panel: customer list — hidden on mobile when detail is open */}
+          <div className={`${selectedId ? 'hidden sm:flex' : 'flex'} w-full sm:w-80 shrink-0 flex-col overflow-hidden border-r border-border bg-canvas`}>
             <div className="flex-1 overflow-y-auto">
               {listError && (
                 <div className="border-b border-red-100 bg-red-50 px-4 py-2.5 text-xs text-red-600">
@@ -338,8 +338,17 @@ export function CustomersPage() {
             </div>
           </div>
 
-          {/* Right panel: detail */}
-          <div className="flex flex-1 flex-col overflow-hidden bg-mist">
+          {/* Right panel: detail — hidden on mobile when nothing selected */}
+          <div className={`${selectedId ? 'flex' : 'hidden sm:flex'} flex-1 flex-col overflow-hidden bg-mist`}>
+            {/* Mobile back button */}
+            {selectedId && (
+              <button
+                onClick={() => setSelectedId(null)}
+                className="flex sm:hidden shrink-0 items-center gap-1 border-b border-border bg-canvas px-4 py-2.5 text-xs text-ink/50 hover:text-ink"
+              >
+                ← Back to list
+              </button>
+            )}
             {selectedId?.startsWith('orderonly:') ? (
               (() => {
                 const oc = orderCustomersMap.get(selectedId.slice('orderonly:'.length));

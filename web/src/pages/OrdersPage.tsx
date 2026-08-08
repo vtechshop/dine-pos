@@ -40,7 +40,7 @@ const STATUS_COLORS: Record<string, string> = {
   ready:      'bg-emerald-50 text-emerald-700 border-emerald-200',
   served:     'bg-purple-50 text-purple-700 border-purple-200',
   paid:       'bg-green-50 text-green-700 border-green-200',
-  cancelled:  'bg-gray-50 text-gray-500 border-gray-200',
+  cancelled:  'bg-ink/5 text-ink/40 border-ink/10',
 };
 
 const SOURCE_LABELS: Record<string, string> = {

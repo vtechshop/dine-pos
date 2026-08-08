@@ -19,12 +19,12 @@ type DrawerState =
 
 type InventoryTab = 'ingredients' | 'waste';
 
-const WASTE_REASONS: Array<{ id: WasteLog['reason']; label: string; color: string }> = [
-  { id: 'expired',    label: 'Expired',    color: '#C62828' },
-  { id: 'damaged',    label: 'Damaged',    color: '#E65100' },
-  { id: 'overcooked', label: 'Overcooked', color: '#F57F17' },
-  { id: 'returned',   label: 'Returned',   color: '#1565C0' },
-  { id: 'other',      label: 'Other',      color: '#616161' },
+const WASTE_REASONS: Array<{ id: WasteLog['reason']; label: string; bgClass: string; badgeClass: string }> = [
+  { id: 'expired',    label: 'Expired',    bgClass: 'bg-red-700',    badgeClass: 'bg-red-100 text-red-700' },
+  { id: 'damaged',    label: 'Damaged',    bgClass: 'bg-orange-700', badgeClass: 'bg-orange-100 text-orange-700' },
+  { id: 'overcooked', label: 'Overcooked', bgClass: 'bg-yellow-500', badgeClass: 'bg-yellow-100 text-yellow-700' },
+  { id: 'returned',   label: 'Returned',   bgClass: 'bg-blue-700',   badgeClass: 'bg-blue-100 text-blue-700' },
+  { id: 'other',      label: 'Other',      bgClass: 'bg-ink/40',     badgeClass: 'bg-ink/10 text-ink/60' },
 ];
 
 function todayStr(): string {
@@ -380,7 +380,7 @@ export function InventoryPage() {
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => setDrawer({ mode: 'restock', ingredient: i })}
-                              className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-[11px] font-semibold text-green-700 hover:bg-green-100"
+                              className="rounded-lg border border-brand/30 bg-brand/10 px-2.5 py-1 text-[11px] font-semibold text-brand hover:bg-brand/20"
                             >
                               + Restock
                             </button>
@@ -473,11 +473,8 @@ export function InventoryPage() {
                                   </span>
                                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-ink/5">
                                     <div
-                                      className="h-2 rounded-full transition-all duration-300"
-                                      style={{
-                                        width: `${(r.totalLoss / maxLoss) * 100}%`,
-                                        background: reasonDef?.color ?? '#616161',
-                                      }}
+                                      className={`h-2 rounded-full transition-all duration-300 ${reasonDef?.bgClass ?? 'bg-ink/40'}`}
+                                      style={{ width: `${(r.totalLoss / maxLoss) * 100}%` }}
                                     />
                                   </div>
                                   <span className="w-24 shrink-0 text-right text-xs font-semibold tabular-nums text-ink">
@@ -568,11 +565,7 @@ export function InventoryPage() {
                               <td className="px-5 py-2.5 text-ink/60">{log.unit}</td>
                               <td className="px-5 py-2.5">
                                 <span
-                                  className="rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize"
-                                  style={{
-                                    background: (reason?.color ?? '#616161') + '20',
-                                    color: reason?.color ?? '#616161',
-                                  }}
+                                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${reason?.badgeClass ?? 'bg-ink/10 text-ink/60'}`}
                                 >
                                   {reason?.label ?? log.reason}
                                 </span>

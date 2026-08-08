@@ -292,7 +292,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
             onClick={() => setVegFilter(v)}
             className={`h-8 rounded-lg border px-3 text-xs font-medium transition-colors ${
               vegFilter === v
-                ? 'border-blue-500 bg-blue-50 text-blue-700'
+                ? 'border-brand bg-brand text-white'
                 : 'border-border bg-canvas text-ink/50 hover:bg-mist'
             }`}
           >
@@ -304,7 +304,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
           onClick={() => setAvailFilter(availFilter === true ? null : true)}
           className={`h-8 rounded-lg border px-3 text-xs font-medium transition-colors ${
             availFilter === true
-              ? 'border-green-500 bg-green-50 text-green-700'
+              ? 'border-brand bg-brand text-white'
               : 'border-border bg-canvas text-ink/50 hover:bg-mist'
           }`}
         >
@@ -487,7 +487,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                         onClick={() => { void toggleAvail(p); }}
                         disabled={toggling.has(p._id)}
                         className={`relative inline-flex h-5 w-9 rounded-full transition-colors disabled:opacity-50 ${
-                          p.isAvailable ? 'bg-green-500' : 'bg-gray-200'
+                          p.isAvailable ? 'bg-brand' : 'bg-ink/20'
                         }`}
                       >
                         <span

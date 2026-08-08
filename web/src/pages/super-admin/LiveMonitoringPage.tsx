@@ -32,10 +32,10 @@ function serviceColor(status: string): 'green' | 'amber' | 'red' {
   return 'amber';
 }
 
-function formatLoadAvg(avg: number): { label: string; color: 'green' | 'amber' | 'red' } {
-  if (avg < 1)  return { label: avg.toFixed(2), color: 'green' };
-  if (avg < 2)  return { label: avg.toFixed(2), color: 'amber' };
-  return           { label: avg.toFixed(2), color: 'red' };
+function formatLoadAvg(avg: number, cpuPercent: number): { label: string; color: 'green' | 'amber' | 'red' } {
+  if (cpuPercent < 60)  return { label: avg.toFixed(2), color: 'green' };
+  if (cpuPercent < 80)  return { label: avg.toFixed(2), color: 'amber' };
+  return                 { label: avg.toFixed(2), color: 'red' };
 }
 
 // ── sub-components ─────────────────────────────────────────────────────────────
@@ -176,7 +176,7 @@ export function LiveMonitoringPage() {
   const memory       = sysHealth?.memory       ?? null;
   const uptimeSec    = sysHealth?.uptimeSeconds ?? null;
   const loadAvg      = sysHealth?.loadAvg       ?? null;
-  const loadInfo     = loadAvg !== null ? formatLoadAvg(loadAvg) : null;
+  const loadInfo     = loadAvg !== null ? formatLoadAvg(loadAvg, sysHealth?.cpu?.usagePercent ?? 0) : null;
 
   const loadColors = {
     green: 'text-green-700',

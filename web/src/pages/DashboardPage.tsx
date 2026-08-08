@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import {
   RefreshCw, Search, TrendingUp, ShoppingCart,
-  LayoutGrid, Zap, Bell, X,
+  LayoutGrid, Zap, Bell, X, CreditCard, Smartphone, Banknote, Trophy, Package2,
 } from 'lucide-react';
 import type { Table, SessionSummary, TableGridItem, DailyReport } from '../types';
 import { fetchTables, fetchOpenSessions, openSession } from '../api/tables';
 import { ApiError } from '../api/client';
-import { fetchDailyReport } from '../api/dashboard';
+import { fetchDailyReport, fetchTopProducts } from '../api/dashboard';
+import type { TopProduct } from '../api/dashboard';
 import { TableCard } from '../components/ui/TableCard';
 import { BillingDrawer } from '../components/billing/BillingDrawer';
 import { useSettings } from '../context/SettingsContext';
@@ -93,13 +94,156 @@ function TableSkeleton() {
   );
 }
 
+// ── Payment Breakdown mini-card ───────────────────────────────────────────────
+
+interface PaymentBreakdownProps {
+  report:  DailyReport | null;
+  loading: boolean;
+  symbol:  string;
+}
+
+function PaymentBreakdownCard({ report, loading, symbol }: PaymentBreakdownProps) {
+  const rows = useMemo(() => {
+    if (!report) return [];
+    const { cash, upi, card } = report.paymentBreakdown;
+    const total = (cash ?? 0) + (upi ?? 0) + (card ?? 0);
+    return [
+      { label: 'Cash',  icon: <Banknote   size={12} />, value: cash ?? 0, pct: total > 0 ? Math.round(((cash ?? 0) / total) * 100) : 0 },
+      { label: 'UPI',   icon: <Smartphone size={12} />, value: upi  ?? 0, pct: total > 0 ? Math.round(((upi  ?? 0) / total) * 100) : 0 },
+      { label: 'Card',  icon: <CreditCard size={12} />, value: card ?? 0, pct: total > 0 ? Math.round(((card ?? 0) / total) * 100) : 0 },
+    ].filter(r => r.value > 0);
+  }, [report]);
+
+  return (
+    <div className="rounded-xl border border-border bg-canvas p-4">
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/35">Payment Split</p>
+      {loading ? (
+        <div className="space-y-3">
+          {[1,2,3].map(i => <div key={i} className="animate-pulse h-7 rounded bg-border/60" />)}
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-ink/30">No transactions today</p>
+      ) : (
+        <div className="space-y-2.5">
+          {rows.map(r => (
+            <div key={r.label}>
+              <div className="mb-1 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-ink/50">{r.icon}<span className="text-xs">{r.label}</span></div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-ink/30">{r.pct}%</span>
+                  <span className="text-xs font-semibold tabular-nums text-ink">{symbol}{r.value.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+              <div className="h-1 overflow-hidden rounded-full bg-mist">
+                <div className="h-full rounded-full bg-brand/70 transition-all" style={{ width: `${r.pct}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Top Products mini-card ─────────────────────────────────────────────────────
+
+interface TopProductsCardProps {
+  products: TopProduct[];
+  loading:  boolean;
+  symbol:   string;
+}
+
+function TopProductsCard({ products, loading, symbol }: TopProductsCardProps) {
+  return (
+    <div className="rounded-xl border border-border bg-canvas p-4">
+      <div className="mb-3 flex items-center gap-1.5">
+        <Trophy size={12} className="text-brand/60" />
+        <p className="text-[10px] font-bold uppercase tracking-widest text-ink/35">Top Items Today</p>
+      </div>
+      {loading ? (
+        <div className="space-y-2.5">
+          {[1,2,3,4,5].map(i => <div key={i} className="animate-pulse h-5 rounded bg-border/60" />)}
+        </div>
+      ) : products.length === 0 ? (
+        <div className="flex flex-col items-center py-2 text-center">
+          <Package2 size={20} className="mb-1 text-ink/15" />
+          <p className="text-xs text-ink/30">No orders yet today</p>
+        </div>
+      ) : (
+        <ol className="space-y-1.5">
+          {products.map((p, i) => (
+            <li key={p.productName} className="flex items-center gap-2">
+              <span className="w-4 shrink-0 text-[10px] font-bold tabular-nums text-ink/20">{i + 1}</span>
+              <span className="flex-1 truncate text-xs text-ink" title={p.productName}>{p.productName}</span>
+              <span className="shrink-0 text-[11px] tabular-nums text-ink/40">{p.totalQuantity}×</span>
+              <span className="shrink-0 text-[11px] font-semibold tabular-nums text-ink">
+                {symbol}{Math.round(p.totalRevenue).toLocaleString('en-IN')}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+// ── Order Mix mini-card ────────────────────────────────────────────────────────
+
+interface OrderMixCardProps {
+  report:         DailyReport | null;
+  loading:        boolean;
+  liveOrderCount: number;
+  symbol:         string;
+}
+
+function OrderMixCard({ report, loading, liveOrderCount, symbol }: OrderMixCardProps) {
+  const dineIn  = report ? report.totalOrders - report.parcelOrders : 0;
+  const parcel  = report?.parcelOrders ?? 0;
+
+  return (
+    <div className="rounded-xl border border-border bg-canvas p-4">
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/35">Order Mix</p>
+      {loading ? (
+        <div className="space-y-3">
+          {[1,2,3].map(i => <div key={i} className="animate-pulse h-7 rounded bg-border/60" />)}
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between rounded-lg bg-mist px-3 py-2">
+            <span className="text-xs text-ink/50">Active now</span>
+            <span className={`text-sm font-bold tabular-nums ${liveOrderCount > 0 ? 'text-brand' : 'text-ink/30'}`}>
+              {liveOrderCount}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-ink/50">Dine-in</span>
+            <span className="text-xs font-semibold tabular-nums text-ink">{dineIn} orders</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-ink/50">Parcel / Takeaway</span>
+            <span className="text-xs font-semibold tabular-nums text-ink">{parcel} orders</span>
+          </div>
+          {report && report.totalDiscount > 0 && (
+            <div className="flex items-center justify-between border-t border-border pt-2">
+              <span className="text-xs text-ink/40">Discounts given</span>
+              <span className="text-xs tabular-nums text-ink/50">
+                -{symbol}{Math.round(report.totalDiscount).toLocaleString('en-IN')}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Dashboard page ─────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
   const { settings }               = useSettings();
   const { socket, reconnectCount } = useSocket();
   const { role }                   = useAuth();
-  const { unreadCount, markRead }  = useLiveOrders();
+  const { orders: liveOrders, unreadCount, markRead } = useLiveOrders();
   const currencySymbol             = settings?.currencySymbol ?? '₹';
 
   // Revenue data is shown to admin and cashier only
@@ -119,6 +263,8 @@ export function DashboardPage() {
   const [search,        setSearch]        = useState('');
   const [billingSessionId, setBillingSessionId] = useState<string | null>(null);
   const [openingTableId,   setOpeningTableId]   = useState<string | null>(null);
+  const [topProducts,        setTopProducts]        = useState<TopProduct[]>([]);
+  const [topProductsLoading, setTopProductsLoading] = useState(true);
 
   const [newOrderTables, dispatchBadge] = useReducer(badgeReducer, new Set<string>());
 
@@ -151,6 +297,20 @@ export function DashboardPage() {
     }
   }, []);
 
+  // ── Data loading — top products (admin/cashier, non-critical) ──────────────
+
+  const loadTopProducts = useCallback(async () => {
+    setTopProductsLoading(true);
+    try {
+      const products = await fetchTopProducts();
+      setTopProducts(products.slice(0, 5));
+    } catch {
+      setTopProducts([]);
+    } finally {
+      setTopProductsLoading(false);
+    }
+  }, []);
+
   // ── Data loading — morning brief (admin only, non-critical) ─────────────────
 
   const loadBrief = useCallback(async () => {
@@ -171,13 +331,19 @@ export function DashboardPage() {
     void load();
     void loadReport();
     void loadBrief();
-  }, [load, loadReport, loadBrief, reconnectCount]);
+    if (showRevenue) void loadTopProducts();
+  }, [load, loadReport, loadBrief, loadTopProducts, reconnectCount, showRevenue]);
 
   // Periodic refresh every 2 minutes
   useEffect(() => {
-    const id = setInterval(() => { void load(); void loadReport(); void loadBrief(); }, 120_000);
+    const id = setInterval(() => {
+      void load();
+      void loadReport();
+      void loadBrief();
+      if (showRevenue) void loadTopProducts();
+    }, 120_000);
     return () => clearInterval(id);
-  }, [load, loadReport, loadBrief]);
+  }, [load, loadReport, loadBrief, loadTopProducts, showRevenue]);
 
   // ── Socket: targeted badge update — does NOT rebuild table list ─────────────
 
@@ -423,6 +589,15 @@ export function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* ── Owner Insights Row ─────────────────────────────────────────────── */}
+        {showRevenue && (
+          <div className="grid grid-cols-1 gap-3 border-b border-border bg-canvas px-5 py-4 sm:grid-cols-3">
+            <PaymentBreakdownCard report={report} loading={reportLoading} symbol={currencySymbol} />
+            <TopProductsCard products={topProducts} loading={topProductsLoading} symbol={currencySymbol} />
+            <OrderMixCard report={report} loading={reportLoading} liveOrderCount={liveOrders.length} symbol={currencySymbol} />
+          </div>
+        )}
 
         {/* ── Rush Hour banner ───────────────────────────────────────────────── */}
         {isRushHour && (

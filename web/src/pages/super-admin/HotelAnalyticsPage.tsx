@@ -11,12 +11,15 @@ import {
   getFailedPayments,
   getTopHotels,
   getRevenueAnalytics,
+  getCompletedTrends,
   type DashboardData,
   type SubscriptionRevenueData,
   type DeviceLicensingData,
   type FailedPaymentsData,
   type TopHotel,
   type RevenueAnalyticsData,
+  type CompletedTrendsData,
+  type CompletedTrendsPoint,
 } from '../../api/superAdmin';
 import { Spinner } from '../../components/ui/Spinner';
 
@@ -114,6 +117,64 @@ function RevenueChart({ points }: { points: { date: string; revenue: number; ord
   );
 }
 
+function RevenueTrendChart({ points }: { points: CompletedTrendsPoint[] }) {
+  const W = 600; const H = 100; const PAD = 4;
+  const maxRev = Math.max(...points.map(p => p.revenue), 1);
+  if (points.every(p => p.revenue === 0)) {
+    return <div className="flex h-24 items-center justify-center"><p className="text-xs text-ink/30">No completed orders in this period</p></div>;
+  }
+  const pts = points.map((p, i) => ({
+    x: PAD + (i / Math.max(points.length - 1, 1)) * (W - PAD * 2),
+    y: H - PAD - ((p.revenue / maxRev) * (H - PAD * 2)),
+    ...p,
+  }));
+  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const areaPath = `${linePath} L ${pts[pts.length - 1].x} ${H} L ${pts[0].x} ${H} Z`;
+  return (
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 240, height: 100 }}>
+        <defs>
+          <linearGradient id="revTrendGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor="#6366f1" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#6366f1" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <path d={areaPath} fill="url(#revTrendGrad)" />
+        <path d={linePath} fill="none" stroke="#6366f1" strokeWidth="1.5" strokeLinejoin="round" />
+        {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="2" fill="#6366f1" />)}
+      </svg>
+      <div className="mt-1 flex justify-between text-[10px] text-ink/30">
+        <span>{pts[0]?.date}</span><span>{pts[pts.length - 1]?.date}</span>
+      </div>
+    </div>
+  );
+}
+
+function OrderVolumeChart({ points }: { points: CompletedTrendsPoint[] }) {
+  const W = 600; const H = 100; const PAD = 4;
+  const maxOrders = Math.max(...points.map(p => p.orders), 1);
+  if (points.every(p => p.orders === 0)) {
+    return <div className="flex h-24 items-center justify-center"><p className="text-xs text-ink/30">No completed orders in this period</p></div>;
+  }
+  const n = points.length;
+  const slotW = (W - PAD * 2) / n;
+  const barW  = Math.max(slotW - 2, 2);
+  return (
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 240, height: 100 }}>
+        {points.map((p, i) => {
+          const barH = (p.orders / maxOrders) * (H - PAD * 2);
+          const x    = PAD + i * slotW + (slotW - barW) / 2;
+          return <rect key={i} x={x} y={H - PAD - barH} width={barW} height={barH} fill="#10b981" rx={1} />;
+        })}
+      </svg>
+      <div className="mt-1 flex justify-between text-[10px] text-ink/30">
+        <span>{points[0]?.date}</span><span>{points[points.length - 1]?.date}</span>
+      </div>
+    </div>
+  );
+}
+
 // ── HotelAnalyticsPage ─────────────────────────────────────────────────────────
 
 export function HotelAnalyticsPage() {
@@ -138,6 +199,11 @@ export function HotelAnalyticsPage() {
   const [actHotels,  setActHotels]  = useState<TopHotel[]>([]);
   const [actLoading, setActLoading] = useState(true);
   const [actError,   setActError]   = useState(false);
+
+  // ── completed-order daily trends ──────────────────────────────────────────────
+  const [trendsData,    setTrendsData]    = useState<CompletedTrendsData | null>(null);
+  const [trendsLoading, setTrendsLoading] = useState(true);
+  const [trendsError,   setTrendsError]   = useState(false);
 
   // ── main load ────────────────────────────────────────────────────────────────
 
@@ -184,6 +250,17 @@ export function HotelAnalyticsPage() {
       .catch(() => { if (!cancelled) { setActError(true);     setActLoading(false); } });
     return () => { cancelled = true; };
   }, [actBy, actPeriod]);
+
+  // ── completed-order daily trends (once on mount) ──────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    setTrendsLoading(true);
+    setTrendsError(false);
+    getCompletedTrends()
+      .then(d  => { if (!cancelled) { setTrendsData(d);     setTrendsLoading(false); } })
+      .catch(() => { if (!cancelled) { setTrendsError(true); setTrendsLoading(false); } });
+    return () => { cancelled = true; };
+  }, []);
 
   // ── derived values ────────────────────────────────────────────────────────────
 
@@ -784,27 +861,59 @@ export function HotelAnalyticsPage() {
         )}
       </section>
 
-      {/* ── Historical Charts (Coming Soon) ── */}
+      {/* ── Historical Charts ── */}
       <section>
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink/40">
           Historical Analytics
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {[
-            'Revenue Trend (30 days)',
-            'Order Volume Over Time',
-            'Hotel Churn Rate',
-          ].map(label => (
-            <div
-              key={label}
-              className="flex h-28 items-center justify-center rounded-xl border border-border bg-mist/30"
-            >
-              <div className="text-center">
-                <p className="text-sm font-medium text-ink/30">{label}</p>
-                <p className="mt-1 text-xs text-ink/20">Coming Soon</p>
-              </div>
+
+          {/* Revenue Trend (30 days) */}
+          <div className="rounded-xl border border-border bg-canvas p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold text-ink/60">Revenue Trend (30 days)</p>
+              <p className="text-xs font-bold tabular-nums text-ink">
+                {trendsLoading ? '—' : fmtINR(trendsData?.totalRevenue ?? 0)}
+              </p>
             </div>
-          ))}
+            {trendsLoading ? (
+              <div className="flex h-24 items-center justify-center"><Spinner /></div>
+            ) : trendsError ? (
+              <div className="flex h-24 items-center justify-center">
+                <p className="text-xs text-red-500">Failed to load</p>
+              </div>
+            ) : (
+              <RevenueTrendChart points={trendsData!.points} />
+            )}
+          </div>
+
+          {/* Order Volume Over Time (30 days) */}
+          <div className="rounded-xl border border-border bg-canvas p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold text-ink/60">Order Volume (30 days)</p>
+              <p className="text-xs font-bold tabular-nums text-ink">
+                {trendsLoading ? '—' : `${(trendsData?.totalOrders ?? 0).toLocaleString('en-IN')} orders`}
+              </p>
+            </div>
+            {trendsLoading ? (
+              <div className="flex h-24 items-center justify-center"><Spinner /></div>
+            ) : trendsError ? (
+              <div className="flex h-24 items-center justify-center">
+                <p className="text-xs text-red-500">Failed to load</p>
+              </div>
+            ) : (
+              <OrderVolumeChart points={trendsData!.points} />
+            )}
+          </div>
+
+          {/* Hotel Churn Rate — Coming Soon */}
+          <div className="flex h-28 items-center justify-center rounded-xl border border-border bg-mist/30">
+            <div className="text-center">
+              <p className="text-sm font-medium text-ink/30">Hotel Churn Rate</p>
+              <p className="mt-1 text-xs text-ink/20">Coming Soon</p>
+            </div>
+          </div>
+
         </div>
       </section>
 

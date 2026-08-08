@@ -220,7 +220,7 @@ export function GiftVouchersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        v.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
+                        v.isActive ? 'bg-brand/10 text-brand' : 'bg-ink/5 text-ink/40'
                       }`}>
                         {v.isActive ? 'Active' : 'Inactive'}
                       </span>

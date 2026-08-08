@@ -714,23 +714,25 @@ export function ReportsPage() {
       {/* ── Top bar ── */}
       <div className="shrink-0 border-b border-border bg-canvas">
         {/* Tab row + actions */}
-        <div className="flex items-center border-b border-border px-5">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-3 text-xs font-semibold transition-colors ${
-                tab === t.id
-                  ? 'border-brand text-brand'
-                  : 'border-transparent text-ink/40 hover:text-ink'
-              }`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
+        <div className="flex items-center border-b border-border overflow-x-auto">
+          <div className="flex shrink-0 items-center pl-5">
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-3 text-xs font-semibold transition-colors ${
+                  tab === t.id
+                    ? 'border-brand text-brand'
+                    : 'border-transparent text-ink/40 hover:text-ink'
+                }`}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            ))}
+          </div>
 
-          <div className="ml-auto flex items-center gap-2 py-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2 px-5 py-2">
             <button
               onClick={handleCSV}
               className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5 hover:text-ink"

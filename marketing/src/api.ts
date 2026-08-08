@@ -1,9 +1,5 @@
-import emailjs from '@emailjs/browser';
-
-const WA_NUMBER   = '916381356683';
-const SERVICE_ID  = import.meta.env.VITE_EMAILJS_SERVICE_ID as string;
-const TEMPLATE_ID = import.meta.env.VITE_EMAILJS_CONTACT_TEMPLATE_ID as string;
-const PUBLIC_KEY  = import.meta.env.VITE_EMAILJS_PUBLIC_KEY as string;
+const WA_NUMBER = '916381356683';
+const API_BASE  = import.meta.env.VITE_API_URL as string | undefined;
 
 export interface InquiryResponse {
   message: string;
@@ -20,6 +16,8 @@ export const submitDemo = async (body: {
   preferredTime?: string;
   notes?: string;
 }): Promise<InquiryResponse> => {
+  // Open WhatsApp immediately — must be synchronous with the user gesture
+  // so the browser does not treat it as a popup and block it.
   const lines = [
     "Hi, I'd like to book a free DinePOS demo.",
     '',
@@ -39,6 +37,22 @@ export const submitDemo = async (body: {
     'noopener,noreferrer',
   );
 
+  // Persist to DB — saves lead, emits new_lead socket event to SA, sends confirmation emails.
+  // Fire after WhatsApp so the popup is never blocked, but await so the caller gets a proper id.
+  if (API_BASE) {
+    try {
+      const res = await fetch(`${API_BASE}/inquiries/demo`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      const data = (await res.json().catch(() => ({}))) as { message?: string; id?: string };
+      if (res.ok) {
+        return { message: data.message ?? 'Demo booked! We will confirm your slot shortly.', id: String(data.id ?? Date.now()) };
+      }
+    } catch { /* non-fatal — WhatsApp already opened */ }
+  }
+
   return { message: 'WhatsApp opened', id: Date.now().toString() };
 };
 
@@ -49,26 +63,21 @@ export const submitContact = async (body: {
   restaurant?: string;
   message: string;
 }): Promise<InquiryResponse> => {
-  if (!SERVICE_ID || !TEMPLATE_ID || !PUBLIC_KEY) {
-    throw new Error('Email service is not configured. Please reach us at info@happya.in');
+  if (!API_BASE) {
+    throw new Error('Contact form is not configured. Please reach us at info@happya.in');
   }
 
-  const result = await emailjs.send(
-    SERVICE_ID,
-    TEMPLATE_ID,
-    {
-      from_name:  body.name,
-      from_email: body.email,
-      from_phone: body.phone ?? '',
-      restaurant: body.restaurant ?? '',
-      message:    body.message,
-    },
-    { publicKey: PUBLIC_KEY },
-  );
+  const res = await fetch(`${API_BASE}/inquiries/contact`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  });
 
-  if (result.status !== 200) {
-    throw new Error('Failed to send message. Please try again or email us at info@happya.in');
+  const data = (await res.json().catch(() => ({}))) as { message?: string; id?: string };
+
+  if (!res.ok) {
+    throw new Error(data.message ?? 'Failed to send message. Please try again or email us at info@happya.in');
   }
 
-  return { message: 'Message sent', id: result.text };
+  return { message: data.message ?? 'Message sent', id: String(data.id ?? Date.now()) };
 };

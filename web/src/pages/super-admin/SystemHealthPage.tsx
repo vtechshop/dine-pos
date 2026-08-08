@@ -184,9 +184,9 @@ export function SystemHealthPage() {
     : memory.percentage > 60             ? 'bg-amber-500'
     : 'bg-green-500';
 
-  const loadColor = loadAvg === null ? 'text-ink/20'
-    : loadAvg < 1 ? 'text-green-700'
-    : loadAvg < 2 ? 'text-amber-700'
+  const loadColor = cpuInfo === null ? 'text-ink/20'
+    : cpuInfo.usagePercent < 60 ? 'text-green-700'
+    : cpuInfo.usagePercent < 80 ? 'text-amber-700'
     : 'text-red-600';
 
   const hotelsOnline  = dash ? dash.hotelStats.active + dash.hotelStats.trial : null;
@@ -339,7 +339,7 @@ export function SystemHealthPage() {
               <>
                 <p className={`text-2xl font-bold tabular-nums ${loadColor}`}>{loadAvg.toFixed(2)}</p>
                 <p className="mt-1 text-[11px] text-ink/40">
-                  {loadAvg < 1 ? 'Low — healthy' : loadAvg < 2 ? 'Moderate' : 'High — investigate'}
+                  {(cpuInfo?.usagePercent ?? 0) < 60 ? 'Low — healthy' : (cpuInfo?.usagePercent ?? 0) < 80 ? 'Moderate' : 'High — investigate'}
                 </p>
               </>
             ) : (
@@ -384,8 +384,14 @@ export function SystemHealthPage() {
             available={devicesOnline !== null}
           />
           <MetricTile icon={Wifi}   label="Connections"  value={sysHealth?.socketClients ?? '—'} sub="active socket connections" available={sysHealth?.socketClients !== undefined} />
-          <MetricTile icon={Server} label="Live Orders"   value="—" available={false} />
-          <MetricTile icon={Server} label="Sessions"      value="—" available={false} />
+          <MetricTile icon={Server} label="Live Orders"
+            value={sysHealth?.liveOrders ?? '—'}
+            sub="pending · preparing · ready · served"
+            available={sysHealth?.liveOrders !== undefined && sysHealth.liveOrders !== null} />
+          <MetricTile icon={Server} label="Sessions"
+            value={sysHealth?.activeSessions ?? '—'}
+            sub="open table sessions"
+            available={sysHealth?.activeSessions !== undefined && sysHealth.activeSessions !== null} />
         </div>
       </section>
 

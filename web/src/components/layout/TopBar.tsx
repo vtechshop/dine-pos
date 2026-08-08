@@ -3,6 +3,7 @@ import { Hotel, LogOut, User, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { NotificationBell } from '../ui/NotificationBell';
+import { BroadcastBell } from '../ui/BroadcastBell';
 import { LiveBadge } from '../ui/LiveBadge';
 
 export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -42,8 +43,10 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
 
         {/* Right controls */}
         <div className="flex items-center gap-1">
-          {/* Notification bell */}
+          {/* Notification bell — live orders (all roles) */}
           <NotificationBell />
+          {/* Broadcast bell — SA announcements (admin only) */}
+          {role === 'admin' && <BroadcastBell />}
 
           {/* Socket status badge */}
           <div className="mx-2">

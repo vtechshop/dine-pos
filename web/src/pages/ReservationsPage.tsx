@@ -25,7 +25,7 @@ function fmtDate(iso: string) {
 const STATUS_STYLE: Record<Reservation['status'], string> = {
   confirmed: 'bg-blue-50 text-blue-700 border-blue-200',
   seated:    'bg-green-50 text-green-700 border-green-200',
-  cancelled: 'bg-gray-50 text-gray-400 border-gray-200',
+  cancelled: 'bg-ink/5 text-ink/30 border-ink/10',
   'no-show': 'bg-red-50 text-red-600 border-red-200',
 };
 

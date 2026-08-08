@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import Hotel, { IFeatureFlags } from '../models/Hotel';
 import RefreshToken from '../models/RefreshToken';
+import RemoteConfig from '../models/RemoteConfig';
 import { getRedisClient } from '../config/redis';
 import { logger } from '../utils/logger';
 
@@ -136,6 +137,49 @@ export const invalidateStatusCache = async (hotelId: string): Promise<void> => {
   }
 };
 
+// ── Global maintenance-mode cache ─────────────────────────────────────────────
+// Mirrors per-hotel status cache but keyed globally (no hotelId).
+// Fail-open: if DB is unreachable we never block valid hotel access.
+const MAINT_REDIS_KEY = 'global:maintenance';
+let _maintLocalCache: { active: boolean; message: string; expiresAt: number } | null = null;
+
+async function resolveMaintenanceMode(): Promise<{ active: boolean; message: string }> {
+  if (_maintLocalCache && Date.now() < _maintLocalCache.expiresAt) {
+    return { active: _maintLocalCache.active, message: _maintLocalCache.message };
+  }
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const raw = await redis.get(MAINT_REDIS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { active: boolean; message: string };
+        _maintLocalCache = { ...parsed, expiresAt: Date.now() + STATUS_TTL_MS };
+        return parsed;
+      }
+    } catch { /* fall through to DB */ }
+  }
+  try {
+    const rc = await RemoteConfig.findOne().select('maintenanceMode maintenanceMessage').lean();
+    const result = {
+      active:  (rc as any)?.maintenanceMode  ?? false,
+      message: (rc as any)?.maintenanceMessage ?? '',
+    };
+    _maintLocalCache = { ...result, expiresAt: Date.now() + STATUS_TTL_MS };
+    if (redis) {
+      redis.setex(MAINT_REDIS_KEY, STATUS_TTL_S, JSON.stringify(result)).catch(() => {});
+    }
+    return result;
+  } catch {
+    return { active: false, message: '' };
+  }
+}
+
+export function invalidateMaintenanceCache(): void {
+  _maintLocalCache = null;
+  const redis = getRedisClient();
+  if (redis) redis.del(MAINT_REDIS_KEY).catch(() => {});
+}
+
 // ── Auth middleware ───────────────────────────────────────────────────────────
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers.authorization;
@@ -216,7 +260,18 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
       }
     }
 
-    // trial and active: allow
+    // trial and active — check maintenance mode before allowing
+    try {
+      const maint = await resolveMaintenanceMode();
+      if (maint.active) {
+        res.status(503).json({
+          code: 'MAINTENANCE_MODE',
+          message: maint.message || 'The system is currently under maintenance. Please try again later.',
+        });
+        return;
+      }
+    } catch { /* fail open — never block valid hotel access on maintenance cache error */ }
+
     next();
   } catch {
     res.status(401).json({ message: 'Invalid or expired session. Please login again.' });

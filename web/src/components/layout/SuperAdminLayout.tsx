@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { SANotificationsProvider } from '../../context/SANotificationsContext';
 import { SANotificationBell } from './SANotificationBell';
 import { LeadNotificationProvider } from '../../context/LeadNotificationContext';
+import { LeadToast } from '../ui/LeadToast';
 
 export function SuperAdminLayout() {
   const { logout } = useAuth();
@@ -209,6 +210,10 @@ export function SuperAdminLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Real-time lead alert toast — appears on any SA page */}
+      <LeadToast />
+
     </SANotificationsProvider>
     </LeadNotificationProvider>
   );

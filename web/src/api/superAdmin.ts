@@ -179,9 +179,11 @@ export interface DashboardSystemHealth {
   api:           string;
   memory:        { usedMB: number; totalMB: number; rssMB: number; percentage: number };
   cpu:           { cores: number; usagePercent: number; loadAvg1m: number; loadAvg5m: number; loadAvg15m: number };
-  uptimeSeconds: number;
-  loadAvg:       number;
-  socketClients?: number;
+  uptimeSeconds:   number;
+  loadAvg:         number;
+  socketClients?:  number;
+  liveOrders?:     number | null;
+  activeSessions?: number | null;
 }
 
 export interface AppVersionPoint {
@@ -296,6 +298,24 @@ export interface RevenueAnalyticsData {
 
 export function getRevenueAnalytics(period: '7d' | '30d' | '90d'): Promise<RevenueAnalyticsData> {
   return saFetch<RevenueAnalyticsData>(`/analytics/revenue?period=${period}`);
+}
+
+// ── Completed-Order Daily Trends ──────────────────────────────────────────────
+
+export interface CompletedTrendsPoint {
+  date:    string; // YYYY-MM-DD (UTC)
+  revenue: number;
+  orders:  number;
+}
+
+export interface CompletedTrendsData {
+  points:       CompletedTrendsPoint[];
+  totalRevenue: number;
+  totalOrders:  number;
+}
+
+export function getCompletedTrends(): Promise<CompletedTrendsData> {
+  return saFetch<CompletedTrendsData>('/analytics/completed-trends');
 }
 
 export function getDashboard(opts?: { noRedirect?: boolean }): Promise<DashboardData> {
