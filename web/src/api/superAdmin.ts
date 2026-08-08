@@ -181,6 +181,7 @@ export interface DashboardSystemHealth {
   cpu:           { cores: number; usagePercent: number; loadAvg1m: number; loadAvg5m: number; loadAvg15m: number };
   uptimeSeconds: number;
   loadAvg:       number;
+  socketClients?: number;
 }
 
 export interface AppVersionPoint {

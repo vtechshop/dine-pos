@@ -268,7 +268,7 @@ export function SystemHealthPage() {
           <InfraCard icon={Server}   label="API Server"    status={apiStatus}   available={apiStatus !== null}   />
           <InfraCard icon={Database} label="MongoDB"       status={mongoStatus} available={mongoStatus !== null} />
           <InfraCard icon={Wifi}     label="Redis"         status={redisStatus} available={redisStatus !== null} />
-          <InfraCard icon={Radio}    label="Socket Server" status={null}        available={false}                />
+          <InfraCard icon={Radio}    label="Socket Server" status={sysHealth?.socketClients !== undefined ? 'Connected' : null} available={sysHealth?.socketClients !== undefined} />
         </div>
       </section>
 
@@ -383,7 +383,7 @@ export function SystemHealthPage() {
             value={devicesOnline ?? '—'} sub="last heartbeat ≤ 5m"
             available={devicesOnline !== null}
           />
-          <MetricTile icon={Wifi}   label="Connections"  value="—" available={false} />
+          <MetricTile icon={Wifi}   label="Connections"  value={sysHealth?.socketClients ?? '—'} sub="active socket connections" available={sysHealth?.socketClients !== undefined} />
           <MetricTile icon={Server} label="Live Orders"   value="—" available={false} />
           <MetricTile icon={Server} label="Sessions"      value="—" available={false} />
         </div>

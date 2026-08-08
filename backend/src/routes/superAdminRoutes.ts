@@ -23,6 +23,7 @@ import { getPriceForPlan, getDeviceLimitForPlan } from '../utils/planLimits';
 import { logAuditRaw } from '../utils/audit';
 import { logger } from '../utils/logger';
 import { invalidateStatusCache } from '../middleware/auth';
+import { io } from '../server';
 import { Expo } from 'expo-server-sdk';
 
 
@@ -903,8 +904,9 @@ router.get('/dashboard', superAdminAuth, async (_req: Request, res: Response) =>
             loadAvg5m:    Math.round(dl5  * 100) / 100,
             loadAvg15m:   Math.round(dl15 * 100) / 100,
           },
-          uptimeSeconds: Math.round(process.uptime()),
-          loadAvg:       dl1,
+          uptimeSeconds:  Math.round(process.uptime()),
+          loadAvg:        dl1,
+          socketClients:  io.engine.clientsCount,
         };
       })(),
       appVersions: {
