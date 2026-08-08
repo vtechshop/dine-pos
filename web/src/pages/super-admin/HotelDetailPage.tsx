@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Check, X, Copy, Eye, EyeOff, PauseCircle, PlayCircle, CalendarPlus, CreditCard, Sliders, Settings, FileText, Activity } from 'lucide-react';
+import { ArrowLeft, Check, X, Copy, Eye, EyeOff, PauseCircle, PlayCircle, CalendarPlus, CreditCard, Sliders, Settings, FileText, Activity, Pencil } from 'lucide-react';
 import {
   getHotel, approveHotel, rejectHotel, suspendHotel, activateHotel, extendTrial,
-  updateFeatures, setPlan, setTrial,
-  type Hotel, type ApproveResponse,
+  updateFeatures, setPlan, setTrial, updateHotelSettings, updateHotelNote,
+  type Hotel, type ApproveResponse, type HotelSettingsPayload,
 } from '../../api/superAdmin';
 import { Spinner } from '../../components/ui/Spinner';
 
@@ -204,11 +204,31 @@ export function HotelDetailPage() {
   const [featuresError,   setFeaturesError]   = useState<string | null>(null);
   const [featuresSuccess, setFeaturesSuccess] = useState<string | null>(null);
 
+  // Hotel Settings edit
+  const [editingSettings,  setEditingSettings]  = useState(false);
+  const [settingsForm,     setSettingsForm]     = useState<HotelSettingsPayload>({});
+  const [savingSettings,   setSavingSettings]   = useState(false);
+  const [settingsError,    setSettingsError]    = useState<string | null>(null);
+  const [settingsSuccess,  setSettingsSuccess]  = useState<string | null>(null);
+
+  // Internal Notes
+  const [note,        setNote]        = useState('');
+  const [savingNote,  setSavingNote]  = useState(false);
+  const [noteError,   setNoteError]   = useState<string | null>(null);
+  const [noteSuccess, setNoteSuccess] = useState<string | null>(null);
+  const [notedAt,     setNotedAt]     = useState<string | null>(null);
+
   useEffect(() => {
     if (!id) return;
     setLoading(true);
     getHotel(id)
-      .then(h => { setHotel(h); setFeatures(h.features); setDraftFeatures(h.features); })
+      .then(h => {
+        setHotel(h);
+        setFeatures(h.features);
+        setDraftFeatures(h.features);
+        setNote(h.saNote ?? '');
+        setNotedAt(h.saNotedAt ?? null);
+      })
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load hotel'))
       .finally(() => setLoading(false));
   }, [id]);
@@ -327,6 +347,55 @@ export function HotelDetailPage() {
       setFeaturesError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSavingFeatures(false);
+    }
+  }
+
+  function startEditSettings() {
+    if (!hotel) return;
+    setSettingsForm({
+      hotelName:    hotel.hotelName,
+      ownerName:    hotel.ownerName,
+      phone:        hotel.phone,
+      email:        hotel.email || '',
+      address:      hotel.address || '',
+      city:         hotel.city || '',
+      state:        hotel.state || '',
+      pincode:      hotel.pincode || '',
+      businessType: hotel.businessType,
+    });
+    setSettingsError(null);
+    setEditingSettings(true);
+  }
+
+  async function handleSaveSettings() {
+    if (!id) return;
+    setSavingSettings(true); setSettingsError(null);
+    try {
+      const res = await updateHotelSettings(id, settingsForm);
+      setHotel(res.hotel);
+      setEditingSettings(false);
+      setSettingsSuccess('Settings saved');
+      setTimeout(() => setSettingsSuccess(null), 3000);
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  async function handleSaveNote() {
+    if (!id) return;
+    setSavingNote(true); setNoteError(null);
+    try {
+      const res = await updateHotelNote(id, note);
+      setNote(res.saNote);
+      setNotedAt(res.saNotedAt);
+      setNoteSuccess('Note saved');
+      setTimeout(() => setNoteSuccess(null), 2000);
+    } catch (err) {
+      setNoteError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setSavingNote(false);
     }
   }
 
@@ -637,45 +706,137 @@ export function HotelDetailPage() {
         </div>
       )}
 
-      {/* Hotel Settings (read-only) */}
+      {/* Hotel Settings */}
       <div className="mt-4 rounded-xl border border-border bg-canvas p-5">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Settings size={15} className="text-ink/40" />
             <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Hotel Settings</p>
           </div>
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-600">
-            Edit Coming Soon
-          </span>
+          {!editingSettings ? (
+            <button
+              onClick={startEditSettings}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1 text-xs font-medium text-ink/60 transition hover:bg-mist"
+            >
+              <Pencil size={12} /> Edit
+            </button>
+          ) : (
+            <button
+              onClick={() => { setEditingSettings(false); setSettingsError(null); }}
+              className="text-xs text-ink/40 hover:text-ink transition"
+            >
+              Cancel
+            </button>
+          )}
         </div>
-        <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-          {[
-            { label: 'Hotel Name',    value: hotel.hotelName },
-            { label: 'Owner Name',    value: hotel.ownerName },
-            { label: 'Phone',         value: hotel.phone },
-            { label: 'Email',         value: hotel.email || '—' },
-            { label: 'Business Type', value: hotel.businessType },
-            { label: 'City',          value: hotel.city || '—' },
-            { label: 'State',         value: hotel.state || '—' },
-            { label: 'Admin ID',      value: hotel.adminId || '—' },
-          ].map(({ label, value }) => (
-            <div key={label} className="flex justify-between gap-2">
-              <dt className="text-ink/50">{label}</dt>
-              <dd className="text-right font-medium text-ink capitalize">{value}</dd>
+
+        {settingsSuccess && (
+          <p className="mb-3 text-xs text-green-600">{settingsSuccess}</p>
+        )}
+
+        {!editingSettings ? (
+          <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+            {[
+              { label: 'Hotel Name',    value: hotel.hotelName },
+              { label: 'Owner Name',    value: hotel.ownerName },
+              { label: 'Phone',         value: hotel.phone },
+              { label: 'Email',         value: hotel.email || '—' },
+              { label: 'Business Type', value: hotel.businessType },
+              { label: 'Address',       value: hotel.address || '—' },
+              { label: 'City',          value: hotel.city || '—' },
+              { label: 'State',         value: hotel.state || '—' },
+              { label: 'Pincode',       value: hotel.pincode || '—' },
+              { label: 'Admin ID',      value: hotel.adminId || '—' },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex justify-between gap-2">
+                <dt className="text-ink/50">{label}</dt>
+                <dd className="text-right font-medium text-ink capitalize">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {([
+                { key: 'hotelName',    label: 'Hotel Name',    type: 'text'  },
+                { key: 'ownerName',    label: 'Owner Name',    type: 'text'  },
+                { key: 'phone',        label: 'Phone',         type: 'tel'   },
+                { key: 'email',        label: 'Email',         type: 'email' },
+                { key: 'address',      label: 'Address',       type: 'text'  },
+                { key: 'city',         label: 'City',          type: 'text'  },
+                { key: 'state',        label: 'State',         type: 'text'  },
+                { key: 'pincode',      label: 'Pincode',       type: 'text'  },
+              ] as { key: keyof HotelSettingsPayload; label: string; type: string }[]).map(({ key, label, type }) => (
+                <div key={key} className="space-y-1">
+                  <label className="block text-xs font-medium text-ink/50">{label}</label>
+                  <input
+                    type={type}
+                    value={(settingsForm[key] as string) ?? ''}
+                    onChange={e => setSettingsForm(f => ({ ...f, [key]: e.target.value }))}
+                    disabled={savingSettings}
+                    className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink placeholder-ink/30 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-50"
+                  />
+                </div>
+              ))}
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-ink/50">Business Type</label>
+                <select
+                  value={settingsForm.businessType ?? ''}
+                  onChange={e => setSettingsForm(f => ({ ...f, businessType: e.target.value }))}
+                  disabled={savingSettings}
+                  className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-50"
+                >
+                  {['restaurant','hotel','bakery','cafe','sweet-shop','juice-shop','fast-food','cloud-kitchen','food-court','mess','catering','veg','non-veg','both'].map(bt => (
+                    <option key={bt} value={bt}>{bt}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-          ))}
-        </dl>
+            {settingsError && <p className="text-xs text-red-600">{settingsError}</p>}
+            <button
+              onClick={handleSaveSettings}
+              disabled={savingSettings}
+              className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand/90 disabled:opacity-60"
+            >
+              {savingSettings && <Spinner size="sm" />}
+              {savingSettings ? 'Saving…' : 'Save Settings'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Internal Notes */}
       <div className="mt-4 rounded-xl border border-border bg-canvas p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <FileText size={15} className="text-ink/40" />
-          <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Internal Notes</p>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileText size={15} className="text-ink/40" />
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Internal Notes</p>
+          </div>
+          {notedAt && (
+            <span className="text-[10px] text-ink/30">
+              Saved {new Date(notedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </span>
+          )}
         </div>
-        <div className="flex flex-col items-center justify-center py-6 text-center">
-          <p className="text-sm font-medium text-ink/50">Coming Soon</p>
-          <p className="mt-1 text-xs text-ink/30">Internal remarks and notes will appear here once the feature is available.</p>
+        <textarea
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          rows={4}
+          placeholder="Add internal remarks about this hotel (only visible to super admins)…"
+          disabled={savingNote}
+          className="w-full resize-none rounded-lg border border-border bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder-ink/40 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20 disabled:opacity-50"
+        />
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            onClick={handleSaveNote}
+            disabled={savingNote}
+            className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand/90 disabled:opacity-60"
+          >
+            {savingNote && <Spinner size="sm" />}
+            {savingNote ? 'Saving…' : 'Save Note'}
+          </button>
+          {noteSuccess && <p className="text-xs text-green-600">{noteSuccess}</p>}
+          {noteError   && <p className="text-xs text-red-600">{noteError}</p>}
         </div>
       </div>
 

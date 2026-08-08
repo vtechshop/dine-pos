@@ -635,8 +635,29 @@ router.get('/health', superAdminAuth, async (_req: Request, res: Response) => {
       Device.countDocuments(),
     ]);
 
-    const onlineDeviceCutoff = new Date(Date.now() - 5 * 60 * 1000); // 5 min
+    const onlineDeviceCutoff = new Date(Date.now() - 5 * 60 * 1000);
     const onlineDevices = await Device.countDocuments({ lastSeen: { $gte: onlineDeviceCutoff } });
+
+    // CPU info
+    const cpus      = os.cpus();
+    const [l1, l5, l15] = os.loadavg();
+    const cpuUsage  = Math.min(100, Math.round((l1 / (cpus.length || 1)) * 100));
+
+    // Disk info (Node 19+, graceful fallback)
+    let disk: { usedGB: number; totalGB: number; percentage: number } | null = null;
+    try {
+      const fs  = await import('fs');
+      const st  = (fs as any).statfsSync?.('/');
+      if (st) {
+        const total = st.blocks  * st.bsize;
+        const free  = st.bfree   * st.bsize;
+        disk = {
+          totalGB:    Math.round(total / 1_073_741_824 * 10) / 10,
+          usedGB:     Math.round((total - free) / 1_073_741_824 * 10) / 10,
+          percentage: Math.round(((total - free) / total) * 100),
+        };
+      }
+    } catch { /* not available on this Node version */ }
 
     return res.json({
       status:       'ok',
@@ -646,7 +667,22 @@ router.get('/health', superAdminAuth, async (_req: Request, res: Response) => {
       totalOrders,
       totalDevices,
       onlineDevices,
-      checkedAt:    new Date(),
+      cpu: {
+        cores:        cpus.length,
+        model:        cpus[0]?.model ?? 'unknown',
+        usagePercent: cpuUsage,
+        loadAvg1m:    Math.round(l1  * 100) / 100,
+        loadAvg5m:    Math.round(l5  * 100) / 100,
+        loadAvg15m:   Math.round(l15 * 100) / 100,
+      },
+      disk,
+      serviceInfo: {
+        version:     process.env.npm_package_version || '1.0.0',
+        nodeVersion: process.version,
+        environment: process.env.NODE_ENV || 'production',
+        apiVersion:  'v1',
+      },
+      checkedAt: new Date(),
     });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -792,21 +828,33 @@ router.get('/dashboard', superAdminAuth, async (_req: Request, res: Response) =>
 
       // Row 4
       recentTickets,
-      systemHealth: {
-        mongo:  mongoState === 1 ? 'ok' : 'error',
-        redis:  redisState,
-        api:    'ok',
-        memory: {
-          usedMB:     Math.round(mem.heapUsed  / 1_048_576),
-          totalMB:    Math.round(mem.heapTotal / 1_048_576),
-          rssMB:      Math.round(mem.rss       / 1_048_576),
-          percentage: Math.round((mem.heapUsed / mem.heapTotal) * 100),
-        },
-        uptimeSeconds: Math.round(process.uptime()),
-        loadAvg:       os.loadavg()[0],
-      },
+      systemHealth: (() => {
+        const cpuList   = os.cpus();
+        const [dl1, dl5, dl15] = os.loadavg();
+        return {
+          mongo:  mongoState === 1 ? 'ok' : 'error',
+          redis:  redisState,
+          api:    'ok',
+          memory: {
+            usedMB:     Math.round(mem.heapUsed  / 1_048_576),
+            totalMB:    Math.round(mem.heapTotal / 1_048_576),
+            rssMB:      Math.round(mem.rss       / 1_048_576),
+            percentage: Math.round((mem.heapUsed / mem.heapTotal) * 100),
+          },
+          cpu: {
+            cores:        cpuList.length,
+            usagePercent: Math.min(100, Math.round((dl1 / (cpuList.length || 1)) * 100)),
+            loadAvg1m:    Math.round(dl1  * 100) / 100,
+            loadAvg5m:    Math.round(dl5  * 100) / 100,
+            loadAvg15m:   Math.round(dl15 * 100) / 100,
+          },
+          uptimeSeconds: Math.round(process.uptime()),
+          loadAvg:       dl1,
+        };
+      })(),
       appVersions: {
         latestVersion,
+        webVersion:          process.env.npm_package_version || '1.0.0',
         forceUpdateEnabled:  (remoteConfig as any)?.forceUpdate || false,
         totalDevices,
         outdatedDeviceCount,
@@ -1245,6 +1293,107 @@ router.post('/push-token', superAdminAuth, async (req: Request, res: Response) =
     );
     return res.json({ message: 'Push token registered' });
   } catch (err) { return sendError(res, 500, 'Server error', err); }
+});
+
+// ── Edit Hotel Settings ───────────────────────────────────────────────────────
+// PUT /api/superadmin/hotels/:id/settings
+// Updates basic hotel registration info (not credentials / status / subscription).
+
+router.put('/hotels/:id/settings', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const allowed = ['hotelName', 'ownerName', 'phone', 'email', 'address', 'city', 'state', 'pincode', 'businessType'];
+    const update: any = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) update[key] = String(req.body[key]).trim();
+    }
+    if (Object.keys(update).length === 0) return res.status(400).json({ message: 'No valid fields provided' });
+
+    // Phone must be unique if changing
+    if (update.phone) {
+      const conflict = await Hotel.findOne({ phone: update.phone, _id: { $ne: req.params.id } });
+      if (conflict) return res.status(409).json({ message: 'Phone number already used by another hotel' });
+    }
+
+    const hotel = await Hotel.findByIdAndUpdate(
+      req.params.id,
+      { $set: update },
+      { new: true, runValidators: true },
+    ).select('-adminPasswordHash');
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    await logAuditRaw({ action: 'superadmin.hotel.settings_updated', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: update });
+    return res.json({ message: 'Hotel settings updated', hotel });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// ── SA Internal Note ──────────────────────────────────────────────────────────
+// PATCH /api/superadmin/hotels/:id/note
+
+router.patch('/hotels/:id/note', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const note = typeof req.body.note === 'string' ? req.body.note.slice(0, 2000) : '';
+    const hotel = await Hotel.findByIdAndUpdate(
+      req.params.id,
+      { $set: { saNote: note, saNotedAt: new Date() } },
+      { new: true },
+    ).select('saNote saNotedAt');
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    return res.json({ saNote: hotel.saNote, saNotedAt: hotel.saNotedAt });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// ── Historical Revenue (time-series) ─────────────────────────────────────────
+// GET /api/superadmin/analytics/revenue?period=7d|30d|90d
+
+router.get('/analytics/revenue', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const period = String(req.query.period ?? '30d');
+    const days   = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+    const from   = new Date(Date.now() - days * 86_400_000);
+    from.setHours(0, 0, 0, 0);
+
+    const [dailyRev, totalOrders, totalRevenue] = await Promise.all([
+      Order.aggregate([
+        { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: from } } },
+        {
+          $group: {
+            _id: {
+              y: { $year: '$createdAt' },
+              m: { $month: '$createdAt' },
+              d: { $dayOfMonth: '$createdAt' },
+            },
+            revenue: { $sum: '$grandTotal' },
+            orders:  { $sum: 1 },
+          },
+        },
+        { $sort: { '_id.y': 1, '_id.m': 1, '_id.d': 1 } },
+      ]),
+      Order.countDocuments({ status: { $ne: 'cancelled' }, createdAt: { $gte: from } }),
+      Order.aggregate([
+        { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: from } } },
+        { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const totalRev = (totalRevenue as any[])[0]?.total ?? 0;
+    const totalOrd = (totalRevenue as any[])[0]?.count ?? 0;
+    const activeHotels = await Hotel.countDocuments({ status: { $in: ['trial', 'active'] } });
+
+    const points = (dailyRev as any[]).map((d: any) => ({
+      date:    `${d._id.y}-${String(d._id.m).padStart(2,'0')}-${String(d._id.d).padStart(2,'0')}`,
+      revenue: Math.round(d.revenue),
+      orders:  d.orders,
+    }));
+
+    return res.json({
+      period,
+      points,
+      totalRevenue:      Math.round(totalRev),
+      totalOrders:       totalOrd,
+      avgOrderBill:      totalOrd > 0 ? Math.round(totalRev / totalOrd) : 0,
+      avgOrdersPerHotel: activeHotels > 0 ? Math.round(totalOrd / activeHotels) : 0,
+      activeHotels,
+    });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 export default router;

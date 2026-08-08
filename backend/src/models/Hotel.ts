@@ -106,6 +106,10 @@ export interface IHotel extends Document {
   premiumExpiry: Date | null;
   trialEndsAt: Date | null;
 
+  // Super admin internal note
+  saNote: string;
+  saNotedAt: Date | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -206,6 +210,10 @@ const HotelSchema: Schema = new Schema(
     premiumPlan:        { type: String, default: 'free' },
     premiumExpiry:      { type: Date, default: null },
     trialEndsAt:        { type: Date, default: null },
+
+    // Super admin internal note
+    saNote:             { type: String, default: '' },
+    saNotedAt:          { type: Date, default: null },
   },
   { timestamps: true }
 );

@@ -67,8 +67,10 @@ export interface Hotel {
   phone:                 string;
   email:                 string;
   businessType:          string;
+  address:               string;
   city:                  string;
   state:                 string;
+  pincode:               string;
   status:                'pending' | 'trial' | 'active' | 'expired' | 'suspended' | 'rejected';
   adminId:               string;
   trialStartDate:        string | null;
@@ -78,6 +80,8 @@ export interface Hotel {
   subscriptionType:      'trial' | 'starter' | 'professional' | 'enterprise';
   subscriptionStartDate: string | null;
   subscriptionEndDate:   string | null;
+  saNote:                string;
+  saNotedAt:             string | null;
   createdAt:             string;
   updatedAt:             string;
   features: {
@@ -158,8 +162,16 @@ export interface DashboardSystemHealth {
   redis:         string;
   api:           string;
   memory:        { usedMB: number; totalMB: number; rssMB: number; percentage: number };
+  cpu:           { cores: number; usagePercent: number; loadAvg1m: number; loadAvg5m: number; loadAvg15m: number };
   uptimeSeconds: number;
   loadAvg:       number;
+}
+
+export interface AppVersionPoint {
+  version:    string;
+  count:      number;
+  percentage: number;
+  isLatest:   boolean;
 }
 
 export interface DashboardData {
@@ -188,6 +200,14 @@ export interface DashboardData {
     trialEndDate: string | null; subscriptionEndDate: string | null;
   }[];
   systemHealth?: DashboardSystemHealth;
+  appVersions?: {
+    latestVersion:       string;
+    webVersion:          string;
+    forceUpdateEnabled:  boolean;
+    totalDevices:        number;
+    outdatedDeviceCount: number;
+    distribution:        AppVersionPoint[];
+  };
   generatedAt:   string;
 }
 
@@ -201,11 +221,64 @@ export interface HealthData {
   totalOrders:   number;
   totalDevices:  number;
   onlineDevices: number;
+  cpu:           { cores: number; model: string; usagePercent: number; loadAvg1m: number; loadAvg5m: number; loadAvg15m: number } | null;
+  disk:          { usedGB: number; totalGB: number; percentage: number } | null;
+  serviceInfo:   { version: string; nodeVersion: string; environment: string; apiVersion: string } | null;
   checkedAt:     string;
 }
 
 export function getHealth(): Promise<HealthData> {
   return saFetch<HealthData>('/health');
+}
+
+// ── Hotel Settings + Note ─────────────────────────────────────────────────────
+
+export interface HotelSettingsPayload {
+  hotelName?:   string;
+  ownerName?:   string;
+  phone?:       string;
+  email?:       string;
+  address?:     string;
+  city?:        string;
+  state?:       string;
+  pincode?:     string;
+  businessType?: string;
+}
+
+export function updateHotelSettings(id: string, payload: HotelSettingsPayload): Promise<{ message: string; hotel: Hotel }> {
+  return saFetch<{ message: string; hotel: Hotel }>(`/hotels/${id}/settings`, {
+    method: 'PUT',
+    body:   JSON.stringify(payload),
+  });
+}
+
+export function updateHotelNote(id: string, note: string): Promise<{ saNote: string; saNotedAt: string | null }> {
+  return saFetch<{ saNote: string; saNotedAt: string | null }>(`/hotels/${id}/note`, {
+    method: 'PATCH',
+    body:   JSON.stringify({ note }),
+  });
+}
+
+// ── Revenue Analytics ─────────────────────────────────────────────────────────
+
+export interface RevenuePoint {
+  date:    string;
+  revenue: number;
+  orders:  number;
+}
+
+export interface RevenueAnalyticsData {
+  period:            string;
+  points:            RevenuePoint[];
+  totalRevenue:      number;
+  totalOrders:       number;
+  avgOrderBill:      number;
+  avgOrdersPerHotel: number;
+  activeHotels:      number;
+}
+
+export function getRevenueAnalytics(period: '7d' | '30d' | '90d'): Promise<RevenueAnalyticsData> {
+  return saFetch<RevenueAnalyticsData>(`/analytics/revenue?period=${period}`);
 }
 
 export function getDashboard(opts?: { noRedirect?: boolean }): Promise<DashboardData> {

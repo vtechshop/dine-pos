@@ -10,11 +10,13 @@ import {
   getDeviceLicensing,
   getFailedPayments,
   getTopHotels,
+  getRevenueAnalytics,
   type DashboardData,
   type SubscriptionRevenueData,
   type DeviceLicensingData,
   type FailedPaymentsData,
   type TopHotel,
+  type RevenueAnalyticsData,
 } from '../../api/superAdmin';
 import { Spinner } from '../../components/ui/Spinner';
 
@@ -79,12 +81,35 @@ function KpiCard({
   );
 }
 
-function ComingSoonCard({ label }: { label: string }) {
+function RevenueChart({ points }: { points: { date: string; revenue: number; orders: number }[] }) {
+  const W = 600; const H = 100; const PAD = 4;
+  const maxRev = Math.max(...points.map(p => p.revenue), 1);
+  const pts = points.map((p, i) => {
+    const x = PAD + (i / Math.max(points.length - 1, 1)) * (W - PAD * 2);
+    const y = H - PAD - ((p.revenue / maxRev) * (H - PAD * 2));
+    return { x, y, ...p };
+  });
+  const linePath  = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const areaPath  = `${linePath} L ${pts[pts.length - 1].x} ${H} L ${pts[0].x} ${H} Z`;
   return (
-    <div className="rounded-xl border border-border bg-mist/40 p-4">
-      <p className="text-xs font-medium text-ink/30">{label}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums text-ink/15">—</p>
-      <p className="mt-0.5 text-[11px] text-ink/25">Coming Soon</p>
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 240, height: 100 }}>
+        <defs>
+          <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor="var(--color-brand, #6366f1)" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="var(--color-brand, #6366f1)" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <path d={areaPath} fill="url(#revGrad)" />
+        <path d={linePath} fill="none" stroke="var(--color-brand, #6366f1)" strokeWidth="1.5" strokeLinejoin="round" />
+        {pts.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="var(--color-brand, #6366f1)" />
+        ))}
+      </svg>
+      <div className="mt-1 flex justify-between text-[10px] text-ink/30">
+        <span>{pts[0]?.date}</span>
+        <span>{pts[pts.length - 1]?.date}</span>
+      </div>
     </div>
   );
 }
@@ -101,6 +126,11 @@ export function HotelAnalyticsPage() {
   const [payments,    setPayments]    = useState<FailedPaymentsData | null>(null);
   const [ordToday,    setOrdToday]    = useState<TopHotel[] | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // ── revenue analytics ────────────────────────────────────────────────────────
+  const [revData,    setRevData]    = useState<RevenueAnalyticsData | null>(null);
+  const [revPeriod,  setRevPeriod]  = useState<'7d' | '30d' | '90d'>('30d');
+  const [revLoading, setRevLoading] = useState(true);
 
   // ── activity leaderboard (independent — refetches on filter change) ──────────
   const [actBy,      setActBy]      = useState<ByOption>('activity');
@@ -132,6 +162,16 @@ export function HotelAnalyticsPage() {
   }, []);
 
   useEffect(() => { loadMain(); }, [loadMain]);
+
+  // ── revenue analytics ────────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    setRevLoading(true);
+    getRevenueAnalytics(revPeriod)
+      .then(d  => { if (!cancelled) { setRevData(d);  setRevLoading(false); } })
+      .catch(() => { if (!cancelled) { setRevLoading(false); } });
+    return () => { cancelled = true; };
+  }, [revPeriod]);
 
   // ── activity section ─────────────────────────────────────────────────────────
 
@@ -265,7 +305,14 @@ export function HotelAnalyticsPage() {
               color="text-brand"
               loading={mainLoading}
             />
-            <ComingSoonCard label="Avg Order Bill" />
+            <KpiCard
+              label="Avg Order Bill"
+              value={revData ? fmtINR(revData.avgOrderBill) : '—'}
+              sub={revData ? `last ${revPeriod}` : undefined}
+              icon={TrendingUp}
+              color="text-green-600"
+              loading={revLoading}
+            />
           </div>
 
           {/* Revenue by plan */}
@@ -318,16 +365,42 @@ export function HotelAnalyticsPage() {
           </div>
         </div>
 
-        {/* Historical Revenue Trend — Coming Soon */}
-        <div className="mt-4 overflow-hidden rounded-xl border border-border bg-mist/30">
-          <div className="flex h-28 items-center justify-center">
-            <div className="text-center">
-              <p className="text-sm font-medium text-ink/30">Historical Revenue Trend</p>
-              <p className="mt-1 text-xs text-ink/20">
-                Coming Soon · Requires time-series revenue endpoint
-              </p>
+        {/* Historical Revenue Trend */}
+        <div className="mt-4 overflow-hidden rounded-xl border border-border bg-canvas p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink/40">Revenue Trend</p>
+            <div className="flex overflow-hidden rounded-lg border border-border">
+              {(['7d', '30d', '90d'] as const).map(p => (
+                <button
+                  key={p}
+                  onClick={() => setRevPeriod(p)}
+                  className={`px-2.5 py-1 text-xs font-medium transition ${
+                    revPeriod === p ? 'bg-ink text-canvas' : 'text-ink/50 hover:bg-mist'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
             </div>
           </div>
+          {revLoading ? (
+            <div className="flex h-28 items-center justify-center">
+              <Spinner size="sm" />
+            </div>
+          ) : !revData || revData.points.length === 0 ? (
+            <div className="flex h-28 items-center justify-center text-xs text-ink/30">
+              No revenue data for this period
+            </div>
+          ) : (
+            <RevenueChart points={revData.points} />
+          )}
+          {revData && (
+            <div className="mt-2 flex gap-4 text-xs text-ink/40">
+              <span>Total: <strong className="text-ink">{fmtINR(revData.totalRevenue)}</strong></span>
+              <span>Orders: <strong className="text-ink">{revData.totalOrders}</strong></span>
+              <span>Avg/Hotel: <strong className="text-ink">{revData.avgOrdersPerHotel}</strong></span>
+            </div>
+          )}
         </div>
       </section>
 
@@ -352,8 +425,22 @@ export function HotelAnalyticsPage() {
             </p>
           </div>
 
-          <ComingSoonCard label="Avg Orders per Hotel" />
-          <ComingSoonCard label="Platform Order Total" />
+          <KpiCard
+            label="Avg Orders per Hotel"
+            value={revData ? String(revData.avgOrdersPerHotel) : '—'}
+            sub={revData ? `last ${revPeriod}` : undefined}
+            icon={Activity}
+            color="text-brand"
+            loading={revLoading}
+          />
+          <KpiCard
+            label="Platform Order Total"
+            value={revData ? String(revData.totalOrders) : '—'}
+            sub={revData ? `last ${revPeriod}` : undefined}
+            icon={ShoppingBag}
+            color="text-violet-600"
+            loading={revLoading}
+          />
         </div>
 
         {/* Top hotels by orders today */}

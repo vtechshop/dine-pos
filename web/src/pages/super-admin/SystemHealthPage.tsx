@@ -175,6 +175,9 @@ export function SystemHealthPage() {
   const memory    = sysHealth?.memory        ?? null;
   const uptimeSec = sysHealth?.uptimeSeconds ?? null;
   const loadAvg   = sysHealth?.loadAvg       ?? null;
+  const cpuInfo   = sysHealth?.cpu           ?? null;
+  const diskInfo  = health?.disk             ?? null;
+  const svcInfo   = health?.serviceInfo      ?? null;
 
   const memBarColor = !memory              ? 'bg-mist'
     : memory.percentage > 80              ? 'bg-red-500'
@@ -344,10 +347,23 @@ export function SystemHealthPage() {
             )}
           </div>
 
-          {/* CPU — Coming Soon */}
-          <MetricTile icon={Cpu}       label="CPU Usage"  value="—" available={false} comingSoon />
-          {/* Disk — Coming Soon */}
-          <MetricTile icon={HardDrive} label="Disk Usage" value="—" available={false} comingSoon />
+          {/* CPU */}
+          <MetricTile
+            icon={Cpu}
+            label="CPU Usage"
+            value={cpuInfo ? `${cpuInfo.usagePercent}%` : '—'}
+            sub={cpuInfo ? `${cpuInfo.cores} core${cpuInfo.cores !== 1 ? 's' : ''} · ${cpuInfo.loadAvg1m.toFixed(2)} load` : undefined}
+            available={cpuInfo !== null}
+          />
+          {/* Disk */}
+          <MetricTile
+            icon={HardDrive}
+            label="Disk Usage"
+            value={diskInfo ? `${diskInfo.percentage}%` : '—'}
+            sub={diskInfo ? `${diskInfo.usedGB} / ${diskInfo.totalGB} GB` : undefined}
+            available={diskInfo !== null}
+            comingSoon={diskInfo === null}
+          />
         </div>
       </section>
 
@@ -378,18 +394,15 @@ export function SystemHealthPage() {
 
         {/* Service Information */}
         <section className="rounded-xl border border-border bg-canvas p-5">
-          <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink/40">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink/40">
             Service Information
           </h2>
-          <p className="mb-3 text-[11px] text-ink/30">
-            Not exposed by current backend endpoints
-          </p>
           <div className="divide-y divide-border">
-            <InfoRow label="Backend Version" value="—" />
-            <InfoRow label="API Version"     value="—" />
-            <InfoRow label="Environment"     value="—" />
-            <InfoRow label="Node.js Version" value="—" />
-            <InfoRow label="Build Time"      value="—" />
+            <InfoRow label="Backend Version" value={svcInfo?.version      ?? '—'} />
+            <InfoRow label="API Version"     value={svcInfo?.apiVersion   ?? '—'} />
+            <InfoRow label="Environment"     value={svcInfo?.environment  ?? '—'} />
+            <InfoRow label="Node.js Version" value={svcInfo?.nodeVersion  ?? '—'} />
+            <InfoRow label="CPU Cores"       value={cpuInfo ? String(cpuInfo.cores) : '—'} />
           </div>
         </section>
 
@@ -423,7 +436,7 @@ export function SystemHealthPage() {
 
       {/* Footer */}
       <p className="text-center text-[11px] text-ink/30">
-        Data refreshes every {REFRESH_SEC} seconds · CPU, Disk, Socket metrics require additional backend endpoints
+        Data refreshes every {REFRESH_SEC} seconds · Socket metrics require additional backend endpoints
       </p>
 
     </div>

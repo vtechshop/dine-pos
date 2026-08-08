@@ -128,7 +128,7 @@ type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
 export function VersionManagementPage() {
   const [config,       setConfig]       = useState<RemoteConfig | null>(null);
-  const [_dash,        _setDash]        = useState<DashboardData | null>(null);
+  const [dash,         setDash]         = useState<DashboardData | null>(null);
   const [configError,  setConfigError]  = useState(false);
   const [dashError,    setDashError]    = useState(false);
   const [lastUpdated,  setLastUpdated]  = useState<Date | null>(null);
@@ -153,7 +153,7 @@ export function VersionManagementPage() {
     }
 
     if (dashRes.status === 'fulfilled') {
-      _setDash(dashRes.value);
+      setDash(dashRes.value);
       setDashError(false);
     } else {
       setDashError(true);
@@ -284,8 +284,20 @@ export function VersionManagementPage() {
       <section>
         <SectionLabel>Version Overview</SectionLabel>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <VersionCard icon={Globe}      label="Current Web Version"    value="—"                          sub="Coming Soon"                  available={false} />
-          <VersionCard icon={Smartphone} label="Current Mobile Version" value="—"                          sub="Coming Soon"                  available={false} />
+          <VersionCard
+            icon={Globe}
+            label="Current Web Version"
+            value={dash?.appVersions?.webVersion ?? '—'}
+            sub="backend release"
+            available={dash?.appVersions != null}
+          />
+          <VersionCard
+            icon={Smartphone}
+            label="Latest Mobile Version"
+            value={dash?.appVersions?.latestVersion || '—'}
+            sub={dash?.appVersions ? `${dash.appVersions.totalDevices} devices tracked` : 'no data'}
+            available={!!(dash?.appVersions?.latestVersion)}
+          />
           <VersionCard icon={GitBranch}  label="Min Android Version"    value={config?.minimumAppVersion    ?? '—'} sub="minimum required"     available={config !== null} />
           <VersionCard icon={GitBranch}  label="Min iOS Version"        value={config?.minimumAppVersionIos ?? '—'} sub="minimum required"     available={config !== null} />
         </div>
@@ -466,69 +478,74 @@ export function VersionManagementPage() {
         </div>
       )}
 
-      {/* ── Version Distribution (Coming Soon) ── */}
+      {/* ── Version Distribution ── */}
       <section>
         <SectionLabel>Version Distribution</SectionLabel>
         <div className="overflow-hidden rounded-xl border border-border bg-canvas">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-mist/40">
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/40">App Version</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">Devices</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">Hotels</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">% Share</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center">
-                    <p className="text-sm font-medium text-ink/30">Coming Soon</p>
-                    <p className="mt-1 text-xs text-ink/25">
-                      Requires device app version reporting via heartbeat endpoint
-                    </p>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          {dashError ? (
+            <div className="flex items-center gap-2 px-4 py-3 text-sm text-amber-600">
+              <AlertCircle size={14} /> Distribution data unavailable
+            </div>
+          ) : !dash?.appVersions?.distribution?.length ? (
+            <div className="px-4 py-10 text-center">
+              <p className="text-sm font-medium text-ink/30">No version data</p>
+              <p className="mt-1 text-xs text-ink/25">Devices report app version via heartbeat</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-mist/40">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/40">App Version</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">Devices</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">% Share</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {dash.appVersions.distribution.map(row => (
+                    <tr key={row.version} className="hover:bg-mist/40">
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-medium text-ink">{row.version}</span>
+                          {row.isLatest && (
+                            <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">Latest</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-ink/70">{row.count}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-mist">
+                            <div className="h-full rounded-full bg-brand" style={{ width: `${row.percentage}%` }} />
+                          </div>
+                          <span className="w-8 text-right tabular-nums text-ink/70">{row.percentage}%</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {row.isLatest ? (
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">Up to date</span>
+                        ) : (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Outdated</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      </section>
-
-      {/* ── Hotels by Version (Coming Soon) ── */}
-      <section>
-        <SectionLabel>Hotels by Version</SectionLabel>
-        <div className="overflow-hidden rounded-xl border border-border bg-canvas">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-mist/40">
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/40">Hotel</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/40">App Version</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink/40">Platform</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">Last Seen</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink/40">Update Required</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center">
-                    <p className="text-sm font-medium text-ink/30">Coming Soon</p>
-                    <p className="mt-1 text-xs text-ink/25">
-                      Requires version field in device heartbeat records
-                    </p>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {dash?.appVersions && (
+          <p className="mt-2 text-right text-[11px] text-ink/30">
+            {dash.appVersions.outdatedDeviceCount} device{dash.appVersions.outdatedDeviceCount !== 1 ? 's' : ''} on outdated builds · {dash.appVersions.totalDevices} total tracked
+          </p>
+        )}
       </section>
 
       {/* Footer */}
       <p className="text-center text-[11px] text-ink/30">
-        Version distribution and hotel grouping require additional backend version tracking · Config changes apply immediately
+        Version distribution reflects active devices reporting via heartbeat · Config changes apply immediately
       </p>
 
     </div>
