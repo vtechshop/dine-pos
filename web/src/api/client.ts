@@ -95,10 +95,13 @@ export async function apiFetch<T>(path: string, init: ExtendedInit = {}): Promis
         return apiFetch<T>(path, { ...init, _isRetry: true });
       }
       // Refresh failed: clear auth state and force back to correct login page.
-      // Super admin tokens have no refresh — route them to the SA login.
+      // Super admin sessions have no refresh token — hotel API 401s fired from
+      // shared contexts (NotificationContext, SettingsProvider) must NOT
+      // redirect; just throw so the catch in each context handles it silently.
       _onAuthExpired?.();
-      const isSA = localStorage.getItem('pos_role') === 'superadmin';
-      window.location.replace(isSA ? '/super-admin/login' : '/login');
+      if (localStorage.getItem('pos_role') !== 'superadmin') {
+        window.location.replace('/login');
+      }
       throw new ApiError(401, 'Session expired');
     }
     const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string; hotelName?: string; expiredOn?: string; subscriptionType?: string };
