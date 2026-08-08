@@ -140,11 +140,21 @@ router.put('/hotels/:id/approve', superAdminAuth, async (req: Request, res: Resp
     const trialEndDate = new Date();
     trialEndDate.setDate(trialEndDate.getDate() + days);
 
-    const featureUpdate: Record<string, boolean> = {};
-    const allowedFeatures = ['payment', 'reservations', 'customerChat', 'qrOrdering', 'expenses', 'reports', 'tables', 'ingredients', 'waste', 'aggregator'];
+    const featureUpdate: Record<string, boolean | string> = {};
+    const allowedBoolFeatures = [
+      'payment', 'reservations', 'customerChat', 'qrOrdering', 'expenses', 'reports',
+      'tables', 'ingredients', 'waste', 'aggregator',
+      'tableSessions', 'customerDatabase', 'loyaltyProgram', 'birthdayOffers',
+      'whatsappNotifications', 'smsNotifications', 'digitalReceipts',
+      'customerOrderHistory', 'marketingCampaigns',
+      'shift', 'kiosk', 'ai',
+    ];
     if (features && typeof features === 'object') {
-      for (const key of allowedFeatures) {
+      for (const key of allowedBoolFeatures) {
         if (features[key] !== undefined) featureUpdate[`features.${key}`] = Boolean(features[key]);
+      }
+      if (['disabled', 'name_only', 'name_mobile'].includes(features.customerIdentification)) {
+        featureUpdate['features.customerIdentification'] = features.customerIdentification;
       }
     }
 
@@ -427,18 +437,43 @@ router.put('/hotels/:id/plan', superAdminAuth, async (req: Request, res: Respons
 // PUT /api/superadmin/hotels/:id/features — update feature flags
 router.put('/hotels/:id/features', superAdminAuth, async (req: Request, res: Response) => {
   try {
-    const allowed = ['payment', 'reservations', 'customerChat', 'qrOrdering', 'expenses', 'reports', 'tables', 'ingredients', 'waste', 'aggregator'];
+    // Boolean flags — set directly
+    const boolFlags = [
+      'payment', 'reservations', 'customerChat', 'qrOrdering', 'expenses', 'reports',
+      'tables', 'ingredients', 'waste', 'aggregator',
+      // v1.1 flags
+      'tableSessions', 'customerDatabase', 'loyaltyProgram', 'birthdayOffers',
+      'whatsappNotifications', 'smsNotifications', 'digitalReceipts',
+      'customerOrderHistory', 'marketingCampaigns',
+      // v1.2 flags
+      'shift', 'kiosk', 'ai',
+    ];
+    // String-enum flags — validate allowed values
+    const enumFlags: Record<string, string[]> = {
+      customerIdentification: ['disabled', 'name_only', 'name_mobile'],
+    };
+
     const update: any = {};
-    for (const key of allowed) {
+    for (const key of boolFlags) {
       if (req.body[key] !== undefined) {
         update[`features.${key}`] = Boolean(req.body[key]);
       }
     }
+    for (const [key, allowed] of Object.entries(enumFlags)) {
+      if (req.body[key] !== undefined) {
+        if (!allowed.includes(req.body[key])) {
+          return res.status(400).json({ message: `Invalid value for ${key}. Allowed: ${allowed.join(', ')}` });
+        }
+        update[`features.${key}`] = req.body[key];
+      }
+    }
+
     if (Object.keys(update).length === 0) return res.status(400).json({ message: 'No valid feature flags provided' });
 
     const hotel = await Hotel.findByIdAndUpdate(req.params.id, { $set: update }, { new: true }).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
+    logAuditRaw({ action: 'superadmin.hotel.features_updated', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: update });
     return res.json({ message: 'Feature flags updated', features: hotel.features });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });

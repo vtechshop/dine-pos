@@ -4,6 +4,10 @@ import {
 } from 'react';
 import { useAuth } from './AuthContext';
 import type { SelectedModifier } from '../types';
+import {
+  apiOpenShift, apiGetActiveShift, apiCloseShift, apiAddMovement,
+  type ShiftData,
+} from '../api/shifts';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -157,6 +161,10 @@ export function CashierProvider({ children }: { children: ReactNode }) {
   const heldKey   = hotelId ? `pos_held_${hotelId}`   : '';
   const drawerKey = hotelId ? `pos_drawer_${hotelId}` : '';
 
+  // Tracks the MongoDB shift _id separately (for API calls)
+  // shift.id is a local/display ID; shiftApiIdRef is the source-of-truth backend ID
+  const shiftApiIdRef = useRef<string | null>(null);
+
   // ── Shift ─────────────────────────────────────────────────────────────────
   const [shift, setShift] = useState<ShiftState | null>(() => {
     if (!hotelId) return null;
@@ -201,6 +209,49 @@ export function CashierProvider({ children }: { children: ReactNode }) {
     if (drawerKey) localStorage.setItem(drawerKey, JSON.stringify(drawerMovements));
   }, [drawerMovements, drawerKey]);
 
+  // ── Sync active shift from API on mount ───────────────────────────────────
+  useEffect(() => {
+    if (!hotelId) return;
+    apiGetActiveShift()
+      .then(({ shift: apiShift }) => {
+        if (!apiShift) return;
+        shiftApiIdRef.current = apiShift._id;
+        const synced: ShiftState = {
+          id:          apiShift._id,
+          cashierName: apiShift.cashierName,
+          cashierId:   apiShift.cashierId,
+          openedAt:    apiShift.openedAt,
+          openingCash: apiShift.openingCash,
+          openingNote: apiShift.openingNote,
+          status:      'open',
+        };
+        setShift(synced);
+        const movements: DrawerMovement[] = [
+          {
+            id: `opening_${apiShift._id}`,
+            type: 'opening',
+            amount: apiShift.openingCash,
+            reason: 'Shift opening balance',
+            cashierName: apiShift.cashierName,
+            timestamp: apiShift.openedAt,
+          },
+          ...apiShift.movements.map((m): DrawerMovement => ({
+            id:          m._id,
+            type:        m.type,
+            amount:      m.amount,
+            reason:      m.reason,
+            cashierName: m.cashierName,
+            timestamp:   m.timestamp,
+          })),
+        ];
+        setDrawerMovements(movements);
+      })
+      .catch(() => {
+        // API unavailable — keep localStorage state as offline fallback
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelId]);
+
   // ── Cart (in-memory only) ─────────────────────────────────────────────────
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeTab, setActiveTab] = useState<CashierTab>('dashboard');
@@ -239,33 +290,81 @@ export function CashierProvider({ children }: { children: ReactNode }) {
 
   // ── Shift actions ─────────────────────────────────────────────────────────
   const openShift = useCallback((data: Omit<ShiftState, 'id' | 'status'>) => {
-    const id = `shift_${Date.now()}`;
-    const newShift: ShiftState = { ...data, id, status: 'open' };
+    // Optimistic UI update immediately
+    const tempId = `shift_${Date.now()}`;
+    const newShift: ShiftState = { ...data, id: tempId, status: 'open' };
     setShift(newShift);
-    const movId = `mov_${Date.now()}`;
     setDrawerMovements([{
-      id: movId,
+      id: `mov_${Date.now()}`,
       type: 'opening',
       amount: data.openingCash,
       reason: 'Shift opening balance',
       cashierName: data.cashierName,
       timestamp: data.openedAt,
     }]);
+
+    // Persist to backend in background; on success replace with real MongoDB _id
+    apiOpenShift({
+      cashierName: data.cashierName,
+      cashierId:   data.cashierId,
+      openedAt:    data.openedAt,
+      openingCash: data.openingCash,
+      openingNote: data.openingNote,
+    }).then(({ shift: s }) => {
+      shiftApiIdRef.current = s._id;
+      setShift(prev => prev ? { ...prev, id: s._id } : null);
+      setDrawerMovements([{
+        id: `opening_${s._id}`,
+        type: 'opening',
+        amount: s.openingCash,
+        reason: 'Shift opening balance',
+        cashierName: s.cashierName,
+        timestamp: s.openedAt,
+      }]);
+    }).catch(() => {
+      // API offline — localStorage fallback already set via optimistic update
+    });
   }, []);
 
   const closeShift = useCallback((actualCash: number, note: string) => {
+    const apiId = shiftApiIdRef.current;
+
+    // Optimistic local close
     setShift(prev => {
       if (!prev) return null;
-      const openingCash = prev.openingCash;
       return {
         ...prev,
         status: 'closed',
         closedAt: new Date().toISOString(),
         actualCash,
-        difference: actualCash - openingCash,
+        difference: actualCash - prev.openingCash,
         closingNote: note,
       };
     });
+
+    if (apiId) {
+      apiCloseShift(apiId, actualCash, note)
+        .then(({ shift: s }) => {
+          shiftApiIdRef.current = null;
+          setShift({
+            id:          s._id,
+            cashierName: s.cashierName,
+            cashierId:   s.cashierId,
+            openedAt:    s.openedAt,
+            openingCash: s.openingCash,
+            openingNote: s.openingNote,
+            status:      'closed',
+            closedAt:    s.closedAt ?? undefined,
+            actualCash:  s.actualCash ?? undefined,
+            difference:  s.difference ?? undefined,
+            closingNote: s.closingNote,
+          });
+        })
+        .catch(() => {
+          // API offline — localStorage fallback already set
+          shiftApiIdRef.current = null;
+        });
+    }
   }, []);
 
   // ── Held bill actions ─────────────────────────────────────────────────────
@@ -291,9 +390,27 @@ export function CashierProvider({ children }: { children: ReactNode }) {
 
   // ── Drawer actions ────────────────────────────────────────────────────────
   const addDrawerMovement = useCallback((m: Omit<DrawerMovement, 'id' | 'timestamp'>) => {
+    // Optimistic local update
     const id = `mov_${Date.now()}`;
     const movement: DrawerMovement = { ...m, id, timestamp: new Date().toISOString() };
     setDrawerMovements(prev => [movement, ...prev]);
+
+    const apiId = shiftApiIdRef.current;
+    if (apiId && (m.type === 'cash_in' || m.type === 'cash_out')) {
+      apiAddMovement(apiId, {
+        type:        m.type,
+        amount:      m.amount,
+        reason:      m.reason,
+        cashierName: m.cashierName,
+      }).then(({ movement: saved }) => {
+        // Replace temp movement with server-assigned ID
+        setDrawerMovements(prev =>
+          prev.map(mv => mv.id === id ? { ...mv, id: saved._id } : mv),
+        );
+      }).catch(() => {
+        // API offline — keep temp movement in localStorage
+      });
+    }
   }, []);
 
   const clearDrawerMovements = useCallback(() => setDrawerMovements([]), []);

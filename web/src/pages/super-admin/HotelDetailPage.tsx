@@ -17,10 +17,63 @@ const STATUS_BADGE: Record<string, string> = {
   expired:   'bg-gray-100 text-gray-500 border-gray-200',
 };
 
-const FEATURE_LABELS: [keyof Hotel['features'], string][] = [
+// Boolean-only flags (customerIdentification is a string enum — handled separately)
+type BoolFeatureKey = { [K in keyof Hotel['features']]: Hotel['features'][K] extends boolean ? K : never }[keyof Hotel['features']];
+
+const FEATURE_GROUPS: { section: string; flags: [BoolFeatureKey, string][] }[] = [
+  {
+    section: 'Core POS',
+    flags: [
+      ['payment',      'Online Payment'],
+      ['reservations', 'Reservations'],
+      ['tables',       'Table Management'],
+      ['reports',      'Reports'],
+      ['expenses',     'Expenses'],
+    ],
+  },
+  {
+    section: 'Ordering & Channels',
+    flags: [
+      ['qrOrdering',   'QR Ordering'],
+      ['aggregator',   'Aggregator / Online'],
+      ['customerChat', 'Customer Chat'],
+    ],
+  },
+  {
+    section: 'Inventory',
+    flags: [
+      ['ingredients',  'Ingredients'],
+      ['waste',        'Waste Tracking'],
+    ],
+  },
+  {
+    section: 'Customer & Loyalty',
+    flags: [
+      ['tableSessions',          'Table Sessions'],
+      ['customerDatabase',       'Customer Database'],
+      ['loyaltyProgram',         'Loyalty Program'],
+      ['birthdayOffers',         'Birthday Offers'],
+      ['digitalReceipts',        'Digital Receipts'],
+      ['customerOrderHistory',   'Order History'],
+      ['marketingCampaigns',     'Marketing Campaigns'],
+      ['whatsappNotifications',  'WhatsApp Notifications'],
+      ['smsNotifications',       'SMS Notifications'],
+    ],
+  },
+  {
+    section: 'Operations',
+    flags: [
+      ['shift', 'Shift Management'],
+      ['kiosk', 'Kiosk Mode'],
+      ['ai',    'AI Suite'],
+    ],
+  },
+];
+
+// Flat list for the approve modal (core flags only)
+const APPROVE_FEATURE_LABELS: [BoolFeatureKey, string][] = [
   ['payment',      'Online Payment'],
   ['reservations', 'Reservations'],
-  ['customerChat', 'Customer Chat'],
   ['qrOrdering',   'QR Ordering'],
   ['expenses',     'Expenses'],
   ['reports',      'Reports'],
@@ -28,6 +81,7 @@ const FEATURE_LABELS: [keyof Hotel['features'], string][] = [
   ['ingredients',  'Ingredients'],
   ['waste',        'Waste Tracking'],
   ['aggregator',   'Aggregator'],
+  ['shift',        'Shift Management'],
 ];
 
 type PlanId = 'trial' | 'monthly' | 'quarterly' | 'halfyearly' | 'yearly';
@@ -673,25 +727,49 @@ export function HotelDetailPage() {
             <Sliders size={15} className="text-ink/40" />
             <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Feature Flags</p>
           </div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
-            {FEATURE_LABELS.map(([key, label]) => (
-              <div
-                key={key}
-                className="flex cursor-pointer items-center gap-2.5"
-                onClick={() => setDraftFeatures(f => f ? { ...f, [key]: !f[key] } : f)}
-              >
-                <div className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
-                  draftFeatures[key] ? 'bg-brand' : 'bg-ink/20'
-                }`}>
-                  <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                    draftFeatures[key] ? 'translate-x-4' : 'translate-x-0'
-                  }`} />
+
+          <div className="space-y-5">
+            {FEATURE_GROUPS.map(({ section, flags }) => (
+              <div key={section}>
+                <p className="mb-2.5 text-xs font-semibold text-ink/40 uppercase tracking-wider">{section}</p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+                  {flags.map(([key, label]) => (
+                    <div
+                      key={key}
+                      className="flex cursor-pointer items-center gap-2.5"
+                      onClick={() => setDraftFeatures(f => f ? { ...f, [key]: !f[key] } : f)}
+                    >
+                      <div className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
+                        draftFeatures[key] ? 'bg-brand' : 'bg-ink/20'
+                      }`}>
+                        <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                          draftFeatures[key] ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </div>
+                      <span className="text-sm text-ink">{label}</span>
+                    </div>
+                  ))}
                 </div>
-                <span className="text-sm text-ink">{label}</span>
+                {/* Customer Identification mode — shown inside Customer & Loyalty section */}
+                {section === 'Customer & Loyalty' && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <label className="text-sm text-ink/70 whitespace-nowrap">Guest ID mode:</label>
+                    <select
+                      value={draftFeatures.customerIdentification}
+                      onChange={e => setDraftFeatures(f => f ? { ...f, customerIdentification: e.target.value as Hotel['features']['customerIdentification'] } : f)}
+                      className="rounded-md border border-border bg-canvas px-2.5 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30"
+                    >
+                      <option value="disabled">Disabled</option>
+                      <option value="name_only">Name only</option>
+                      <option value="name_mobile">Name + Mobile</option>
+                    </select>
+                  </div>
+                )}
               </div>
             ))}
           </div>
-          <div className="mt-4 flex items-center gap-3">
+
+          <div className="mt-5 flex items-center gap-3">
             <button
               onClick={handleSaveFeatures}
               disabled={savingFeatures}
@@ -863,7 +941,7 @@ export function HotelDetailPage() {
             <div className="mb-5">
               <p className="mb-2 text-sm font-medium text-ink/70">Feature Flags</p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                {FEATURE_LABELS.map(([key, label]) => (
+                {APPROVE_FEATURE_LABELS.map(([key, label]) => (
                   <div
                     key={key}
                     className="flex cursor-pointer items-center gap-2.5"

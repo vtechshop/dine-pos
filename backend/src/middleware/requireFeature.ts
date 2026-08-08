@@ -35,6 +35,10 @@ const FEATURE_DEFAULTS: Record<BooleanFeatureKey, boolean> = {
   digitalReceipts:        false,
   customerOrderHistory:   false,
   marketingCampaigns:     false,
+  // ── Operations v1.2 ────────────────────────────────────────────────────
+  shift:  true,   // core POS feature — on by default
+  kiosk:  false,  // premium
+  ai:     false,  // premium
 };
 
 /**

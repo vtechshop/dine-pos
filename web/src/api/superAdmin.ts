@@ -85,6 +85,7 @@ export interface Hotel {
   createdAt:             string;
   updatedAt:             string;
   features: {
+    // Core flags (v1.0)
     payment:       boolean;
     reservations:  boolean;
     customerChat:  boolean;
@@ -95,6 +96,21 @@ export interface Hotel {
     ingredients:   boolean;
     waste:         boolean;
     aggregator:    boolean;
+    // Table sessions & customer (v1.1)
+    tableSessions:           boolean;
+    customerIdentification:  'disabled' | 'name_only' | 'name_mobile';
+    customerDatabase:        boolean;
+    loyaltyProgram:          boolean;
+    birthdayOffers:          boolean;
+    whatsappNotifications:   boolean;
+    smsNotifications:        boolean;
+    digitalReceipts:         boolean;
+    customerOrderHistory:    boolean;
+    marketingCampaigns:      boolean;
+    // Operations (v1.2)
+    shift:  boolean;
+    kiosk:  boolean;
+    ai:     boolean;
   };
 }
 

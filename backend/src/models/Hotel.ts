@@ -31,6 +31,11 @@ export interface IFeatureFlags {
   digitalReceipts: boolean;
   customerOrderHistory: boolean;
   marketingCampaigns: boolean;
+
+  // ── Operations (v1.2) ────────────────────────────────────────────────────
+  shift: boolean;   // shift management with backend persistence
+  kiosk: boolean;   // self-service kiosk mode (premium)
+  ai: boolean;      // AI suite — analytics, alerts, forecasting, chat, OCR (premium)
 }
 
 export type BusinessType =
@@ -203,6 +208,11 @@ const HotelSchema: Schema = new Schema(
       digitalReceipts:         { type: Boolean, default: false },
       customerOrderHistory:    { type: Boolean, default: false },
       marketingCampaigns:      { type: Boolean, default: false },
+
+      // ── Operations (v1.2) ──────────────────────────────────────────────
+      shift:  { type: Boolean, default: true  },
+      kiosk:  { type: Boolean, default: false },
+      ai:     { type: Boolean, default: false },
     },
 
     // Legacy premium fields (backwards compat)
