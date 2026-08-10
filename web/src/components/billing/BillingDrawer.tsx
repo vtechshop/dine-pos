@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, RefreshCw } from 'lucide-react';
+import { X, RefreshCw, Loader2, Users } from 'lucide-react';
 import type { SessionBill, GuestBill, PaymentMethod, SessionSummary, BillingOrder } from '../../types';
 import { fetchSessionBill, billGuest, bulkBillAndClose } from '../../api/billing';
 import type { SplitDetails } from '../../api/billing';
@@ -47,6 +47,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
   const [confirming, setConfirming]           = useState(false);
   const [actionError, setActionError]         = useState<string | null>(null);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [closingTable, setClosingTable]         = useState(false);
 
   // Pulses the Confirm Payment button briefly after a guest is selected via Pay
   const [confirmFlash, setConfirmFlash] = useState(false);
@@ -106,6 +107,10 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
   const grandTotal        = activeGuestBills.reduce(
     (s, gb) => s + gb.orders.reduce((os, o) => os + o.grandTotal, 0), 0,
   );
+
+  // Structural states — drive which view the drawer shows
+  const isEmptyTable    = bill !== null && bill.guests.length === 0;
+  const allGuestsBilled = bill !== null && bill.guests.length > 0 && activeGuestCount === 0;
 
   const guestTotal = selectedGuestBill
     ? selectedGuestBill.orders.reduce((s, o) => s + o.grandTotal, 0)
@@ -210,6 +215,20 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
     }
   }
 
+  // ── Close table (empty table or all-guests-billed) ────────────────────────
+
+  async function handleCloseTable() {
+    setClosingTable(true);
+    setActionError(null);
+    try {
+      await bulkBillAndClose(sessionId, 'cash');
+      onClose();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to close table');
+      setClosingTable(false);
+    }
+  }
+
   // ── Guest select from panel ────────────────────────────────────────────────
 
   function handleBillGuest(guestId: string) {
@@ -301,6 +320,28 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
               Retry
             </button>
           </div>
+        ) : isEmptyTable ? (
+          /* ── Empty table: no guests, no orders ── */
+          <div className="flex flex-1 flex-col items-center justify-center gap-5 p-8 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-ink/5">
+              <Users size={22} className="text-ink/30" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-ink">No guests on this table</p>
+              <p className="text-xs text-ink/50">No orders have been placed yet.</p>
+            </div>
+            {actionError && (
+              <p className="max-w-xs text-xs text-red-600">{actionError}</p>
+            )}
+            <button
+              onClick={() => void handleCloseTable()}
+              disabled={closingTable}
+              className="mt-1 flex items-center gap-2 rounded-xl border border-border px-6 py-2.5 text-sm font-medium text-ink/60 transition-colors hover:bg-mist disabled:opacity-40"
+            >
+              {closingTable && <Loader2 size={14} className="animate-spin" />}
+              {closingTable ? 'Closing…' : 'Close Table'}
+            </button>
+          </div>
         ) : (
           <div className="flex flex-1 flex-col overflow-y-auto sm:flex-row sm:overflow-hidden">
             {/* Left: Guest panel */}
@@ -368,6 +409,9 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
                       confirming={confirming}
                       onConfirm={() => void handleConfirm()}
                       confirmFlash={confirmFlash}
+                      allGuestsBilled={allGuestsBilled}
+                      onCloseTable={() => void handleCloseTable()}
+                      closingTable={closingTable}
                     />
                   )}
                 </>

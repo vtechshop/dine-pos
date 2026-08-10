@@ -26,6 +26,9 @@ interface Props {
   confirming: boolean;
   onConfirm: () => void;
   confirmFlash?: boolean;
+  allGuestsBilled: boolean;
+  onCloseTable: () => void;
+  closingTable: boolean;
 }
 
 const CASH_PRESETS = [100, 200, 500, 1000, 2000];
@@ -55,13 +58,15 @@ export const PaymentPanel = memo(function PaymentPanel({
   confirming,
   onConfirm,
   confirmFlash = false,
+  allGuestsBilled,
+  onCloseTable,
+  closingTable,
 }: Props) {
   const guestTotal = selectedGuestBill
     ? selectedGuestBill.orders.reduce((s, o) => s + o.grandTotal, 0)
     : 0;
 
   const billingAmount = mode === 'table' ? grandTotal : guestTotal;
-  const noActiveGuests = activeGuestCount === 0;
   const change = paidAmount > 0 && paidAmount >= billingAmount ? paidAmount - billingAmount : null;
   const short  = paidAmount > 0 && paidAmount < billingAmount  ? billingAmount - paidAmount  : null;
 
@@ -310,12 +315,23 @@ export const PaymentPanel = memo(function PaymentPanel({
         )}
       </div>
 
-      {/* Confirm button */}
+      {/* Action button */}
       <div className="border-t border-border bg-mist px-4 py-3">
-        {noActiveGuests ? (
-          <div className="rounded-lg bg-green-50 px-3 py-3 text-center text-sm text-green-700 font-medium">
-            All guests billed
-          </div>
+        {allGuestsBilled ? (
+          <button
+            onClick={onCloseTable}
+            disabled={closingTable}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-ink py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-ink/90 disabled:opacity-40"
+          >
+            {closingTable ? (
+              <>
+                <Loader2 size={15} className="animate-spin" />
+                Closing…
+              </>
+            ) : (
+              'Close Table'
+            )}
+          </button>
         ) : (
           <button
             onClick={onConfirm}
