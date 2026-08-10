@@ -19,8 +19,9 @@ function elapsedLabel(openedAt: string): string {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
-function borderColor(status: TableGridItem['status'], hasNewOrder: boolean): string {
+function borderColor(status: TableGridItem['status'], hasNewOrder: boolean, isDelayed: boolean): string {
   if (hasNewOrder)           return 'border-brand/60 ring-1 ring-brand/20';
+  if (isDelayed)             return 'border-amber-400 ring-1 ring-amber-200';
   if (status === 'occupied') return 'border-green-300';
   if (status === 'reserved') return 'border-amber-200';
   if (status === 'inactive') return 'border-dashed border-border';
@@ -44,7 +45,9 @@ export const TableCard = memo(function TableCard({
 }: TableCardProps) {
   const { session, status } = table;
   const displayName = table.name || `T${table.number}`;
-  const clickable = (!!onSelect && !!table.currentSessionId) || !!onOpenAvailable;
+  const clickable   = (!!onSelect && !!table.currentSessionId) || !!onOpenAvailable;
+  const isDelayed   = status === 'occupied' && !!session?.openedAt
+    && (Date.now() - new Date(session.openedAt).getTime()) > 90 * 60_000;
 
   function handleClick() {
     if (isOpening) return;
@@ -58,7 +61,7 @@ export const TableCard = memo(function TableCard({
   return (
     <div
       onClick={clickable ? handleClick : undefined}
-      className={`relative flex min-h-[108px] flex-col rounded-xl border p-3.5 transition-shadow hover:shadow-md ${borderColor(status, hasNewOrder)} ${bgColor(status)} ${clickable ? 'cursor-pointer active:scale-[0.98]' : ''}`}
+      className={`relative flex min-h-[108px] flex-col rounded-xl border p-3.5 transition-shadow hover:shadow-md ${borderColor(status, hasNewOrder, isDelayed)} ${bgColor(status)} ${clickable ? 'cursor-pointer active:scale-[0.98]' : ''}`}
     >
       {/* New order badge */}
       {hasNewOrder && (
@@ -89,7 +92,7 @@ export const TableCard = memo(function TableCard({
               <Users size={10} />
               {session.activeGuestCount}/{session.guestCount}
             </span>
-            <span className="flex items-center gap-1 text-ink/50">
+            <span className={`flex items-center gap-1 ${isDelayed ? 'font-semibold text-amber-600' : 'text-ink/50'}`}>
               <Clock size={10} />
               {elapsedLabel(session.openedAt)}
             </span>

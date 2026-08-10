@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw, Search, TrendingUp, ShoppingCart,
-  LayoutGrid, Zap, Bell, X, CreditCard, Smartphone, Banknote, Trophy, Package2,
+  LayoutGrid, Zap, Bell, X, CreditCard, Smartphone, Banknote, Trophy, Package2, Plus,
 } from 'lucide-react';
 import type { Table, SessionSummary, TableGridItem, DailyReport } from '../types';
 import { fetchTables, fetchOpenSessions, openSession } from '../api/tables';
@@ -240,6 +241,7 @@ function OrderMixCard({ report, loading, liveOrderCount, symbol }: OrderMixCardP
 // ── Dashboard page ─────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
+  const navigate                   = useNavigate();
   const { settings }               = useSettings();
   const { socket, reconnectCount } = useSocket();
   const { role }                   = useAuth();
@@ -499,6 +501,14 @@ export function DashboardPage() {
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             Refresh
+          </button>
+
+          <button
+            onClick={() => navigate('/orders')}
+            className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand/90"
+          >
+            <Plus size={13} />
+            New Order
           </button>
         </div>
       </div>
