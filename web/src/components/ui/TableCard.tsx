@@ -21,17 +21,17 @@ function elapsedLabel(openedAt: string): string {
 
 function borderColor(status: TableGridItem['status'], hasNewOrder: boolean): string {
   if (hasNewOrder)           return 'border-brand/60 ring-1 ring-brand/20';
-  if (status === 'occupied') return 'border-green-200';
+  if (status === 'occupied') return 'border-green-300';
   if (status === 'reserved') return 'border-amber-200';
   if (status === 'inactive') return 'border-dashed border-border';
   return 'border-border';
 }
 
 function bgColor(status: TableGridItem['status']): string {
-  if (status === 'occupied') return 'bg-canvas';
+  if (status === 'occupied') return 'bg-green-50';
   if (status === 'reserved') return 'bg-amber-50';
   if (status === 'inactive') return 'bg-mist';
-  return 'bg-mist';
+  return 'bg-canvas';
 }
 
 export const TableCard = memo(function TableCard({
@@ -58,7 +58,7 @@ export const TableCard = memo(function TableCard({
   return (
     <div
       onClick={clickable ? handleClick : undefined}
-      className={`relative flex flex-col rounded-xl border p-3.5 transition-shadow hover:shadow-md ${borderColor(status, hasNewOrder)} ${bgColor(status)} ${clickable ? 'cursor-pointer active:scale-[0.98]' : ''}`}
+      className={`relative flex min-h-[108px] flex-col rounded-xl border p-3.5 transition-shadow hover:shadow-md ${borderColor(status, hasNewOrder)} ${bgColor(status)} ${clickable ? 'cursor-pointer active:scale-[0.98]' : ''}`}
     >
       {/* New order badge */}
       {hasNewOrder && (
@@ -67,9 +67,9 @@ export const TableCard = memo(function TableCard({
         </div>
       )}
 
-      {/* Header */}
+      {/* Header — table name + status chip */}
       <div className="mb-2 flex items-start justify-between gap-1">
-        <span className="text-base font-bold text-ink leading-tight">{displayName}</span>
+        <span className="text-lg font-bold text-ink leading-tight">{displayName}</span>
         <StatusChip
           status={status === 'available' ? 'available' : status === 'occupied' ? 'occupied' : status === 'reserved' ? 'reserved' : 'inactive'}
           size="xs"
@@ -78,26 +78,21 @@ export const TableCard = memo(function TableCard({
 
       {/* Session data */}
       {status === 'occupied' && session ? (
-        <div className="space-y-1.5 text-xs">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1 text-ink/55">
-              <Users size={11} /> Guests
-            </span>
-            <span className="font-semibold text-ink/80">
+        <div className="flex flex-col gap-1.5">
+          {/* Amount — hero stat */}
+          <span className="text-xl font-bold tabular-nums text-ink leading-none">
+            {currencySymbol}{session.runningTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+          </span>
+          {/* Meta row — guests + timer */}
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="flex items-center gap-1 text-green-700">
+              <Users size={10} />
               {session.activeGuestCount}/{session.guestCount}
             </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-ink/55">Total</span>
-            <span className="font-bold text-ink tabular-nums">
-              {currencySymbol}{session.runningTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            <span className="flex items-center gap-1 text-ink/50">
+              <Clock size={10} />
+              {elapsedLabel(session.openedAt)}
             </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1 text-ink/55">
-              <Clock size={11} /> Open
-            </span>
-            <span className="text-ink/65">{elapsedLabel(session.openedAt)}</span>
           </div>
         </div>
       ) : status === 'reserved' ? (
@@ -109,7 +104,7 @@ export const TableCard = memo(function TableCard({
           <Loader2 size={11} className="animate-spin" /> Opening…
         </p>
       ) : onOpenAvailable ? (
-        <p className="mt-auto text-xs text-brand/85">Tap to seat guests</p>
+        <p className="mt-auto text-xs font-medium text-brand/90">Tap to seat guests</p>
       ) : (
         <p className="mt-auto text-xs text-ink/55">
           {table.capacity} seats

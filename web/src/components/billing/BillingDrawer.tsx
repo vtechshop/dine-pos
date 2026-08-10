@@ -252,11 +252,10 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
         <div className="flex shrink-0 items-center gap-3 border-b border-white/10 bg-ink px-5 py-3 text-white">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-base font-bold">{tableLabel}</span>
+              <span className="text-base font-bold">Table {tableLabel}</span>
               {bill && (
                 <span className="text-xs text-white/40">
-                  · Open {elapsedLabel(bill.session.openedAt)}
-                  · {bill.guests.length} guest{bill.guests.length !== 1 ? 's' : ''}
+                  · Open {elapsedLabel(bill.session.openedAt)} · {bill.guests.length} guest{bill.guests.length !== 1 ? 's' : ''}
                 </span>
               )}
             </div>
