@@ -114,7 +114,7 @@ export function ProductsPage() {
       </div>
 
       {/* Tab panels — conditional mount means shortcuts don't conflict */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto">
         {tab === 'products' && (
           <ProductsPanel categories={categories} />
         )}
@@ -259,9 +259,9 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
   const hasFilter = catFilter || vegFilter !== 'all' || availFilter !== null || search;
 
   return (
-    <div className="flex h-full flex-col">
+    <div>
       {/* Toolbar */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-canvas px-5 py-2.5">
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-border bg-canvas px-5 py-2.5">
         <div className="relative">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/40" />
           <label htmlFor="products-search" className="sr-only">Search products</label>
@@ -357,7 +357,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
       </div>
 
       {/* Count + clear */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-mist/60 px-5 py-1 text-xs text-ink/40">
+      <div className="flex items-center gap-2 border-b border-border bg-mist/60 px-5 py-1 text-xs text-ink/40">
         <span>
           {visible.length} of {products.length} product{products.length !== 1 ? 's' : ''}
         </span>
@@ -374,7 +374,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-y-auto overflow-x-auto">
+      <div>
         {error && (
           <div className="m-5 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
             {error}
@@ -588,9 +588,9 @@ function CategoriesPanel({
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div>
       {/* Toolbar */}
-      <div className="flex shrink-0 items-center justify-between border-b border-border bg-canvas px-5 py-2.5">
+      <div className="flex items-center justify-between border-b border-border bg-canvas px-5 py-2.5">
         <span className="text-xs text-ink/40">{categories.length} categories</span>
         <button
           onClick={() => setEditing('new')}
@@ -601,7 +601,7 @@ function CategoriesPanel({
       </div>
 
       {/* Grid */}
-      <div className="flex-1 overflow-y-auto p-5">
+      <div className="p-5">
         {categories.length === 0 ? (
           <div className="flex h-48 flex-col items-center justify-center text-ink/40">
             <p className="text-sm">No categories yet</p>
