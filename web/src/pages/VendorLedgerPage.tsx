@@ -845,14 +845,14 @@ export function VendorLedgerPage() {
                 <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-ink/40">GRN Aging</h3>
                 <div className="grid grid-cols-4 gap-3">
                   {([
-                    { label: '0 – 30 days',  key: 'current' as const,   color: 'emerald' },
-                    { label: '31 – 60 days', key: 'days31_60' as const, color: 'yellow' },
-                    { label: '61 – 90 days', key: 'days61_90' as const, color: 'orange' },
-                    { label: '> 90 days',    key: 'over90' as const,    color: 'red' },
+                    { label: '0 – 30 days',  key: 'current' as const,   cls: 'text-emerald-600' },
+                    { label: '31 – 60 days', key: 'days31_60' as const, cls: 'text-yellow-600'  },
+                    { label: '61 – 90 days', key: 'days61_90' as const, cls: 'text-orange-600'  },
+                    { label: '> 90 days',    key: 'over90' as const,    cls: 'text-red-600'     },
                   ]).map(bucket => (
                     <div key={bucket.key} className="rounded-lg border border-border bg-mist p-3 text-center">
                       <p className="text-[10px] font-semibold uppercase text-ink/40">{bucket.label}</p>
-                      <p className={`mt-1 text-lg font-bold tabular-nums text-${bucket.color}-600`}>
+                      <p className={`mt-1 text-lg font-bold tabular-nums ${bucket.cls}`}>
                         {sym}{(report?.aging?.[bucket.key] ?? 0).toFixed(0)}
                       </p>
                     </div>

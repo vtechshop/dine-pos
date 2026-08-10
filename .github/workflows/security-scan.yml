@@ -18,7 +18,23 @@ jobs:
       - name: Create reports directory
         run: mkdir -p automation/reports/security
 
+      # PERF_API_URL must point to the OpenAPI spec for the staging API
+      # (e.g. https://staging-api.example.com/api-docs.json).
+      # Without it the ZAP docker command receives an empty -t argument, which
+      # causes bash word-splitting to drop it entirely; getopt then consumes -f
+      # as the target value, leaving 'openapi' as an unrecognised positional —
+      # triggering the "Format must be either 'openapi', 'soap', or 'graphql'"
+      # error and exit code 3. Set the secret to re-enable scanning.
+      - name: Check ZAP target
+        id: zap-preflight
+        run: |
+          if [ -z "${{ secrets.PERF_API_URL }}" ]; then
+            echo "::warning file=.github/workflows/security-scan.yml::PERF_API_URL secret is not set — ZAP scan skipped. Set PERF_API_URL to the OpenAPI spec URL for the staging API to enable security scanning."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run ZAP Scan
+        if: steps.zap-preflight.outputs.skip != 'true'
         uses: zaproxy/action-api-scan@v0.7.0
         with:
           target: ${{ secrets.PERF_API_URL }}

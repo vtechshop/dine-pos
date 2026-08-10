@@ -40,7 +40,7 @@ const PLATFORM_LABEL: Record<AggregatorPlatform, string> = {
 function SyncStatusBadge({ status }: { status: AggregatorIntegration['menuSyncStatus'] }) {
   const cfg = {
     idle: {
-      cls:  'bg-gray-50 border-gray-200 text-gray-500',
+      cls:  'bg-ink/5 border-ink/10 text-ink/40',
       icon: <Clock size={12} />,
       label: 'Idle',
     },

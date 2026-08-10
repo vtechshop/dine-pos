@@ -20,18 +20,18 @@ function elapsedLabel(openedAt: string): string {
 }
 
 function borderColor(status: TableGridItem['status'], hasNewOrder: boolean): string {
-  if (hasNewOrder)           return 'border-[#E8380D]/60 ring-1 ring-[#E8380D]/20';
+  if (hasNewOrder)           return 'border-brand/60 ring-1 ring-brand/20';
   if (status === 'occupied') return 'border-green-200';
   if (status === 'reserved') return 'border-amber-200';
-  if (status === 'inactive') return 'border-dashed border-gray-200';
-  return 'border-gray-100';
+  if (status === 'inactive') return 'border-dashed border-border';
+  return 'border-border';
 }
 
 function bgColor(status: TableGridItem['status']): string {
-  if (status === 'occupied') return 'bg-white';
+  if (status === 'occupied') return 'bg-canvas';
   if (status === 'reserved') return 'bg-amber-50';
-  if (status === 'inactive') return 'bg-gray-50';
-  return 'bg-gray-50';
+  if (status === 'inactive') return 'bg-mist';
+  return 'bg-mist';
 }
 
 export const TableCard = memo(function TableCard({
@@ -69,7 +69,7 @@ export const TableCard = memo(function TableCard({
 
       {/* Header */}
       <div className="mb-2 flex items-start justify-between gap-1">
-        <span className="text-base font-bold text-gray-900 leading-tight">{displayName}</span>
+        <span className="text-base font-bold text-ink leading-tight">{displayName}</span>
         <StatusChip
           status={status === 'available' ? 'available' : status === 'occupied' ? 'occupied' : status === 'reserved' ? 'reserved' : 'inactive'}
           size="xs"
@@ -80,38 +80,38 @@ export const TableCard = memo(function TableCard({
       {status === 'occupied' && session ? (
         <div className="space-y-1.5 text-xs">
           <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1 text-gray-400">
+            <span className="flex items-center gap-1 text-ink/55">
               <Users size={11} /> Guests
             </span>
-            <span className="font-semibold text-gray-700">
+            <span className="font-semibold text-ink/80">
               {session.activeGuestCount}/{session.guestCount}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-gray-400">Total</span>
-            <span className="font-bold text-gray-900 tabular-nums">
+            <span className="text-ink/55">Total</span>
+            <span className="font-bold text-ink tabular-nums">
               {currencySymbol}{session.runningTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1 text-gray-400">
+            <span className="flex items-center gap-1 text-ink/55">
               <Clock size={11} /> Open
             </span>
-            <span className="text-gray-500">{elapsedLabel(session.openedAt)}</span>
+            <span className="text-ink/65">{elapsedLabel(session.openedAt)}</span>
           </div>
         </div>
       ) : status === 'reserved' ? (
         <p className="mt-auto text-xs text-amber-600">Reserved</p>
       ) : status === 'inactive' ? (
-        <p className="mt-auto text-xs text-gray-400">Inactive</p>
+        <p className="mt-auto text-xs text-ink/45">Inactive</p>
       ) : isOpening ? (
-        <p className="mt-auto flex items-center gap-1 text-xs text-[#E8380D]">
+        <p className="mt-auto flex items-center gap-1 text-xs text-brand">
           <Loader2 size={11} className="animate-spin" /> Opening…
         </p>
       ) : onOpenAvailable ? (
-        <p className="mt-auto text-xs text-[#E8380D]/70">Tap to seat guests</p>
+        <p className="mt-auto text-xs text-brand/85">Tap to seat guests</p>
       ) : (
-        <p className="mt-auto text-xs text-gray-400">
+        <p className="mt-auto text-xs text-ink/55">
           {table.capacity} seats
         </p>
       )}

@@ -53,13 +53,13 @@ function KpiCard({ icon, label, value, sub, accent }: KpiCardProps) {
         : 'border-border bg-canvas'
     }`}>
       <div className="mb-2.5 flex items-center gap-1.5">
-        <span className={accent ? 'text-brand' : 'text-ink/35'}>{icon}</span>
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">
+        <span className={accent ? 'text-brand' : 'text-ink/50'}>{icon}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink/60">
           {label}
         </span>
       </div>
       <p className="text-2xl font-bold tabular-nums leading-none text-ink">{value}</p>
-      {sub && <p className="mt-1 text-xs text-ink/40">{sub}</p>}
+      {sub && <p className="mt-1 text-xs text-ink/55">{sub}</p>}
     </div>
   );
 }
@@ -116,21 +116,21 @@ function PaymentBreakdownCard({ report, loading, symbol }: PaymentBreakdownProps
 
   return (
     <div className="rounded-xl border border-border bg-canvas p-4">
-      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/35">Payment Split</p>
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/55">Payment Split</p>
       {loading ? (
         <div className="space-y-3">
           {[1,2,3].map(i => <div key={i} className="animate-pulse h-7 rounded bg-border/60" />)}
         </div>
       ) : rows.length === 0 ? (
-        <p className="text-xs text-ink/30">No transactions today</p>
+        <p className="text-xs text-ink/50">No transactions today</p>
       ) : (
         <div className="space-y-2.5">
           {rows.map(r => (
             <div key={r.label}>
               <div className="mb-1 flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-ink/50">{r.icon}<span className="text-xs">{r.label}</span></div>
+                <div className="flex items-center gap-1.5 text-ink/65">{r.icon}<span className="text-xs">{r.label}</span></div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-ink/30">{r.pct}%</span>
+                  <span className="text-[10px] text-ink/50">{r.pct}%</span>
                   <span className="text-xs font-semibold tabular-nums text-ink">{symbol}{r.value.toLocaleString('en-IN')}</span>
                 </div>
               </div>
@@ -157,8 +157,8 @@ function TopProductsCard({ products, loading, symbol }: TopProductsCardProps) {
   return (
     <div className="rounded-xl border border-border bg-canvas p-4">
       <div className="mb-3 flex items-center gap-1.5">
-        <Trophy size={12} className="text-brand/60" />
-        <p className="text-[10px] font-bold uppercase tracking-widest text-ink/35">Top Items Today</p>
+        <Trophy size={12} className="text-brand/80" />
+        <p className="text-[10px] font-bold uppercase tracking-widest text-ink/55">Top Items Today</p>
       </div>
       {loading ? (
         <div className="space-y-2.5">
@@ -166,16 +166,16 @@ function TopProductsCard({ products, loading, symbol }: TopProductsCardProps) {
         </div>
       ) : products.length === 0 ? (
         <div className="flex flex-col items-center py-2 text-center">
-          <Package2 size={20} className="mb-1 text-ink/15" />
-          <p className="text-xs text-ink/30">No orders yet today</p>
+          <Package2 size={20} className="mb-1 text-ink/30" />
+          <p className="text-xs text-ink/50">No orders yet today</p>
         </div>
       ) : (
         <ol className="space-y-1.5">
           {products.map((p, i) => (
             <li key={p.productName} className="flex items-center gap-2">
-              <span className="w-4 shrink-0 text-[10px] font-bold tabular-nums text-ink/20">{i + 1}</span>
+              <span className="w-4 shrink-0 text-[10px] font-bold tabular-nums text-ink/40">{i + 1}</span>
               <span className="flex-1 truncate text-xs text-ink" title={p.productName}>{p.productName}</span>
-              <span className="shrink-0 text-[11px] tabular-nums text-ink/40">{p.totalQuantity}×</span>
+              <span className="shrink-0 text-[11px] tabular-nums text-ink/55">{p.totalQuantity}×</span>
               <span className="shrink-0 text-[11px] font-semibold tabular-nums text-ink">
                 {symbol}{Math.round(p.totalRevenue).toLocaleString('en-IN')}
               </span>
@@ -202,7 +202,7 @@ function OrderMixCard({ report, loading, liveOrderCount, symbol }: OrderMixCardP
 
   return (
     <div className="rounded-xl border border-border bg-canvas p-4">
-      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/35">Order Mix</p>
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/55">Order Mix</p>
       {loading ? (
         <div className="space-y-3">
           {[1,2,3].map(i => <div key={i} className="animate-pulse h-7 rounded bg-border/60" />)}
@@ -210,23 +210,23 @@ function OrderMixCard({ report, loading, liveOrderCount, symbol }: OrderMixCardP
       ) : (
         <div className="space-y-2.5">
           <div className="flex items-center justify-between rounded-lg bg-mist px-3 py-2">
-            <span className="text-xs text-ink/50">Active now</span>
-            <span className={`text-sm font-bold tabular-nums ${liveOrderCount > 0 ? 'text-brand' : 'text-ink/30'}`}>
+            <span className="text-xs text-ink/65">Active now</span>
+            <span className={`text-sm font-bold tabular-nums ${liveOrderCount > 0 ? 'text-brand' : 'text-ink/45'}`}>
               {liveOrderCount}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-ink/50">Dine-in</span>
+            <span className="text-xs text-ink/65">Dine-in</span>
             <span className="text-xs font-semibold tabular-nums text-ink">{dineIn} orders</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-ink/50">Parcel / Takeaway</span>
+            <span className="text-xs text-ink/65">Parcel / Takeaway</span>
             <span className="text-xs font-semibold tabular-nums text-ink">{parcel} orders</span>
           </div>
           {report && report.totalDiscount > 0 && (
             <div className="flex items-center justify-between border-t border-border pt-2">
-              <span className="text-xs text-ink/40">Discounts given</span>
-              <span className="text-xs tabular-nums text-ink/50">
+              <span className="text-xs text-ink/55">Discounts given</span>
+              <span className="text-xs tabular-nums text-ink/65">
                 -{symbol}{Math.round(report.totalDiscount).toLocaleString('en-IN')}
               </span>
             </div>
@@ -454,7 +454,7 @@ export function DashboardPage() {
         <div className="flex items-center gap-3">
           <h1 className="text-base font-semibold text-ink">Dashboard</h1>
           {!loading && (
-            <div className="flex items-center gap-1 text-xs text-ink/40">
+            <div className="flex items-center gap-1 text-xs text-ink/55">
               <span className="font-medium text-green-600">{occupiedCount} occupied</span>
               <span>·</span>
               <span>{availableCount} available</span>
@@ -466,14 +466,14 @@ export function DashboardPage() {
           {/* Search — F1 focuses this */}
           <div className="relative">
             <label htmlFor="table-search" className="sr-only">Search table</label>
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/30" />
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/40" />
             <input
               id="table-search"
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search table… (F1)"
-              className="h-8 w-48 rounded-lg border border-border bg-mist pl-8 pr-3 text-xs text-ink placeholder:text-ink/30 outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20 transition-colors"
+              className="h-8 w-48 rounded-lg border border-border bg-mist pl-8 pr-3 text-xs text-ink placeholder:text-ink/40 outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20 transition-colors"
             />
           </div>
 
@@ -485,7 +485,7 @@ export function DashboardPage() {
               className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
                 filter === f
                   ? 'bg-brand text-white'
-                  : 'bg-ink/5 text-ink/50 hover:bg-ink/10 hover:text-ink'
+                  : 'bg-ink/5 text-ink/60 hover:bg-ink/10 hover:text-ink'
               }`}
             >
               {f}
@@ -495,7 +495,7 @@ export function DashboardPage() {
           <button
             onClick={() => { void load(); void loadReport(); void loadBrief(); }}
             disabled={loading}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-ink/40 transition-colors hover:bg-ink/5 hover:text-ink/70 disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-ink/55 transition-colors hover:bg-ink/5 hover:text-ink/80 disabled:opacity-40"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             Refresh
@@ -505,13 +505,6 @@ export function DashboardPage() {
 
       {/* ── Scrollable body ──────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-
-        {/* ── Morning Brief (admin only, first card) ───────────────────────────── */}
-        {role === 'admin' && (briefLoading || morningBrief) && (
-          morningBrief
-            ? <MorningBriefCard brief={morningBrief} />
-            : <MorningBriefCard brief={null as any} loading />
-        )}
 
         {/* ── KPI Strip ──────────────────────────────────────────────────────── */}
         <div className="border-b border-border bg-mist px-5 py-4">
@@ -590,15 +583,6 @@ export function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Owner Insights Row ─────────────────────────────────────────────── */}
-        {showRevenue && (
-          <div className="grid grid-cols-1 gap-3 border-b border-border bg-canvas px-5 py-4 sm:grid-cols-3">
-            <PaymentBreakdownCard report={report} loading={reportLoading} symbol={currencySymbol} />
-            <TopProductsCard products={topProducts} loading={topProductsLoading} symbol={currencySymbol} />
-            <OrderMixCard report={report} loading={reportLoading} liveOrderCount={liveOrders.length} symbol={currencySymbol} />
-          </div>
-        )}
-
         {/* ── Rush Hour banner ───────────────────────────────────────────────── */}
         {isRushHour && (
           <div className="flex items-center gap-2.5 border-b border-brand/20 bg-brand/5 px-5 py-2.5">
@@ -650,8 +634,8 @@ export function DashboardPage() {
           /* Empty state */
           ) : visibleItems.length === 0 ? (
             <div className="flex h-48 flex-col items-center justify-center text-center">
-              <LayoutGrid size={28} className="mb-2 text-ink/20" />
-              <p className="text-sm text-ink/30">No tables found</p>
+              <LayoutGrid size={28} className="mb-2 text-ink/30" />
+              <p className="text-sm text-ink/50">No tables found</p>
               {search && (
                 <button
                   onClick={() => setSearch('')}
@@ -691,6 +675,22 @@ export function DashboardPage() {
             </div>
           )}
         </div>
+
+        {/* ── Owner Insights Row (below fold — analytics after operations) ──── */}
+        {showRevenue && (
+          <div className="grid grid-cols-1 gap-3 border-t border-border bg-canvas px-5 py-4 sm:grid-cols-3">
+            <PaymentBreakdownCard report={report} loading={reportLoading} symbol={currencySymbol} />
+            <TopProductsCard products={topProducts} loading={topProductsLoading} symbol={currencySymbol} />
+            <OrderMixCard report={report} loading={reportLoading} liveOrderCount={liveOrders.length} symbol={currencySymbol} />
+          </div>
+        )}
+
+        {/* ── Morning Brief (admin only, below analytics) ─────────────────────── */}
+        {role === 'admin' && (briefLoading || morningBrief) && (
+          morningBrief
+            ? <MorningBriefCard brief={morningBrief} />
+            : <MorningBriefCard brief={null as any} loading />
+        )}
       </div>
 
       {/* ── Billing drawer — unchanged ────────────────────────────────────────── */}

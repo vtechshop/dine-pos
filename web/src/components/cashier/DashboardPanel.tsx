@@ -55,7 +55,7 @@ function KpiCard({
         onClick ? 'hover:shadow-sm active:scale-[0.98]' : 'cursor-default'
       } ${color}`}
     >
-      <div className="shrink-0 rounded-lg p-2 bg-white/60">
+      <div className="shrink-0 rounded-lg p-2 bg-canvas/60">
         {icon}
       </div>
       <div className="min-w-0">
@@ -310,8 +310,8 @@ export function DashboardPanel() {
           label="Bills Today"
           value={String(report?.totalOrders ?? 0)}
           sub={`Avg ${fmtINR(sym, avgBill)}`}
-          icon={<ShoppingBag size={16} className="text-blue-600" />}
-          color="border-blue-100 bg-blue-50 text-blue-800"
+          icon={<ShoppingBag size={16} className="text-ink/50" />}
+          color="border-border bg-canvas text-ink"
           onClick={() => setActiveTab('search')}
         />
         <KpiCard
@@ -326,8 +326,8 @@ export function DashboardPanel() {
           label="Hold Bills"
           value={String(heldBills.length)}
           sub="Parked orders"
-          icon={<Layers size={16} className="text-purple-600" />}
-          color="border-purple-100 bg-purple-50 text-purple-800"
+          icon={<Layers size={16} className="text-ink/50" />}
+          color="border-ink/10 bg-ink/5 text-ink"
           onClick={heldBills.length > 0 ? () => setActiveTab('hold') : undefined}
         />
         <KpiCard
@@ -355,8 +355,8 @@ export function DashboardPanel() {
             {([
               { label: 'Cash', val: report.paymentBreakdown.cash, cls: 'text-emerald-700' },
               { label: 'UPI', val: report.paymentBreakdown.upi, cls: 'text-brand' },
-              { label: 'Card', val: report.paymentBreakdown.card, cls: 'text-blue-600' },
-              { label: 'Split', val: report.paymentBreakdown.split, cls: 'text-purple-600' },
+              { label: 'Card', val: report.paymentBreakdown.card, cls: 'text-ink/50' },
+              { label: 'Split', val: report.paymentBreakdown.split, cls: 'text-ink/50' },
             ] as const).map(({ label, val, cls }) => (
               <div key={label}>
                 <p className="text-[10px] text-ink/50">{label}</p>

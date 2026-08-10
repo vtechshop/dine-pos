@@ -17,10 +17,10 @@ interface ChipProps {
 
 function Chip({ icon, label, value, dim }: ChipProps) {
   return (
-    <div className={`flex items-center gap-1.5 ${dim ? 'opacity-30' : ''}`}>
-      <span className="text-white/30">{icon}</span>
-      <span className="text-xs text-white/40">{label}</span>
-      <span className="text-xs font-semibold text-white/80 tabular-nums">{value}</span>
+    <div className={`flex items-center gap-1.5 ${dim ? 'opacity-50' : ''}`}>
+      <span className="text-white/45">{icon}</span>
+      <span className="text-xs text-white/55">{label}</span>
+      <span className="text-xs font-semibold text-white/85 tabular-nums">{value}</span>
     </div>
   );
 }
@@ -74,15 +74,15 @@ export function StatusBar() {
         {/* Keyboard shortcut hints */}
         <div className="hidden items-center gap-2 xl:flex">
           {(['F1 Search', 'F2 New Order', 'F3 Tables', 'F4 Customers'] as const).map(hint => (
-            <span key={hint} className="text-[9px] font-mono text-white/25 tracking-wide">{hint}</span>
+            <span key={hint} className="text-[9px] font-mono text-white/45 tracking-wide">{hint}</span>
           ))}
           <Divider />
         </div>
 
         {/* Printer status — green/gray are semantic online/offline indicators */}
         <div className="flex items-center gap-1.5">
-          <Printer size={12} className={printersOnline ? 'text-green-500' : 'text-white/20'} />
-          <span className={`text-[10px] ${printersOnline ? 'text-green-400' : 'text-white/20'}`}>
+          <Printer size={12} className={printersOnline ? 'text-green-500' : 'text-white/35'} />
+          <span className={`text-[10px] ${printersOnline ? 'text-green-400' : 'text-white/35'}`}>
             {devices.length === 0 ? 'No printer' : printersOnline ? 'Printer OK' : 'Printer offline'}
           </span>
         </div>
@@ -96,12 +96,12 @@ export function StatusBar() {
           ) : connected ? (
             <Wifi size={12} className="text-green-500" />
           ) : (
-            <WifiOff size={12} className="text-white/20" />
+            <WifiOff size={12} className="text-white/35" />
           )}
           <span className={`text-[10px] font-medium ${
             reconnecting ? 'text-yellow-400 animate-pulse'
             : connected  ? 'text-green-400'
-            : 'text-white/20'
+            : 'text-white/35'
           }`}>
             {reconnecting ? 'Reconnecting…' : connected ? 'Live' : 'Offline'}
           </span>

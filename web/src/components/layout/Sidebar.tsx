@@ -35,35 +35,56 @@ interface PosNavItem {
 
 const NAV_GROUPS: NavGroup[] = [
   {
+    // Operations — daily restaurant workflow, top of list
     items: [
-      { to: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
-      { to: '/orders',       icon: ShoppingCart,    label: 'Orders' },
-      { to: '/tables',       icon: LayoutGrid,      label: 'Tables',    hint: 'F3' },
-      { to: '/customers',    icon: Users,           label: 'Customers', hint: 'F4' },
-      { to: '/products',     icon: Package,         label: 'Products' },
-      { to: '/modifiers',    icon: Layers,          label: 'Modifiers' },
-      { to: '/vendors',          icon: Store,        label: 'Vendors' },
-      { to: '/purchase-orders',  icon: ShoppingBag,  label: 'Purchase Orders' },
-      { to: '/grn',              icon: ClipboardList, label: 'Receive Goods' },
-      { to: '/vendor-ledger',    icon: Wallet,        label: 'Vendor Ledger' },
-      { to: '/coupons',          icon: Tag,           label: 'Coupons' },
-      { to: '/gift-vouchers',    icon: Gift,          label: 'Gift Vouchers' },
-      { to: '/inventory',              icon: Archive,    label: 'Inventory' },
+      { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard'  },
+      { to: '/tables',     icon: LayoutGrid,      label: 'Tables',    hint: 'F3' },
+      { to: '/kitchen',    icon: ChefHat,         label: 'Kitchen'    },
+      { to: '/orders',     icon: ShoppingCart,    label: 'Orders'     },
+    ],
+  },
+  {
+    heading: 'Menu & Catalog',
+    items: [
+      { to: '/products',               icon: Package,    label: 'Products'   },
+      { to: '/modifiers',              icon: Layers,     label: 'Modifiers'  },
+      { to: '/inventory',              icon: Archive,    label: 'Inventory'  },
       { to: '/inventory-intelligence', icon: TrendingUp, label: 'Stock Intel' },
-      { to: '/payments',               icon: CreditCard, label: 'Payments' },
-      { to: '/reports',    icon: BarChart2,   label: 'Reports' },
-      { to: '/audit-logs', icon: Shield,      label: 'Audit Logs' },
-      { to: '/settings',   icon: Settings,    label: 'Settings' },
-      { to: '/reservations', icon: CalendarDays, label: 'Reservations' },
-      { to: '/kitchen',    icon: ChefHat,     label: 'Kitchen' },
+    ],
+  },
+  {
+    heading: 'Customers & Promotions',
+    items: [
+      { to: '/customers',    icon: Users,        label: 'Customers',    hint: 'F4' },
+      { to: '/coupons',      icon: Tag,          label: 'Coupons'       },
+      { to: '/gift-vouchers', icon: Gift,        label: 'Gift Vouchers' },
+      { to: '/reservations', icon: CalendarDays, label: 'Reservations'  },
+    ],
+  },
+  {
+    heading: 'Purchasing',
+    items: [
+      { to: '/vendors',         icon: Store,         label: 'Vendors'         },
+      { to: '/purchase-orders', icon: ShoppingBag,   label: 'Purchase Orders' },
+      { to: '/grn',             icon: ClipboardList, label: 'Receive Goods'   },
+      { to: '/vendor-ledger',   icon: Wallet,        label: 'Vendor Ledger'   },
+    ],
+  },
+  {
+    heading: 'Finance & Admin',
+    items: [
+      { to: '/reports',    icon: BarChart2,  label: 'Reports'    },
+      { to: '/payments',   icon: CreditCard, label: 'Payments'   },
+      { to: '/audit-logs', icon: Shield,     label: 'Audit Logs' },
+      { to: '/settings',   icon: Settings,   label: 'Settings'   },
     ],
   },
   {
     heading: 'Delivery',
     items: [
       { to: '/online-orders', icon: Truck,     label: 'Online Orders' },
-      { to: '/integrations',  icon: Link2,     label: 'Integrations' },
-      { to: '/menu-sync',     icon: RefreshCw, label: 'Menu Sync' },
+      { to: '/integrations',  icon: Link2,     label: 'Integrations'  },
+      { to: '/menu-sync',     icon: RefreshCw, label: 'Menu Sync'     },
     ],
   },
   {
@@ -75,14 +96,14 @@ const NAV_GROUPS: NavGroup[] = [
   {
     heading: 'AI Platform',
     items: [
-      { to: '/ai',                  icon: Bot,          label: 'AI Dashboard'    },
-      { to: '/ai/brief',            icon: Sunrise,       label: 'Morning Brief'   },
-      { to: '/ai/reports',          icon: FileBarChart,  label: 'AI Reports'      },
-      { to: '/ai/chat',             icon: MessageSquare, label: 'AI Chat'         },
-      { to: '/ai/forecast',         icon: TrendingUp,    label: 'Forecast'        },
-      { to: '/ai/alerts',           icon: Bell,          label: 'Alerts'          },
-      { to: '/ai/recommendations',  icon: Lightbulb,     label: 'Recommendations' },
-      { to: '/ai/purchase',         icon: ScanLine,      label: 'Purchase AI'     },
+      { to: '/ai',                 icon: Bot,          label: 'AI Dashboard'    },
+      { to: '/ai/brief',           icon: Sunrise,      label: 'Morning Brief'   },
+      { to: '/ai/reports',         icon: FileBarChart,  label: 'AI Reports'      },
+      { to: '/ai/chat',            icon: MessageSquare, label: 'AI Chat'         },
+      { to: '/ai/forecast',        icon: TrendingUp,    label: 'Forecast'        },
+      { to: '/ai/alerts',          icon: Bell,          label: 'Alerts'          },
+      { to: '/ai/recommendations', icon: Lightbulb,     label: 'Recommendations' },
+      { to: '/ai/purchase',        icon: ScanLine,      label: 'Purchase AI'     },
     ],
   },
 ];
@@ -135,7 +156,7 @@ function NavItemRow({ item }: { item: NavItem }) {
         `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
           isActive
             ? 'bg-brand text-white'
-            : 'text-white/50 hover:bg-white/[0.08] hover:text-white'
+            : 'text-white/70 hover:bg-white/[0.08] hover:text-white'
         }`
       }
     >
@@ -144,7 +165,7 @@ function NavItemRow({ item }: { item: NavItem }) {
           <Icon size={16} />
           <span className="flex-1">{label}</span>
           {hint && (
-            <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-orange-200' : 'text-white/25'}`}>
+            <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-orange-200' : 'text-white/40'}`}>
               {hint}
             </span>
           )}
@@ -182,13 +203,13 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
                   isActive
                     ? 'bg-brand text-white'
-                    : 'text-white/50 hover:bg-white/[0.08] hover:text-white'
+                    : 'text-white/70 hover:bg-white/[0.08] hover:text-white'
                 }`}
               >
                 <Icon size={16} />
                 <span className="flex-1 text-left">{item.label}</span>
                 {item.hint && (
-                  <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-orange-200' : 'text-white/25'}`}>
+                  <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-orange-200' : 'text-white/40'}`}>
                     {item.hint}
                   </span>
                 )}
@@ -231,7 +252,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         {NAV_GROUPS.map((group, gi) => (
           <div key={gi}>
             {group.heading && (
-              <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-white/25">
+              <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-white/40">
                 {group.heading}
               </p>
             )}
@@ -262,13 +283,13 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       >
         {/* Mobile close header */}
         <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 md:hidden">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-white/45">
             Navigation
           </span>
           <button
             onClick={onClose}
             aria-label="Close navigation"
-            className="rounded-lg p-1 text-white/40 hover:bg-white/[0.08] hover:text-white"
+            className="rounded-lg p-1 text-white/50 hover:bg-white/[0.08] hover:text-white"
           >
             <X size={15} />
           </button>
@@ -277,7 +298,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         {navContent}
 
         <div className="border-t border-white/10 px-4 py-3">
-          <p className="text-[10px] text-white/20">Dine POS Web · v1.0</p>
+          <p className="text-[10px] text-white/35">Dine POS Web · v1.0</p>
         </div>
       </aside>
     </>

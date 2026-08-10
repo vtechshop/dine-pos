@@ -36,7 +36,7 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
           {hotelName && (
             <>
               <span className="text-white/25">/</span>
-              <span className="max-w-48 truncate text-sm text-white/50" title={hotelName}>{hotelName}</span>
+              <span className="max-w-48 truncate text-sm text-white/65" title={hotelName}>{hotelName}</span>
             </>
           )}
         </div>
@@ -74,7 +74,7 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             <button
               onClick={() => setConfirmLogout(true)}
               aria-label="Sign out"
-              className="ml-1 rounded-lg p-1.5 text-white/30 transition-colors hover:bg-white/[0.08] hover:text-white/70"
+              className="ml-1 rounded-lg p-1.5 text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white/80"
             >
               <LogOut size={15} />
             </button>
@@ -87,7 +87,7 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="w-72 rounded-2xl bg-canvas p-6 shadow-2xl">
             <h3 className="text-base font-bold text-ink mb-1">Sign out?</h3>
-            <p className="text-xs text-ink/50 mb-4">
+            <p className="text-xs text-ink/60 mb-4">
               Your session will end. Any open tables remain unaffected.
             </p>
             <div className="flex gap-2">

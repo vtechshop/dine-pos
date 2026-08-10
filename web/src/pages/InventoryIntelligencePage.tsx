@@ -20,7 +20,7 @@ function fmt0(n: number) { return n.toLocaleString('en-IN', { maximumFractionDig
 
 function KPICard({ label, value, sub, accent = false }: { label: string; value: string; sub?: string; accent?: boolean }) {
   return (
-    <div className={`rounded-xl border p-4 flex flex-col gap-1 ${accent ? 'border-brand/30 bg-brand/5' : 'border-border bg-white'}`}>
+    <div className={`rounded-xl border p-4 flex flex-col gap-1 ${accent ? 'border-brand/30 bg-brand/5' : 'border-border bg-canvas'}`}>
       <span className="text-xs text-ink/50 font-medium uppercase tracking-wide">{label}</span>
       <span className={`text-xl font-bold tabular-nums ${accent ? 'text-brand' : 'text-ink'}`}>{value}</span>
       {sub && <span className="text-xs text-ink/40">{sub}</span>}
@@ -29,7 +29,7 @@ function KPICard({ label, value, sub, accent = false }: { label: string; value: 
 }
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`rounded-xl border border-border bg-white p-4 ${className}`}>{children}</div>;
+  return <div className={`rounded-xl border border-border bg-canvas p-4 ${className}`}>{children}</div>;
 }
 
 function SectionHead({ title, action }: { title: string; action?: React.ReactNode }) {
@@ -90,10 +90,10 @@ function DateRange({ from, to, onChange }: { from: string; to: string; onChange:
         </button>
       ))}
       <input type="date" value={from} onChange={e => onChange(e.target.value, to)}
-        className="text-xs border border-border rounded-lg px-2 py-1 bg-white text-ink" />
+        className="text-xs border border-border rounded-lg px-2 py-1 bg-canvas text-ink" />
       <span className="text-xs text-ink/40">–</span>
       <input type="date" value={to} onChange={e => onChange(from, e.target.value)}
-        className="text-xs border border-border rounded-lg px-2 py-1 bg-white text-ink" />
+        className="text-xs border border-border rounded-lg px-2 py-1 bg-canvas text-ink" />
     </div>
   );
 }
@@ -228,7 +228,7 @@ export function InventoryIntelligencePage() {
           <p className="text-sm text-ink/50 mt-0.5">Waste, costs, vendor prices and stock analytics</p>
         </div>
         <button onClick={exportCSV}
-          className="flex items-center gap-2 px-4 py-2 text-sm bg-white border border-border rounded-xl text-ink hover:bg-mist transition-colors">
+          className="flex items-center gap-2 px-4 py-2 text-sm bg-canvas border border-border rounded-xl text-ink hover:bg-mist transition-colors">
           <Download size={14}/> Export CSV
         </button>
       </div>
@@ -245,7 +245,7 @@ export function InventoryIntelligencePage() {
         {TABS.map(({ key, label, Icon }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
-              tab === key ? 'bg-brand text-white' : 'bg-white border border-border text-ink/70 hover:bg-mist'}`}>
+              tab === key ? 'bg-brand text-white' : 'bg-canvas border border-border text-ink/70 hover:bg-mist'}`}>
             <Icon size={14}/>{label}
           </button>
         ))}

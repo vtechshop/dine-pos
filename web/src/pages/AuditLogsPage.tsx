@@ -161,7 +161,9 @@ export function AuditLogsPage() {
         )}
 
         {loading ? (
-          <div className="flex h-40 items-center justify-center text-sm text-ink/40">Loading…</div>
+          <div className="flex h-40 items-center justify-center">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-brand" />
+          </div>
         ) : logs.length === 0 ? (
           <div className="flex h-40 flex-col items-center justify-center gap-2 text-sm text-ink/40">
             <Shield size={28} className="opacity-30" />
@@ -193,10 +195,10 @@ export function AuditLogsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                          log.actorRole === 'admin'       ? 'bg-blue-50 text-blue-700' :
+                          log.actorRole === 'admin'       ? 'bg-brand/10 text-brand' :
                           log.actorRole === 'cashier'     ? 'bg-green-50 text-green-700' :
-                          log.actorRole === 'super_admin' ? 'bg-purple-50 text-purple-700' :
-                          'bg-gray-100 text-gray-600'
+                          log.actorRole === 'super_admin' ? 'bg-ink/10 text-ink/60' :
+                          'bg-ink/5 text-ink/40'
                         }`}>
                           {log.actorRole}
                         </span>

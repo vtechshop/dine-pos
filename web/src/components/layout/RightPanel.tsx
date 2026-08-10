@@ -10,7 +10,7 @@ export function RightPanel() {
       {/* Header */}
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2">
-          <ShoppingCart size={15} className="text-ink/40" />
+          <ShoppingCart size={15} className="text-ink/55" />
           <span className="text-sm font-semibold text-ink">Live Orders</span>
         </div>
         {orders.length > 0 && (
@@ -24,9 +24,9 @@ export function RightPanel() {
       <div className="flex-1 overflow-y-auto p-3">
         {orders.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <ShoppingCart size={28} className="mb-2 text-ink/15" />
-            <p className="text-sm text-ink/30">No orders yet</p>
-            <p className="mt-1 text-xs text-ink/20">New orders appear here instantly</p>
+            <ShoppingCart size={28} className="mb-2 text-ink/30" />
+            <p className="text-sm text-ink/55">No orders yet</p>
+            <p className="mt-1 text-xs text-ink/45">New orders appear here instantly</p>
           </div>
         ) : (
           <div className="space-y-2">

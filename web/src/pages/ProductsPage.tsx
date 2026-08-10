@@ -631,7 +631,7 @@ function CategoriesPanel({
                     <span className="text-[10px] text-ink/40">#{c.sortOrder}</span>
                     <span
                       className={`text-[10px] font-medium ${
-                        c.isActive ? 'text-green-600' : 'text-gray-400'
+                        c.isActive ? 'text-green-600' : 'text-ink/40'
                       }`}
                     >
                       {c.isActive ? '● Active' : '○ Inactive'}

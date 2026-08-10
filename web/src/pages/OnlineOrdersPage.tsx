@@ -582,14 +582,14 @@ function OrderCard({
           )}
           {order.status === 'preparing' && (
             <button type="button" onClick={() => void handleDispatch()} disabled={busy === 'dispatch'}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+              className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-50">
               {busy === 'dispatch' ? <Spinner size="sm" /> : <Check size={12} />}
               Mark Ready
             </button>
           )}
           {order.status === 'ready' && (
             <button type="button" onClick={() => void handleDispatch()} disabled={busy === 'dispatch'}
-              className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700 disabled:opacity-50">
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
               {busy === 'dispatch' ? <Spinner size="sm" /> : <ShoppingBag size={12} />}
               Mark Dispatched
             </button>

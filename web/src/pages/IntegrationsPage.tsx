@@ -87,14 +87,14 @@ function ToastList({ toasts }: { toasts: Toast[] }) {
 function ConnectionBadge({ status }: { status: AggregatorIntegration['connectionStatus'] }) {
   const cfg = {
     connected:    'bg-emerald-50 border-emerald-200 text-emerald-700',
-    disconnected: 'bg-gray-50 border-gray-200 text-gray-500',
+    disconnected: 'bg-ink/5 border-ink/10 text-ink/40',
     error:        'bg-red-50 border-red-200 text-red-700',
   }[status];
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${cfg}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${
         status === 'connected' ? 'bg-emerald-500' :
-        status === 'error'     ? 'bg-red-500' : 'bg-gray-400'
+        status === 'error'     ? 'bg-red-500' : 'bg-ink/30'
       }`} />
       {status}
     </span>
@@ -105,7 +105,7 @@ function ConnectionBadge({ status }: { status: AggregatorIntegration['connection
 
 function SyncBadge({ status }: { status: AggregatorIntegration['menuSyncStatus'] }) {
   const cfg = {
-    idle:    'bg-gray-50 border-gray-200 text-gray-500',
+    idle:    'bg-ink/5 border-ink/10 text-ink/40',
     syncing: 'bg-blue-50 border-blue-200 text-blue-700',
     success: 'bg-emerald-50 border-emerald-200 text-emerald-700',
     failed:  'bg-red-50 border-red-200 text-red-700',
