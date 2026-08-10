@@ -2,13 +2,15 @@ import { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw, Search, TrendingUp, ShoppingCart,
-  LayoutGrid, Zap, Bell, X, CreditCard, Smartphone, Banknote, Trophy, Package2, Plus,
+  LayoutGrid, Zap, Bell, X, CreditCard, Smartphone, Banknote, Trophy, Package2, Plus, ChefHat,
 } from 'lucide-react';
 import type { Table, SessionSummary, TableGridItem, DailyReport } from '../types';
 import { fetchTables, fetchOpenSessions, openSession } from '../api/tables';
 import { ApiError } from '../api/client';
 import { fetchDailyReport, fetchTopProducts } from '../api/dashboard';
 import type { TopProduct } from '../api/dashboard';
+import { fetchKitchenOrders } from '../api/orders';
+import { fetchOrdersForHourly } from '../api/reports';
 import { TableCard } from '../components/ui/TableCard';
 import { BillingDrawer } from '../components/billing/BillingDrawer';
 import { useSettings } from '../context/SettingsContext';
@@ -238,6 +240,97 @@ function OrderMixCard({ report, loading, liveOrderCount, symbol }: OrderMixCardP
   );
 }
 
+// ── Hourly Revenue mini-card ───────────────────────────────────────────────────
+
+interface HourlyBucket { hour: number; revenue: number; orders: number; }
+
+function HourlyRevenueCard({ symbol }: { symbol: string }) {
+  const [data,    setData]    = useState<HourlyBucket[]>([]);
+  const [peak,    setPeak]    = useState(1);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    void (async () => {
+      try {
+        const { orders } = await fetchOrdersForHourly(today);
+        const map = new Map<number, HourlyBucket>();
+        for (const o of orders) {
+          const h = new Date(o.createdAt).getHours();
+          const b = map.get(h) ?? { hour: h, revenue: 0, orders: 0 };
+          b.revenue += o.grandTotal;
+          b.orders  += 1;
+          map.set(h, b);
+        }
+        const buckets = Array.from({ length: 18 }, (_, i) => {
+          const h = i + 6;
+          return map.get(h) ?? { hour: h, revenue: 0, orders: 0 };
+        });
+        setPeak(Math.max(...buckets.map(b => b.revenue), 1));
+        setData(buckets);
+      } catch { setData([]); }
+      finally   { setLoading(false); }
+    })();
+  }, []);
+
+  function hourLabel(h: number) {
+    if (h === 0)  return '12a';
+    if (h < 12)   return `${h}a`;
+    if (h === 12) return '12p';
+    return `${h - 12}p`;
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-canvas p-4">
+      <div className="mb-3 flex items-center gap-1.5">
+        <TrendingUp size={12} className="text-brand/80" />
+        <p className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Revenue by Hour</p>
+      </div>
+      {loading ? (
+        <div className="animate-pulse h-20 rounded bg-border/40" />
+      ) : data.every(b => b.revenue === 0) ? (
+        <p className="py-6 text-center text-xs text-ink/60">No orders recorded today</p>
+      ) : (
+        <>
+          <div className="relative flex items-end gap-[3px]" style={{ height: 80 }}>
+            {data.map(b => {
+              const barH = b.revenue > 0
+                ? Math.max(Math.round((b.revenue / peak) * 76), 4)
+                : 0;
+              return (
+                <div key={b.hour} className="group relative flex-1">
+                  <div
+                    className="absolute bottom-0 left-0 right-0 rounded-sm"
+                    style={{
+                      height: barH > 0 ? `${barH}px` : '1px',
+                      backgroundColor: barH > 0 ? '#E8380D' : '#E8D5C0',
+                      opacity: barH > 0 ? 0.6 : 0.2,
+                    }}
+                  />
+                  {b.revenue > 0 && (
+                    <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 group-hover:block">
+                      <div className="whitespace-nowrap rounded bg-ink px-2 py-1 text-[10px] text-white shadow-md">
+                        {symbol}{Math.round(b.revenue).toLocaleString('en-IN')} · {b.orders}×
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-1.5 flex gap-[3px]">
+            {data.map((b, i) => (
+              <div key={b.hour} className="flex-1 text-center">
+                <span className="text-[9px] text-ink/30">{i % 3 === 0 ? hourLabel(b.hour) : ''}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Dashboard page ─────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
@@ -267,6 +360,8 @@ export function DashboardPage() {
   const [openingTableId,   setOpeningTableId]   = useState<string | null>(null);
   const [topProducts,        setTopProducts]        = useState<TopProduct[]>([]);
   const [topProductsLoading, setTopProductsLoading] = useState(true);
+  const [kotCount,           setKotCount]           = useState(0);
+  const [kotLoading,         setKotLoading]         = useState(true);
 
   const [newOrderTables, dispatchBadge] = useReducer(badgeReducer, new Set<string>());
 
@@ -313,6 +408,20 @@ export function DashboardPage() {
     }
   }, []);
 
+  // ── Data loading — kitchen queue count (all roles with kitchen access) ───────
+
+  const loadKot = useCallback(async () => {
+    setKotLoading(true);
+    try {
+      const orders = await fetchKitchenOrders();
+      setKotCount(orders.length);
+    } catch {
+      setKotCount(0);
+    } finally {
+      setKotLoading(false);
+    }
+  }, []);
+
   // ── Data loading — morning brief (admin only, non-critical) ─────────────────
 
   const loadBrief = useCallback(async () => {
@@ -333,8 +442,9 @@ export function DashboardPage() {
     void load();
     void loadReport();
     void loadBrief();
+    void loadKot();
     if (showRevenue) void loadTopProducts();
-  }, [load, loadReport, loadBrief, loadTopProducts, reconnectCount, showRevenue]);
+  }, [load, loadReport, loadBrief, loadTopProducts, loadKot, reconnectCount, showRevenue]);
 
   // Periodic refresh every 2 minutes
   useEffect(() => {
@@ -342,10 +452,11 @@ export function DashboardPage() {
       void load();
       void loadReport();
       void loadBrief();
+      void loadKot();
       if (showRevenue) void loadTopProducts();
     }, 120_000);
     return () => clearInterval(id);
-  }, [load, loadReport, loadBrief, loadTopProducts, showRevenue]);
+  }, [load, loadReport, loadBrief, loadTopProducts, loadKot, showRevenue]);
 
   // ── Socket: targeted badge update — does NOT rebuild table list ─────────────
 
@@ -520,7 +631,7 @@ export function DashboardPage() {
         <div className="border-b border-border bg-mist px-5 py-4">
           <div className={`grid gap-3 ${
             showRevenue
-              ? 'grid-cols-2 sm:grid-cols-4'
+              ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
               : 'grid-cols-1 sm:grid-cols-2'
           }`}>
 
@@ -589,6 +700,17 @@ export function DashboardPage() {
                   sub={report && report.totalOrders > 0 ? 'per order' : undefined}
                 />
               )
+            )}
+
+            {/* Kitchen Queue — visible to all roles with kitchen access */}
+            {kotLoading ? <KpiSkeleton /> : (
+              <KpiCard
+                icon={<ChefHat size={14} />}
+                label="Kitchen Queue"
+                value={String(kotCount)}
+                sub={kotCount === 0 ? 'All clear' : kotCount === 1 ? '1 order active' : `${kotCount} orders active`}
+                accent={kotCount >= 5}
+              />
             )}
           </div>
         </div>
@@ -688,10 +810,13 @@ export function DashboardPage() {
 
         {/* ── Owner Insights Row (below fold — analytics after operations) ──── */}
         {showRevenue && (
-          <div className="grid grid-cols-1 gap-3 border-t border-border bg-canvas px-5 py-4 sm:grid-cols-3">
-            <PaymentBreakdownCard report={report} loading={reportLoading} symbol={currencySymbol} />
-            <TopProductsCard products={topProducts} loading={topProductsLoading} symbol={currencySymbol} />
-            <OrderMixCard report={report} loading={reportLoading} liveOrderCount={liveOrders.length} symbol={currencySymbol} />
+          <div className="border-t border-border bg-canvas px-5 py-4 space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <PaymentBreakdownCard report={report} loading={reportLoading} symbol={currencySymbol} />
+              <TopProductsCard products={topProducts} loading={topProductsLoading} symbol={currencySymbol} />
+              <OrderMixCard report={report} loading={reportLoading} liveOrderCount={liveOrders.length} symbol={currencySymbol} />
+            </div>
+            <HourlyRevenueCard symbol={currencySymbol} />
           </div>
         )}
 

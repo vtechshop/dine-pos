@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, RefreshCw, Loader2, Users } from 'lucide-react';
 import type { SessionBill, GuestBill, PaymentMethod, SessionSummary, BillingOrder } from '../../types';
 import { fetchSessionBill, billGuest, bulkBillAndClose } from '../../api/billing';
+import { redeemGiftVoucher } from '../../api/giftVouchers';
 import type { SplitDetails } from '../../api/billing';
 import { GuestPanel } from './GuestPanel';
 import { PaymentPanel } from './PaymentPanel';
@@ -51,6 +52,9 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
 
   // Pulses the Confirm Payment button briefly after a guest is selected via Pay
   const [confirmFlash, setConfirmFlash] = useState(false);
+
+  // Gift voucher applied to the current billing session
+  const [appliedVoucher, setAppliedVoucher] = useState<{ code: string; amount: number } | null>(null);
 
   // Receipt overlay after successful billing
   const [receipt, setReceipt] = useState<{
@@ -116,9 +120,10 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
     ? selectedGuestBill.orders.reduce((s, o) => s + o.grandTotal, 0)
     : 0;
 
-  const billingAmount = mode === 'table' ? grandTotal : guestTotal;
-  const splitSum      = splitDetails.cash + splitDetails.card + splitDetails.upi;
-  const splitValid    = Math.abs(splitSum - billingAmount) < 0.01;
+  const billingAmount    = mode === 'table' ? grandTotal : guestTotal;
+  const netBillingAmount = Math.max(billingAmount - (appliedVoucher?.amount ?? 0), 0);
+  const splitSum         = splitDetails.cash + splitDetails.card + splitDetails.upi;
+  const splitValid       = Math.abs(splitSum - netBillingAmount) < 0.01;
 
   const canConfirm =
     billingAmount > 0 &&
@@ -172,6 +177,11 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
           transactionId || undefined,
           upiApp || undefined,
         );
+        // Redeem voucher after billing succeeds (non-critical: billing already done)
+        if (appliedVoucher) {
+          try { await redeemGiftVoucher(appliedVoucher.code, appliedVoucher.amount); } catch { /* ignore */ }
+          setAppliedVoucher(null);
+        }
         setReceipt({
           mode: 'table',
           guestBill: null,
@@ -188,6 +198,11 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
           transactionId: transactionId || undefined,
           upiApp: upiApp || undefined,
         });
+        // Redeem voucher after billing succeeds (non-critical: billing already done)
+        if (appliedVoucher) {
+          try { await redeemGiftVoucher(appliedVoucher.code, appliedVoucher.amount); } catch { /* ignore */ }
+          setAppliedVoucher(null);
+        }
         setReceipt({
           mode: 'guest',
           guestBill: { guest: billedGuest, orders: selectedGuestBill.orders },
@@ -236,6 +251,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
     setMode('guest');
     setSplitDetails({ cash: 0, card: 0, upi: 0 });
     setPaidAmount(0);
+    setAppliedVoucher(null);
     setConfirmFlash(true);
     setTimeout(() => setConfirmFlash(false), 1200);
   }
@@ -389,6 +405,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
                         setTransactionId('');
                         setUpiApp('');
                         setSplitDetails({ cash: 0, card: 0, upi: 0 });
+                        setAppliedVoucher(null);
                       }}
                       selectedGuestBill={selectedGuestBill}
                       grandTotal={grandTotal}
@@ -411,6 +428,9 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
                       allGuestsBilled={allGuestsBilled}
                       onCloseTable={() => void handleCloseTable()}
                       closingTable={closingTable}
+                      appliedVoucher={appliedVoucher}
+                      onVoucherApplied={(code, amount) => setAppliedVoucher({ code, amount })}
+                      onVoucherCleared={() => setAppliedVoucher(null)}
                     />
                   )}
                 </>
