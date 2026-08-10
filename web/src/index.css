@@ -13,6 +13,13 @@
 }
 
 @layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    background-color: rgb(var(--ink));
+  }
+
   :root {
     /* Space-separated RGB — enables Tailwind opacity modifiers (bg-brand/20, text-ink/40) */
     --brand:  232 56 13;   /* #E8380D — primary CTA */

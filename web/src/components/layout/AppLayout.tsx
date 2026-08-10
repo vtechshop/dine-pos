@@ -51,7 +51,7 @@ export function AppLayout() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-ink">
+    <div className="flex h-full flex-col overflow-hidden bg-ink">
       <TopBar onMenuClick={() => setSidebarOpen(true)} />
 
       <div className="flex flex-1 overflow-hidden">
