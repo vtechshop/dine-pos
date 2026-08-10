@@ -15,7 +15,7 @@ interface StatusChipProps {
 
 const MAP: Record<Status, { bg: string; text: string; dot: string; label: string }> = {
   occupied:  { bg: 'bg-green-100',  text: 'text-green-700',  dot: 'bg-green-500',  label: 'Occupied'  },
-  available: { bg: 'bg-ink/5',      text: 'text-ink/60',     dot: 'bg-ink/35',     label: 'Available' },
+  available: { bg: 'bg-green-50',   text: 'text-green-700',  dot: 'bg-green-500',  label: 'Available' },
   reserved:  { bg: 'bg-amber-100',  text: 'text-amber-700',  dot: 'bg-amber-500',  label: 'Reserved'  },
   inactive:  { bg: 'bg-ink/5',      text: 'text-ink/45',     dot: 'bg-ink/30',     label: 'Inactive'  },
   online:    { bg: 'bg-green-100',  text: 'text-green-700',  dot: 'bg-green-500',  label: 'Online'    },

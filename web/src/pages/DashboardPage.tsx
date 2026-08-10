@@ -53,13 +53,13 @@ function KpiCard({ icon, label, value, sub, accent }: KpiCardProps) {
         : 'border-border bg-canvas'
     }`}>
       <div className="mb-2.5 flex items-center gap-1.5">
-        <span className={accent ? 'text-brand' : 'text-ink/50'}>{icon}</span>
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink/60">
+        <span className={accent ? 'text-brand' : 'text-ink/60'}>{icon}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink/70">
           {label}
         </span>
       </div>
       <p className="text-2xl font-bold tabular-nums leading-none text-ink">{value}</p>
-      {sub && <p className="mt-1 text-xs text-ink/55">{sub}</p>}
+      {sub && <p className="mt-1 text-xs text-ink/65">{sub}</p>}
     </div>
   );
 }
@@ -116,13 +116,13 @@ function PaymentBreakdownCard({ report, loading, symbol }: PaymentBreakdownProps
 
   return (
     <div className="rounded-xl border border-border bg-canvas p-4">
-      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/55">Payment Split</p>
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/65">Payment Split</p>
       {loading ? (
         <div className="space-y-3">
           {[1,2,3].map(i => <div key={i} className="animate-pulse h-7 rounded bg-border/60" />)}
         </div>
       ) : rows.length === 0 ? (
-        <p className="text-xs text-ink/50">No transactions today</p>
+        <p className="text-xs text-ink/60">No transactions today</p>
       ) : (
         <div className="space-y-2.5">
           {rows.map(r => (
@@ -158,7 +158,7 @@ function TopProductsCard({ products, loading, symbol }: TopProductsCardProps) {
     <div className="rounded-xl border border-border bg-canvas p-4">
       <div className="mb-3 flex items-center gap-1.5">
         <Trophy size={12} className="text-brand/80" />
-        <p className="text-[10px] font-bold uppercase tracking-widest text-ink/55">Top Items Today</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Top Items Today</p>
       </div>
       {loading ? (
         <div className="space-y-2.5">
@@ -166,8 +166,8 @@ function TopProductsCard({ products, loading, symbol }: TopProductsCardProps) {
         </div>
       ) : products.length === 0 ? (
         <div className="flex flex-col items-center py-2 text-center">
-          <Package2 size={20} className="mb-1 text-ink/30" />
-          <p className="text-xs text-ink/50">No orders yet today</p>
+          <Package2 size={20} className="mb-1 text-ink/35" />
+          <p className="text-xs text-ink/60">No orders yet today</p>
         </div>
       ) : (
         <ol className="space-y-1.5">
@@ -202,7 +202,7 @@ function OrderMixCard({ report, loading, liveOrderCount, symbol }: OrderMixCardP
 
   return (
     <div className="rounded-xl border border-border bg-canvas p-4">
-      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/55">Order Mix</p>
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/65">Order Mix</p>
       {loading ? (
         <div className="space-y-3">
           {[1,2,3].map(i => <div key={i} className="animate-pulse h-7 rounded bg-border/60" />)}
@@ -210,23 +210,23 @@ function OrderMixCard({ report, loading, liveOrderCount, symbol }: OrderMixCardP
       ) : (
         <div className="space-y-2.5">
           <div className="flex items-center justify-between rounded-lg bg-mist px-3 py-2">
-            <span className="text-xs text-ink/65">Active now</span>
-            <span className={`text-sm font-bold tabular-nums ${liveOrderCount > 0 ? 'text-brand' : 'text-ink/45'}`}>
+            <span className="text-xs text-ink/70">Active now</span>
+            <span className={`text-sm font-bold tabular-nums ${liveOrderCount > 0 ? 'text-brand' : 'text-ink/55'}`}>
               {liveOrderCount}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-ink/65">Dine-in</span>
+            <span className="text-xs text-ink/70">Dine-in</span>
             <span className="text-xs font-semibold tabular-nums text-ink">{dineIn} orders</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-ink/65">Parcel / Takeaway</span>
+            <span className="text-xs text-ink/70">Parcel / Takeaway</span>
             <span className="text-xs font-semibold tabular-nums text-ink">{parcel} orders</span>
           </div>
           {report && report.totalDiscount > 0 && (
             <div className="flex items-center justify-between border-t border-border pt-2">
-              <span className="text-xs text-ink/55">Discounts given</span>
-              <span className="text-xs tabular-nums text-ink/65">
+              <span className="text-xs text-ink/65">Discounts given</span>
+              <span className="text-xs tabular-nums text-ink/70">
                 -{symbol}{Math.round(report.totalDiscount).toLocaleString('en-IN')}
               </span>
             </div>
