@@ -374,7 +374,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overflow-x-auto">
         {error && (
           <div className="m-5 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
             {error}
@@ -399,8 +399,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
           </div>
         ) : (
           <>
-          <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
+          <table className="min-w-[640px] w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-mist text-left">
                 <th className="w-7 px-3 py-2.5" />
@@ -521,7 +520,6 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
               })}
             </tbody>
           </table>
-          </div>
           {visible.length > visibleCount && (
             <div className="flex items-center justify-center gap-3 py-4 text-xs">
               <span className="text-ink/40">Showing {visibleCount} of {visible.length}</span>
