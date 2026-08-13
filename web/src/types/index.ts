@@ -534,13 +534,25 @@ export interface Expense {
 
 // ── Waste Logs ────────────────────────────────────────────────────────────────
 
+export type WasteReason =
+  | 'expired'
+  | 'spoiled'
+  | 'damaged'
+  | 'overcooked'
+  | 'returned'
+  | 'overproduction'
+  | 'preparation'
+  | 'spillage'
+  | 'other';
+
 export interface WasteLog {
   _id: string;
   productId?: string;
+  ingredientId?: string;
   productName: string;
   quantity: number;
   unit: string;
-  reason: 'expired' | 'damaged' | 'overcooked' | 'returned' | 'other';
+  reason: WasteReason;
   estimatedLoss: number;
   date: string;
   notes: string;
@@ -553,4 +565,46 @@ export interface WasteAnalytics {
   totalEntries: number;
   topItems: Array<{ productName: string; totalQty: number; totalLoss: number }>;
   byReason: Array<{ _id: string; count: number; totalLoss: number }>;
+}
+
+// ── Stock Movements ───────────────────────────────────────────────────────────
+
+export type StockMovementType =
+  | 'stock_in'
+  | 'restock'
+  | 'sale'
+  | 'sale_reversal'
+  | 'waste'
+  | 'adjustment'
+  | 'opening_stock'
+  | 'grn';
+
+export interface StockMovement {
+  _id: string;
+  hotelId: string;
+  ingredientId: string;
+  ingredientName: string;
+  type: StockMovementType;
+  delta: number;
+  previousStock: number;
+  resultingStock: number;
+  costPerUnit: number | null;
+  totalCost: number | null;
+  referenceId: string;
+  referenceType: 'order' | 'grn' | 'waste' | 'manual' | null;
+  reason: string;
+  notes: string;
+  supplier: string;
+  invoiceNumber: string;
+  performedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InventorySummary {
+  total: number;
+  lowStock: number;
+  outOfStock: number;
+  stockValue: number;
+  todayWasteLoss: number;
 }

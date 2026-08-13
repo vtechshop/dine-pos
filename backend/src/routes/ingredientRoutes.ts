@@ -1,5 +1,8 @@
 import { Router, Response } from 'express';
+import mongoose from 'mongoose';
 import Ingredient from '../models/Ingredient';
+import WasteLog from '../models/WasteLog';
+import StockMovement from '../models/StockMovement';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
@@ -10,7 +13,63 @@ router.use(authMiddleware);
 router.use(requireAdmin);
 router.use(requireFeature('ingredients'));
 
-// GET all ingredients for this hotel
+// ── GET /summary — KPI overview ─────────────────────────────────────────────
+// Must come before /:id routes so 'summary' is not treated as an ObjectId param.
+router.get('/summary', async (req: AuthRequest, res: Response) => {
+  try {
+    const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const [aggResult, wasteLossResult] = await Promise.all([
+      Ingredient.aggregate([
+        { $match: { hotelId: hotelObjId } },
+        {
+          $group: {
+            _id: null,
+            total:       { $sum: 1 },
+            lowStock:    { $sum: { $cond: [{ $and: [{ $gt: ['$currentStock', 0] }, { $lte: ['$currentStock', '$lowStockThreshold'] }] }, 1, 0] } },
+            outOfStock:  { $sum: { $cond: [{ $eq: ['$currentStock', 0] }, 1, 0] } },
+            stockValue:  { $sum: { $multiply: ['$currentStock', '$costPerUnit'] } },
+          },
+        },
+      ]),
+      WasteLog.aggregate([
+        { $match: { hotelId: hotelObjId, date: { $gte: today, $lte: todayEnd } } },
+        { $group: { _id: null, totalLoss: { $sum: '$estimatedLoss' } } },
+      ]),
+    ]);
+
+    const agg = aggResult[0] ?? { total: 0, lowStock: 0, outOfStock: 0, stockValue: 0 };
+    res.json({
+      total:          agg.total,
+      lowStock:       agg.lowStock,
+      outOfStock:     agg.outOfStock,
+      stockValue:     agg.stockValue,
+      todayWasteLoss: wasteLossResult[0]?.totalLoss ?? 0,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Failed to fetch inventory summary', error);
+  }
+});
+
+// ── GET /alerts/low-stock ────────────────────────────────────────────────────
+router.get('/alerts/low-stock', async (req: AuthRequest, res: Response) => {
+  try {
+    const ingredients = await Ingredient.find({
+      hotelId: req.hotelId,
+      $expr: { $lte: ['$currentStock', '$lowStockThreshold'] },
+    }).sort({ currentStock: 1 });
+    res.json({ ingredients });
+  } catch (error) {
+    sendError(res, 500, 'Failed to fetch low stock alerts', error);
+  }
+});
+
+// ── GET / — list all ingredients ─────────────────────────────────────────────
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
@@ -25,32 +84,173 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET low stock ingredients (currentStock <= lowStockThreshold)
-router.get('/alerts/low-stock', async (req: AuthRequest, res: Response) => {
-  try {
-    const ingredients = await Ingredient.find({
-      hotelId: req.hotelId,
-      $expr: { $lte: ['$currentStock', '$lowStockThreshold'] },
-    }).sort({ currentStock: 1 });
-    res.json({ ingredients });
-  } catch (error) {
-    sendError(res, 500, 'Failed to fetch low stock alerts', error);
-  }
-});
-
-// POST create ingredient
+// ── POST / — create ingredient ────────────────────────────────────────────────
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const ingredient = new Ingredient({ ...req.body, hotelId: req.hotelId });
     await ingredient.save();
     logAudit(req, 'ingredient.created', 'ingredient', String((ingredient as any)._id), { name: (ingredient as any).name });
+
+    // Record opening stock movement if initial stock is positive
+    const initStock = (ingredient as any).currentStock as number;
+    if (initStock > 0) {
+      await StockMovement.create({
+        hotelId:        req.hotelId,
+        ingredientId:   (ingredient as any)._id,
+        ingredientName: (ingredient as any).name,
+        type:           'opening_stock',
+        delta:          initStock,
+        previousStock:  0,
+        resultingStock: initStock,
+        costPerUnit:    (ingredient as any).costPerUnit ?? null,
+        totalCost:      initStock * ((ingredient as any).costPerUnit ?? 0),
+        referenceType:  'manual',
+        performedBy:    req.role ?? 'admin',
+      });
+    }
+
     res.status(201).json(ingredient);
   } catch (error) {
     sendError(res, 400, 'Invalid data', error);
   }
 });
 
-// PUT update ingredient (name, unit, threshold, cost)
+// ── GET /:id/history — stock movement history for one ingredient ──────────────
+router.get('/:id/history', async (req: AuthRequest, res: Response) => {
+  try {
+    const ingredient = await Ingredient.findOne({ _id: req.params.id, hotelId: req.hotelId }).select('_id');
+    if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const skip  = Math.max(parseInt(req.query.skip  as string) || 0,  0);
+
+    const [movements, total] = await Promise.all([
+      StockMovement.find({ hotelId: req.hotelId, ingredientId: req.params.id })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      StockMovement.countDocuments({ hotelId: req.hotelId, ingredientId: req.params.id }),
+    ]);
+
+    res.json({ movements, total, limit, skip });
+  } catch (error) {
+    sendError(res, 500, 'Failed to fetch stock history', error);
+  }
+});
+
+// ── POST /:id/stock-in — add stock with cost + supplier info ──────────────────
+router.post('/:id/stock-in', async (req: AuthRequest, res: Response) => {
+  try {
+    const { quantity, costPerUnit, supplier = '', invoiceNumber = '', date, notes = '' } = req.body;
+
+    if (typeof quantity !== 'number' || quantity <= 0) {
+      return res.status(400).json({ message: 'quantity must be a positive number' });
+    }
+    if (typeof costPerUnit !== 'number' || costPerUnit < 0) {
+      return res.status(400).json({ message: 'costPerUnit must be a non-negative number' });
+    }
+
+    // Read current state before update (needed for previousStock + WAC)
+    const before = await Ingredient.findOne({ _id: req.params.id, hotelId: req.hotelId });
+    if (!before) return res.status(404).json({ message: 'Ingredient not found' });
+
+    const prevStock = (before as any).currentStock as number;
+    const prevCost  = (before as any).costPerUnit  as number;
+    const newStock  = prevStock + quantity;
+
+    // Weighted-average cost calculation
+    const newCostPerUnit = newStock > 0
+      ? (prevStock * prevCost + quantity * costPerUnit) / newStock
+      : costPerUnit;
+
+    const ingredient = await Ingredient.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId },
+      { $inc: { currentStock: quantity }, $set: { costPerUnit: newCostPerUnit } },
+      { new: true },
+    );
+    if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+
+    const totalCost = quantity * costPerUnit;
+
+    await StockMovement.create({
+      hotelId:        req.hotelId,
+      ingredientId:   req.params.id,
+      ingredientName: (ingredient as any).name,
+      type:           'stock_in',
+      delta:          quantity,
+      previousStock:  prevStock,
+      resultingStock: newStock,
+      costPerUnit,
+      totalCost,
+      referenceType:  'manual',
+      supplier,
+      invoiceNumber,
+      notes,
+      performedBy:    req.role ?? 'admin',
+    });
+
+    logAudit(req, 'ingredient.stock_in', 'ingredient', req.params.id, {
+      name: (ingredient as any).name, quantity, costPerUnit, supplier, invoiceNumber,
+    });
+
+    res.json({ ingredient, movement: { delta: quantity, previousStock: prevStock, resultingStock: newStock, costPerUnit, totalCost } });
+  } catch (error) {
+    sendError(res, 500, 'Failed to record stock in', error);
+  }
+});
+
+// ── POST /:id/adjust — physical count correction ──────────────────────────────
+router.post('/:id/adjust', async (req: AuthRequest, res: Response) => {
+  try {
+    const { physicalStock, reason = 'physical_count', notes = '' } = req.body;
+
+    if (typeof physicalStock !== 'number' || physicalStock < 0) {
+      return res.status(400).json({ message: 'physicalStock must be a non-negative number' });
+    }
+
+    const before = await Ingredient.findOne({ _id: req.params.id, hotelId: req.hotelId });
+    if (!before) return res.status(404).json({ message: 'Ingredient not found' });
+
+    const prevStock = (before as any).currentStock as number;
+    const delta = physicalStock - prevStock;
+
+    if (delta === 0) {
+      return res.json({ ingredient: before, message: 'No change — physical stock matches system stock' });
+    }
+
+    const ingredient = await Ingredient.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId },
+      { $set: { currentStock: physicalStock } },
+      { new: true, runValidators: true },
+    );
+    if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+
+    await StockMovement.create({
+      hotelId:        req.hotelId,
+      ingredientId:   req.params.id,
+      ingredientName: (ingredient as any).name,
+      type:           'adjustment',
+      delta,
+      previousStock:  prevStock,
+      resultingStock: physicalStock,
+      costPerUnit:    (ingredient as any).costPerUnit ?? null,
+      referenceType:  'manual',
+      reason,
+      notes,
+      performedBy:    req.role ?? 'admin',
+    });
+
+    logAudit(req, 'ingredient.adjusted', 'ingredient', req.params.id, {
+      name: (ingredient as any).name, prevStock, physicalStock, delta, reason,
+    });
+
+    res.json({ ingredient, movement: { delta, previousStock: prevStock, resultingStock: physicalStock, reason } });
+  } catch (error) {
+    sendError(res, 500, 'Failed to adjust stock', error);
+  }
+});
+
+// ── PUT /:id — update ingredient metadata ─────────────────────────────────────
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { name, unit, lowStockThreshold, costPerUnit, currentStock } = req.body;
@@ -63,7 +263,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     const ingredient = await Ingredient.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
       update,
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
     if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
     logAudit(req, 'ingredient.updated', 'ingredient', req.params.id, { name: (ingredient as any).name });
@@ -73,19 +273,39 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// PATCH restock — add quantity to currentStock
+// ── PATCH /:id/restock — legacy increment endpoint ───────────────────────────
 router.patch('/:id/restock', async (req: AuthRequest, res: Response) => {
   try {
     const { quantity } = req.body;
     if (typeof quantity !== 'number' || quantity <= 0) {
       return res.status(400).json({ message: 'Valid positive quantity required' });
     }
+
+    const before = await Ingredient.findOne({ _id: req.params.id, hotelId: req.hotelId });
+    if (!before) return res.status(404).json({ message: 'Ingredient not found' });
+
+    const prevStock = (before as any).currentStock as number;
+
     const ingredient = await Ingredient.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
       { $inc: { currentStock: quantity } },
-      { new: true }
+      { new: true },
     );
     if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+
+    // Record in StockMovement for audit trail
+    await StockMovement.create({
+      hotelId:        req.hotelId,
+      ingredientId:   req.params.id,
+      ingredientName: (ingredient as any).name,
+      type:           'restock',
+      delta:          quantity,
+      previousStock:  prevStock,
+      resultingStock: prevStock + quantity,
+      referenceType:  'manual',
+      performedBy:    req.role ?? 'admin',
+    }).catch(() => { /* Audit failure must not break the restock response */ });
+
     logAudit(req, 'ingredient.restocked', 'ingredient', req.params.id, { name: (ingredient as any).name, quantity });
     res.json(ingredient);
   } catch (error) {
@@ -93,7 +313,7 @@ router.patch('/:id/restock', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// DELETE ingredient
+// ── DELETE /:id ───────────────────────────────────────────────────────────────
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const ingredient = await Ingredient.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });

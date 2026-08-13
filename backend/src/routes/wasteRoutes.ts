@@ -1,7 +1,9 @@
 import { Router, Response } from 'express';
-import WasteLog from '../models/WasteLog';
-import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import mongoose from 'mongoose';
+import WasteLog from '../models/WasteLog';
+import Ingredient from '../models/Ingredient';
+import StockMovement from '../models/StockMovement';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 
 const router = Router();
@@ -9,7 +11,7 @@ router.use(authMiddleware);
 router.use(requireAdmin);
 router.use(requireFeature('waste'));
 
-// GET waste logs with optional date filter
+// ── GET / — waste logs with optional date filter ─────────────────────────────
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const filter: any = { hotelId: req.hotelId };
@@ -35,7 +37,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET waste analytics — top wasted items + total loss
+// ── GET /analytics — waste KPIs ──────────────────────────────────────────────
 router.get('/analytics', async (req: AuthRequest, res: Response) => {
   try {
     const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
@@ -75,10 +77,77 @@ router.get('/analytics', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST log waste
+// ── POST / — log waste ────────────────────────────────────────────────────────
+// If ingredientId is provided:
+//   1. Validate ingredient belongs to this hotel
+//   2. Deduct quantity from ingredient.currentStock (clamped to available)
+//   3. Auto-calculate estimatedLoss if not provided (qty × costPerUnit)
+//   4. Create StockMovement record for the deduction
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const log = new WasteLog({ ...req.body, hotelId: req.hotelId });
+    const { ingredientId, quantity, estimatedLoss, ...rest } = req.body;
+
+    let resolvedIngredientId: mongoose.Types.ObjectId | null = null;
+    let resolvedEstimatedLoss = typeof estimatedLoss === 'number' ? estimatedLoss : 0;
+
+    if (ingredientId) {
+      // Validate ingredient belongs to this hotel
+      const ingredient = await Ingredient.findOne({ _id: ingredientId, hotelId: req.hotelId });
+      if (!ingredient) {
+        return res.status(404).json({ message: 'Ingredient not found for this hotel' });
+      }
+
+      const qty = typeof quantity === 'number' ? quantity : parseFloat(quantity) || 0;
+      if (qty <= 0) {
+        return res.status(400).json({ message: 'quantity must be positive' });
+      }
+
+      const prevStock = (ingredient as any).currentStock as number;
+      const costPerUnit = (ingredient as any).costPerUnit as number;
+
+      // Clamp deduction to available stock — never go below 0
+      const actualDeduction = Math.min(qty, Math.max(0, prevStock));
+
+      // Auto-compute estimated loss if not manually provided
+      if (typeof estimatedLoss !== 'number') {
+        resolvedEstimatedLoss = actualDeduction * costPerUnit;
+      }
+
+      resolvedIngredientId = (ingredient as any)._id;
+
+      // Deduct stock
+      if (actualDeduction > 0) {
+        await Ingredient.updateOne(
+          { _id: ingredientId, hotelId: req.hotelId },
+          { $inc: { currentStock: -actualDeduction } },
+        );
+
+        // Record stock movement — best-effort (don't fail the waste log on audit failure)
+        StockMovement.create({
+          hotelId:        req.hotelId,
+          ingredientId:   resolvedIngredientId,
+          ingredientName: (ingredient as any).name,
+          type:           'waste',
+          delta:          -actualDeduction,
+          previousStock:  prevStock,
+          resultingStock: prevStock - actualDeduction,
+          costPerUnit,
+          totalCost:      resolvedEstimatedLoss,
+          referenceType:  'waste',
+          reason:         rest.reason ?? 'other',
+          notes:          rest.notes ?? '',
+          performedBy:    req.role ?? 'admin',
+        }).catch(() => {});
+      }
+    }
+
+    const log = new WasteLog({
+      ...rest,
+      quantity,
+      estimatedLoss: resolvedEstimatedLoss,
+      hotelId: req.hotelId,
+      ingredientId: resolvedIngredientId,
+    });
     await log.save();
     res.status(201).json(log);
   } catch (error) {
@@ -86,7 +155,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// DELETE
+// ── DELETE /:id ───────────────────────────────────────────────────────────────
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const log = await WasteLog.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });

@@ -1,12 +1,24 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export type WasteReason =
+  | 'expired'
+  | 'spoiled'
+  | 'damaged'
+  | 'overcooked'
+  | 'returned'
+  | 'overproduction'
+  | 'preparation'
+  | 'spillage'
+  | 'other';
+
 export interface IWasteLog extends Document {
   hotelId: mongoose.Types.ObjectId;
   productId?: mongoose.Types.ObjectId;
+  ingredientId?: mongoose.Types.ObjectId;  // Set when waste is ingredient-level
   productName: string;
   quantity: number;
   unit: string;
-  reason: 'expired' | 'damaged' | 'overcooked' | 'returned' | 'other';
+  reason: WasteReason;
   estimatedLoss: number;
   date: Date;
   notes: string;
@@ -16,10 +28,15 @@ const WasteLogSchema: Schema = new Schema(
   {
     hotelId:       { type: Schema.Types.ObjectId, ref: 'Hotel', required: true, index: true },
     productId:     { type: Schema.Types.ObjectId, ref: 'Product', default: null },
+    ingredientId:  { type: Schema.Types.ObjectId, ref: 'Ingredient', default: null },
     productName:   { type: String, required: true, trim: true },
     quantity:      { type: Number, required: true, min: 0 },
     unit:          { type: String, default: 'pcs' },
-    reason:        { type: String, enum: ['expired', 'damaged', 'overcooked', 'returned', 'other'], default: 'other' },
+    reason: {
+      type: String,
+      enum: ['expired', 'spoiled', 'damaged', 'overcooked', 'returned', 'overproduction', 'preparation', 'spillage', 'other'],
+      default: 'other',
+    },
     estimatedLoss: { type: Number, default: 0, min: 0 },
     date:          { type: Date, required: true, default: Date.now },
     notes:         { type: String, default: '' },
