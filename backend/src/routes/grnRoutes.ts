@@ -9,6 +9,7 @@ import VendorLedgerEntry from '../models/VendorLedgerEntry';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
+import StockMovement from '../models/StockMovement';
 
 const router = Router();
 router.use(authMiddleware);
@@ -320,6 +321,43 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       }
 
       await session.commitTransaction();
+
+      // Best-effort: audit StockMovement records for GRN stock receipts.
+      // Reads ingredient data after the transaction so audit failure never rolls back the GRN.
+      if (inventoryOps.length > 0) {
+        const grnIngIds = inventoryOps.map(op => op.ingredientId);
+        Ingredient.find({ _id: { $in: grnIngIds }, hotelId: req.hotelId })
+          .select('_id name currentStock costPerUnit')
+          .lean()
+          .then(ings => {
+            const ingMap = new Map((ings as any[]).map(i => [String(i._id), i]));
+            const movements = inventoryOps.map(op => {
+              const ing = ingMap.get(String(op.ingredientId));
+              if (!ing) return null;
+              const item = (processedItems as any[]).find(pi => String(pi.ingredientId) === String(op.ingredientId));
+              const purchasePrice = item && Number(item.purchasePrice) > 0 ? Number(item.purchasePrice) : 0;
+              const resultingStock = Number(ing.currentStock);
+              return {
+                hotelId: req.hotelId,
+                ingredientId: op.ingredientId,
+                ingredientName: String(ing.name),
+                type: 'grn' as const,
+                delta: op.acceptedQty,
+                previousStock: Math.max(0, resultingStock - op.acceptedQty),
+                resultingStock,
+                costPerUnit: ing.costPerUnit ?? null,
+                totalCost: purchasePrice > 0 ? op.acceptedQty * purchasePrice : null,
+                referenceId: String(grn._id),
+                referenceType: 'grn' as const,
+                reason: `GRN ${grnNumber}`,
+                supplier: String((po.vendorSnapshot as any)?.businessName ?? ''),
+                invoiceNumber: grnNumber,
+              };
+            }).filter(Boolean);
+            if (movements.length > 0) return StockMovement.insertMany(movements);
+          })
+          .catch(() => {});
+      }
 
       logAudit(req, 'grn.created', 'grn', String(grn._id), {
         grnNumber,

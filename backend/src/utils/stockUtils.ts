@@ -8,14 +8,16 @@ export const applyIngredientStockChange = async (
   sign: 1 | -1,
   session?: mongoose.ClientSession,
   overrides?: Map<string, number>,
-): Promise<Map<string, number>> => {
+): Promise<{ actualDeltas: Map<string, number>; previousStocks: Map<string, number> }> => {
+  const empty = () => ({ actualDeltas: new Map<string, number>(), previousStocks: new Map<string, number>() });
+
   const productIds = orderItems.filter(i => i.product).map(i => i.product);
-  if (productIds.length === 0) return new Map();
+  if (productIds.length === 0) return empty();
 
   const productsWithRecipe = await Product.find({
     _id: { $in: productIds }, hotelId, 'recipe.0': { $exists: true },
   }).select('recipe').session(session ?? null);
-  if (productsWithRecipe.length === 0) return new Map();
+  if (productsWithRecipe.length === 0) return empty();
 
   const recipeDemand = new Map<string, number>();
   for (const item of orderItems) {
@@ -27,7 +29,7 @@ export const applyIngredientStockChange = async (
       recipeDemand.set(key, (recipeDemand.get(key) || 0) + r.quantity * item.quantity);
     }
   }
-  if (recipeDemand.size === 0) return new Map();
+  if (recipeDemand.size === 0) return empty();
 
   const actualDeltas = new Map<string, number>();
 
@@ -61,25 +63,28 @@ export const applyIngredientStockChange = async (
     if (bulkOps.length > 0) {
       await Ingredient.bulkWrite(bulkOps, { session });
     }
-  } else {
-    // Restoration: use recorded deltas when available so we restore exactly
-    // what was taken, not the full recipe amount (which may exceed what was in stock).
-    const demand = overrides ?? recipeDemand;
-    const bulkOps: any[] = [];
-    for (const [ingredientId, qty] of demand) {
-      if (qty <= 0) continue;
-      actualDeltas.set(ingredientId, qty);
-      bulkOps.push({
-        updateOne: {
-          filter: { _id: ingredientId, hotelId },
-          update: { $inc: { currentStock: qty } },
-        },
-      });
-    }
-    if (bulkOps.length > 0) {
-      await Ingredient.bulkWrite(bulkOps, { session });
-    }
+
+    // Return stockMap as previousStocks — used by callers to create StockMovement audit records
+    return { actualDeltas, previousStocks: stockMap };
   }
 
-  return actualDeltas;
+  // sign === 1: Restoration — use recorded deltas when available so we restore exactly
+  // what was taken, not the full recipe amount (which may exceed what was in stock).
+  const demand = overrides ?? recipeDemand;
+  const bulkOps: any[] = [];
+  for (const [ingredientId, qty] of demand) {
+    if (qty <= 0) continue;
+    actualDeltas.set(ingredientId, qty);
+    bulkOps.push({
+      updateOne: {
+        filter: { _id: ingredientId, hotelId },
+        update: { $inc: { currentStock: qty } },
+      },
+    });
+  }
+  if (bulkOps.length > 0) {
+    await Ingredient.bulkWrite(bulkOps, { session });
+  }
+
+  return { actualDeltas, previousStocks: new Map() };
 };

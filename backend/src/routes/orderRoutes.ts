@@ -10,6 +10,8 @@ import CustomerProfile from '../models/CustomerProfile';
 import { findOrCreateOpenSession, findOrCreateDefaultGuest } from '../utils/sessionUtils';
 import { scheduleKOTPrint, scheduleOrderReceiptPrint } from '../utils/printUtils';
 import { applyIngredientStockChange } from '../utils/stockUtils';
+import Ingredient from '../models/Ingredient';
+import StockMovement from '../models/StockMovement';
 import { authMiddleware, requireAdmin, requireKitchenOrAdmin, requireWaiterOrAdmin, requireCashierOrAdmin, requireWaiterOrCashierOrAdmin, resolveHotelStatus, AuthRequest } from '../middleware/auth';
 import { requireActiveStaff } from '../middleware/staffAuth';
 import { logAudit } from '../utils/audit';
@@ -773,12 +775,16 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       },
     }));
 
+    let ingredientDeltas = new Map<string, number>();
+    let saleMovementPrevStocks = new Map<string, number>();
     const txSession = await mongoose.startSession();
     try {
       await txSession.withTransaction(async () => {
         // Ingredient deduction runs first so we capture actual clamped deltas
         // and persist them on the order for use during cancellation restoration.
-        const ingredientDeltas = await applyIngredientStockChange(order.items, req.hotelId!, -1, txSession);
+        const { actualDeltas, previousStocks } = await applyIngredientStockChange(order.items, req.hotelId!, -1, txSession);
+        ingredientDeltas = actualDeltas;
+        saleMovementPrevStocks = previousStocks;
         if (ingredientDeltas.size > 0) order.ingredientDeltas = ingredientDeltas;
         await order.save({ session: txSession });
         if (stockItems.length > 0) {
@@ -787,6 +793,36 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       });
     } finally {
       await txSession.endSession();
+    }
+
+    // Best-effort: audit StockMovement records for recipe-based deductions (sale type).
+    // Runs after the transaction so audit failure never rolls back the order.
+    if (ingredientDeltas.size > 0) {
+      const saleIngIds = Array.from(ingredientDeltas.keys());
+      Ingredient.find({ _id: { $in: saleIngIds }, hotelId: req.hotelId }).select('_id name').lean()
+        .then(ings => {
+          const nameMap = new Map((ings as any[]).map(i => [String(i._id), String(i.name)]));
+          const movements = saleIngIds.map(id => {
+            const delta = ingredientDeltas.get(id)!;
+            if (delta <= 0) return null;
+            const prev = saleMovementPrevStocks.get(id) ?? 0;
+            return {
+              hotelId: req.hotelId,
+              ingredientId: id,
+              ingredientName: nameMap.get(id) ?? 'Unknown',
+              type: 'sale' as const,
+              delta: -delta,
+              previousStock: prev,
+              resultingStock: prev - delta,
+              referenceId: String(order._id),
+              referenceType: 'order' as const,
+              reason: `Order #${order.orderNumber ?? ''}`,
+              performedBy: String((req as any).cashierId ?? (req as any).waiterId ?? ''),
+            };
+          }).filter(Boolean);
+          if (movements.length > 0) return StockMovement.insertMany(movements);
+        })
+        .catch(() => {});
     }
 
     logger.info('Order saved', { orderId: String(order._id), orderNumber: order.orderNumber, hotelId: req.hotelId });
@@ -914,15 +950,49 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         // Wrap both stock restores in a transaction so they succeed or fail together.
         // Guest total update is outside the tx — it's a derived value that can be
         // recomputed, and cross-collection txns have higher abort risk.
+        let cancelDeltas = new Map<string, number>();
         const cancelTx = await mongoose.startSession();
         try {
           await cancelTx.withTransaction(async () => {
             if (bulkOps.length > 0) await Product.bulkWrite(bulkOps as any, { session: cancelTx });
             // Pass stored deltas so we restore exactly what was deducted (not full recipe qty)
-            await applyIngredientStockChange(existing.items, req.hotelId!, 1, cancelTx, existing.ingredientDeltas as Map<string, number> | undefined);
+            const { actualDeltas } = await applyIngredientStockChange(existing.items, req.hotelId!, 1, cancelTx, existing.ingredientDeltas as Map<string, number> | undefined);
+            cancelDeltas = actualDeltas;
           });
         } finally {
           await cancelTx.endSession();
+        }
+
+        // Best-effort: audit StockMovement records for cancellation restorations (sale_reversal type).
+        // Reads current stock after restoration — resultingStock — then back-computes previousStock.
+        if (cancelDeltas.size > 0) {
+          const cancelIngIds = Array.from(cancelDeltas.keys());
+          Ingredient.find({ _id: { $in: cancelIngIds }, hotelId: req.hotelId })
+            .select('_id name currentStock')
+            .lean()
+            .then(ings => {
+              const movements = (ings as any[]).map(i => {
+                const id = String(i._id);
+                const delta = cancelDeltas.get(id);
+                if (!delta || delta <= 0) return null;
+                const resultingStock = Number(i.currentStock);
+                return {
+                  hotelId: req.hotelId,
+                  ingredientId: id,
+                  ingredientName: String(i.name),
+                  type: 'sale_reversal' as const,
+                  delta: +delta,
+                  previousStock: resultingStock - delta,
+                  resultingStock,
+                  referenceId: String(existing._id),
+                  referenceType: 'order' as const,
+                  reason: `Order #${existing.orderNumber ?? ''} cancelled`,
+                  performedBy: String((req as any).cashierId ?? (req as any).waiterId ?? ''),
+                };
+              }).filter(Boolean);
+              if (movements.length > 0) return StockMovement.insertMany(movements);
+            })
+            .catch(() => {});
         }
         if (existing.guestId) {
           await Guest.findByIdAndUpdate(existing.guestId, [
