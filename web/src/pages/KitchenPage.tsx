@@ -150,25 +150,31 @@ const OrderCard = memo(function OrderCard({
   return (
     <div className={`flex flex-col rounded-xl border-2 ${borderClass} overflow-hidden`}>
       {/* Header */}
-      <div className={`flex items-center justify-between px-4 py-2.5 ${headerClass}`}>
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="font-mono text-sm font-bold text-ink shrink-0">#{order.orderNumber}</span>
-          {isAggregator && <PlatformBadge source={order.orderSource!} />}
-          {!isAggregator && order.isParcel && (
-            <span className="rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand shrink-0">
-              Parcel
-            </span>
-          )}
-          {isDelayed && (
-            <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600 shrink-0">
-              DELAYED
-            </span>
-          )}
+      <div className={`px-4 py-2.5 ${headerClass}`}>
+        {/* Row 1: order number + elapsed time — never crowd each other */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-mono text-sm font-bold text-ink truncate">{order.orderNumber}</span>
+          <div className="flex items-center gap-1 text-xs text-ink/50 shrink-0">
+            <Clock size={11} />
+            {elapsed(order.createdAt, now)}
+          </div>
         </div>
-        <div className="flex items-center gap-1 text-xs text-ink/50 shrink-0">
-          <Clock size={11} />
-          {elapsed(order.createdAt, now)}
-        </div>
+        {/* Row 2: badges — only when present */}
+        {(isAggregator || order.isParcel || isDelayed) && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {isAggregator && <PlatformBadge source={order.orderSource!} />}
+            {!isAggregator && order.isParcel && (
+              <span className="rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand leading-none">
+                Parcel
+              </span>
+            )}
+            {isDelayed && (
+              <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600 leading-none">
+                DELAYED
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Customer / delivery address */}
