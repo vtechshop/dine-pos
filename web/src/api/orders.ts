@@ -39,10 +39,11 @@ export async function fetchKitchenOrders(): Promise<KDSOrder[]> {
 export async function updateOrderStatus(
   orderId: string,
   status: string,
+  extras?: { paymentMethod?: string },
 ): Promise<void> {
   await apiFetch<unknown>(`/orders/${orderId}/status`, {
     method: 'PATCH',
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, ...extras }),
   });
 }
 

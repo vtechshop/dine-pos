@@ -207,7 +207,7 @@ export interface OrderListItem {
   orderNumber: string;
   tableNumber: string;
   customerName?: string;
-  status: 'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled';
+  status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
   paymentMethod?: string | null;
   grandTotal: number;
   subtotal: number;

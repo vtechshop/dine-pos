@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { RefreshCw, Search, ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
+import { RefreshCw, Search, ChevronLeft, ChevronRight, Calendar, X, Banknote, CreditCard, Smartphone } from 'lucide-react';
 import type { OrderListItem } from '../types';
 import { fetchOrders, updateOrderStatus } from '../api/orders';
 import { Spinner } from '../components/ui/Spinner';
@@ -10,7 +10,6 @@ import { useSettings } from '../context/SettingsContext';
 function todayStr() {
   return new Date().toLocaleDateString('en-CA');
 }
-
 function daysAgoStr(n: number) {
   const d = new Date();
   d.setDate(d.getDate() - n);
@@ -20,69 +19,81 @@ function daysAgoStr(n: number) {
 type RangeMode = 'today' | 'week' | 'month' | 'all';
 
 const RANGE_OPTIONS: { key: RangeMode; label: string }[] = [
-  { key: 'today', label: 'Today' },
-  { key: 'week',  label: 'This Week' },
+  { key: 'today', label: 'Today'      },
+  { key: 'week',  label: 'This Week'  },
   { key: 'month', label: 'This Month' },
-  { key: 'all',   label: 'All Time' },
+  { key: 'all',   label: 'All Time'   },
 ];
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
-
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
-
 function timeAgo(iso: string) {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (mins < 1) return 'just now';
+  if (mins < 1)  return 'just now';
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs  < 24) return `${hrs}h ago`;
   return fmtDate(iso);
 }
 
-// ── Config ────────────────────────────────────────────────────────────────────
+// ── Status config ─────────────────────────────────────────────────────────────
+// Backend allowed statuses: pending | preparing | ready | served | completed | cancelled
+// 'completed' = payment collected + order closed (what other UIs show as "Paid")
 
 const STATUS_CFG: Record<string, { pill: string; bar: string; dot: string; label: string }> = {
-  pending:   { pill: 'bg-amber-50 text-amber-700 border-amber-200',       bar: 'bg-amber-400',    dot: 'bg-amber-400',    label: 'Pending'   },
-  preparing: { pill: 'bg-sky-50 text-sky-700 border-sky-200',             bar: 'bg-sky-400',      dot: 'bg-sky-400',      label: 'Preparing' },
-  ready:     { pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', bar: 'bg-emerald-500',  dot: 'bg-emerald-500',  label: 'Ready'     },
-  served:    { pill: 'bg-ink/8 text-ink/60 border-ink/15',                bar: 'bg-ink/25',       dot: 'bg-ink/30',       label: 'Served'    },
-  paid:      { pill: 'bg-green-50 text-green-700 border-green-200',       bar: 'bg-green-500',    dot: 'bg-green-500',    label: 'Paid'      },
-  cancelled: { pill: 'bg-rose-50 text-rose-600 border-rose-200',          bar: 'bg-rose-400',     dot: 'bg-rose-400',     label: 'Cancelled' },
+  pending:   { pill: 'bg-amber-50 text-amber-700 border-amber-200',       bar: 'bg-amber-400',   dot: 'bg-amber-400',   label: 'Pending'   },
+  preparing: { pill: 'bg-sky-50 text-sky-700 border-sky-200',             bar: 'bg-sky-400',     dot: 'bg-sky-400',     label: 'Preparing' },
+  ready:     { pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', bar: 'bg-emerald-500', dot: 'bg-emerald-500', label: 'Ready'     },
+  served:    { pill: 'bg-ink/[0.08] text-ink/60 border-ink/15',           bar: 'bg-ink/25',      dot: 'bg-ink/30',      label: 'Served'    },
+  completed: { pill: 'bg-green-50 text-green-700 border-green-200',       bar: 'bg-green-500',   dot: 'bg-green-500',   label: 'Paid'      },
+  cancelled: { pill: 'bg-rose-50 text-rose-600 border-rose-200',          bar: 'bg-rose-400',    dot: 'bg-rose-400',    label: 'Cancelled' },
 };
 
 const SOURCE_BADGE: Record<string, { label: string; cls: string }> = {
-  'dine-in': { label: 'Dine-in',  cls: 'bg-ink/[0.06] text-ink/60'      },
-  takeaway:  { label: 'Takeaway', cls: 'bg-amber-50 text-amber-700'      },
-  qr:        { label: 'QR',       cls: 'bg-violet-50 text-violet-600'    },
-  swiggy:    { label: 'Swiggy',   cls: 'bg-orange-50 text-orange-600'    },
-  zomato:    { label: 'Zomato',   cls: 'bg-red-50 text-red-600'          },
+  'dine-in': { label: 'Dine-in',  cls: 'bg-ink/[0.06] text-ink/60'   },
+  takeaway:  { label: 'Takeaway', cls: 'bg-amber-50 text-amber-700'   },
+  qr:        { label: 'QR',       cls: 'bg-violet-50 text-violet-600' },
+  swiggy:    { label: 'Swiggy',   cls: 'bg-orange-50 text-orange-600' },
+  zomato:    { label: 'Zomato',   cls: 'bg-red-50 text-red-600'       },
 };
 
-const STATUSES = ['all', 'pending', 'preparing', 'ready', 'served', 'paid', 'cancelled'] as const;
+// ── Status filter tabs ────────────────────────────────────────────────────────
+
+const STATUSES = ['all', 'pending', 'preparing', 'ready', 'served', 'completed', 'cancelled'] as const;
 type StatusFilter = typeof STATUSES[number];
 
-// Lifecycle flow for timeline (excludes cancelled)
-const STATUS_FLOW: { key: string; label: string }[] = [
+// Backend param to send per tab (tabs use 'completed', not 'paid')
+const STATUS_API_PARAM: Record<StatusFilter, string | undefined> = {
+  all:       undefined,
+  pending:   'pending',
+  preparing: 'preparing',
+  ready:     'ready',
+  served:    'served',
+  completed: 'completed',
+  cancelled: 'cancelled',
+};
+
+// ── Status lifecycle for timeline ─────────────────────────────────────────────
+
+const STATUS_FLOW = [
   { key: 'pending',   label: 'Order placed'   },
   { key: 'preparing', label: 'Preparing'      },
   { key: 'ready',     label: 'Ready to serve' },
   { key: 'served',    label: 'Served'         },
-  { key: 'paid',      label: 'Paid'           },
+  { key: 'completed', label: 'Paid'           },
 ];
 
-// Contextual next-action per status (admin-level transitions)
-const NEXT_ACTION: Record<string, { label: string; to: string; cls: string } | null> = {
-  pending:   { label: 'Start Preparing', to: 'preparing', cls: 'bg-brand text-white hover:bg-brand/90'           },
-  preparing: { label: 'Mark Ready',      to: 'ready',     cls: 'bg-emerald-600 text-white hover:bg-emerald-700'  },
-  ready:     { label: 'Mark Served',     to: 'served',    cls: 'bg-emerald-600 text-white hover:bg-emerald-700'  },
-  served:    null,
-  paid:      null,
-  cancelled: null,
-};
+// ── Payment methods for collect-payment panel ─────────────────────────────────
+
+const PAY_METHODS: { key: string; label: string; icon: React.ReactNode }[] = [
+  { key: 'cash', label: 'Cash', icon: <Banknote  size={14} /> },
+  { key: 'upi',  label: 'UPI',  icon: <Smartphone size={14} /> },
+  { key: 'card', label: 'Card', icon: <CreditCard  size={14} /> },
+];
 
 // ── OrderDetailDrawer ─────────────────────────────────────────────────────────
 
@@ -94,25 +105,31 @@ interface DrawerProps {
 }
 
 function OrderDetailDrawer({ order, sym, onClose, onUpdated }: DrawerProps) {
-  const [acting, setActing] = useState(false);
-  const [actionErr, setActionErr] = useState<string | null>(null);
+  const [acting,      setActing]     = useState(false);
+  const [actionErr,   setActionErr]  = useState<string | null>(null);
+  const [payMethod,   setPayMethod]  = useState<string>('cash');
+  const [showPayPanel,setShowPay]    = useState(false);
 
-  const cfg        = STATUS_CFG[order.status];
-  const src        = SOURCE_BADGE[order.orderSource];
-  const nextAction = NEXT_ACTION[order.status];
-  const flowIdx    = STATUS_FLOW.findIndex(s => s.key === order.status);
+  const cfg     = STATUS_CFG[order.status];
+  const src     = SOURCE_BADGE[order.orderSource];
+  const flowIdx = STATUS_FLOW.findIndex(s => s.key === order.status);
 
-  async function doAction(toStatus: string) {
+  async function doAction(toStatus: string, extras?: { paymentMethod?: string }) {
     setActing(true);
     setActionErr(null);
     try {
-      await updateOrderStatus(order._id, toStatus);
+      await updateOrderStatus(order._id, toStatus, extras);
       onUpdated({ _id: order._id, status: toStatus as OrderListItem['status'] });
     } catch (e) {
       setActionErr(e instanceof Error ? e.message : 'Update failed');
     } finally {
       setActing(false);
     }
+  }
+
+  // Collect payment: served → completed with payment method
+  async function doCollectPayment() {
+    await doAction('completed', { paymentMethod: payMethod });
   }
 
   return (
@@ -124,7 +141,7 @@ function OrderDetailDrawer({ order, sym, onClose, onUpdated }: DrawerProps) {
         className="flex h-full w-full max-w-sm flex-col bg-canvas shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* Drawer header */}
         <div className="flex shrink-0 items-start justify-between border-b border-white/10 bg-ink px-5 py-4 text-white">
           <div>
             <p className="mb-1 font-mono text-xs text-white/40">#{order.orderNumber}</p>
@@ -139,10 +156,7 @@ function OrderDetailDrawer({ order, sym, onClose, onUpdated }: DrawerProps) {
               )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-white/10"
-          >
+          <button onClick={onClose} className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-white/10">
             <X size={16} />
           </button>
         </div>
@@ -200,7 +214,7 @@ function OrderDetailDrawer({ order, sym, onClose, onUpdated }: DrawerProps) {
             </ul>
           </div>
 
-          {/* Bill summary */}
+          {/* Bill */}
           <div className="border-b border-border px-5 py-4">
             <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/40">Bill</p>
             <div className="space-y-1.5 text-sm">
@@ -227,12 +241,12 @@ function OrderDetailDrawer({ order, sym, onClose, onUpdated }: DrawerProps) {
             </div>
           </div>
 
-          {/* Status timeline */}
+          {/* Timeline */}
           <div className="px-5 py-4">
             <p className="mb-4 text-[10px] font-bold uppercase tracking-widest text-ink/40">Timeline</p>
             {order.status === 'cancelled' ? (
               <div className="flex items-center gap-3">
-                <div className="h-3 w-3 rounded-full bg-rose-400 flex-shrink-0" />
+                <div className="h-3 w-3 flex-shrink-0 rounded-full bg-rose-400" />
                 <div>
                   <p className="text-xs font-semibold text-rose-500">Cancelled</p>
                   <p className="text-[10px] text-ink/40">{timeAgo(order.createdAt)}</p>
@@ -246,28 +260,28 @@ function OrderDetailDrawer({ order, sym, onClose, onUpdated }: DrawerProps) {
                   const isLast  = idx === STATUS_FLOW.length - 1;
                   return (
                     <div key={step.key} className="flex items-start gap-3">
-                      <div className="flex flex-col items-center flex-shrink-0">
-                        <div className={`h-3 w-3 rounded-full border-2 mt-0.5 transition-colors ${
-                          current
-                            ? 'border-brand bg-brand'
-                            : reached
-                            ? 'border-green-500 bg-green-500'
-                            : 'border-border bg-canvas'
+                      <div className="flex flex-shrink-0 flex-col items-center">
+                        <div className={`mt-0.5 h-3 w-3 rounded-full border-2 transition-colors ${
+                          current  ? 'border-brand bg-brand'
+                          : reached ? 'border-green-500 bg-green-500'
+                          :           'border-border bg-canvas'
                         }`} />
                         {!isLast && (
-                          <div className={`w-px h-6 mt-0.5 ${reached ? 'bg-green-200' : 'bg-border/40'}`} />
+                          <div className={`mt-0.5 h-6 w-px ${reached ? 'bg-green-200' : 'bg-border/40'}`} />
                         )}
                       </div>
                       <div className="pb-1.5">
                         <p className={`text-xs font-medium ${
-                          current ? 'text-brand' : reached ? 'text-ink/70' : 'text-ink/30'
+                          current  ? 'text-brand'
+                          : reached ? 'text-ink/70'
+                          :           'text-ink/30'
                         }`}>
                           {step.label}
                         </p>
-                        {current && (
+                        {current && step.key !== 'completed' && (
                           <p className="text-[10px] text-ink/40">{timeAgo(order.createdAt)}</p>
                         )}
-                        {step.key === 'paid' && order.completedAt && (
+                        {step.key === 'completed' && order.completedAt && (
                           <p className="text-[10px] text-ink/40">{fmtTime(order.completedAt)}</p>
                         )}
                       </div>
@@ -280,21 +294,112 @@ function OrderDetailDrawer({ order, sym, onClose, onUpdated }: DrawerProps) {
 
         </div>
 
-        {/* Footer: contextual action */}
-        {nextAction && (
-          <div className="shrink-0 border-t border-border bg-canvas px-5 py-3">
-            {actionErr && (
-              <p className="mb-2 text-xs text-rose-600">{actionErr}</p>
-            )}
-            <button
-              onClick={() => void doAction(nextAction.to)}
-              disabled={acting}
-              className={`w-full rounded-lg py-2.5 text-sm font-semibold transition-colors disabled:opacity-50 ${nextAction.cls}`}
-            >
-              {acting ? 'Updating…' : nextAction.label}
-            </button>
-          </div>
-        )}
+        {/* ── Footer: contextual actions ── */}
+        <div className="shrink-0 border-t border-border bg-canvas">
+
+          {/* pending → preparing */}
+          {order.status === 'pending' && (
+            <div className="px-5 py-3">
+              {actionErr && <p className="mb-2 text-xs text-rose-600">{actionErr}</p>}
+              <button
+                onClick={() => void doAction('preparing')}
+                disabled={acting}
+                className="w-full rounded-lg bg-brand py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
+              >
+                {acting ? 'Updating…' : 'Start Preparing'}
+              </button>
+            </div>
+          )}
+
+          {/* preparing → ready */}
+          {order.status === 'preparing' && (
+            <div className="px-5 py-3">
+              {actionErr && <p className="mb-2 text-xs text-rose-600">{actionErr}</p>}
+              <button
+                onClick={() => void doAction('ready')}
+                disabled={acting}
+                className="w-full rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {acting ? 'Updating…' : 'Mark Ready'}
+              </button>
+            </div>
+          )}
+
+          {/* ready → served */}
+          {order.status === 'ready' && (
+            <div className="px-5 py-3">
+              {actionErr && <p className="mb-2 text-xs text-rose-600">{actionErr}</p>}
+              <button
+                onClick={() => void doAction('served')}
+                disabled={acting}
+                className="w-full rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {acting ? 'Updating…' : 'Mark Served'}
+              </button>
+            </div>
+          )}
+
+          {/* served → completed (collect payment — admin only) */}
+          {order.status === 'served' && (
+            <div className="px-5 py-3 space-y-3">
+              {actionErr && <p className="text-xs text-rose-600">{actionErr}</p>}
+
+              {!showPayPanel ? (
+                <button
+                  onClick={() => setShowPay(true)}
+                  className="w-full rounded-lg bg-brand py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand/90"
+                >
+                  Collect Payment
+                </button>
+              ) : (
+                <>
+                  {/* Amount */}
+                  <div className="flex items-center justify-between rounded-lg bg-mist px-4 py-2.5">
+                    <span className="text-xs font-medium text-ink/60">Amount to collect</span>
+                    <span className="text-base font-bold tabular-nums text-ink">
+                      {sym}{order.grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {/* Payment method selector */}
+                  <div className="flex gap-2">
+                    {PAY_METHODS.map(m => (
+                      <button
+                        key={m.key}
+                        onClick={() => setPayMethod(m.key)}
+                        className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-semibold transition-colors ${
+                          payMethod === m.key
+                            ? 'border-brand bg-brand/10 text-brand'
+                            : 'border-border bg-canvas text-ink/50 hover:border-brand/30 hover:text-ink'
+                        }`}
+                      >
+                        {m.icon} {m.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Confirm */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowPay(false)}
+                      className="flex-1 rounded-lg border border-border py-2.5 text-sm font-medium text-ink/50 transition-colors hover:bg-mist"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => void doCollectPayment()}
+                      disabled={acting}
+                      className="flex-1 rounded-lg bg-brand py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
+                    >
+                      {acting ? 'Processing…' : 'Confirm'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+        </div>
       </div>
     </div>
   );
@@ -303,9 +408,7 @@ function OrderDetailDrawer({ order, sym, onClose, onUpdated }: DrawerProps) {
 // ── Empty state ───────────────────────────────────────────────────────────────
 
 function EmptyState({ status, rangeMode, search }: {
-  status: StatusFilter;
-  rangeMode: RangeMode;
-  search: string;
+  status: StatusFilter; rangeMode: RangeMode; search: string;
 }) {
   if (search.trim()) {
     return (
@@ -319,12 +422,12 @@ function EmptyState({ status, rangeMode, search }: {
     all:       rangeMode === 'today'
                  ? ['No orders today', 'Orders placed today will appear here.']
                  : ['No orders found', 'Try a different date range.'],
-    pending:   ['No pending orders', 'New orders will appear here when placed.'],
-    preparing: ['No orders in preparation', 'Orders move here when the kitchen starts preparing.'],
-    ready:     ['No orders ready', 'Orders marked ready by the kitchen appear here.'],
-    served:    ['No served orders', 'Orders move here once served to the guest.'],
-    paid:      ['No paid orders', 'Completed and billed orders appear here.'],
-    cancelled: ['No cancelled orders', 'Cancelled orders will appear here.'],
+    pending:   ['No pending orders',       'New orders will appear here when placed.'],
+    preparing: ['No orders in preparation','Orders move here when kitchen starts preparing.'],
+    ready:     ['No orders ready',         'Orders marked ready by the kitchen appear here.'],
+    served:    ['No served orders',        'Orders move here once served to the guest.'],
+    completed: ['No paid orders',          'Completed and billed orders appear here.'],
+    cancelled: ['No cancelled orders',     'Cancelled orders will appear here.'],
   };
   const [title, sub] = copy[status];
   return (
@@ -361,7 +464,8 @@ export function OrdersPage() {
       if (rangeMode === 'today') params.date = date;
       else if (rangeMode === 'week')  { params.from = daysAgoStr(7);  params.to = todayStr(); }
       else if (rangeMode === 'month') { params.from = daysAgoStr(30); params.to = todayStr(); }
-      if (status !== 'all') params.status = status;
+      const apiStatus = STATUS_API_PARAM[status];
+      if (apiStatus) params.status = apiStatus;
       const res = await fetchOrders(params);
       setOrders(res.orders);
       setTotal(res.total);
@@ -386,7 +490,7 @@ export function OrdersPage() {
       : orders,
   [orders, search]);
 
-  // Counts from current page — shown as quick indicators in inactive tabs
+  // Per-status counts from current page (approximate for inactive tabs)
   const pageCounts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const o of orders) c[o.status] = (c[o.status] ?? 0) + 1;
@@ -394,7 +498,6 @@ export function OrdersPage() {
   }, [orders]);
 
   function handleUpdated(patch: Partial<OrderListItem> & { _id: string }) {
-    // If viewing a specific status tab and order moved to a different status, remove it from view
     if (status !== 'all' && patch.status && patch.status !== status) {
       setOrders(prev => prev.filter(o => o._id !== patch._id));
       setSelected(null);
@@ -407,7 +510,7 @@ export function OrdersPage() {
   return (
     <div className="flex h-full flex-col">
 
-      {/* ── Topbar ── */}
+      {/* Topbar */}
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-canvas px-5 py-3">
         <div className="flex items-center gap-3">
           <h1 className="text-base font-semibold text-ink">Orders</h1>
@@ -417,10 +520,8 @@ export function OrdersPage() {
             </span>
           )}
         </div>
-
         <div className="flex flex-wrap items-center gap-2">
-          {/* Range picker */}
-          <div className="flex items-center overflow-hidden rounded-lg border border-border">
+          <div className="flex overflow-hidden rounded-lg border border-border">
             {RANGE_OPTIONS.map(r => (
               <button
                 key={r.key}
@@ -434,7 +535,6 @@ export function OrdersPage() {
             ))}
           </div>
 
-          {/* Date picker — Today mode only */}
           {rangeMode === 'today' && (
             <div className="relative flex items-center">
               <Calendar size={13} className="pointer-events-none absolute left-2.5 text-ink/40" />
@@ -448,7 +548,6 @@ export function OrdersPage() {
             </div>
           )}
 
-          {/* Search */}
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/30" />
             <label htmlFor="orders-search" className="sr-only">Search orders</label>
@@ -473,14 +572,14 @@ export function OrdersPage() {
         </div>
       </div>
 
-      {/* ── Status tabs ── */}
+      {/* Status tabs */}
       <div className="flex shrink-0 items-center overflow-x-auto border-b border-border bg-canvas px-4">
         {STATUSES.map(s => {
-          const isActive = status === s;
-          const cfg      = s !== 'all' ? STATUS_CFG[s] : null;
-          // Active tab: total from API is accurate. Inactive: page approximation.
-          const cnt      = isActive ? total : (pageCounts[s] ?? 0);
+          const isActive  = status === s;
+          const cfg       = s !== 'all' ? STATUS_CFG[s] : null;
+          const cnt       = isActive ? total : (pageCounts[s] ?? 0);
           const showBadge = isActive ? !loading : cnt > 0;
+          const tabLabel  = s === 'all' ? 'All Orders' : (STATUS_CFG[s]?.label ?? s);
 
           return (
             <button
@@ -490,8 +589,8 @@ export function OrdersPage() {
                 isActive ? 'text-brand' : 'text-ink/50 hover:text-ink'
               }`}
             >
-              {cfg && <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />}
-              {s === 'all' ? 'All Orders' : (cfg?.label ?? s)}
+              {cfg && <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${cfg.dot}`} />}
+              {tabLabel}
               {showBadge && (
                 <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
                   isActive
@@ -511,7 +610,7 @@ export function OrdersPage() {
         })}
       </div>
 
-      {/* ── Order list ── */}
+      {/* Order list */}
       <div className="flex-1 overflow-y-auto">
         {error && (
           <div className="m-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -520,14 +619,12 @@ export function OrdersPage() {
         )}
 
         {loading && orders.length === 0 ? (
-          <div className="flex h-48 items-center justify-center">
-            <Spinner size="lg" />
-          </div>
+          <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>
         ) : filtered.length === 0 ? (
           <EmptyState status={status} rangeMode={rangeMode} search={search} />
         ) : (
           <>
-            {/* Column headers — desktop only */}
+            {/* Column headers — desktop */}
             <div className="sticky top-0 z-10 hidden md:grid md:grid-cols-[2fr_1fr_80px_80px_100px_88px] items-center gap-2 border-b border-border/50 bg-canvas px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-ink/30">
               <span className="pl-4">Order</span>
               <span>Table / Guest</span>
@@ -547,24 +644,18 @@ export function OrdersPage() {
                   <div
                     key={order._id}
                     onClick={() => setSelected(isSel ? null : order)}
-                    className={`relative cursor-pointer px-5 py-3 transition-colors ${
-                      isSel ? 'bg-brand/[0.04]' : 'hover:bg-mist'
-                    }`}
+                    className={`relative cursor-pointer px-5 py-3 transition-colors ${isSel ? 'bg-brand/[0.04]' : 'hover:bg-mist'}`}
                   >
-                    {/* Status left accent bar */}
                     <div className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r ${cfg?.bar ?? 'bg-ink/10'}`} />
 
-                    {/* ── Desktop row ── */}
+                    {/* Desktop row */}
                     <div className="hidden md:grid md:grid-cols-[2fr_1fr_80px_80px_100px_88px] items-center gap-2">
 
-                      {/* Order */}
                       <div className="min-w-0 pl-4">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="font-mono text-xs font-bold text-ink">#{order.orderNumber}</span>
                           {order.isParcel && (
-                            <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand leading-none">
-                              Parcel
-                            </span>
+                            <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand leading-none">Parcel</span>
                           )}
                         </div>
                         <p className="mt-0.5 truncate text-[11px] text-ink/40">
@@ -578,7 +669,6 @@ export function OrdersPage() {
                         </p>
                       </div>
 
-                      {/* Table / Guest */}
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-ink">{order.tableNumber || '—'}</p>
                         {order.customerName && (
@@ -586,27 +676,23 @@ export function OrdersPage() {
                         )}
                       </div>
 
-                      {/* Type / source */}
                       <div>
                         <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none ${src?.cls ?? 'bg-ink/5 text-ink/50'}`}>
                           {src?.label ?? order.orderSource}
                         </span>
                       </div>
 
-                      {/* Time */}
                       <div className="text-xs text-ink/50">
                         <div>{fmtTime(order.createdAt)}</div>
                         <div className="text-[10px] text-ink/30">{fmtDate(order.createdAt)}</div>
                       </div>
 
-                      {/* Status pill */}
                       <div>
-                        <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold capitalize leading-none ${cfg?.pill ?? ''}`}>
+                        <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold capitalize leading-none ${cfg?.pill ?? 'bg-ink/5 text-ink/40 border-ink/10'}`}>
                           {cfg?.label ?? order.status}
                         </span>
                       </div>
 
-                      {/* Amount */}
                       <div className="text-right">
                         <span className="text-sm font-bold tabular-nums text-ink">
                           {sym}{order.grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
@@ -614,7 +700,7 @@ export function OrdersPage() {
                       </div>
                     </div>
 
-                    {/* ── Mobile card ── */}
+                    {/* Mobile card */}
                     <div className="block md:hidden pl-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -625,8 +711,7 @@ export function OrdersPage() {
                             )}
                           </div>
                           <p className="mt-0.5 text-xs text-ink/60">
-                            {order.tableNumber || '—'}
-                            {order.customerName && ` · ${order.customerName}`}
+                            {order.tableNumber || '—'}{order.customerName && ` · ${order.customerName}`}
                           </p>
                           <p className="text-[11px] text-ink/40">
                             {order.items.length} item{order.items.length !== 1 ? 's' : ''} · {fmtTime(order.createdAt)}
@@ -636,7 +721,7 @@ export function OrdersPage() {
                           <p className="text-sm font-bold tabular-nums text-ink">
                             {sym}{order.grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                           </p>
-                          <span className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize leading-none ${cfg?.pill ?? ''}`}>
+                          <span className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize leading-none ${cfg?.pill ?? 'bg-ink/5 text-ink/40 border-ink/10'}`}>
                             {cfg?.label ?? order.status}
                           </span>
                         </div>
@@ -651,7 +736,7 @@ export function OrdersPage() {
         )}
       </div>
 
-      {/* ── Pagination ── */}
+      {/* Pagination */}
       {pages > 1 && (
         <div className="flex shrink-0 items-center justify-between border-t border-border bg-canvas px-5 py-2.5">
           <span className="text-xs text-ink/40">Page {page} of {pages} · {total} orders</span>
@@ -674,7 +759,7 @@ export function OrdersPage() {
         </div>
       )}
 
-      {/* ── Order detail drawer ── */}
+      {/* Order detail drawer */}
       {selected && (
         <OrderDetailDrawer
           order={selected}
