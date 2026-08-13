@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { RefreshCw, Search, ChevronLeft, ChevronRight, Calendar, X, Banknote, CreditCard, Smartphone } from 'lucide-react';
+import { RefreshCw, Search, ChevronLeft, ChevronRight, Calendar, X, Banknote, CreditCard, Smartphone, CheckCircle2 } from 'lucide-react';
+import QRCode from 'react-qr-code';
 import type { OrderListItem } from '../types';
 import { fetchOrders, updateOrderStatus } from '../api/orders';
 import { Spinner } from '../components/ui/Spinner';
@@ -100,15 +101,18 @@ const PAY_METHODS: { key: string; label: string; icon: React.ReactNode }[] = [
 interface DrawerProps {
   order: OrderListItem;
   sym: string;
+  upiId: string;
+  hotelName: string;
   onClose: () => void;
   onUpdated: (patch: Partial<OrderListItem> & { _id: string }) => void;
 }
 
-function OrderDetailDrawer({ order, sym, onClose, onUpdated }: DrawerProps) {
-  const [acting,      setActing]     = useState(false);
-  const [actionErr,   setActionErr]  = useState<string | null>(null);
-  const [payMethod,   setPayMethod]  = useState<string>('cash');
-  const [showPayPanel,setShowPay]    = useState(false);
+function OrderDetailDrawer({ order, sym, upiId, hotelName, onClose, onUpdated }: DrawerProps) {
+  const [acting,       setActing]     = useState(false);
+  const [actionErr,    setActionErr]  = useState<string | null>(null);
+  const [payMethod,    setPayMethod]  = useState<string>('cash');
+  const [showPayPanel, setShowPay]    = useState(false);
+  const [cashReceived, setCashRcvd]   = useState<string>('');
 
   const cfg     = STATUS_CFG[order.status];
   const src     = SOURCE_BADGE[order.orderSource];
@@ -366,7 +370,7 @@ function OrderDetailDrawer({ order, sym, onClose, onUpdated }: DrawerProps) {
                     {PAY_METHODS.map(m => (
                       <button
                         key={m.key}
-                        onClick={() => setPayMethod(m.key)}
+                        onClick={() => { setPayMethod(m.key); setCashRcvd(''); }}
                         className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-semibold transition-colors ${
                           payMethod === m.key
                             ? 'border-brand bg-brand/10 text-brand'
@@ -378,6 +382,72 @@ function OrderDetailDrawer({ order, sym, onClose, onUpdated }: DrawerProps) {
                     ))}
                   </div>
 
+                  {/* UPI QR code */}
+                  {payMethod === 'upi' && (
+                    upiId ? (
+                      <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-white p-4">
+                        <QRCode
+                          value={`upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(hotelName)}&am=${order.grandTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Order ' + order.orderNumber)}`}
+                          size={160}
+                          bgColor="#ffffff"
+                          fgColor="#1a1a1a"
+                        />
+                        <p className="text-center text-xs font-semibold text-ink">{upiId}</p>
+                        <p className="text-center text-[11px] text-ink/50">
+                          Ask customer to scan with any UPI app
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                        UPI ID not configured. Add it in Settings → Billing to show a QR code.
+                      </div>
+                    )
+                  )}
+
+                  {/* Cash change calculator */}
+                  {payMethod === 'cash' && (
+                    <div className="space-y-2">
+                      <label className="block text-xs font-medium text-ink/60">
+                        Amount received from customer
+                      </label>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-ink/40">{sym}</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={order.grandTotal}
+                          placeholder={String(Math.ceil(order.grandTotal))}
+                          value={cashReceived}
+                          onChange={e => setCashRcvd(e.target.value)}
+                          className="w-full rounded-lg border border-border bg-canvas py-2 pl-7 pr-3 text-sm font-semibold text-ink focus:border-brand focus:outline-none"
+                        />
+                      </div>
+                      {cashReceived !== '' && Number(cashReceived) >= order.grandTotal && (
+                        <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-4 py-2.5 border border-emerald-200">
+                          <span className="text-xs font-medium text-emerald-700">Return to customer</span>
+                          <span className="text-base font-bold tabular-nums text-emerald-700">
+                            {sym}{(Number(cashReceived) - order.grandTotal).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      {cashReceived !== '' && Number(cashReceived) < order.grandTotal && (
+                        <p className="text-xs text-rose-600">
+                          Short by {sym}{(order.grandTotal - Number(cashReceived)).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Card instruction */}
+                  {payMethod === 'card' && (
+                    <div className="flex items-center gap-3 rounded-lg border border-border bg-mist px-4 py-3">
+                      <CreditCard size={18} className="text-ink/40 shrink-0" />
+                      <p className="text-xs text-ink/60">
+                        Swipe or tap customer's card on the terminal, then confirm below.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Confirm */}
                   <div className="flex gap-2">
                     <button
@@ -388,10 +458,11 @@ function OrderDetailDrawer({ order, sym, onClose, onUpdated }: DrawerProps) {
                     </button>
                     <button
                       onClick={() => void doCollectPayment()}
-                      disabled={acting}
-                      className="flex-1 rounded-lg bg-brand py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
+                      disabled={acting || (payMethod === 'cash' && cashReceived !== '' && Number(cashReceived) < order.grandTotal)}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
                     >
-                      {acting ? 'Processing…' : 'Confirm'}
+                      <CheckCircle2 size={14} />
+                      {acting ? 'Processing…' : 'Payment Received'}
                     </button>
                   </div>
                 </>
@@ -764,6 +835,8 @@ export function OrdersPage() {
         <OrderDetailDrawer
           order={selected}
           sym={sym}
+          upiId={settings?.upiId ?? ''}
+          hotelName={settings?.hotelName ?? ''}
           onClose={() => setSelected(null)}
           onUpdated={handleUpdated}
         />
