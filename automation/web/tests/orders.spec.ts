@@ -2,9 +2,10 @@ import { test, expect, Page } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { OrdersPage } from '../pages/OrdersPage';
+import { getAdminId, getAdminPassword } from '../setup/webTestState';
 
-const ADMIN_ID = process.env.ADMIN_ID || '';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const ADMIN_ID = getAdminId();
+const ADMIN_PASSWORD = getAdminPassword();
 
 async function loginAsAdmin(page: Page): Promise<void> {
   const loginPage = new LoginPage(page);

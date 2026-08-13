@@ -8,6 +8,7 @@ const BASE_URL = process.env.WEB_BASE_URL || 'http://localhost:3000';
 
 export default defineConfig({
   testDir: './tests',
+  globalSetup: './setup/globalSetup.ts',
   outputDir: '../reports/playwright',
   timeout: 30000,
   retries: process.env.CI ? 2 : 0,

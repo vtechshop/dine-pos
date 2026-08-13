@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { DashboardPage } from '../pages/DashboardPage';
+import { getAdminId, getAdminPassword } from '../setup/webTestState';
 
-const ADMIN_ID = process.env.ADMIN_ID || '';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const ADMIN_ID = getAdminId();
+const ADMIN_PASSWORD = getAdminPassword();
 
 test.describe('Web — Authentication', () => {
   test('WEB-001 admin login page loads', async ({ page }) => {

@@ -85,23 +85,8 @@ jobs:
           TEST_API_URL=http://localhost:5000
           SUPER_ADMIN_ID=${{ secrets.SUPER_ADMIN_ID || 'ci-superadmin' }}
           SUPER_ADMIN_PASS=${{ secrets.SUPER_ADMIN_PASS || 'ci-superpass-1234' }}
-          ADMIN_ID=${{ secrets.TEST_ADMIN_ID }}
-          ADMIN_PASSWORD=${{ secrets.TEST_ADMIN_PASSWORD }}
           EOF
-
-      # TEST_ADMIN_ID / TEST_ADMIN_PASSWORD must be set as repository secrets.
-      # These credentials must match a hotel admin that exists in the CI test database.
-      # There is no automatic fallback — missing secrets cause login tests (WEB-002,
-      # WEB-005, and all orders tests) to fail with an authentication error, which is
-      # the intended signal that the secrets need to be configured.
-      - name: Check web test credentials
-        run: |
-          MISSING=""
-          [ -z "${{ secrets.TEST_ADMIN_ID }}" ]       && MISSING="$MISSING TEST_ADMIN_ID"
-          [ -z "${{ secrets.TEST_ADMIN_PASSWORD }}" ]  && MISSING="$MISSING TEST_ADMIN_PASSWORD"
-          if [ -n "$MISSING" ]; then
-            echo "::error file=.github/workflows/web-tests.yml::Required secrets not set:$MISSING — WEB-002, WEB-005, and all order tests will fail. Add TEST_ADMIN_ID and TEST_ADMIN_PASSWORD to repository secrets."
-          fi
+      # Admin credentials are self-provisioned by Playwright globalSetup — no secrets required.
 
       - name: Run Playwright tests
         working-directory: automation
