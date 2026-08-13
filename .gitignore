@@ -15,6 +15,7 @@ automation/.env.test
 
 # Automation runtime artifacts (generated per-run, contain tokens/secrets)
 automation/.test-state.json
+automation/web/.web-test-state.json
 automation/reports/
 
 # Build outputs

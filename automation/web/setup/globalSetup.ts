@@ -19,30 +19,8 @@ function nextPhone(): string {
   return (++phoneCounter).toString();
 }
 
-async function cleanupLeftoverWebTestHotels(): Promise<void> {
-  try {
-    const { data } = await client.get('/api/superadmin/hotels?limit=200', { headers: saHeaders });
-    const hotels = data.hotels || data.data || [];
-    const testHotels = hotels.filter(
-      (h: any) => /^9\d{9}$/.test(h.phone ?? '') && String(h.hotelName ?? '').includes('[WebTest]'),
-    );
-    await Promise.all(
-      testHotels.map((h: any) =>
-        client.delete(`/api/superadmin/hotels/${h._id}`, { headers: saHeaders }).catch(() => {}),
-      ),
-    );
-    if (testHotels.length > 0) {
-      console.log(`[Web GlobalSetup] Cleaned up ${testHotels.length} leftover web test hotel(s)`);
-    }
-  } catch {
-    // Non-fatal — best-effort cleanup
-  }
-}
-
 export default async function globalSetup(): Promise<void> {
   console.log('\n[Web GlobalSetup] Provisioning test hotel...');
-
-  await cleanupLeftoverWebTestHotels();
 
   const phone = nextPhone();
   const timestamp = Date.now();
@@ -106,11 +84,6 @@ export default async function globalSetup(): Promise<void> {
 
   const state = { hotelId, adminId, password, phone, setupAt: new Date().toISOString() };
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
-
-  // Make credentials available to Playwright workers via process.env.
-  // Workers are forked after globalSetup completes so they inherit these values.
-  process.env.ADMIN_ID = adminId;
-  process.env.ADMIN_PASSWORD = password;
 
   console.log(`[Web GlobalSetup] Hotel ready: ${hotelId}, adminId: ${adminId}`);
   console.log('[Web GlobalSetup] Setup complete.\n');
