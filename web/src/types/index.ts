@@ -237,7 +237,12 @@ export interface KDSOrder {
   notes?: string;
   status: 'pending' | 'preparing' | 'ready';
   isParcel: boolean;
-  items: { product?: string; productName: string; quantity: number }[];
+  items: {
+    product?: string;
+    productName: string;
+    quantity: number;
+    selectedModifiers?: import('@dinepos/shared/types').SelectedModifier[];
+  }[];
   createdAt: string;
 }
 

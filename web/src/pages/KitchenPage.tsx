@@ -203,9 +203,14 @@ const OrderCard = memo(function OrderCard({
       {/* Items */}
       <ul className="flex-1 space-y-1.5 px-4 py-3">
         {order.items.map((item, i) => (
-          <li key={i} className="flex items-baseline gap-2 text-sm text-ink">
-            <span className="w-5 shrink-0 text-right font-bold text-brand">{item.quantity}×</span>
-            <span>{item.productName}</span>
+          <li key={i} className="text-sm text-ink">
+            <div className="flex items-baseline gap-2">
+              <span className="w-5 shrink-0 text-right font-bold text-brand">{item.quantity}×</span>
+              <span>{item.productName}</span>
+            </div>
+            {(item.selectedModifiers ?? []).map((m, mi) => (
+              <div key={mi} className="ml-7 text-[11px] text-ink/50">+ {m.modifierOptionName}</div>
+            ))}
           </li>
         ))}
       </ul>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Pencil, Trash2, Loader2, X, Check,
-  ChevronDown, ChevronUp, AlertCircle,
+  ChevronDown, ChevronUp, AlertCircle, Copy,
 } from 'lucide-react';
 import type { ModifierGroup, ModifierOption } from '../types';
 import {
@@ -171,12 +171,18 @@ function GroupDrawer({
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState<string | null>(null);
 
-  // options sub-state (for edit mode)
-  const [liveGroup, setLiveGroup]     = useState<ModifierGroup | null>(group);
-  const [newOpt, setNewOpt]           = useState<ModifierOptionInput>(BLANK_OPT);
-  const [addingOpt, setAddingOpt]     = useState(false);
-  const [optErr, setOptErr]           = useState<string | null>(null);
-  const [showAddOpt, setShowAddOpt]   = useState(false);
+  // Saved-group state — set from prop (edit) or after first create (create→edit transition)
+  const [liveGroup, setLiveGroup]   = useState<ModifierGroup | null>(group);
+  const [newOpt, setNewOpt]         = useState<ModifierOptionInput>(BLANK_OPT);
+  const [addingOpt, setAddingOpt]   = useState(false);
+  const [optErr, setOptErr]         = useState<string | null>(null);
+  const [showAddOpt, setShowAddOpt] = useState(false);
+
+  // Pre-save pending options for CREATE mode (sent inline on first save)
+  const [pendingOpts, setPendingOpts]       = useState<ModifierOptionInput[]>([]);
+  const [newPendingOpt, setNewPendingOpt]   = useState<ModifierOptionInput>(BLANK_OPT);
+  const [showAddPending, setShowAddPending] = useState(false);
+  const [pendingOptErr, setPendingOptErr]   = useState<string | null>(null);
 
   useEffect(() => {
     if (group) {
@@ -193,6 +199,7 @@ function GroupDrawer({
     } else {
       setForm(BLANK_GROUP);
       setLiveGroup(null);
+      setPendingOpts([]);
     }
     setErr(null);
   }, [group]);
@@ -205,12 +212,20 @@ function GroupDrawer({
     if (!form.name.trim()) { setErr('Name is required'); return; }
     setSaving(true); setErr(null);
     try {
-      const saved = group
-        ? await updateModifierGroup(group._id, form)
-        : await createModifierGroup(form);
+      let saved: ModifierGroup;
+      if (group) {
+        saved = await updateModifierGroup(group._id, form);
+      } else if (liveGroup) {
+        // Already created in this session — update
+        saved = await updateModifierGroup(liveGroup._id, form);
+      } else {
+        // First-time create — send pending options inline
+        saved = await createModifierGroup({ ...form, options: pendingOpts });
+        setPendingOpts([]);
+        setShowAddPending(false);
+      }
       onSaved(saved);
-      if (!group) onClose();
-      else setLiveGroup(saved);
+      setLiveGroup(saved);
     } catch { setErr('Save failed'); }
     finally { setSaving(false); }
   }
@@ -229,6 +244,15 @@ function GroupDrawer({
     finally { setAddingOpt(false); }
   }
 
+  function handleAddPendingOpt() {
+    if (!newPendingOpt.name.trim()) { setPendingOptErr('Name is required'); return; }
+    setPendingOpts(p => [...p, { ...newPendingOpt }]);
+    setNewPendingOpt(BLANK_OPT);
+    setShowAddPending(false);
+    setPendingOptErr(null);
+  }
+
+  const isEdit = !!(group || liveGroup);
   const field = 'block w-full rounded-lg border border-border px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20';
 
   return (
@@ -240,7 +264,7 @@ function GroupDrawer({
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-border bg-ink px-5 py-3 text-white">
           <h2 className="text-sm font-semibold">
-            {group ? 'Edit Modifier Group' : 'New Modifier Group'}
+            {isEdit ? 'Edit Modifier Group' : 'New Modifier Group'}
           </h2>
           <button onClick={onClose} className="rounded-lg p-1.5 text-white/40 hover:bg-white/10">
             <X size={16} />
@@ -252,6 +276,13 @@ function GroupDrawer({
           {err && (
             <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
               <AlertCircle size={13} /> {err}
+            </div>
+          )}
+
+          {/* Created-in-session hint */}
+          {!group && liveGroup && (
+            <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+              <Check size={13} /> Group created — add options below or close.
             </div>
           )}
 
@@ -344,7 +375,7 @@ function GroupDrawer({
             </div>
           </div>
 
-          {/* Options (edit mode) */}
+          {/* ── Options — edit mode (saved group exists): per-option API calls ── */}
           {liveGroup && (
             <div>
               <div className="mb-2 flex items-center justify-between">
@@ -413,20 +444,98 @@ function GroupDrawer({
               )}
             </div>
           )}
+
+          {/* ── Options — create mode (no saved group yet): local pending list ── */}
+          {!liveGroup && (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-xs font-semibold uppercase tracking-wide text-ink/50">
+                  Options ({pendingOpts.length})
+                </label>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddPending(p => !p); setPendingOptErr(null); }}
+                  className="flex items-center gap-1 rounded-md border border-brand/30 bg-brand/5 px-2 py-1 text-xs font-semibold text-brand hover:bg-brand/10"
+                >
+                  {showAddPending ? <ChevronUp size={11} /> : <Plus size={11} />}
+                  {showAddPending ? 'Cancel' : 'Add'}
+                </button>
+              </div>
+
+              {showAddPending && (
+                <div className="mb-3 flex flex-col gap-1.5 rounded-lg border border-brand/20 bg-brand/5 p-2">
+                  <div className="flex gap-1.5">
+                    <input
+                      className="flex-1 rounded border border-border px-2 py-1 text-xs text-ink outline-none focus:border-brand/40"
+                      value={newPendingOpt.name}
+                      onChange={e => setNewPendingOpt(d => ({ ...d, name: e.target.value }))}
+                      placeholder="Option name (e.g. Extra Cheese)"
+                      autoFocus
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddPendingOpt(); } }}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-20 rounded border border-border px-2 py-1 text-xs text-ink outline-none focus:border-brand/40"
+                      value={newPendingOpt.price ?? 0}
+                      onChange={e => setNewPendingOpt(d => ({ ...d, price: parseFloat(e.target.value) || 0 }))}
+                      placeholder="₹"
+                    />
+                  </div>
+                  {pendingOptErr && <p className="text-[10px] text-red-500">{pendingOptErr}</p>}
+                  <div className="flex justify-end gap-1">
+                    <button type="button" onClick={() => { setShowAddPending(false); setNewPendingOpt(BLANK_OPT); setPendingOptErr(null); }}
+                      className="rounded-md border border-border px-2 py-1 text-[11px] text-ink/50 hover:bg-mist">
+                      Cancel
+                    </button>
+                    <button type="button" onClick={handleAddPendingOpt}
+                      className="flex items-center gap-1 rounded-md bg-brand px-3 py-1 text-[11px] font-semibold text-white hover:bg-brand/90">
+                      <Plus size={10} /> Add
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {pendingOpts.length === 0 ? (
+                <p className="text-xs italic text-ink/30">Optional — add options before saving, or add them after.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {pendingOpts.map((opt, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg border border-border/60 bg-canvas px-2.5 py-1.5">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-medium text-ink">{opt.name}</span>
+                        {(opt.price ?? 0) > 0 && (
+                          <span className="ml-1.5 text-[10px] text-brand font-semibold">+₹{opt.price}</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPendingOpts(p => p.filter((_, j) => j !== i))}
+                        className="rounded-md p-1 text-red-300 hover:bg-red-50 hover:text-red-500"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="flex shrink-0 gap-2 border-t border-border bg-mist px-5 py-3">
           <button onClick={onClose}
             className="flex-1 rounded-lg border border-border bg-canvas px-4 py-2 text-sm font-medium text-ink/60 transition-colors hover:bg-mist">
-            {group ? 'Close' : 'Cancel'}
+            {isEdit ? 'Close' : 'Cancel'}
           </button>
           <button
             onClick={() => { void handleSave(); }}
             disabled={saving}
             className="flex-1 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand/90 disabled:opacity-40"
           >
-            {saving ? 'Saving…' : group ? 'Update' : 'Create Group'}
+            {saving ? 'Saving…' : isEdit ? 'Update' : 'Create Group'}
           </button>
         </div>
       </div>
@@ -437,11 +546,12 @@ function GroupDrawer({
 // ── Group card ────────────────────────────────────────────────────────────────
 
 function GroupCard({
-  group, onEdit, onDelete, expanded, onToggle,
+  group, onEdit, onDelete, onDuplicate, expanded, onToggle,
 }: {
   group: ModifierGroup;
   onEdit: () => void;
   onDelete: () => void;
+  onDuplicate: () => void;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -467,6 +577,9 @@ function GroupCard({
         <div className="flex items-center gap-1.5 shrink-0">
           <button type="button" onClick={onToggle} className="rounded-md p-1.5 text-ink/30 hover:bg-mist hover:text-ink">
             {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          <button type="button" onClick={onDuplicate} title="Duplicate" className="rounded-md p-1.5 text-ink/30 hover:bg-mist hover:text-ink">
+            <Copy size={13} />
           </button>
           <button type="button" onClick={onEdit} className="rounded-md p-1.5 text-ink/30 hover:bg-mist hover:text-ink">
             <Pencil size={13} />
@@ -592,6 +705,22 @@ export function ModifierGroupsPage() {
     finally { setDeleting(false); }
   }
 
+  async function handleDuplicate(group: ModifierGroup) {
+    try {
+      const created = await createModifierGroup({
+        name:          group.name + ' (Copy)',
+        description:   group.description,
+        isActive:      group.isActive,
+        isRequired:    group.isRequired,
+        selectionType: group.selectionType,
+        minSelections: group.minSelections,
+        maxSelections: group.maxSelections,
+        options:       group.options.map(o => ({ name: o.name, price: o.price, isActive: o.isActive })),
+      });
+      handleSaved(created);
+    } catch { setError('Failed to duplicate modifier group'); }
+  }
+
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
@@ -662,6 +791,7 @@ export function ModifierGroupsPage() {
                 onToggle={() => setExpandedId(p => p === g._id ? null : g._id)}
                 onEdit={() => setDrawer({ group: g })}
                 onDelete={() => setDeleteTarget(g)}
+                onDuplicate={() => { void handleDuplicate(g); }}
               />
             ))}
           </div>

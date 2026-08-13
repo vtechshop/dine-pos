@@ -120,9 +120,19 @@ export function ReceiptView({ guest, sessionId, tableLabel, orders, currencySymb
         <div className="space-y-0.5">
           {orders.flatMap(order =>
             order.items.map((item, i) => (
-              <div key={`${order._id}-${i}`} className="flex justify-between text-ink/70">
-                <span>{item.productName} ×{item.quantity}</span>
-                <span className="tabular-nums">{fmt(item.total ?? item.price * item.quantity, currencySymbol)}</span>
+              <div key={`${order._id}-${i}`}>
+                <div className="flex justify-between text-ink/70">
+                  <span>{item.productName} ×{item.quantity}</span>
+                  <span className="tabular-nums">{fmt(item.total ?? item.price * item.quantity, currencySymbol)}</span>
+                </div>
+                {(item.selectedModifiers ?? []).map((m, mi) => (
+                  <div key={mi} className="flex justify-between pl-3 text-[10px] text-ink/45">
+                    <span>+ {m.modifierOptionName}</span>
+                    {(m.modifierPrice ?? 0) > 0 && (
+                      <span className="tabular-nums">+{fmt(m.modifierPrice, currencySymbol)}</span>
+                    )}
+                  </div>
+                ))}
               </div>
             )),
           )}

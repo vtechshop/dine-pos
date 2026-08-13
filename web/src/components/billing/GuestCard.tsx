@@ -79,9 +79,19 @@ export function GuestCard({ guest, orders, currencySymbol, selected, onSelect, o
             <p className="text-xs text-ink/40">No orders yet</p>
           ) : (
             allItems.map((item, i) => (
-              <div key={i} className="flex justify-between text-xs text-ink/65">
-                <span>{item.productName} ×{item.quantity}</span>
-                <span className="tabular-nums">{fmt(item.total ?? item.price * item.quantity, currencySymbol)}</span>
+              <div key={i}>
+                <div className="flex justify-between text-xs text-ink/65">
+                  <span>{item.productName} ×{item.quantity}</span>
+                  <span className="tabular-nums">{fmt(item.total ?? item.price * item.quantity, currencySymbol)}</span>
+                </div>
+                {(item.selectedModifiers ?? []).map((m, mi) => (
+                  <div key={mi} className="flex justify-between pl-3 text-[10px] text-ink/40">
+                    <span>+ {m.modifierOptionName}</span>
+                    {(m.modifierPrice ?? 0) > 0 && (
+                      <span className="tabular-nums">+{fmt(m.modifierPrice, currencySymbol)}</span>
+                    )}
+                  </div>
+                ))}
               </div>
             ))
           )}
