@@ -2,7 +2,7 @@
 // use the same definitions. All existing imports in this app are unchanged.
 export type {
   FeatureFlags, Category, Product, ProductVariant, ModifierOption, ModifierGroup,
-  OrderItem, PaymentMethod, SelectedModifier,
+  OrderItem, PaymentMethod, SelectedModifier, KitchenStation, RecipeItem,
 } from '@dinepos/shared/types';
 
 // ── Hotel Settings ────────────────────────────────────────────────────────────
@@ -237,7 +237,7 @@ export interface KDSOrder {
   notes?: string;
   status: 'pending' | 'preparing' | 'ready';
   isParcel: boolean;
-  items: { productName: string; quantity: number }[];
+  items: { product?: string; productName: string; quantity: number }[];
   createdAt: string;
 }
 

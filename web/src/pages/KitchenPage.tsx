@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback, memo } from 'react';
-import { RefreshCw, ChefHat, Clock, Check, X, Truck, MapPin } from 'lucide-react';
+import { useState, useEffect, useCallback, memo, useMemo } from 'react';
+import { RefreshCw, ChefHat, Clock, Check, X, Truck, MapPin, ChevronDown } from 'lucide-react';
 import type { KDSOrder } from '../types';
 import { fetchKitchenOrders, updateOrderStatus } from '../api/orders';
 import { acceptDeliveryOrder, rejectDeliveryOrder, dispatchDeliveryOrder } from '../api/aggregator';
+import { fetchProducts } from '../api/products';
+import { fetchKitchenStations } from '../api/kitchenStations';
+import type { KitchenStation } from '../api/kitchenStations';
 import { Spinner } from '../components/ui/Spinner';
 import { useSocket } from '../context/SocketContext';
 
@@ -309,6 +312,11 @@ export function KitchenPage() {
   const [now,           setNow]           = useState(() => Date.now());
   const [lastRefreshed, setLastRefreshed] = useState<number | null>(null);
 
+  // ── Station filter ────────────────────────────────────────────────────────────
+  const [stations,         setStations]         = useState<KitchenStation[]>([]);
+  const [selectedStation,  setSelectedStation]  = useState('');
+  const [stationProductIds, setStationProductIds] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
@@ -344,6 +352,24 @@ export function KitchenPage() {
       socket.off('order_status_updated', handler);
     };
   }, [socket, load]);
+
+  // Load stations once
+  useEffect(() => {
+    fetchKitchenStations()
+      .then(list => setStations(list.filter(s => s.isActive)))
+      .catch(() => {});
+  }, []);
+
+  // When station filter changes, load that station's product IDs
+  useEffect(() => {
+    if (!selectedStation) {
+      setStationProductIds(new Set());
+      return;
+    }
+    fetchProducts({ kitchenStation: selectedStation })
+      .then(ps => setStationProductIds(new Set(ps.map(p => p._id))))
+      .catch(() => setStationProductIds(new Set()));
+  }, [selectedStation]);
 
   const handleAction = useCallback(async (orderId: string, newStatus: string) => {
     setActing(true);
@@ -407,9 +433,20 @@ export function KitchenPage() {
     }
   }, [load]);
 
-  const pending   = orders.filter(o => o.status === 'pending');
-  const preparing = orders.filter(o => o.status === 'preparing');
-  const ready     = orders.filter(o => o.status === 'ready');
+  // Apply station filter client-side: only show orders that have ≥1 item belonging to the station
+  const visibleOrders = useMemo(() => {
+    if (!selectedStation || stationProductIds.size === 0) return orders;
+    return orders
+      .map(o => ({
+        ...o,
+        items: o.items.filter(item => item.product && stationProductIds.has(item.product)),
+      }))
+      .filter(o => o.items.length > 0);
+  }, [orders, selectedStation, stationProductIds]);
+
+  const pending   = visibleOrders.filter(o => o.status === 'pending');
+  const preparing = visibleOrders.filter(o => o.status === 'preparing');
+  const ready     = visibleOrders.filter(o => o.status === 'ready');
 
   const swiggyCount = orders.filter(o => o.orderSource === 'swiggy' && (o.status === 'pending' || o.status === 'preparing')).length;
   const zomatoCount = orders.filter(o => o.orderSource === 'zomato' && (o.status === 'pending' || o.status === 'preparing')).length;
@@ -441,6 +478,23 @@ export function KitchenPage() {
             </span>
           )}
         </div>
+        {/* Station filter */}
+        {stations.length > 0 && (
+          <div className="relative">
+            <select
+              value={selectedStation}
+              onChange={e => setSelectedStation(e.target.value)}
+              className="h-8 appearance-none rounded-lg border border-border bg-canvas pl-2.5 pr-7 text-xs text-ink/70 outline-none focus:border-brand/50"
+            >
+              <option value="">All Stations</option>
+              {stations.map(s => (
+                <option key={s._id} value={s._id}>{s.name}</option>
+              ))}
+            </select>
+            <ChevronDown size={11} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink/30" />
+          </div>
+        )}
+
         <button
           onClick={() => void load()}
           disabled={loading}

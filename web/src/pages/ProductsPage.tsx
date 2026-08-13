@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Plus, Search, RefreshCw, Download, Upload, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, RefreshCw, Download, Upload, Edit2, Trash2, FileText } from 'lucide-react';
 import type { Product, Category } from '../types';
 import {
   fetchProducts,
@@ -215,6 +215,50 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
     );
   }
 
+  async function handleExportPDF(scope: 'all' | 'filtered') {
+    const rows = scope === 'all' ? products : visible;
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const date = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Product Catalogue', 14, 15);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Generated: ${date}  ·  ${rows.length} product${rows.length !== 1 ? 's' : ''}${scope === 'filtered' ? ' (filtered)' : ''}`, 14, 21);
+    autoTable(doc, {
+      startY: 26,
+      head: [['Name', 'Category', 'Type', 'Price (₹)', 'Tax %', 'Stock', 'Available']],
+      body: rows.map(p => [
+        p.name,
+        p.category?.name ?? '—',
+        p.isVeg ? 'Veg' : 'Non-veg',
+        p.price.toFixed(2),
+        p.taxPercent,
+        p.stock < 0 ? '—' : p.stock,
+        p.isAvailable ? 'Yes' : 'No',
+      ]),
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [30, 30, 30], fontSize: 8, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 248, 248] },
+      columnStyles: {
+        3: { halign: 'right' },
+        4: { halign: 'center' },
+        5: { halign: 'center' },
+        6: { halign: 'center' },
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      didDrawPage: (data: any) => {
+        const pageCount = (doc as any).internal.getNumberOfPages();
+        const str = `Page ${data.pageNumber} of ${pageCount}`;
+        doc.setFontSize(8);
+        doc.text(str, doc.internal.pageSize.getWidth() - 14 - doc.getTextWidth(str), doc.internal.pageSize.getHeight() - 8);
+      },
+    });
+    doc.save(`products-${new Date().toISOString().split('T')[0]}.pdf`);
+  }
+
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -331,6 +375,29 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
         >
           <Download size={12} />Export CSV
         </button>
+
+        {/* PDF export — All or filtered */}
+        <div className="relative group">
+          <button
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs text-ink/60 hover:bg-mist"
+          >
+            <FileText size={12} />Export PDF
+          </button>
+          <div className="absolute right-0 top-full z-20 mt-1 hidden w-40 rounded-xl border border-border bg-canvas py-1 shadow-lg group-hover:block">
+            <button
+              onClick={() => void handleExportPDF('all')}
+              className="block w-full px-3 py-2 text-left text-xs text-ink/70 hover:bg-mist"
+            >
+              All Products ({products.length})
+            </button>
+            <button
+              onClick={() => void handleExportPDF('filtered')}
+              className="block w-full px-3 py-2 text-left text-xs text-ink/70 hover:bg-mist"
+            >
+              Current Filter ({visible.length})
+            </button>
+          </div>
+        </div>
 
         <label
           className={`flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 text-xs text-ink/60 hover:bg-mist ${

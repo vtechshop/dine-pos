@@ -278,7 +278,7 @@ router.get('/kitchen', requireKitchenOrAdmin, async (req: AuthRequest, res: Resp
       { hotelId: req.hotelId, status: { $in: ['pending', 'preparing', 'ready'] } },
       { orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1, status: 1, isParcel: 1,
         orderSource: 1, acceptedAt: 1, platformOrderId: 1, deliveryAddress: 1,
-        createdAt: 1, 'items.productName': 1, 'items.quantity': 1 },
+        createdAt: 1, 'items.product': 1, 'items.productName': 1, 'items.quantity': 1 },
     ).sort({ createdAt: 1 }).lean();
     res.json(orders);
   } catch (error) {

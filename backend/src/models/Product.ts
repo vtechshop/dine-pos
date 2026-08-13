@@ -8,7 +8,8 @@ export interface IProduct extends Document {
   taxPercent: number;
   hsnCode: string;
   image: string;
-  imageSource?: 'camera' | 'gallery' | 'zip' | 'library' | 'copy' | 'pexels' | null;
+  imageSource?: 'camera' | 'gallery' | 'zip' | 'library' | 'copy' | 'pexels' | 'ai' | null;
+  kitchenStation?: mongoose.Types.ObjectId | null;
   imageStatus?: 'none' | 'real' | 'placeholder' | 'failed';
   isAvailable: boolean;
   isVeg: boolean;
@@ -72,9 +73,10 @@ const ProductSchema: Schema = new Schema(
     },
     imageSource: {
       type: String,
-      enum: ['camera', 'gallery', 'zip', 'library', 'copy', 'pexels', null],
+      enum: ['camera', 'gallery', 'zip', 'library', 'copy', 'pexels', 'ai', null],
       default: null,
     },
+    kitchenStation: { type: Schema.Types.ObjectId, ref: 'KitchenStation', default: null },
     imageStatus: {
       type: String,
       enum: ['none', 'real', 'placeholder', 'failed'],

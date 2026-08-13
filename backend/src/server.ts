@@ -24,6 +24,7 @@ import Settings from './models/Settings';
 // Route imports
 import categoryRoutes from './routes/categoryRoutes';
 import productRoutes from './routes/productRoutes';
+import kitchenStationRoutes from './routes/kitchenStationRoutes';
 import orderRoutes from './routes/orderRoutes';
 import settingsRoutes from './routes/settingsRoutes';
 import seedRoutes from './routes/seedRoutes';
@@ -329,6 +330,7 @@ app.use('/api/superadmin', superAdminRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/kitchen-stations', kitchenStationRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/uploads', uploadRoutes);

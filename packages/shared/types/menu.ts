@@ -64,6 +64,18 @@ export interface Category {
   updatedAt: string;
 }
 
+export interface KitchenStation {
+  _id:       string;
+  name:      string;
+  isActive:  boolean;
+  sortOrder: number;
+}
+
+export interface RecipeItem {
+  ingredient: { _id: string; name: string; unit: string; costPerUnit: number } | string;
+  quantity:   number;
+}
+
 export interface Product {
   _id:            string;
   name:           string;
@@ -72,12 +84,15 @@ export interface Product {
   taxPercent:     number;
   hsnCode:        string;
   image:          string;
+  imageSource?:   string | null;
   isAvailable:    boolean;
   isVeg:          boolean;
   shortCode:      string;
   description:    string;
-  stock:          number;  // -1 = unlimited
+  stock:          number;  // -1 = not tracked
   isDeleted:      boolean;
+  kitchenStation?: KitchenStation | null;
+  recipe?:        RecipeItem[];
   variants?:      ProductVariant[];
   modifierGroups?: ModifierGroup[];
   createdAt:      string;

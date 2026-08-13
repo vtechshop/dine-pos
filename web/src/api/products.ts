@@ -10,23 +10,53 @@ export interface ProductInput {
   taxPercent?: number;
   hsnCode?: string;
   image?: string;
+  imageSource?: string;
+  imageStatus?: string;
   isAvailable?: boolean;
   isVeg?: boolean;
   shortCode?: string;
   description?: string;
   stock?: number;
+  kitchenStation?: string | null;
   variants?: Array<{ _id?: string; name: string; price: number }>;
+}
+
+export interface RecipeItemInput {
+  ingredient: string;  // ingredient _id
+  quantity: number;
+}
+
+export async function updateProductRecipe(
+  productId: string,
+  recipe: RecipeItemInput[],
+): Promise<Product> {
+  return apiFetch<Product>(`/products/${productId}/recipe`, {
+    method: 'PUT',
+    body: JSON.stringify({ recipe }),
+  });
+}
+
+export async function generateProductImage(
+  productId: string,
+  data: { prompt?: string; style?: string },
+): Promise<{ url: string; prompt: string }> {
+  return apiFetch<{ url: string; prompt: string }>(`/products/${productId}/generate-image`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function fetchProducts(params?: {
   search?: string;
   category?: string;
   available?: boolean;
+  kitchenStation?: string;
 }): Promise<Product[]> {
   const qs = new URLSearchParams();
-  if (params?.search)             qs.set('search', params.search);
-  if (params?.category)           qs.set('category', params.category);
-  if (params?.available === true)  qs.set('available', 'true');
+  if (params?.search)                qs.set('search', params.search);
+  if (params?.category)              qs.set('category', params.category);
+  if (params?.available === true)    qs.set('available', 'true');
+  if (params?.kitchenStation)        qs.set('kitchenStation', params.kitchenStation);
   const q = qs.toString();
   return apiFetch<Product[]>(`/products${q ? `?${q}` : ''}`);
 }

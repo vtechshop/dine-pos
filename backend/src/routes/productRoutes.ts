@@ -1,10 +1,27 @@
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
+import { v2 as cloudinary } from 'cloudinary';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import Product from '../models/Product';
+import Ingredient from '../models/Ingredient';
 import ModifierGroup from '../models/ModifierGroup';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
+
+// Simple in-memory rate limiter for AI image generation (5 req/hotel/minute)
+const _imgGenBucket = new Map<string, { count: number; resetAt: number }>();
+function checkImgGenRate(hotelId: string): boolean {
+  const now = Date.now();
+  const entry = _imgGenBucket.get(hotelId);
+  if (!entry || entry.resetAt < now) {
+    _imgGenBucket.set(hotelId, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  if (entry.count >= 5) return false;
+  entry.count++;
+  return true;
+}
 
 const router = Router();
 
@@ -17,6 +34,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const filter: any = { hotelId: req.hotelId, isDeleted: false };
     if (req.query.available === 'true') filter.isAvailable = true;
     if (req.query.category) filter.category = req.query.category;
+    if (req.query.kitchenStation) filter.kitchenStation = req.query.kitchenStation;
     if (req.query.search) {
       const escaped = (req.query.search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.name = { $regex: escaped, $options: 'i' };
@@ -24,6 +42,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     const products = await Product.find(filter)
       .populate('category', 'name color')
+      .populate('kitchenStation', 'name isActive')
       .populate({ path: 'modifierGroups', match: { isDeleted: false } })
       .sort({ name: 1 });
     res.json(products);
@@ -75,7 +94,7 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
 // PUT update product — admin only
 router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const ALLOWED = ['name', 'description', 'price', 'taxPercent', 'category', 'isAvailable', 'isVeg', 'shortCode', 'image', 'imageSource', 'imageStatus', 'stock', 'variants', 'modifierGroups'] as const;
+    const ALLOWED = ['name', 'description', 'price', 'taxPercent', 'hsnCode', 'category', 'isAvailable', 'isVeg', 'shortCode', 'image', 'imageSource', 'imageStatus', 'stock', 'variants', 'modifierGroups', 'kitchenStation'] as const;
     const update: Record<string, unknown> = {};
     for (const key of ALLOWED) {
       if (req.body[key] !== undefined) update[key] = req.body[key];
@@ -219,6 +238,129 @@ router.delete('/:id/variants/:variantId', requireAdmin, async (req: AuthRequest,
     res.json(product);
   } catch (error) {
     sendError(res, 500, 'Server error', error);
+  }
+});
+
+// ── Recipe sub-resource ───────────────────────────────────────────────────────
+
+// PUT /products/:id/recipe — replace recipe array (admin only)
+// Validates each ingredient belongs to the same hotel.
+router.put('/:id/recipe', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const { recipe } = req.body;
+    if (!Array.isArray(recipe)) {
+      return res.status(400).json({ message: 'recipe must be an array' });
+    }
+
+    const validated: { ingredient: mongoose.Types.ObjectId; quantity: number }[] = [];
+    for (const item of recipe) {
+      if (!mongoose.isValidObjectId(item.ingredient)) {
+        return res.status(400).json({ message: `Invalid ingredient ID: ${String(item.ingredient)}` });
+      }
+      const qty = Number(item.quantity);
+      if (!isFinite(qty) || qty < 0) {
+        return res.status(400).json({ message: 'quantity must be a non-negative number' });
+      }
+      const ing = await Ingredient.findOne({ _id: item.ingredient, hotelId: req.hotelId });
+      if (!ing) {
+        return res.status(404).json({ message: `Ingredient not found: ${String(item.ingredient)}` });
+      }
+      validated.push({ ingredient: new mongoose.Types.ObjectId(String(item.ingredient)), quantity: qty });
+    }
+
+    const product = await Product.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId, isDeleted: false },
+      { recipe: validated },
+      { new: true },
+    ).populate('category', 'name color');
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+
+    logAudit(req, 'product.recipe.updated', 'product', req.params.id, { ingredientCount: validated.length });
+    res.json(product);
+  } catch (error) {
+    sendError(res, 400, 'Invalid data', error);
+  }
+});
+
+// ── AI Image Generation ───────────────────────────────────────────────────────
+
+// POST /products/:id/generate-image — generate an AI image using Gemini (admin only)
+// Returns { url, prompt } — does NOT auto-save. Frontend must call PUT /:id to persist.
+router.post('/:id/generate-image', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!checkImgGenRate(String(req.hotelId))) {
+      return res.status(429).json({ message: 'Too many image generation requests. Try again in a minute.' });
+    }
+
+    const product = await Product.findOne({ _id: req.params.id, hotelId: req.hotelId, isDeleted: false });
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ message: 'AI image generation is not configured (missing GEMINI_API_KEY)' });
+    }
+
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key:    process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+
+    const { prompt: customPrompt, style = 'menu' } = req.body as { prompt?: string; style?: string };
+
+    const STYLES: Record<string, string> = {
+      menu:   'professional restaurant menu photograph, clean studio lighting, white background, food styling, appetizing',
+      rustic: 'rustic restaurant style, wooden table, warm ambient lighting, home-cooked look, natural colors',
+      fine:   'fine dining presentation, elegant plating, dark moody background, luxurious, Michelin-star quality',
+    };
+    const styleDesc = STYLES[style] || STYLES.menu;
+    const productName  = (product as any).name as string;
+    const productDesc  = (product as any).description as string;
+
+    const prompt = customPrompt?.trim() ||
+      `${styleDesc}. Dish: ${productName}. ${productDesc ? productDesc + '. ' : ''}High resolution, realistic, no text overlay.`;
+
+    const modelId = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.0-flash-preview-image-generation';
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: modelId });
+
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ['image'] } as Record<string, unknown>,
+    });
+
+    const parts = (result.response.candidates?.[0]?.content?.parts ?? []) as Array<{ inlineData?: { data: string; mimeType: string } }>;
+    const imagePart = parts.find(p => p.inlineData?.data);
+
+    if (!imagePart?.inlineData) {
+      return res.status(503).json({
+        message: 'AI did not return an image. Ensure GEMINI_API_KEY has access to the image generation model.',
+      });
+    }
+
+    const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
+
+    const uploadResult = await new Promise<{ secure_url: string }>((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: 'hotel-pos/products', resource_type: 'image', format: 'jpg' },
+        (error, r) => {
+          if (error || !r) reject(error ?? new Error('Cloudinary upload failed'));
+          else resolve(r as { secure_url: string });
+        },
+      );
+      stream.end(imageBuffer);
+    });
+
+    logAudit(req, 'product.image.aiGenerated', 'product', req.params.id, { productName });
+    res.json({ url: uploadResult.secure_url, prompt });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('NOT_FOUND') || msg.includes('not found') || msg.includes('not supported')) {
+      return res.status(503).json({
+        message: `Image generation model not available. ${msg}`,
+      });
+    }
+    sendError(res, 500, 'Image generation failed', err);
   }
 });
 
