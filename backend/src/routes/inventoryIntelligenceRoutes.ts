@@ -2,8 +2,10 @@ import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import Order from '../models/Order';
 import Ingredient from '../models/Ingredient';
+import Product from '../models/Product';
 import GRN from '../models/GRN';
 import WasteLog from '../models/WasteLog';
+import StockMovement from '../models/StockMovement';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { sendError } from '../utils/sendError';
 import Vendor from '../models/Vendor';
@@ -710,6 +712,127 @@ router.get('/reorder-suggestions', async (req: AuthRequest, res: Response) => {
     });
   } catch (err) {
     return sendError(res, 500, 'Reorder suggestions failed', err);
+  }
+});
+
+// ── 10. GET /food-cost ────────────────────────────────────────────────────────
+// Recipe cost per menu item using current ingredient WAC.
+// Returns items with recipes (food cost computed) and items without recipes.
+
+router.get('/food-cost', async (req: AuthRequest, res: Response) => {
+  try {
+    const hotelId = new mongoose.Types.ObjectId(req.hotelId);
+
+    const [withRecipe, withoutRecipe] = await Promise.all([
+      Product.aggregate([
+        { $match: { hotelId, isDeleted: false, 'recipe.0': { $exists: true } } },
+        { $unwind: '$recipe' },
+        {
+          $lookup: {
+            from: 'ingredients',
+            let: { iid: '$recipe.ingredient', hid: hotelId },
+            pipeline: [
+              { $match: { $expr: { $and: [{ $eq: ['$_id', '$$iid'] }, { $eq: ['$hotelId', '$$hid'] }] } } },
+              { $project: { costPerUnit: 1 } },
+            ],
+            as: 'ing',
+          },
+        },
+        { $unwind: { path: '$ing', preserveNullAndEmptyArrays: true } },
+        {
+          $group: {
+            _id:        '$_id',
+            name:       { $first: '$name' },
+            price:      { $first: '$price' },
+            recipeCost: {
+              $sum: {
+                $multiply: [
+                  { $ifNull: ['$ing.costPerUnit', 0] },
+                  { $ifNull: ['$recipe.quantity', 0] },
+                ],
+              },
+            },
+          },
+        },
+        {
+          $addFields: {
+            foodCostPct: {
+              $cond: [
+                { $gt: ['$price', 0] },
+                { $multiply: [{ $divide: ['$recipeCost', '$price'] }, 100] },
+                0,
+              ],
+            },
+            grossMargin: { $subtract: ['$price', '$recipeCost'] },
+            marginPct: {
+              $cond: [
+                { $gt: ['$price', 0] },
+                { $multiply: [{ $divide: [{ $subtract: ['$price', '$recipeCost'] }, '$price'] }, 100] },
+                0,
+              ],
+            },
+          },
+        },
+        { $sort: { foodCostPct: -1 } },
+      ]).option({ maxTimeMS: 30_000 }),
+
+      Product.find({ hotelId, isDeleted: false, $or: [{ recipe: { $exists: false } }, { recipe: { $size: 0 } }] })
+        .select('name price')
+        .lean()
+        .maxTimeMS(30_000),
+    ]);
+
+    return res.json({
+      withRecipe: (withRecipe as any[]).map(p => ({
+        productId:   String(p._id),
+        name:        String(p.name),
+        price:       round2(p.price ?? 0),
+        recipeCost:  round2(p.recipeCost),
+        foodCostPct: round2(p.foodCostPct),
+        grossMargin: round2(p.grossMargin),
+        marginPct:   round2(p.marginPct),
+      })),
+      withoutRecipe: (withoutRecipe as any[]).map(p => ({
+        productId: String(p._id),
+        name:      String(p.name),
+        price:     round2(p.price ?? 0),
+      })),
+      summary: {
+        totalWithRecipe:    withRecipe.length,
+        totalWithoutRecipe: withoutRecipe.length,
+        avgFoodCostPct: withRecipe.length > 0
+          ? round2((withRecipe as any[]).reduce((s, p) => s + (p.foodCostPct ?? 0), 0) / withRecipe.length)
+          : 0,
+      },
+    });
+  } catch (err) {
+    return sendError(res, 500, 'Food cost failed', err);
+  }
+});
+
+// ── 11. GET /movements-log?from=&to=&limit=&skip=&type= ───────────────────────
+// Paginated StockMovement audit log for the hotel.
+
+router.get('/movements-log', async (req: AuthRequest, res: Response) => {
+  try {
+    const hotelId = new mongoose.Types.ObjectId(req.hotelId);
+    const { from, to } = req.query;
+    const { start, end } = parseRange(from, to);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string || '50', 10)));
+    const skip  = Math.max(0, parseInt(req.query.skip  as string || '0',  10));
+    const type  = req.query.type as string | undefined;
+
+    const match: Record<string, unknown> = { hotelId, createdAt: { $gte: start, $lte: end } };
+    if (type && type !== 'all') match.type = type;
+
+    const [movements, total] = await Promise.all([
+      StockMovement.find(match).sort({ createdAt: -1 }).skip(skip).limit(limit).lean().maxTimeMS(30_000),
+      StockMovement.countDocuments(match),
+    ]);
+
+    return res.json({ movements, total, limit, skip });
+  } catch (err) {
+    return sendError(res, 500, 'Movements log failed', err);
   }
 });
 

@@ -1,6 +1,11 @@
 import { apiFetch } from './client';
 import type { Ingredient, StockMovement, InventorySummary } from '../types';
 
+// ── All ingredients ────────────────────────────────────────────────────────────
+export async function fetchIngredients(): Promise<Ingredient[]> {
+  return apiFetch<Ingredient[]>('/ingredients');
+}
+
 // ── Summary (KPI cards) ──────────────────────────────────────────────────────
 export async function fetchInventorySummary(): Promise<InventorySummary> {
   return apiFetch('/ingredients/summary');

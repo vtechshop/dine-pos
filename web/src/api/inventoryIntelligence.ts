@@ -100,6 +100,67 @@ export interface PurchaseIntelligence {
   monthlySpend:       { _id: string; totalSpend: number; grnCount: number }[];
 }
 
+export interface FoodCostItem {
+  productId:   string;
+  name:        string;
+  price:       number;
+  recipeCost:  number;
+  foodCostPct: number;
+  grossMargin: number;
+  marginPct:   number;
+}
+
+export interface FoodCostData {
+  withRecipe:    FoodCostItem[];
+  withoutRecipe: { productId: string; name: string; price: number }[];
+  summary:       { totalWithRecipe: number; totalWithoutRecipe: number; avgFoodCostPct: number };
+}
+
+export interface MovementLogEntry {
+  _id:            string;
+  ingredientId:   string;
+  ingredientName: string;
+  type:           string;
+  delta:          number;
+  previousStock:  number;
+  resultingStock: number;
+  costPerUnit:    number | null;
+  totalCost:      number | null;
+  referenceId:    string;
+  referenceType:  string | null;
+  reason:         string;
+  notes:          string;
+  supplier:       string;
+  invoiceNumber:  string;
+  createdAt:      string;
+}
+
+export interface MovementsLog {
+  movements: MovementLogEntry[];
+  total:     number;
+  limit:     number;
+  skip:      number;
+}
+
+export interface ReorderSuggestion {
+  ingredientId:        string;
+  name:                string;
+  unit:                string;
+  currentStock:        number;
+  lowStockThreshold:   number;
+  costPerUnit:         number;
+  avgDailyConsumption: number;
+  daysOfStock:         number | null;
+  needsReorder:        boolean;
+  suggestedQty:        number;
+  estimatedCost:       number;
+}
+
+export interface ReorderData {
+  suggestions: ReorderSuggestion[];
+  summary:     { totalItems: number; criticalItems: number; estimatedTotal: number };
+}
+
 // ── API calls ─────────────────────────────────────────────────────────────────
 
 const base = '/inventory-intelligence';
@@ -145,4 +206,24 @@ export function fetchPurchaseIntelligence(from?: string, to?: string): Promise<P
   if (from) p.set('from', from);
   if (to)   p.set('to', to);
   return apiFetch<PurchaseIntelligence>(`${base}/purchase-intelligence?${p}`);
+}
+
+export function fetchFoodCost(): Promise<FoodCostData> {
+  return apiFetch<FoodCostData>(`${base}/food-cost`);
+}
+
+export function fetchMovementsLog(
+  from?: string, to?: string, limit = 50, skip = 0, type = 'all',
+): Promise<MovementsLog> {
+  const p = new URLSearchParams();
+  if (from) p.set('from', from);
+  if (to)   p.set('to', to);
+  p.set('limit', String(limit));
+  p.set('skip',  String(skip));
+  if (type !== 'all') p.set('type', type);
+  return apiFetch<MovementsLog>(`${base}/movements-log?${p}`);
+}
+
+export function fetchReorderSuggestions(): Promise<ReorderData> {
+  return apiFetch<ReorderData>(`${base}/reorder-suggestions`);
 }
