@@ -269,13 +269,16 @@ router.get('/reports/products', authMiddleware, requireAdmin, async (req: AuthRe
 router.use(authMiddleware);
 router.use(requireActiveStaff);
 
-// GET /api/orders/kitchen — active orders for KDS (pending + preparing), oldest first
+// GET /api/orders/kitchen — active orders for KDS (pending + preparing + ready), oldest first
+// 'ready' is included so the kitchen can see which orders are waiting for collection.
+// Waiter marks them 'served' via PATCH /:id/status.
 router.get('/kitchen', requireKitchenOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const orders = await Order.find(
-      { hotelId: req.hotelId, status: { $in: ['pending', 'preparing'] } },
-      { orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1, status: 1, isParcel: 1, createdAt: 1,
-        'items.productName': 1, 'items.quantity': 1 },
+      { hotelId: req.hotelId, status: { $in: ['pending', 'preparing', 'ready'] } },
+      { orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1, status: 1, isParcel: 1,
+        orderSource: 1, acceptedAt: 1, platformOrderId: 1, deliveryAddress: 1,
+        createdAt: 1, 'items.productName': 1, 'items.quantity': 1 },
     ).sort({ createdAt: 1 }).lean();
     res.json(orders);
   } catch (error) {

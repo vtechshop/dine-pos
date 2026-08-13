@@ -131,7 +131,9 @@ const OrderCard = memo(function OrderCard({
     ? order.orderSource === 'swiggy'
       ? 'border-orange-400 bg-orange-50/30'
       : 'border-red-400 bg-red-50/30'
-    : isPending
+    : isReady
+      ? 'border-green-300 bg-green-50/40'
+      : isPending
       ? 'border-amber-300 bg-amber-50/40'
       : 'border-blue-300 bg-blue-50/40';
 
@@ -139,7 +141,9 @@ const OrderCard = memo(function OrderCard({
     ? order.orderSource === 'swiggy'
       ? 'bg-orange-100/60'
       : 'bg-red-100/60'
-    : isPending
+    : isReady
+      ? 'bg-green-400/20'
+      : isPending
       ? 'bg-amber-400/20'
       : 'bg-blue-400/20';
 
@@ -257,6 +261,17 @@ const OrderCard = memo(function OrderCard({
                 className="w-full rounded-lg bg-blue-600 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
               >
                 Mark Ready
+              </button>
+            )}
+
+            {/* Ready → Served (dine-in / parcel) */}
+            {isReady && !isAggregator && (
+              <button
+                onClick={() => onAction(order._id, 'served')}
+                disabled={acting}
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+              >
+                <Check size={12} /> Mark Served
               </button>
             )}
 
