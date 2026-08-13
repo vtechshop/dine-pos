@@ -100,6 +100,9 @@ export function CustomerDetail({ customerId, rewardName, isAdmin, currencySymbol
 
   // Edit form
   const [showEdit, setShowEdit]       = useState(false);
+  const [editName, setEditName]       = useState('');
+  const [editEmail, setEditEmail]     = useState('');
+  const [editBday, setEditBday]       = useState('');
   const [editNotes, setEditNotes]     = useState('');
   const [editTags, setEditTags]       = useState('');
   const [editAnniv, setEditAnniv]     = useState('');
@@ -162,6 +165,9 @@ export function CustomerDetail({ customerId, rewardName, isAdmin, currencySymbol
 
   const openEdit = () => {
     if (!customer) return;
+    setEditName(customer.name ?? '');
+    setEditEmail(customer.email ?? '');
+    setEditBday(customer.birthday ?? '');
     setEditNotes(customer.notes ?? '');
     setEditTags((customer.tags ?? []).join(', '));
     setEditAnniv(customer.anniversary ?? '');
@@ -172,18 +178,30 @@ export function CustomerDetail({ customerId, rewardName, isAdmin, currencySymbol
 
   const handleSave = async () => {
     if (!customer) return;
+    const trimmedName = editName.trim();
+    if (!trimmedName) { setSaveError('Name is required'); return; }
     setSaving(true);
     setSaveError(null);
     try {
       const newTags = editTags.split(',').map(t => t.trim()).filter(Boolean);
       const body: Parameters<typeof updateCustomer>[1] = {
+        name:           trimmedName,
+        email:          editEmail.trim() || undefined,
         notes:          editNotes.trim(),
         tags:           newTags,
         marketingOptIn: editOptIn,
       };
+      // birthday: validate MM-DD format before sending
+      if (editBday) {
+        if (/^\d{2}-\d{2}$/.test(editBday)) body.birthday = editBday;
+        else { setSaveError('Birthday must be in MM-DD format (e.g. 07-15)'); setSaving(false); return; }
+      } else {
+        body.birthday = '';
+      }
+      // anniversary: validate MM-DD format
       if (editAnniv) {
-        const parts = editAnniv.split('-');
-        if (parts.length === 2) body.anniversary = editAnniv;
+        if (/^\d{2}-\d{2}$/.test(editAnniv)) body.anniversary = editAnniv;
+        else { setSaveError('Anniversary must be in MM-DD format (e.g. 07-15)'); setSaving(false); return; }
       } else {
         body.anniversary = '';
       }
@@ -433,11 +451,33 @@ export function CustomerDetail({ customerId, rewardName, isAdmin, currencySymbol
             <button onClick={() => setShowEdit(false)} className="text-ink/30 hover:text-ink"><X size={13}/></button>
           </div>
           <div className="space-y-3">
-            <div>
-              <label className="text-[10px] text-ink/40 block mb-0.5">Anniversary (MM-DD)</label>
-              <input type="text" value={editAnniv} onChange={e => setEditAnniv(e.target.value)}
-                placeholder="07-15 for July 15"
-                className="w-full rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs text-ink placeholder-ink/30 outline-none focus:border-brand/50" />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-ink/40 block mb-0.5">Name <span className="text-red-400">*</span></label>
+                <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                  placeholder="Customer name"
+                  className="w-full rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs text-ink placeholder-ink/30 outline-none focus:border-brand/50" />
+              </div>
+              <div>
+                <label className="text-[10px] text-ink/40 block mb-0.5">Email</label>
+                <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)}
+                  placeholder="optional@email.com"
+                  className="w-full rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs text-ink placeholder-ink/30 outline-none focus:border-brand/50" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-ink/40 block mb-0.5">Birthday (MM-DD)</label>
+                <input type="text" value={editBday} onChange={e => setEditBday(e.target.value)}
+                  placeholder="07-15 for July 15"
+                  className="w-full rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs text-ink placeholder-ink/30 outline-none focus:border-brand/50" />
+              </div>
+              <div>
+                <label className="text-[10px] text-ink/40 block mb-0.5">Anniversary (MM-DD)</label>
+                <input type="text" value={editAnniv} onChange={e => setEditAnniv(e.target.value)}
+                  placeholder="07-15 for July 15"
+                  className="w-full rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs text-ink placeholder-ink/30 outline-none focus:border-brand/50" />
+              </div>
             </div>
             <div>
               <label className="text-[10px] text-ink/40 block mb-0.5">Tags (comma-separated)</label>
@@ -452,7 +492,7 @@ export function CustomerDetail({ customerId, rewardName, isAdmin, currencySymbol
             </div>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={editOptIn} onChange={e => setEditOptIn(e.target.checked)} className="accent-brand" />
-              <span className="text-xs text-ink/70">Marketing opt-in (WhatsApp / SMS)</span>
+              <span className="text-xs text-ink/70">Marketing opt-in (WhatsApp / SMS campaigns)</span>
             </label>
           </div>
           {saveError && <p className="mt-2 text-[10px] text-red-500">{saveError}</p>}

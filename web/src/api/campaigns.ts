@@ -26,7 +26,7 @@ export async function createCampaign(body: {
   audience: CampaignAudience;
   customAudience?: string[];
   messageTemplate: string;
-  scheduledAt?: string | null;
+  scheduledAt?: string | null;  // ISO string, must be a future datetime if provided
 }): Promise<{ campaign: Campaign }> {
   return apiFetch('/campaigns', {
     method: 'POST',

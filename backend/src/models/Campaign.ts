@@ -18,7 +18,8 @@ export interface ICampaign extends Document {
   status:          CampaignStatus;
   scheduledAt:     Date | null;
   sentAt:          Date | null;
-  recipientCount:  number;
+  recipientCount:  number;   // total audience size (including opted-out) at creation time
+  eligibleCount:   number;   // opted-in audience size at creation time (will actually receive)
   failureReason:   string;
   createdBy:       string;
   createdAt:       Date;
@@ -42,6 +43,7 @@ const CampaignSchema: Schema = new Schema(
     scheduledAt:     { type: Date, default: null },
     sentAt:          { type: Date, default: null },
     recipientCount:  { type: Number, default: 0, min: 0 },
+    eligibleCount:   { type: Number, default: 0, min: 0 },
     failureReason:   { type: String, default: '', maxlength: 1000 },
     createdBy:       { type: String, default: 'admin', maxlength: 100 },
   },

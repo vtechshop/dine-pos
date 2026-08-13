@@ -76,8 +76,22 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
     const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
 
-    // Compute recipient count for the chosen audience
-    const { count } = await resolveAudienceCount(hotelObjId, audience, customAudience);
+    // Validate scheduledAt if provided
+    let parsedScheduledAt: Date | null = null;
+    if (scheduledAt) {
+      parsedScheduledAt = new Date(scheduledAt);
+      if (isNaN(parsedScheduledAt.getTime())) {
+        res.status(400).json({ message: 'scheduledAt must be a valid ISO date string' });
+        return;
+      }
+      if (parsedScheduledAt <= new Date()) {
+        res.status(400).json({ message: 'scheduledAt must be a future date/time' });
+        return;
+      }
+    }
+
+    // Compute audience size (total) and eligible count (opted-in with phone)
+    const { count, eligibleCount } = await resolveAudienceCount(hotelObjId, audience, customAudience);
 
     const campaign = await Campaign.create({
       hotelId:         hotelObjId,
@@ -88,9 +102,10 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
         ? customAudience.map((id: string) => new mongoose.Types.ObjectId(id))
         : [],
       messageTemplate: String(messageTemplate).trim().slice(0, 4000),
-      status:          scheduledAt ? 'scheduled' : 'draft',
-      scheduledAt:     scheduledAt ? new Date(scheduledAt) : null,
+      status:          parsedScheduledAt ? 'scheduled' : 'draft',
+      scheduledAt:     parsedScheduledAt,
       recipientCount:  count,
+      eligibleCount,
       createdBy:       `admin:${req.hotelId}`,
     });
 
@@ -140,10 +155,25 @@ router.patch('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
       } else {
         campaign.customAudience = [];
       }
-      const { count } = await resolveAudienceCount(
+      const { count, eligibleCount } = await resolveAudienceCount(
         new mongoose.Types.ObjectId(req.hotelId), audience, customAudience,
       );
       campaign.recipientCount = count;
+      campaign.eligibleCount  = eligibleCount;
+    }
+
+    // Update scheduledAt if provided
+    if (req.body.scheduledAt !== undefined) {
+      if (req.body.scheduledAt === null) {
+        campaign.scheduledAt = null;
+        if (campaign.status === 'scheduled') campaign.status = 'draft';
+      } else {
+        const parsed = new Date(req.body.scheduledAt as string);
+        if (!isNaN(parsed.getTime())) {
+          campaign.scheduledAt = parsed;
+          campaign.status      = 'scheduled';
+        }
+      }
     }
 
     await campaign.save();
@@ -205,16 +235,10 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function resolveAudienceCount(
+function buildAudienceFilter(
   hotelObjId: mongoose.Types.ObjectId,
   audience: string,
-  customAudience?: string[],
-): Promise<{ count: number }> {
-  if (audience === 'custom') {
-    const ids = Array.isArray(customAudience) ? customAudience : [];
-    return { count: ids.length };
-  }
-
+): Record<string, any> {
   const filter: Record<string, any> = { hotelId: hotelObjId, status: { $ne: 'merged' } };
   const now = new Date();
   const mm  = String(now.getMonth() + 1).padStart(2, '0');
@@ -242,11 +266,38 @@ async function resolveAudienceCount(
       filter.loyaltyBalance = 0;
       filter.visitCount     = { $gt: 0 };
       break;
-    // 'all' — no extra filter
+    // 'all' — no extra filter beyond base
   }
 
-  const count = await CustomerProfile.countDocuments(filter);
-  return { count };
+  return filter;
+}
+
+/**
+ * Returns total audience size AND opted-in eligible count.
+ * eligible = marketingOptIn:true AND has a phone number.
+ */
+async function resolveAudienceCount(
+  hotelObjId: mongoose.Types.ObjectId,
+  audience: string,
+  customAudience?: string[],
+): Promise<{ count: number; eligibleCount: number }> {
+  if (audience === 'custom') {
+    const ids = Array.isArray(customAudience)
+      ? customAudience.map(id => new mongoose.Types.ObjectId(id))
+      : [];
+    const [count, eligibleCount] = await Promise.all([
+      CustomerProfile.countDocuments({ _id: { $in: ids }, hotelId: hotelObjId }),
+      CustomerProfile.countDocuments({ _id: { $in: ids }, hotelId: hotelObjId, marketingOptIn: true, phone: { $ne: null } }),
+    ]);
+    return { count, eligibleCount };
+  }
+
+  const base = buildAudienceFilter(hotelObjId, audience);
+  const [count, eligibleCount] = await Promise.all([
+    CustomerProfile.countDocuments(base),
+    CustomerProfile.countDocuments({ ...base, marketingOptIn: true, phone: { $ne: null } }),
+  ]);
+  return { count, eligibleCount };
 }
 
 export default router;

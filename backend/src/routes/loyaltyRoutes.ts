@@ -149,8 +149,22 @@ router.get('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: Re
     let sort: Record<string, any> = { lastVisitAt: -1 };
 
     if (segment) {
-      const now = new Date();
-      const mm  = String(now.getMonth() + 1).padStart(2, '0');
+      const now  = new Date();
+      const mm   = String(now.getMonth() + 1).padStart(2, '0');
+
+      // Build a set of MM-DD strings for the next 7 days (for birthday/anniversary week)
+      function nextSevenDayPatterns(): string[] {
+        const patterns: string[] = [];
+        for (let i = 0; i < 7; i++) {
+          const d    = new Date(now);
+          d.setDate(d.getDate() + i);
+          const m    = String(d.getMonth() + 1).padStart(2, '0');
+          const day  = String(d.getDate()).padStart(2, '0');
+          patterns.push(`${m}-${day}`);
+        }
+        return patterns;
+      }
+
       switch (segment) {
         case 'new':
           filter.visitCount = 1;
@@ -184,6 +198,12 @@ router.get('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: Re
           break;
         case 'anniversary':
           filter.anniversary = { $regex: `^${mm}-`, $ne: null };
+          break;
+        case 'birthdayweek':
+          filter.birthday = { $in: nextSevenDayPatterns(), $ne: null };
+          break;
+        case 'anniversaryweek':
+          filter.anniversary = { $in: nextSevenDayPatterns(), $ne: null };
           break;
         case 'loyalty':
           filter.loyaltyBalance = { $gt: 0 };

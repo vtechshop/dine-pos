@@ -108,7 +108,7 @@ export async function fetchLoyaltyActivity(
 }
 
 export async function searchCustomersBySegment(params: {
-  segment?: CustomerSegment;
+  segment?: CustomerSegment | string;
   phone?: string;
   name?: string;
   page?: number;

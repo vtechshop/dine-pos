@@ -2,6 +2,7 @@ import { runHourlyAggregation } from '../workers/hourlyAggregator';
 import { dispatchDailySnapshots } from '../workers/dailySnapshotBuilder';
 import { dispatchMorningBriefs } from '../workers/morningBriefWorker';
 import { runLoyaltyExpiry } from '../workers/loyaltyExpiryWorker';
+import { dispatchScheduledCampaigns } from '../workers/campaignWorker';
 import { logger } from '../utils/logger';
 
 let hourlyTimer:  ReturnType<typeof setTimeout>  | null = null;
@@ -69,6 +70,11 @@ function scheduleDailyDispatch(): void {
         logger.error('[scheduler] loyalty expiry error', { err: String(err) }),
       );
     }
+
+    // Campaign scheduling sweep — every minute, checks for campaigns past their scheduledAt
+    void dispatchScheduledCampaigns().catch((err) =>
+      logger.error('[scheduler] campaign dispatch error', { err: String(err) }),
+    );
   }, 60 * 1000);
 }
 

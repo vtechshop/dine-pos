@@ -24,17 +24,19 @@ type StatusFilter = 'all' | 'active' | 'blocked';
 type SortMode     = 'default' | 'spend' | 'visits';
 
 const SEGMENTS: { key: CustomerSegment; label: string; desc: string; icon?: string }[] = [
-  { key: 'all',        label: 'All Customers',            desc: 'Everyone in your CRM' },
-  { key: 'new',        label: 'New Customers',            desc: 'Visited exactly once' },
-  { key: 'repeat',     label: 'Repeat Customers',         desc: 'Visited 2+ times' },
-  { key: 'vip',        label: 'VIP / Top Spenders',       desc: 'Sorted by lifetime spend' },
-  { key: 'inactive30', label: 'Inactive 30+ Days',        desc: 'No visit in 30 days', icon: '⚠️' },
-  { key: 'inactive60', label: 'Inactive 60+ Days',        desc: 'No visit in 60 days', icon: '⚠️' },
-  { key: 'inactive90', label: 'Inactive 90+ Days',        desc: 'No visit in 90 days', icon: '🔴' },
-  { key: 'birthday',   label: 'Birthday This Month',      desc: 'Celebrate with them' },
-  { key: 'anniversary',label: 'Anniversary This Month',   desc: 'Milestone moments' },
-  { key: 'loyalty',    label: 'Loyalty Members',          desc: 'Have earned points' },
-  { key: 'noloyalty',  label: 'Without Loyalty',          desc: 'Visited but not enrolled' },
+  { key: 'all',             label: 'All Customers',            desc: 'Everyone in your CRM' },
+  { key: 'new',             label: 'New Customers',            desc: 'Visited exactly once' },
+  { key: 'repeat',          label: 'Repeat Customers',         desc: 'Visited 2+ times' },
+  { key: 'vip',             label: 'VIP / Top Spenders',       desc: 'Sorted by lifetime spend' },
+  { key: 'inactive30',      label: 'Inactive 30+ Days',        desc: 'No visit in 30 days', icon: '⚠️' },
+  { key: 'inactive60',      label: 'Inactive 60+ Days',        desc: 'No visit in 60 days', icon: '⚠️' },
+  { key: 'inactive90',      label: 'Inactive 90+ Days',        desc: 'No visit in 90 days', icon: '🔴' },
+  { key: 'birthdayweek',    label: 'Birthday This Week',       desc: 'Birthdays in next 7 days', icon: '🎂' },
+  { key: 'birthday',        label: 'Birthday This Month',      desc: 'Birthdays this calendar month', icon: '🎁' },
+  { key: 'anniversaryweek', label: 'Anniversary This Week',    desc: 'Anniversaries in next 7 days', icon: '💍' },
+  { key: 'anniversary',     label: 'Anniversary This Month',   desc: 'Anniversaries this calendar month' },
+  { key: 'loyalty',         label: 'Loyalty Members',          desc: 'Have earned points' },
+  { key: 'noloyalty',       label: 'Without Loyalty',          desc: 'Visited but not enrolled' },
 ];
 
 function looksLikePhone(q: string): boolean {
@@ -289,33 +291,41 @@ export function CustomersPage() {
   const handleExport = useCallback(async () => {
     setExporting(true);
     try {
-      let source: CustomerSummary[];
-      let label: string;
+      // Always fetch from server to ensure complete dataset (not limited by local pagination state)
+      let segmentParam: CustomerSegment | undefined;
+      let label = 'customers';
 
       if (activeTab === 'segments') {
-        const res = await searchCustomersBySegment({
-          segment: activeSegment === 'all' ? undefined : activeSegment,
-          export: true,
-        });
-        source = res.customers;
-        label = activeSegment;
-      } else {
-        source = visibleCustomers;
-        label = 'customers';
+        segmentParam = activeSegment === 'all' ? undefined : activeSegment;
+        label        = activeSegment;
       }
+      // For customers tab: no segment filter (export current search/filter via server)
+      const res = await searchCustomersBySegment({
+        segment:  segmentParam,
+        phone:    activeTab === 'customers' && looksLikePhone(search) ? search.trim() : undefined,
+        name:     activeTab === 'customers' && !looksLikePhone(search) && search.trim() ? search.trim() : undefined,
+        export:   true,
+      });
 
-      const rows = [
-        ['Name', 'Phone', 'Orders / Visits', 'Lifetime Spend', 'Avg Bill', 'Last Visit', 'Loyalty Points', 'Status'],
-        ...source.map(c => [
-          c.name,
-          c.phone ?? '',
-          String(c.visitCount),
-          String(Math.round(c.lifetimeSpend)),
-          String(c.visitCount > 0 ? Math.round(c.lifetimeSpend / c.visitCount) : 0),
-          c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString('en-IN') : '',
-          String(c.loyaltyBalance),
-          c.status ?? 'active',
-        ]),
+      const rows: string[][] = [
+        ['Name', 'Phone', 'Email', 'Visits', 'Lifetime Spend', 'Avg Bill', 'Last Visit', 'Birthday', 'Anniversary', 'Loyalty Points', 'Status', 'Created'],
+        ...res.customers.map(c => {
+          const avg = c.visitCount > 0 ? Math.round(c.lifetimeSpend / c.visitCount) : 0;
+          return [
+            c.name,
+            c.phone ?? '',
+            (c as any).email ?? '',
+            String(c.visitCount),
+            String(Math.round(c.lifetimeSpend)),
+            String(avg),
+            c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString('en-IN') : '',
+            (c as any).birthday ?? '',
+            (c as any).anniversary ?? '',
+            String(c.loyaltyBalance),
+            c.status ?? 'active',
+            (c as any).createdAt ? new Date((c as any).createdAt).toLocaleDateString('en-IN') : '',
+          ];
+        }),
       ];
       csvDownload(`dinepos-${label}-${new Date().toLocaleDateString('en-CA')}.csv`, rows);
     } catch {
@@ -323,7 +333,7 @@ export function CustomersPage() {
     } finally {
       setExporting(false);
     }
-  }, [activeTab, activeSegment, visibleCustomers]);
+  }, [activeTab, activeSegment, search]);
 
   // ── Feature gate ──────────────────────────────────────────────────────────
 

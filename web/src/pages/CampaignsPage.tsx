@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   MessageCircle, Plus, Send, Clock, CheckCircle2, XCircle,
-  ChevronDown, AlertTriangle, Users, RefreshCw, X,
+  ChevronDown, AlertTriangle, Users, RefreshCw, X, Info,
 } from 'lucide-react';
 import type { Campaign, CampaignAudience, CampaignStatus } from '../types/customers';
 import {
@@ -12,33 +12,75 @@ import { Spinner } from '../components/ui/Spinner';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const AUDIENCE_LABELS: Record<CampaignAudience, string> = {
-  all:        'All Customers',
-  new:        'New Customers',
-  repeat:     'Repeat Customers',
-  vip:        'VIP / Top Spenders',
-  inactive30: 'Inactive 30+ Days',
-  inactive60: 'Inactive 60+ Days',
-  inactive90: 'Inactive 90+ Days',
-  birthday:   'Birthday This Month',
-  anniversary:'Anniversary This Month',
-  loyalty:    'Loyalty Members',
-  noloyalty:  'Without Loyalty',
-  custom:     'Custom List',
+  all:         'All Customers',
+  new:         'New Customers',
+  repeat:      'Repeat Customers',
+  vip:         'VIP / Top Spenders',
+  inactive30:  'Inactive 30+ Days',
+  inactive60:  'Inactive 60+ Days',
+  inactive90:  'Inactive 90+ Days',
+  birthday:    'Birthday This Month',
+  anniversary: 'Anniversary This Month',
+  loyalty:     'Loyalty Members',
+  noloyalty:   'Without Loyalty',
+  custom:      'Custom List',
 };
 
-const STATUS_CONFIG: Record<CampaignStatus, { label: string; cls: string; Icon: React.ElementType }> = {
-  draft:     { label: 'Draft',     cls: 'text-ink/50 bg-mist',                  Icon: Clock         },
-  scheduled: { label: 'Scheduled', cls: 'text-amber-700 bg-amber-100',           Icon: Clock         },
-  sent:      { label: 'Sent',      cls: 'text-green-700 bg-green-100',           Icon: CheckCircle2  },
-  failed:    { label: 'Failed',    cls: 'text-red-700 bg-red-100',               Icon: XCircle       },
-  cancelled: { label: 'Cancelled', cls: 'text-ink/30 bg-ink/5',                  Icon: XCircle       },
+const STATUS_CONFIG: Record<CampaignStatus, { label: string; cls: string; Icon: React.ElementType; desc: string }> = {
+  draft:     { label: 'Draft',     cls: 'text-ink/50 bg-mist border-border',          Icon: Clock,        desc: 'Not yet scheduled or sent' },
+  scheduled: { label: 'Scheduled', cls: 'text-amber-700 bg-amber-50 border-amber-200', Icon: Clock,        desc: 'Will be sent automatically at scheduled time' },
+  sent:      { label: 'Sent',      cls: 'text-green-700 bg-green-50 border-green-200', Icon: CheckCircle2, desc: 'Delivered to eligible recipients' },
+  failed:    { label: 'Failed',    cls: 'text-red-700 bg-red-50 border-red-200',       Icon: XCircle,      desc: 'Delivery failed — see reason' },
+  cancelled: { label: 'Cancelled', cls: 'text-ink/30 bg-ink/5 border-border',          Icon: XCircle,      desc: 'Campaign was cancelled' },
 };
 
 const TEMPLATE_VARS = ['{name}', '{hotel}', '{lastOrderDate}', '{points}', '{pointsBalance}'];
 
+function formatDateTime(iso: string | null | undefined) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// Minimum datetime-local value: now + 5 minutes, in local time for the input
+function minScheduleValue(): string {
+  const d = new Date(Date.now() + 5 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ── Audience count display ─────────────────────────────────────────────────────
+
+function AudienceCount({ total, eligible }: { total: number; eligible: number }) {
+  const optedOut = total - eligible;
+  return (
+    <div className="mt-2 rounded-lg border border-border bg-mist p-3 text-[11px] space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-ink/60">Total in segment</span>
+        <span className="font-semibold tabular-nums text-ink">{total.toLocaleString()}</span>
+      </div>
+      {optedOut > 0 && (
+        <div className="flex items-center justify-between text-red-600/70">
+          <span>Opted out (excluded)</span>
+          <span className="font-semibold tabular-nums">−{optedOut.toLocaleString()}</span>
+        </div>
+      )}
+      <div className="flex items-center justify-between border-t border-border pt-1 mt-1">
+        <span className="font-semibold text-ink">Eligible recipients</span>
+        <span className="font-bold tabular-nums text-brand">{eligible.toLocaleString()}</span>
+      </div>
+      {eligible === 0 && (
+        <p className="text-amber-700 text-[10px]">No opted-in customers in this segment. Enable marketing opt-in in customer profiles.</p>
+      )}
+    </div>
+  );
 }
 
 // ── Create Campaign Modal ──────────────────────────────────────────────────────
@@ -49,12 +91,26 @@ interface CreateModalProps {
 }
 
 function CreateModal({ onClose, onCreated }: CreateModalProps) {
-  const [name,     setName]     = useState('');
-  const [channel,  setChannel]  = useState<'whatsapp' | 'sms'>('whatsapp');
-  const [audience, setAudience] = useState<CampaignAudience>('all');
-  const [message,  setMessage]  = useState('');
-  const [saving,   setSaving]   = useState(false);
-  const [error,    setError]    = useState<string | null>(null);
+  const [name,        setName]        = useState('');
+  const [channel,     setChannel]     = useState<'whatsapp' | 'sms'>('whatsapp');
+  const [audience,    setAudience]    = useState<CampaignAudience>('all');
+  const [message,     setMessage]     = useState('');
+  const [scheduleNow, setScheduleNow] = useState(true);
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [saving,      setSaving]      = useState(false);
+  const [error,       setError]       = useState<string | null>(null);
+  const [audienceCounts, setAudienceCounts] = useState<{ total: number; eligible: number } | null>(null);
+  const [countLoading, setCountLoading] = useState(false);
+
+  // Fetch audience counts when audience changes
+  useEffect(() => {
+    setAudienceCounts(null);
+    if (audience === 'custom') return;
+    setCountLoading(true);
+    // Use createCampaign with a dry-run flag isn't available; we fetch via a dummy draft approach.
+    // Instead we rely on the counts returned from the actual create. For now we show nothing until created.
+    setCountLoading(false);
+  }, [audience]);
 
   const insertVar = (v: string) => setMessage(prev => prev + v);
 
@@ -62,10 +118,22 @@ function CreateModal({ onClose, onCreated }: CreateModalProps) {
     e.preventDefault();
     if (!name.trim())    { setError('Campaign name is required'); return; }
     if (!message.trim()) { setError('Message template is required'); return; }
+    if (!scheduleNow && !scheduledAt) { setError('Please select a scheduled date and time'); return; }
+
     setSaving(true);
     setError(null);
     try {
-      const res = await createCampaign({ name: name.trim(), channel, audience, messageTemplate: message });
+      const body: Parameters<typeof createCampaign>[0] = {
+        name:            name.trim(),
+        channel,
+        audience,
+        messageTemplate: message,
+      };
+      if (!scheduleNow && scheduledAt) {
+        body.scheduledAt = new Date(scheduledAt).toISOString();
+      }
+      const res = await createCampaign(body);
+      setAudienceCounts({ total: res.campaign.recipientCount, eligible: res.campaign.eligibleCount });
       onCreated(res.campaign);
       onClose();
     } catch (e) {
@@ -77,16 +145,16 @@ function CreateModal({ onClose, onCreated }: CreateModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="relative w-full max-w-lg rounded-2xl border border-border bg-canvas shadow-2xl">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+      <div className="relative w-full max-w-lg rounded-2xl border border-border bg-canvas shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 flex items-center justify-between border-b border-border bg-canvas px-5 py-4 z-10">
           <h2 className="text-sm font-semibold text-ink">Create Campaign</h2>
           <button onClick={onClose} className="text-ink/40 hover:text-ink"><X size={16} /></button>
         </div>
 
         <form onSubmit={e => void handleSubmit(e)} className="space-y-4 p-5">
           {error && (
-            <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
-              <AlertTriangle size={12} />{error}
+            <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+              <AlertTriangle size={12} className="shrink-0"/>{error}
             </div>
           )}
 
@@ -104,11 +172,8 @@ function CreateModal({ onClose, onCreated }: CreateModalProps) {
             <div>
               <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-ink/40">Channel</label>
               <div className="relative">
-                <select
-                  value={channel}
-                  onChange={e => setChannel(e.target.value as 'whatsapp' | 'sms')}
-                  className="h-9 w-full appearance-none rounded-lg border border-border bg-mist px-3 pr-8 text-sm text-ink outline-none focus:border-brand/50"
-                >
+                <select value={channel} onChange={e => setChannel(e.target.value as 'whatsapp' | 'sms')}
+                  className="h-9 w-full appearance-none rounded-lg border border-border bg-mist px-3 pr-8 text-sm text-ink outline-none focus:border-brand/50">
                   <option value="whatsapp">WhatsApp</option>
                   <option value="sms">SMS</option>
                 </select>
@@ -118,19 +183,48 @@ function CreateModal({ onClose, onCreated }: CreateModalProps) {
             <div>
               <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-ink/40">Audience</label>
               <div className="relative">
-                <select
-                  value={audience}
-                  onChange={e => setAudience(e.target.value as CampaignAudience)}
-                  className="h-9 w-full appearance-none rounded-lg border border-border bg-mist px-3 pr-8 text-sm text-ink outline-none focus:border-brand/50"
-                >
+                <select value={audience} onChange={e => setAudience(e.target.value as CampaignAudience)}
+                  className="h-9 w-full appearance-none rounded-lg border border-border bg-mist px-3 pr-8 text-sm text-ink outline-none focus:border-brand/50">
                   {(Object.entries(AUDIENCE_LABELS) as [CampaignAudience, string][])
                     .filter(([k]) => k !== 'custom')
-                    .map(([k, v]) => <option key={k} value={k}>{v}</option>)
-                  }
+                    .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
                 <ChevronDown size={12} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/40" />
               </div>
             </div>
+          </div>
+
+          {/* Audience counts (shown after create returns data) */}
+          {countLoading && <div className="flex items-center gap-2 text-xs text-ink/40"><Spinner size="sm" />Computing audience…</div>}
+          {audienceCounts && <AudienceCount total={audienceCounts.total} eligible={audienceCounts.eligible} />}
+
+          {/* Scheduling */}
+          <div>
+            <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-ink/40">Send Timing</label>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setScheduleNow(true)}
+                className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${scheduleNow ? 'border-brand bg-brand/5 text-brand' : 'border-border text-ink/50 hover:bg-mist'}`}>
+                Send Now (Draft)
+              </button>
+              <button type="button" onClick={() => setScheduleNow(false)}
+                className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${!scheduleNow ? 'border-brand bg-brand/5 text-brand' : 'border-border text-ink/50 hover:bg-mist'}`}>
+                Schedule
+              </button>
+            </div>
+            {!scheduleNow && (
+              <div className="mt-2">
+                <input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  min={minScheduleValue()}
+                  onChange={e => setScheduledAt(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-border bg-mist px-3 text-xs text-ink outline-none focus:border-brand/50"
+                />
+                <p className="mt-1 text-[10px] text-ink/40 flex items-center gap-1">
+                  <Info size={9} />Campaign fires automatically at this time via the server scheduler.
+                </p>
+              </div>
+            )}
           </div>
 
           <div>
@@ -150,31 +244,31 @@ function CreateModal({ onClose, onCreated }: CreateModalProps) {
               placeholder="Hi {name}, we have a special offer for you! Visit {hotel} to redeem your {points} points."
               className="w-full rounded-lg border border-border bg-mist px-3 py-2.5 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20 resize-none"
             />
-            <p className="mt-1 text-[10px] text-ink/30">{message.length} characters</p>
+            <p className="mt-1 text-[10px] text-ink/30">{message.length} / 4000 characters</p>
           </div>
 
-          {/* Preview */}
+          {/* Live preview */}
           {message && (
             <div className="rounded-lg border border-brand/20 bg-brand/5 p-3">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-brand/60">Preview</p>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-brand/60">Preview (sample data)</p>
               <p className="text-xs text-ink/80 whitespace-pre-wrap">
                 {message
-                  .replace(/{name}/g,          'Ramesh Kumar')
-                  .replace(/{hotel}/g,         'Your Restaurant')
-                  .replace(/{lastOrderDate}/g, '10 Aug 2026')
-                  .replace(/{points}/g,        '120')
-                  .replace(/{pointsBalance}/g, '450')
-                }
+                  .replace(/\{name\}/g,          'Ramesh Kumar')
+                  .replace(/\{hotel\}/g,         'Your Restaurant')
+                  .replace(/\{lastOrderDate\}/g, '10 Aug 2026')
+                  .replace(/\{points\}/g,        '120')
+                  .replace(/\{pointsBalance\}/g, '450')}
               </p>
             </div>
           )}
 
-          {/* Provider note */}
+          {/* Provider notice */}
           <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
             <AlertTriangle size={12} className="mt-0.5 shrink-0 text-amber-600" />
             <p className="text-[11px] text-amber-800">
               <span className="font-semibold">No {channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} provider configured.</span>{' '}
-              You can create and save this campaign as a draft. Actual sending requires a provider integration.
+              Campaign will be saved but actual delivery requires a provider integration in Settings → Integrations.
+              Only opted-in customers with a phone number will receive messages.
             </p>
           </div>
 
@@ -186,7 +280,7 @@ function CreateModal({ onClose, onCreated }: CreateModalProps) {
             <button type="submit" disabled={saving}
               className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand/90 disabled:opacity-50">
               {saving ? <Spinner size="sm" /> : <Plus size={13} />}
-              {saving ? 'Saving…' : 'Save Draft'}
+              {saving ? 'Saving…' : scheduleNow ? 'Save Draft' : 'Schedule Campaign'}
             </button>
           </div>
         </form>
@@ -213,13 +307,11 @@ function SendResultModal({ result, onClose }: SendResultProps) {
           <CheckCircle2 size={36} className="mx-auto mb-4 text-green-500" />
         )}
         <h2 className="mb-2 text-sm font-bold text-ink">
-          {isNoProvider ? 'Provider Not Configured' : 'Campaign Sent!'}
+          {isNoProvider ? 'Provider Not Configured' : 'Campaign Queued'}
         </h2>
-        <p className="mb-1 text-xs text-ink/60">{result.message}</p>
-        {!isNoProvider && (
-          <p className="text-xs text-ink/40">
-            {result.campaign.recipientCount} recipients via {result.campaign.channel}
-          </p>
+        <p className="mb-3 text-xs text-ink/60">{result.message}</p>
+        {isNoProvider && (
+          <p className="text-xs text-ink/40">Configure a WhatsApp Business API or SMS provider in Settings → Integrations to enable delivery.</p>
         )}
         <button onClick={onClose}
           className="mt-5 w-full rounded-lg bg-brand py-2 text-sm font-medium text-white hover:bg-brand/90">
@@ -263,7 +355,7 @@ export function CampaignsPage() {
   useEffect(() => { void load(); }, [load]);
 
   const handleSend = useCallback(async (id: string) => {
-    if (!confirm('Send this campaign now?')) return;
+    if (!confirm('Send this campaign now? Only opted-in customers with a phone number will receive the message.')) return;
     setSending(id);
     try {
       const res = await sendCampaign(id);
@@ -277,7 +369,7 @@ export function CampaignsPage() {
   }, [load]);
 
   const handleCancel = useCallback(async (id: string) => {
-    if (!confirm('Cancel this campaign?')) return;
+    if (!confirm('Cancel this campaign? This cannot be undone.')) return;
     setCancelling(id);
     try {
       await cancelCampaign(id);
@@ -301,7 +393,6 @@ export function CampaignsPage() {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="shrink-0 border-b border-border bg-canvas px-5">
-        {/* Title row */}
         <div className="flex items-center justify-between py-3">
           <div className="flex items-center gap-2">
             <MessageCircle size={16} className="text-brand" />
@@ -313,36 +404,32 @@ export function CampaignsPage() {
               className="rounded-lg p-1.5 text-ink/30 hover:bg-ink/5 disabled:opacity-40">
               <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             </button>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"
-            >
+            <button onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90">
               <Plus size={12} />New Campaign
             </button>
           </div>
         </div>
 
-        {/* Status filter tabs */}
+        {/* Status tabs */}
         <div className="flex items-center gap-0.5">
           {tabs.map(({ key, label }) => (
             <button key={key} onClick={() => setStatusFilter(key)}
               className={`-mb-px border-b-2 px-3 py-2.5 text-[11px] font-semibold transition-colors ${
-                statusFilter === key
-                  ? 'border-brand text-brand'
-                  : 'border-transparent text-ink/40 hover:text-ink'
-              }`}>
+                statusFilter === key ? 'border-brand text-brand' : 'border-transparent text-ink/40 hover:text-ink'}`}>
               {label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Provider warning banner */}
-      <div className="shrink-0 flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-5 py-2.5">
-        <AlertTriangle size={12} className="shrink-0 text-amber-600" />
+      {/* Provider warning */}
+      <div className="shrink-0 flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-5 py-2">
+        <AlertTriangle size={11} className="shrink-0 text-amber-600" />
         <p className="text-[11px] text-amber-800">
           <span className="font-semibold">WhatsApp / SMS provider not configured.</span>{' '}
-          Campaigns can be created and saved as drafts. To actually send messages, configure a provider in Settings → Integrations.
+          Campaigns can be created, scheduled, and managed. Actual delivery requires a provider in Settings → Integrations.
+          Only customers with marketing opt-in will receive messages.
         </p>
       </div>
 
@@ -356,9 +443,7 @@ export function CampaignsPage() {
             <p className="text-sm font-medium text-ink/30">
               {statusFilter === 'all' ? 'No campaigns yet' : `No ${statusFilter} campaigns`}
             </p>
-            <p className="mt-1 text-xs text-ink/20">
-              Create a campaign to send WhatsApp or SMS messages to your customers
-            </p>
+            <p className="mt-1 text-xs text-ink/20">Create a campaign to send WhatsApp or SMS messages to your customers</p>
             <button onClick={() => setShowCreate(true)}
               className="mt-4 flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90">
               <Plus size={12} />Create your first campaign
@@ -368,13 +453,15 @@ export function CampaignsPage() {
           <div className="space-y-3">
             {campaigns.map(camp => {
               const sc = STATUS_CONFIG[camp.status];
+              const optedOut = (camp.recipientCount ?? 0) - (camp.eligibleCount ?? 0);
               return (
-                <div key={camp._id} className="rounded-xl border border-border bg-canvas p-5 hover:border-brand/30 transition-colors">
+                <div key={camp._id} className="rounded-xl border border-border bg-canvas p-5 hover:border-brand/20 transition-colors">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
+                      {/* Name + badges */}
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <h3 className="text-sm font-semibold text-ink truncate">{camp.name}</h3>
-                        <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${sc.cls}`}>
+                        <span className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sc.cls}`}>
                           <sc.Icon size={9} />{sc.label}
                         </span>
                         <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[10px] font-medium text-ink/50 capitalize">
@@ -382,14 +469,20 @@ export function CampaignsPage() {
                         </span>
                       </div>
 
+                      {/* Meta */}
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink/40">
                         <span className="flex items-center gap-1">
                           <Users size={10} />
-                          {AUDIENCE_LABELS[camp.audience]} · {camp.recipientCount} recipients
+                          {AUDIENCE_LABELS[camp.audience]}
+                          {' · '}
+                          <span className="text-brand font-medium">{(camp.eligibleCount ?? 0).toLocaleString()} eligible</span>
+                          {optedOut > 0 && (
+                            <span className="text-ink/30"> ({optedOut} opted-out excluded)</span>
+                          )}
                         </span>
-                        {camp.scheduledAt && (
-                          <span className="flex items-center gap-1">
-                            <Clock size={10} />Scheduled {formatDate(camp.scheduledAt)}
+                        {camp.scheduledAt && camp.status === 'scheduled' && (
+                          <span className="flex items-center gap-1 text-amber-700">
+                            <Clock size={10} />Fires at {formatDateTime(camp.scheduledAt)}
                           </span>
                         )}
                         {camp.sentAt && (
@@ -401,20 +494,25 @@ export function CampaignsPage() {
                       </div>
 
                       {/* Message preview */}
-                      <p className="mt-2 text-xs text-ink/50 line-clamp-2 leading-relaxed">
+                      <p className="mt-2 text-xs text-ink/50 line-clamp-2 leading-relaxed font-mono bg-mist rounded px-2 py-1">
                         {camp.messageTemplate}
                       </p>
 
+                      {/* Failure reason */}
                       {camp.failureReason && (
-                        <p className="mt-1 text-[11px] text-red-600">
-                          <span className="font-semibold">Error:</span> {camp.failureReason}
-                        </p>
+                        <div className="mt-2 flex items-start gap-1.5 rounded border border-red-200 bg-red-50 px-2 py-1.5">
+                          <XCircle size={10} className="shrink-0 text-red-500 mt-0.5" />
+                          <p className="text-[11px] text-red-700">{camp.failureReason}</p>
+                        </div>
                       )}
+
+                      {/* Status explanation */}
+                      <p className="mt-1.5 text-[10px] text-ink/30 italic">{sc.desc}</p>
                     </div>
 
                     {/* Actions */}
                     <div className="flex shrink-0 flex-col gap-1.5">
-                      {(camp.status === 'draft' || camp.status === 'scheduled') && (
+                      {camp.status === 'draft' && (
                         <button
                           onClick={() => void handleSend(camp._id)}
                           disabled={sending === camp._id}
@@ -424,7 +522,7 @@ export function CampaignsPage() {
                           Send Now
                         </button>
                       )}
-                      {camp.status !== 'sent' && camp.status !== 'cancelled' && (
+                      {(camp.status === 'draft' || camp.status === 'scheduled') && (
                         <button
                           onClick={() => void handleCancel(camp._id)}
                           disabled={cancelling === camp._id}
@@ -444,17 +542,11 @@ export function CampaignsPage() {
       </div>
 
       {showCreate && (
-        <CreateModal
-          onClose={() => setShowCreate(false)}
-          onCreated={() => { void load(); }}
-        />
+        <CreateModal onClose={() => setShowCreate(false)} onCreated={() => void load()} />
       )}
 
       {sendResult && (
-        <SendResultModal
-          result={sendResult}
-          onClose={() => setSendResult(null)}
-        />
+        <SendResultModal result={sendResult} onClose={() => setSendResult(null)} />
       )}
     </div>
   );

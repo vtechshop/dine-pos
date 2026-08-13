@@ -74,7 +74,8 @@ export interface Campaign {
   status:          CampaignStatus;
   scheduledAt:     string | null;
   sentAt:          string | null;
-  recipientCount:  number;
+  recipientCount:  number;   // total audience size
+  eligibleCount:   number;   // opted-in with phone (will actually receive)
   failureReason:   string;
   createdBy:       string;
   createdAt:       string;
@@ -84,7 +85,9 @@ export interface Campaign {
 export type CustomerSegment =
   | 'all' | 'new' | 'repeat' | 'vip'
   | 'inactive30' | 'inactive60' | 'inactive90'
-  | 'birthday' | 'anniversary' | 'loyalty' | 'noloyalty';
+  | 'birthday' | 'anniversary'
+  | 'birthdayweek' | 'anniversaryweek'
+  | 'loyalty' | 'noloyalty';
 
 export type LoyaltyTransactionType =
   | 'earn'
