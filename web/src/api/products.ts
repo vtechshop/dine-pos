@@ -9,6 +9,7 @@ export interface ProductInput {
   category: string;
   taxPercent?: number;
   hsnCode?: string;
+  image?: string;
   isAvailable?: boolean;
   isVeg?: boolean;
   shortCode?: string;

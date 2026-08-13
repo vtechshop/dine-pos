@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Plus, Trash2, Loader2, ImageIcon } from 'lucide-react';
 import type { Product, Category, ModifierGroup } from '../../types';
 import type { ProductInput } from '../../api/products';
 import { createProduct, updateProduct } from '../../api/products';
+import { apiFetch } from '../../api/client';
 import {
   fetchModifierGroups,
   assignModifierGroupToProduct,
@@ -38,6 +39,12 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState<string | null>(null);
 
+  // ── Image upload ──────────────────────────────────────────────────────────────
+  const [imageUrl,      setImageUrl]      = useState<string>('');
+  const [imgUploading,  setImgUploading]  = useState(false);
+  const [imgError,      setImgError]      = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
   // ── Modifier group assignment (edit mode only) ─────────────────────────────
   const [assignedGroups, setAssignedGroups]   = useState<ModifierGroup[]>([]);
   const [allGroups, setAllGroups]             = useState<ModifierGroup[]>([]);
@@ -66,11 +73,11 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
         description: product.description,
         stock:       product.stock,
       });
+      setImageUrl(product.image ?? '');
       setVariants(
         (product.variants ?? []).map(v => ({ _id: v._id, name: v.name, price: v.price })),
       );
       setAssignedGroups((product.modifierGroups ?? []) as ModifierGroup[]);
-      // Load all active modifier groups for the dropdown
       setMgLoading(true);
       fetchModifierGroups({ active: true, limit: 200 })
         .then(res => setAllGroups(res.groups))
@@ -78,13 +85,36 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
         .finally(() => setMgLoading(false));
     } else {
       setForm(BLANK);
+      setImageUrl('');
       setVariants([]);
       setAssignedGroups([]);
       setAllGroups([]);
     }
+    setImgError(null);
     setMgError(null);
     setError(null);
   }, [product]);
+
+  async function handleImageFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImgError(null);
+    setImgUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const { url } = await apiFetch<{ url: string }>('/uploads/image', {
+        method: 'POST',
+        body: fd,
+      });
+      setImageUrl(url);
+    } catch (err) {
+      setImgError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setImgUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
 
   async function handleAssignGroup(groupId: string) {
     if (!product) return;
@@ -141,7 +171,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const payload = { ...form, variants };
+      const payload: ProductInput = { ...form, variants, image: imageUrl || undefined };
       const saved = product
         ? await updateProduct(product._id, payload)
         : await createProduct(payload);
@@ -187,6 +217,69 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
               {error}
             </div>
           )}
+
+          {/* Image */}
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
+              Product Image
+            </label>
+            {imageUrl ? (
+              <div className="relative overflow-hidden rounded-lg border border-border">
+                <img
+                  src={imageUrl}
+                  alt="Product"
+                  className="h-40 w-full object-cover"
+                  onError={() => setImageUrl('')}
+                />
+                <div className="absolute right-2 top-2 flex gap-1.5">
+                  <button
+                    type="button"
+                    disabled={imgUploading}
+                    onClick={() => fileRef.current?.click()}
+                    className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-black/70 disabled:opacity-40"
+                  >
+                    {imgUploading ? 'Uploading…' : 'Change'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImageUrl('')}
+                    className="rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
+                    title="Remove image"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={imgUploading}
+                onClick={() => fileRef.current?.click()}
+                className="flex h-24 w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-border bg-mist transition-colors hover:border-brand/40 hover:bg-brand/5 disabled:cursor-default disabled:opacity-60"
+              >
+                {imgUploading ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin text-brand" />
+                    <span className="text-xs text-ink/50">Uploading…</span>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon size={20} className="text-ink/30" />
+                    <span className="text-xs text-ink/50">Click to upload image</span>
+                    <span className="text-[10px] text-ink/30">JPG, PNG, WEBP · max 5 MB</span>
+                  </>
+                )}
+              </button>
+            )}
+            {imgError && <p className="mt-1 text-xs text-red-500">{imgError}</p>}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={e => { void handleImageFile(e); }}
+            />
+          </div>
 
           {/* Name */}
           <div>
@@ -343,7 +436,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                     : 'border-border bg-canvas text-ink/50 hover:bg-mist'
                 }`}
               >
-                Unlimited
+                Not tracked
               </button>
               <button
                 type="button"
@@ -456,7 +549,6 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                 <p className="mb-2 text-xs text-red-500">{mgError}</p>
               )}
 
-              {/* Assigned groups */}
               {assignedGroups.length === 0 ? (
                 <p className="mb-2 text-xs italic text-ink/30">No modifier groups assigned.</p>
               ) : (
@@ -488,7 +580,6 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                 </div>
               )}
 
-              {/* Assign dropdown */}
               {mgLoading ? (
                 <div className="flex items-center gap-2 text-xs text-ink/40">
                   <Loader2 size={12} className="animate-spin" /> Loading groups…
@@ -541,7 +632,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
           </button>
           <button
             onClick={() => { void handleSave(); }}
-            disabled={saving}
+            disabled={saving || imgUploading}
             className="flex-1 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand/90 disabled:opacity-40"
           >
             {saving ? 'Saving…' : product ? 'Update' : 'Create Product'}

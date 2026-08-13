@@ -473,7 +473,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                     {/* Stock */}
                     <td className="px-3 py-2.5 text-center text-xs">
                       {p.stock === -1 ? (
-                        <span className="text-ink/40">∞</span>
+                        <span className="text-ink/25">—</span>
                       ) : (
                         <span className={p.stock <= 5 ? 'font-semibold text-orange-500' : 'text-ink/70'}>
                           {p.stock}
