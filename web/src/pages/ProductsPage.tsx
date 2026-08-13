@@ -86,7 +86,7 @@ export function ProductsPage() {
   useEffect(() => { void loadCategories(); }, [loadCategories]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-1 min-h-0 flex-col">
       {/* Page header + tabs */}
       <div className="flex shrink-0 flex-col border-b border-border bg-canvas">
         <div className="px-5 py-3">
