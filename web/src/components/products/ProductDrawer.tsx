@@ -59,9 +59,11 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
   const [error, setError]       = useState<string | null>(null);
 
   // ── Image ─────────────────────────────────────────────────────────────────────
-  const [imageUrl,     setImageUrl]     = useState('');
-  const [imgUploading, setImgUploading] = useState(false);
-  const [imgError,     setImgError]     = useState<string | null>(null);
+  const [imageUrl,       setImageUrl]       = useState('');
+  // Tracks where the current imageUrl came from so imageSource is saved correctly
+  const [imageSourceType, setImageSourceType] = useState<'existing' | 'gallery' | 'ai'>('existing');
+  const [imgUploading,   setImgUploading]   = useState(false);
+  const [imgError,       setImgError]       = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // ── AI Image Generation panel ─────────────────────────────────────────────────
@@ -69,7 +71,8 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
   const [aiPrompt,      setAiPrompt]      = useState('');
   const [aiStyle,       setAiStyle]       = useState('menu');
   const [aiGenerating,  setAiGenerating]  = useState(false);
-  const [aiPreviewUrl,  setAiPreviewUrl]  = useState<string | null>(null);
+  // Stores base64 data URL for preview — not uploaded until user confirms
+  const [aiPreviewData, setAiPreviewData] = useState<string | null>(null);
   const [aiError,       setAiError]       = useState<string | null>(null);
 
   // ── Kitchen Station ───────────────────────────────────────────────────────────
@@ -126,20 +129,29 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
         kitchenStation: stationId,
       });
       setImageUrl(product.image ?? '');
+      setImageSourceType('existing');
       setVariants((product.variants ?? []).map(v => ({ _id: v._id, name: v.name, price: v.price })));
       setAssignedGroups((product.modifierGroups ?? []) as ModifierGroup[]);
 
-      // Load recipe ingredients
+      // Load recipe ingredients — backend now populates recipe.ingredient, so typeof check
+      // accepts both populated objects (normal) and fallback string refs (edge case).
       if (product.recipe && product.recipe.length > 0) {
         const drafts: RecipeDraft[] = product.recipe
-          .filter(r => r.ingredient && typeof r.ingredient === 'object')
+          .filter(r => r.ingredient != null)
           .map(r => {
             const ing = r.ingredient as { _id: string; name: string; unit: string; costPerUnit: number };
             return {
-              ingredient: { _id: ing._id, name: ing.name, unit: ing.unit, costPerUnit: ing.costPerUnit ?? 0, currentStock: 0 },
+              ingredient: {
+                _id:         typeof ing === 'object' ? ing._id   : String(ing),
+                name:        typeof ing === 'object' ? ing.name  : '',
+                unit:        typeof ing === 'object' ? ing.unit  : '',
+                costPerUnit: typeof ing === 'object' ? (ing.costPerUnit ?? 0) : 0,
+                currentStock: 0,
+              },
               quantity: r.quantity,
             };
-          });
+          })
+          .filter(d => d.ingredient._id);
         setRecipe(drafts);
       } else {
         setRecipe([]);
@@ -163,6 +175,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
     } else {
       setForm(BLANK);
       setImageUrl('');
+      setImageSourceType('existing');
       setVariants([]);
       setRecipe([]);
       setAssignedGroups([]);
@@ -171,7 +184,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
     }
     setImgError(null);
     setAiError(null);
-    setAiPreviewUrl(null);
+    setAiPreviewData(null);
     setShowAiPanel(false);
     setMgError(null);
     setRecipeError(null);
@@ -189,7 +202,8 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
       fd.append('image', file);
       const { url } = await apiFetch<{ url: string }>('/uploads/image', { method: 'POST', body: fd });
       setImageUrl(url);
-      setAiPreviewUrl(null);
+      setImageSourceType('gallery');
+      setAiPreviewData(null);
     } catch (err) {
       setImgError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
@@ -202,13 +216,13 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
     if (!product) return;
     setAiError(null);
     setAiGenerating(true);
-    setAiPreviewUrl(null);
+    setAiPreviewData(null);
     try {
-      const { url } = await generateProductImage(product._id, {
+      const { imageData } = await generateProductImage(product._id, {
         prompt: aiPrompt.trim() || undefined,
         style: aiStyle,
       });
-      setAiPreviewUrl(url);
+      setAiPreviewData(imageData);
     } catch (err) {
       setAiError(err instanceof Error ? err.message : 'Generation failed');
     } finally {
@@ -216,11 +230,27 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
     }
   }
 
-  function handleUseAiImage() {
-    if (aiPreviewUrl) {
-      setImageUrl(aiPreviewUrl);
-      setAiPreviewUrl(null);
+  // Upload the base64 preview to Cloudinary only when user explicitly confirms.
+  // This prevents orphaned uploads from abandoned generations.
+  async function handleUseAiImage() {
+    if (!aiPreviewData) return;
+    setImgUploading(true);
+    setImgError(null);
+    try {
+      // Convert base64 data URL → Blob → FormData and reuse the existing upload endpoint
+      const res = await fetch(aiPreviewData);
+      const blob = await res.blob();
+      const fd = new FormData();
+      fd.append('image', blob, 'ai-generated.jpg');
+      const { url } = await apiFetch<{ url: string }>('/uploads/image', { method: 'POST', body: fd });
+      setImageUrl(url);
+      setImageSourceType('ai');
+      setAiPreviewData(null);
       setShowAiPanel(false);
+    } catch (err) {
+      setImgError(err instanceof Error ? err.message : 'Failed to save AI image');
+    } finally {
+      setImgUploading(false);
     }
   }
 
@@ -306,13 +336,28 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
     setSaving(true);
     setError(null);
     try {
+      // imageSourceType tracks where the current imageUrl came from:
+      //   'existing' → no change from what was already saved
+      //   'gallery'  → user uploaded a file
+      //   'ai'       → user confirmed an AI-generated image
+      const resolvedImageSource: string | undefined =
+        !imageUrl                          ? undefined :
+        imageSourceType === 'ai'           ? 'ai' :
+        imageSourceType === 'gallery'      ? 'gallery' :
+        (product?.imageSource ?? undefined);
+
+      const resolvedImageStatus: string | undefined =
+        !imageUrl                          ? undefined :
+        imageSourceType === 'ai'           ? 'real' :
+        imageSourceType === 'gallery'      ? 'real' :
+        ((product as any)?.imageStatus ?? undefined);
+
       const payload: ProductInput = {
         ...form,
         variants,
-        image: imageUrl || undefined,
-        imageSource: imageUrl && !product?.image ? 'gallery' :
-                     imageUrl && imageUrl !== product?.image && (product as any)?.imageSource === 'ai' ? 'ai' :
-                     imageUrl ? (form.imageSource ?? undefined) : undefined,
+        image:       imageUrl || undefined,
+        imageSource: resolvedImageSource,
+        imageStatus: resolvedImageStatus,
       };
       const saved = product
         ? await updateProduct(product._id, payload)
@@ -370,7 +415,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setImageUrl(''); setAiPreviewUrl(null); }}
+                    onClick={() => { setImageUrl(''); setAiPreviewData(null); }}
                     className="rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
                   >
                     <X size={12} />
@@ -398,7 +443,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
               <div className="mt-2">
                 <button
                   type="button"
-                  onClick={() => { setShowAiPanel(p => !p); setAiError(null); setAiPreviewUrl(null); }}
+                  onClick={() => { setShowAiPanel(p => !p); setAiError(null); setAiPreviewData(null); }}
                   className="flex items-center gap-1.5 rounded-md border border-brand/30 bg-brand/5 px-2.5 py-1.5 text-xs font-semibold text-brand hover:bg-brand/10"
                 >
                   <Wand2 size={12} />
@@ -444,21 +489,25 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                     )}
 
                     {/* Generated preview */}
-                    {aiPreviewUrl && (
+                    {aiPreviewData && (
                       <div className="space-y-2">
-                        <img src={aiPreviewUrl} alt="AI generated" className="w-full rounded-lg object-cover" style={{ maxHeight: 180 }} />
+                        <img src={aiPreviewData} alt="AI generated" className="w-full rounded-lg object-cover" style={{ maxHeight: 180 }} />
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            onClick={handleUseAiImage}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-xs font-semibold text-white hover:bg-brand/90"
+                            onClick={() => void handleUseAiImage()}
+                            disabled={imgUploading}
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand py-2 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
                           >
-                            <CheckCircle2 size={13} /> Use This Image
+                            {imgUploading
+                              ? <><Loader2 size={13} className="animate-spin" /> Saving…</>
+                              : <><CheckCircle2 size={13} /> Use This Image</>
+                            }
                           </button>
                           <button
                             type="button"
                             onClick={() => void handleGenerateImage()}
-                            disabled={aiGenerating}
+                            disabled={aiGenerating || imgUploading}
                             className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-xs font-semibold text-ink/60 hover:bg-mist disabled:opacity-40"
                           >
                             <RefreshCw size={13} /> Regenerate
@@ -467,7 +516,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                       </div>
                     )}
 
-                    {!aiPreviewUrl && (
+                    {!aiPreviewData && (
                       <button
                         type="button"
                         onClick={() => void handleGenerateImage()}

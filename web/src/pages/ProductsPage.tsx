@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Plus, Search, RefreshCw, Download, Upload, Edit2, Trash2, FileText } from 'lucide-react';
 import type { Product, Category } from '../types';
+import { useSettings } from '../context/SettingsContext';
 import {
   fetchProducts,
   fetchCategories,
@@ -129,6 +130,7 @@ export function ProductsPage() {
 // ── Products panel ────────────────────────────────────────────────────────────
 
 function ProductsPanel({ categories }: { categories: Category[] }) {
+  const { settings }                  = useSettings();
   const [products, setProducts]       = useState<Product[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
@@ -221,21 +223,38 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
     const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const date = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const hotelName = settings?.hotelName ?? '';
+
+    // Header: hotel name (if available), title, date
+    let y = 12;
+    if (hotelName) {
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text(hotelName, 14, y);
+      y += 7;
+    }
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text('Product Catalogue', 14, 15);
+    doc.text('Product Catalogue', 14, y);
+    y += 6;
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Generated: ${date}  ·  ${rows.length} product${rows.length !== 1 ? 's' : ''}${scope === 'filtered' ? ' (filtered)' : ''}`, 14, 21);
+    doc.text(
+      `Generated: ${date}  ·  ${rows.length} product${rows.length !== 1 ? 's' : ''}${scope === 'filtered' ? ' (filtered)' : ''}`,
+      14, y,
+    );
+    y += 4;
+
     autoTable(doc, {
-      startY: 26,
-      head: [['Name', 'Category', 'Type', 'Price (₹)', 'Tax %', 'Stock', 'Available']],
+      startY: y,
+      head: [['Name', 'Category', 'Type', 'Price (₹)', 'Tax %', 'HSN', 'Stock', 'Available']],
       body: rows.map(p => [
         p.name,
         p.category?.name ?? '—',
         p.isVeg ? 'Veg' : 'Non-veg',
         p.price.toFixed(2),
         p.taxPercent,
+        p.hsnCode || '—',
         p.stock < 0 ? '—' : p.stock,
         p.isAvailable ? 'Yes' : 'No',
       ]),
@@ -247,6 +266,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
         4: { halign: 'center' },
         5: { halign: 'center' },
         6: { halign: 'center' },
+        7: { halign: 'center' },
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       didDrawPage: (data: any) => {

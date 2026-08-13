@@ -1,6 +1,5 @@
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
-import { v2 as cloudinary } from 'cloudinary';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Product from '../models/Product';
 import Ingredient from '../models/Ingredient';
@@ -44,6 +43,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       .populate('category', 'name color')
       .populate('kitchenStation', 'name isActive')
       .populate({ path: 'modifierGroups', match: { isDeleted: false } })
+      .populate({ path: 'recipe.ingredient', select: 'name unit costPerUnit' })
       .sort({ name: 1 });
     res.json(products);
   } catch (error) {
@@ -70,7 +70,10 @@ router.get('/alerts/low-stock', async (req: AuthRequest, res: Response) => {
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const product = await Product.findOne({ _id: req.params.id, hotelId: req.hotelId })
-      .populate('category');
+      .populate('category', 'name color')
+      .populate('kitchenStation', 'name isActive')
+      .populate({ path: 'modifierGroups', match: { isDeleted: false } })
+      .populate({ path: 'recipe.ingredient', select: 'name unit costPerUnit' });
     if (!product) return res.status(404).json({ message: 'Product not found' });
     res.json(product);
   } catch (error) {
@@ -252,6 +255,16 @@ router.put('/:id/recipe', requireAdmin, async (req: AuthRequest, res: Response) 
       return res.status(400).json({ message: 'recipe must be an array' });
     }
 
+    // Reject duplicate ingredient IDs before any DB lookup
+    const seenIngredientIds = new Set<string>();
+    for (const item of recipe) {
+      const idStr = String(item.ingredient);
+      if (seenIngredientIds.has(idStr)) {
+        return res.status(400).json({ message: 'Duplicate ingredient is not allowed in a recipe.' });
+      }
+      seenIngredientIds.add(idStr);
+    }
+
     const validated: { ingredient: mongoose.Types.ObjectId; quantity: number }[] = [];
     for (const item of recipe) {
       if (!mongoose.isValidObjectId(item.ingredient)) {
@@ -272,7 +285,9 @@ router.put('/:id/recipe', requireAdmin, async (req: AuthRequest, res: Response) 
       { _id: req.params.id, hotelId: req.hotelId, isDeleted: false },
       { recipe: validated },
       { new: true },
-    ).populate('category', 'name color');
+    )
+      .populate('category', 'name color')
+      .populate({ path: 'recipe.ingredient', select: 'name unit costPerUnit' });
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
     logAudit(req, 'product.recipe.updated', 'product', req.params.id, { ingredientCount: validated.length });
@@ -299,12 +314,6 @@ router.post('/:id/generate-image', requireAdmin, async (req: AuthRequest, res: R
     if (!apiKey) {
       return res.status(503).json({ message: 'AI image generation is not configured (missing GEMINI_API_KEY)' });
     }
-
-    cloudinary.config({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-      api_key:    process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET,
-    });
 
     const { prompt: customPrompt, style = 'menu' } = req.body as { prompt?: string; style?: string };
 
@@ -338,21 +347,13 @@ router.post('/:id/generate-image', requireAdmin, async (req: AuthRequest, res: R
       });
     }
 
-    const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
-
-    const uploadResult = await new Promise<{ secure_url: string }>((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { folder: 'hotel-pos/products', resource_type: 'image', format: 'jpg' },
-        (error, r) => {
-          if (error || !r) reject(error ?? new Error('Cloudinary upload failed'));
-          else resolve(r as { secure_url: string });
-        },
-      );
-      stream.end(imageBuffer);
-    });
+    // Return the image as a base64 data URL — Cloudinary upload happens only when
+    // the user explicitly confirms ("Use This Image" + "Update"), preventing orphaned uploads.
+    const mimeType = imagePart.inlineData.mimeType || 'image/jpeg';
+    const imageData = `data:${mimeType};base64,${imagePart.inlineData.data}`;
 
     logAudit(req, 'product.image.aiGenerated', 'product', req.params.id, { productName });
-    res.json({ url: uploadResult.secure_url, prompt });
+    res.json({ imageData, prompt });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('NOT_FOUND') || msg.includes('not found') || msg.includes('not supported')) {

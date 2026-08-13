@@ -39,8 +39,8 @@ export async function updateProductRecipe(
 export async function generateProductImage(
   productId: string,
   data: { prompt?: string; style?: string },
-): Promise<{ url: string; prompt: string }> {
-  return apiFetch<{ url: string; prompt: string }>(`/products/${productId}/generate-image`, {
+): Promise<{ imageData: string; prompt: string }> {
+  return apiFetch<{ imageData: string; prompt: string }>(`/products/${productId}/generate-image`, {
     method: 'POST',
     body: JSON.stringify(data),
   });
