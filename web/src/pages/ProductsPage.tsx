@@ -461,7 +461,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
       </div>
 
       {/* Table */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto bg-canvas">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto bg-canvas scrollbar-hide">
         {error && (
           <div className="m-5 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
             {error}
@@ -688,7 +688,7 @@ function CategoriesPanel({
       </div>
 
       {/* Grid */}
-      <div className="flex-1 min-h-0 overflow-y-auto bg-canvas p-5">
+      <div className="flex-1 min-h-0 overflow-y-auto bg-canvas scrollbar-hide p-5">
         {categories.length === 0 ? (
           <div className="flex h-48 flex-col items-center justify-center text-ink/40">
             <p className="text-sm">No categories yet</p>
