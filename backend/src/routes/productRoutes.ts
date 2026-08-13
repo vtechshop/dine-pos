@@ -329,13 +329,15 @@ router.post('/:id/generate-image', requireAdmin, async (req: AuthRequest, res: R
     const prompt = customPrompt?.trim() ||
       `${styleDesc}. Dish: ${productName}. ${productDesc ? productDesc + '. ' : ''}High resolution, realistic, no text overlay.`;
 
-    const modelId = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.0-flash-preview-image-generation';
+    // gemini-2.0-flash-preview-image-generation was retired; gemini-2.0-flash-exp
+    // is the current model that supports responseModalities image output.
+    const modelId = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.0-flash-exp';
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelId });
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseModalities: ['image'] } as Record<string, unknown>,
+      generationConfig: { responseModalities: ['image', 'text'] } as Record<string, unknown>,
     });
 
     const parts = (result.response.candidates?.[0]?.content?.parts ?? []) as Array<{ inlineData?: { data: string; mimeType: string } }>;
