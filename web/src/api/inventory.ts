@@ -3,7 +3,8 @@ import type { Ingredient, StockMovement, InventorySummary } from '../types';
 
 // ── All ingredients ────────────────────────────────────────────────────────────
 export async function fetchIngredients(): Promise<Ingredient[]> {
-  return apiFetch<Ingredient[]>('/ingredients');
+  const res = await apiFetch<{ ingredients: Ingredient[]; total: number }>('/ingredients?limit=200');
+  return Array.isArray(res.ingredients) ? res.ingredients : [];
 }
 
 // ── Summary (KPI cards) ──────────────────────────────────────────────────────

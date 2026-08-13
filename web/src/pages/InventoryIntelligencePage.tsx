@@ -348,7 +348,7 @@ export function InventoryIntelligencePage() {
 
   const todayConsumptionCost = useMemo(() => {
     if (!todayConsump) return 0;
-    return [...todayConsump.fastMoving, ...todayConsump.slowMoving]
+    return [...(todayConsump.fastMoving ?? []), ...(todayConsump.slowMoving ?? [])]
       .reduce((s, i) => s + i.totalConsumed * i.costPerUnit, 0);
   }, [todayConsump]);
 
