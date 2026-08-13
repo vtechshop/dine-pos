@@ -16,6 +16,7 @@ import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { sendError } from '../utils/sendError';
 import Campaign, { CampaignAudience } from '../models/Campaign';
 import CustomerProfile from '../models/CustomerProfile';
+import { getMessagingProvider } from '../services/messagingProvider';
 
 const router = Router();
 
@@ -27,6 +28,18 @@ const VALID_AUDIENCES: CampaignAudience[] = [
   'inactive30', 'inactive60', 'inactive90',
   'birthday', 'anniversary', 'loyalty', 'noloyalty', 'custom',
 ];
+
+// ── GET /api/campaigns/provider-status — whether a messaging provider is wired ─
+// IMPORTANT: must be registered before /:id so 'provider-status' isn't matched
+//            as an ObjectId param (it would fail the ObjectId cast).
+router.get('/provider-status', (_req: AuthRequest, res: Response): void => {
+  res.json({
+    configured: {
+      whatsapp: getMessagingProvider('whatsapp').name !== 'none',
+      sms:      getMessagingProvider('sms').name !== 'none',
+    },
+  });
+});
 
 // ── GET /api/campaigns — list all campaigns ──────────────────────────────────
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {

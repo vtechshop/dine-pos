@@ -51,9 +51,15 @@ export async function updateCampaign(
 export async function sendCampaign(id: string): Promise<{
   status: 'no_provider' | 'sent';
   message: string;
-  campaign: { _id: string; name: string; channel: string; recipientCount: number };
+  campaign: { _id: string; name: string; channel: string; recipientCount: number; eligibleCount?: number };
 }> {
   return apiFetch(`/campaigns/${id}/send`, { method: 'POST' });
+}
+
+export async function fetchProviderStatus(): Promise<{
+  configured: { whatsapp: boolean; sms: boolean };
+}> {
+  return apiFetch('/campaigns/provider-status');
 }
 
 export async function cancelCampaign(id: string): Promise<{ message: string }> {

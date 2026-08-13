@@ -445,6 +445,28 @@ router.get('/customers/export', requireCashierOrAdmin, async (req: AuthRequest, 
       filter.$text = { $search: String(name).trim() };
     }
 
+    // Selected IDs mode — overrides segment/phone/name filters.
+    // Every ID is validated against hotelId (ownership), so Hotel B IDs
+    // submitted by a Hotel A session are silently excluded.
+    const idsRaw = req.query.ids;
+    if (idsRaw) {
+      const rawArr = Array.isArray(idsRaw)
+        ? (idsRaw as string[])
+        : String(idsRaw).split(',');
+      const validObjIds = rawArr
+        .map(id => id.trim())
+        .filter(id => mongoose.isValidObjectId(id))
+        .map(id => new mongoose.Types.ObjectId(id));
+      if (validObjIds.length > 0) {
+        // Reset segment/phone/name filters; keep hotelId + status:not-merged
+        Object.keys(filter).forEach(k => {
+          if (k !== 'hotelId' && k !== 'status') delete filter[k];
+        });
+        filter._id = { $in: validObjIds };
+        sort = {};
+      }
+    }
+
     const today    = new Date().toISOString().split('T')[0];
     const filename = `dinepos-customers-${today}.csv`;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');

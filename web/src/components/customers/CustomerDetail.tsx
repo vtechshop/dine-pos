@@ -521,6 +521,16 @@ export function CustomerDetail({ customerId, rewardName, isAdmin, currencySymbol
         />
       </div>
 
+      {/* ── Communication history ── */}
+      <div className="border-t border-border px-6 py-4">
+        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ink/40">
+          Communication History
+        </h3>
+        <p className="text-[11px] italic text-ink/30">
+          Communication history will appear here after a WhatsApp or SMS provider is connected in Settings → Integrations.
+        </p>
+      </div>
+
       {/* ── Notes ── */}
       {customer.notes && !showEdit && (
         <div className="px-6 pb-6">

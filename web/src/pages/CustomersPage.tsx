@@ -372,13 +372,19 @@ export function CustomersPage() {
                 <Download size={11} />{exporting ? 'Exporting…' : 'Export CSV'}
               </button>
               {showExportMenu && (
-                <div className="absolute right-0 top-full z-50 mt-1 min-w-[140px] rounded-lg border border-border bg-canvas shadow-lg">
+                <div className="absolute right-0 top-full z-50 mt-1 min-w-[156px] rounded-lg border border-border bg-canvas shadow-lg">
                   <button
                     onClick={() => void handleExport('filter')}
                     className="block w-full px-3 py-2 text-left text-xs text-ink hover:bg-mist rounded-t-lg"
                   >
                     Current Filter
                   </button>
+                  <div
+                    title="Multi-select customers first to enable this option"
+                    className="cursor-not-allowed px-3 py-2 text-xs text-ink/30 select-none"
+                  >
+                    Selected Customers
+                  </div>
                   <button
                     onClick={() => void handleExport('all')}
                     className="block w-full px-3 py-2 text-left text-xs text-ink hover:bg-mist rounded-b-lg"

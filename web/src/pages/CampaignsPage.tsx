@@ -6,6 +6,7 @@ import {
 import type { Campaign, CampaignAudience, CampaignStatus } from '../types/customers';
 import {
   fetchCampaigns, createCampaign, sendCampaign, cancelCampaign,
+  fetchProviderStatus,
 } from '../api/campaigns';
 import { Spinner } from '../components/ui/Spinner';
 
@@ -34,7 +35,8 @@ const STATUS_CONFIG: Record<CampaignStatus, { label: string; cls: string; Icon: 
   cancelled: { label: 'Cancelled', cls: 'text-ink/30 bg-ink/5 border-border',          Icon: XCircle,      desc: 'Campaign was cancelled' },
 };
 
-const TEMPLATE_VARS = ['{name}', '{hotel}', '{lastOrderDate}', '{points}', '{pointsBalance}'];
+// Only {name} and {hotel} are substituted server-side at send time.
+const TEMPLATE_VARS = ['{name}', '{hotel}'];
 
 function formatDateTime(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -253,11 +255,8 @@ function CreateModal({ onClose, onCreated }: CreateModalProps) {
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-brand/60">Preview (sample data)</p>
               <p className="text-xs text-ink/80 whitespace-pre-wrap">
                 {message
-                  .replace(/\{name\}/g,          'Ramesh Kumar')
-                  .replace(/\{hotel\}/g,         'Your Restaurant')
-                  .replace(/\{lastOrderDate\}/g, '10 Aug 2026')
-                  .replace(/\{points\}/g,        '120')
-                  .replace(/\{pointsBalance\}/g, '450')}
+                  .replace(/\{name\}/g,  'Ramesh Kumar')
+                  .replace(/\{hotel\}/g, 'Your Restaurant')}
               </p>
             </div>
           )}
@@ -327,14 +326,15 @@ function SendResultModal({ result, onClose }: SendResultProps) {
 type StatusFilter = 'all' | CampaignStatus;
 
 export function CampaignsPage() {
-  const [campaigns, setCampaigns]     = useState<Campaign[]>([]);
-  const [total, setTotal]             = useState(0);
-  const [loading, setLoading]         = useState(true);
+  const [campaigns, setCampaigns]       = useState<Campaign[]>([]);
+  const [total, setTotal]               = useState(0);
+  const [loading, setLoading]           = useState(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [showCreate, setShowCreate]   = useState(false);
-  const [sending, setSending]         = useState<string | null>(null);
-  const [cancelling, setCancelling]   = useState<string | null>(null);
-  const [sendResult, setSendResult]   = useState<SendResultProps['result'] | null>(null);
+  const [showCreate, setShowCreate]     = useState(false);
+  const [sending, setSending]           = useState<string | null>(null);
+  const [cancelling, setCancelling]     = useState<string | null>(null);
+  const [sendResult, setSendResult]     = useState<SendResultProps['result'] | null>(null);
+  const [providerStatus, setProviderStatus] = useState<{ whatsapp: boolean; sms: boolean }>({ whatsapp: false, sms: false });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -354,8 +354,18 @@ export function CampaignsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const handleSend = useCallback(async (id: string) => {
-    if (!confirm('Send this campaign now? Only opted-in customers with a phone number will receive the message.')) return;
+  useEffect(() => {
+    fetchProviderStatus()
+      .then(r => setProviderStatus(r.configured))
+      .catch(() => {}); // fail-silent: assume no provider if unreachable
+  }, []);
+
+  const handleSend = useCallback(async (id: string, campaign: Campaign) => {
+    const eligible = campaign.eligibleCount ?? 0;
+    const confirmMsg = eligible > 0
+      ? `Send "${campaign.name}" to ${eligible.toLocaleString()} eligible customer${eligible !== 1 ? 's' : ''}?\n\nOnly opted-in customers with a phone number will receive the message.`
+      : `"${campaign.name}" currently has no eligible opted-in recipients. Send anyway?`;
+    if (!confirm(confirmMsg)) return;
     setSending(id);
     try {
       const res = await sendCampaign(id);
@@ -423,15 +433,17 @@ export function CampaignsPage() {
         </div>
       </div>
 
-      {/* Provider warning */}
-      <div className="shrink-0 flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-5 py-2">
-        <AlertTriangle size={11} className="shrink-0 text-amber-600" />
-        <p className="text-[11px] text-amber-800">
-          <span className="font-semibold">WhatsApp / SMS provider not configured.</span>{' '}
-          Campaigns can be created, scheduled, and managed. Actual delivery requires a provider in Settings → Integrations.
-          Only customers with marketing opt-in will receive messages.
-        </p>
-      </div>
+      {/* Provider warning — shown only when no provider is configured */}
+      {!providerStatus.whatsapp && !providerStatus.sms && (
+        <div className="shrink-0 flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-5 py-2">
+          <AlertTriangle size={11} className="shrink-0 text-amber-600" />
+          <p className="text-[11px] text-amber-800">
+            <span className="font-semibold">WhatsApp / SMS provider not configured.</span>{' '}
+            Campaigns can be created and scheduled but actual delivery requires a provider in Settings → Integrations.
+            Send buttons are disabled until a provider is connected.
+          </p>
+        </div>
+      )}
 
       {/* Campaign list */}
       <div className="flex-1 overflow-y-auto p-5">
@@ -513,14 +525,23 @@ export function CampaignsPage() {
                     {/* Actions */}
                     <div className="flex shrink-0 flex-col gap-1.5">
                       {camp.status === 'draft' && (
-                        <button
-                          onClick={() => void handleSend(camp._id)}
-                          disabled={sending === camp._id}
-                          className="flex items-center gap-1 rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-[11px] font-semibold text-brand hover:bg-brand/10 disabled:opacity-50"
-                        >
-                          {sending === camp._id ? <Spinner size="sm" /> : <Send size={10} />}
-                          Send Now
-                        </button>
+                        providerStatus[camp.channel as 'whatsapp' | 'sms'] ? (
+                          <button
+                            onClick={() => void handleSend(camp._id, camp)}
+                            disabled={sending === camp._id}
+                            className="flex items-center gap-1 rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-[11px] font-semibold text-brand hover:bg-brand/10 disabled:opacity-50"
+                          >
+                            {sending === camp._id ? <Spinner size="sm" /> : <Send size={10} />}
+                            Send Now
+                          </button>
+                        ) : (
+                          <div
+                            title="Connect a WhatsApp/SMS provider in Settings → Integrations to enable delivery"
+                            className="flex cursor-not-allowed items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium text-ink/25"
+                          >
+                            <Send size={10} />No Provider
+                          </div>
+                        )
                       )}
                       {(camp.status === 'draft' || camp.status === 'scheduled') && (
                         <button
