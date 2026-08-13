@@ -228,8 +228,8 @@ function tileFillCls(status: Table['status']): string {
   switch (status) {
     case 'occupied': return 'bg-blue-50 border-blue-200';
     case 'reserved': return 'bg-amber-50 border-amber-200';
-    case 'inactive': return 'bg-ink/[0.03] border-dashed border-ink/15';
-    default:         return 'bg-canvas border-dashed border-border/60';
+    case 'inactive': return 'bg-ink/[0.04] border-dashed border-ink/15';
+    default:         return 'bg-emerald-50 border-emerald-200';
   }
 }
 
@@ -238,7 +238,7 @@ function tileNameCls(status: Table['status']): string {
     case 'occupied': return 'text-blue-900';
     case 'reserved': return 'text-amber-900';
     case 'inactive': return 'text-ink/30';
-    default:         return 'text-ink';
+    default:         return 'text-emerald-800';
   }
 }
 
@@ -485,7 +485,7 @@ export function TablesPage() {
                 <div
                   key={table._id}
                   onClick={() => isAdmin && openEditDrawer(table)}
-                  className={`relative flex min-h-[82px] flex-col items-center justify-center rounded-xl border p-2 text-center transition-all hover:shadow-md ${tileFillCls(table.status)} ${isAdmin ? 'cursor-pointer active:scale-[0.97]' : ''}`}
+                  className={`relative aspect-square flex flex-col items-center justify-center rounded-xl border p-2 text-center transition-all hover:shadow-md ${tileFillCls(table.status)} ${isAdmin ? 'cursor-pointer active:scale-[0.97]' : ''}`}
                 >
                   {/* Shape indicator — top-left */}
                   <div className="absolute left-1.5 top-1.5 text-ink/25">

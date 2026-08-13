@@ -92,18 +92,18 @@ function TableCard({
 
   // Tile fill + border by status
   const tileFill = {
-    available: 'bg-canvas border-dashed border-border/60',
+    available: 'bg-emerald-50 border-emerald-200',
     occupied:  'bg-blue-50 border-blue-200',
     reserved:  'bg-amber-50 border-amber-200',
-    inactive:  'bg-ink/[0.03] border-dashed border-ink/15',
-  }[status] ?? 'bg-canvas border-border';
+    inactive:  'bg-ink/[0.04] border-dashed border-ink/15',
+  }[status] ?? 'bg-emerald-50 border-emerald-200';
 
   const nameColor = {
-    available: 'text-ink',
+    available: 'text-emerald-800',
     occupied:  'text-blue-900',
     reserved:  'text-amber-900',
     inactive:  'text-ink/30',
-  }[status] ?? 'text-ink';
+  }[status] ?? 'text-emerald-800';
 
   const label = table.name || `T${table.number}`;
 
@@ -111,7 +111,7 @@ function TableCard({
     <button
       type="button"
       onClick={onClick}
-      className={`relative flex min-h-[82px] flex-col items-center justify-center gap-0.5 rounded-xl border p-2 text-center transition-all hover:shadow-md active:scale-[0.97] ${tileFill} ${
+      className={`relative aspect-square flex flex-col items-center justify-center gap-0.5 rounded-xl border p-2 text-center transition-all hover:shadow-md active:scale-[0.97] ${tileFill} ${
         selected ? 'ring-2 ring-brand ring-offset-1' : ''
       } ${isDelayed && !selected ? 'ring-1 ring-amber-400' : ''}`}
     >
@@ -326,7 +326,7 @@ function LegendStrip() {
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-border bg-canvas px-3 py-2">
       <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-ink/30">Legend</p>
       {[
-        { tileClass: 'border-dashed border-border/60 bg-canvas',    label: 'Available' },
+        { tileClass: 'border-emerald-200 bg-emerald-50',             label: 'Available' },
         { tileClass: 'border-blue-200 bg-blue-50',                   label: 'Running' },
         { tileClass: 'border-amber-200 bg-amber-50',                 label: 'Reserved' },
         { tileClass: 'border-dashed border-ink/15 bg-ink/[0.03]',    label: 'Inactive' },
