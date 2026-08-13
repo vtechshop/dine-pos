@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import Order from '../models/Order';
 import Product from '../models/Product';
+import ModifierGroup from '../models/ModifierGroup';
 import DailyCounter from '../models/DailyCounter';
 import TableSession from '../models/TableSession';
 import Guest from '../models/Guest';
@@ -39,7 +40,12 @@ function recalcOrderTotals(
     const lineTotal = Math.round((lineBase + taxAmt) * 100) / 100;
     subtotal += lineBase;
     taxTotal += taxAmt;
-    return { ...item, quantity: qty, taxAmount: taxAmt, total: lineTotal };
+    // Keep modifierTotal consistent with the normalised quantity
+    const selectedModifiers = (item.selectedModifiers ?? []).map((m: any) => ({
+      ...m,
+      modifierTotal: Math.round((Number(m.modifierPrice) || 0) * qty * 100) / 100,
+    }));
+    return { ...item, quantity: qty, taxAmount: taxAmt, total: lineTotal, selectedModifiers };
   });
 
   subtotal = Math.round(subtotal * 100) / 100;
@@ -53,6 +59,139 @@ function recalcOrderTotals(
 }
 
 
+
+// ── C2: Server-side product + modifier validation ────────────────────────────
+// For items that carry a product ObjectId reference, we:
+//   • verify the product belongs to this hotel and is not deleted
+//   • derive basePrice from the DB (variant price when variantId is set)
+//   • for each selectedModifier, verify group + option are hotel-owned,
+//     active, not deleted, and override the price from the DB value
+//   • recompute item.price = dbBasePrice + sum(dbOptionPrices)
+// Aggregator items without a product ref pass through unvalidated (no DB record to check).
+async function validateAndEnrichItems(
+  rawItems: any[],
+  hotelId: string,
+): Promise<{ items: any[]; error: string | null }> {
+  // Collect distinct product IDs that have a ref
+  const productIdStrings = [
+    ...new Set(
+      rawItems
+        .filter(item => item.product && mongoose.isValidObjectId(item.product))
+        .map(item => String(item.product)),
+    ),
+  ];
+
+  // Collect distinct modifier group IDs from all items
+  const mgIdStrings = [
+    ...new Set(
+      rawItems
+        .flatMap(item => (item.selectedModifiers ?? []))
+        .map((m: any) => m?.modifierGroupId)
+        .filter((id: any) => id && mongoose.isValidObjectId(id))
+        .map(String),
+    ),
+  ];
+
+  // Single parallel fetch for all products and modifier groups
+  const [products, modifierGroups] = await Promise.all([
+    productIdStrings.length > 0
+      ? Product.find({
+          _id:       { $in: productIdStrings.map(id => new mongoose.Types.ObjectId(id)) },
+          hotelId,
+          isDeleted: false,
+        }).lean()
+      : Promise.resolve([]),
+    mgIdStrings.length > 0
+      ? ModifierGroup.find({
+          _id:       { $in: mgIdStrings.map(id => new mongoose.Types.ObjectId(id)) },
+          hotelId,
+          isDeleted: false,
+          isActive:  true,
+        }).lean()
+      : Promise.resolve([]),
+  ]);
+
+  const productMap  = new Map<string, any>(products.map((p: any) => [String(p._id), p]));
+  const modGroupMap = new Map<string, any>(modifierGroups.map((g: any) => [String(g._id), g]));
+
+  const enriched: any[] = [];
+
+  for (const item of rawItems) {
+    // Items without a product ref are aggregator/manual lines — pass through
+    if (!item.product || !mongoose.isValidObjectId(item.product)) {
+      enriched.push(item);
+      continue;
+    }
+
+    const product = productMap.get(String(item.product));
+    if (!product) {
+      return { items: [], error: `Product ${item.product} not found in this hotel or has been deleted` };
+    }
+
+    // Resolve base price: variant if specified, else product price
+    let basePrice: number = Number(product.price) || 0;
+    if (item.variantId && mongoose.isValidObjectId(item.variantId)) {
+      const variant = (product.variants ?? []).find((v: any) => String(v._id) === String(item.variantId));
+      if (!variant) {
+        return { items: [], error: `Variant ${item.variantId} not found on product ${product.name}` };
+      }
+      basePrice = Number(variant.price) || 0;
+    }
+
+    // Validate + enrich each selectedModifier
+    let modifierPriceSum = 0;
+    const validatedModifiers: any[] = [];
+
+    for (const mod of (item.selectedModifiers ?? [])) {
+      if (!mod.modifierGroupId || !mongoose.isValidObjectId(mod.modifierGroupId)) {
+        return { items: [], error: 'Invalid modifierGroupId in selectedModifiers' };
+      }
+
+      const group = modGroupMap.get(String(mod.modifierGroupId));
+      if (!group) {
+        return { items: [], error: `Modifier group ${mod.modifierGroupId} not found, inactive, or does not belong to this hotel` };
+      }
+
+      if (!mod.modifierOptionId || !mongoose.isValidObjectId(mod.modifierOptionId)) {
+        return { items: [], error: 'Invalid modifierOptionId in selectedModifiers' };
+      }
+
+      const option = (group.options ?? []).find(
+        (o: any) => String(o._id) === String(mod.modifierOptionId),
+      );
+      if (!option) {
+        return { items: [], error: `Modifier option ${mod.modifierOptionId} not found in group "${group.name}"` };
+      }
+      if (option.isActive === false) {
+        return { items: [], error: `Modifier option "${option.name}" is inactive` };
+      }
+
+      const serverPrice = Math.max(0, Number(option.price) || 0);
+      modifierPriceSum += serverPrice;
+
+      validatedModifiers.push({
+        modifierGroupId:    String(group._id),
+        modifierGroupName:  group.name,
+        modifierOptionId:   String(option._id),
+        modifierOptionName: option.name,
+        modifierPrice:      serverPrice,
+        modifierTotal:      0, // recalcOrderTotals will set this correctly
+      });
+    }
+
+    const serverUnitPrice = basePrice + modifierPriceSum;
+
+    enriched.push({
+      ...item,
+      price:             serverUnitPrice,
+      taxPercent:        Number(product.taxPercent) || 0,
+      productName:       product.name,
+      selectedModifiers: validatedModifiers,
+    });
+  }
+
+  return { items: enriched, error: null };
+}
 
 // Helper: Generate order number like ORD-20260310-001 (per hotel)
 // Uses an atomic MongoDB $inc counter — no race condition under concurrent tablets.
@@ -575,8 +714,17 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       }
     }
 
+    // ── Server-side price + modifier integrity check ─────────────────────────
+    const { items: validatedItems, error: itemError } = await validateAndEnrichItems(
+      req.body.items,
+      req.hotelId!,
+    );
+    if (itemError) {
+      return res.status(422).json({ message: itemError });
+    }
+
     const orderNumber = await generateOrderNumber(req.hotelId!);
-    const recalc = recalcOrderTotals(req.body.items, req.body.discountAmount, req.body.loyaltyDiscount);
+    const recalc = recalcOrderTotals(validatedItems, req.body.discountAmount, req.body.loyaltyDiscount);
 
     // Explicit field allowlist — never spread req.body to prevent mass-assignment of
     // server-controlled fields (status, completedBy, completedAt, cashierId, hotelId).
