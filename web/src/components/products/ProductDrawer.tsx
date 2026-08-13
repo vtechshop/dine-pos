@@ -131,7 +131,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
       setImageUrl(product.image ?? '');
       setImageSourceType('existing');
       setVariants((product.variants ?? []).map(v => ({ _id: v._id, name: v.name, price: v.price })));
-      setAssignedGroups((product.modifierGroups ?? []) as ModifierGroup[]);
+      setAssignedGroups(((product.modifierGroups ?? []) as (ModifierGroup | null)[]).filter((g): g is ModifierGroup => g !== null));
 
       // Load recipe ingredients — backend now populates recipe.ingredient, so typeof check
       // accepts both populated objects (normal) and fallback string refs (edge case).

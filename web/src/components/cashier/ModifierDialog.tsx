@@ -116,8 +116,9 @@ export function ModifierDialog({ product, sym, onConfirm, onClose }: ModifierDia
   function validate(): string | null {
     for (const group of groups) {
       const selected = (modSelections[group._id] ?? []).length;
-      if (group.isRequired && selected < group.minSelections) {
-        return `"${group.name}" requires at least ${group.minSelections} selection(s)`;
+      const minRequired = group.isRequired ? Math.max(1, group.minSelections) : group.minSelections;
+      if (minRequired > 0 && selected < minRequired) {
+        return `"${group.name}" requires at least ${minRequired} selection(s)`;
       }
       if (group.maxSelections > 0 && selected > group.maxSelections) {
         return `"${group.name}" allows at most ${group.maxSelections} selection(s)`;

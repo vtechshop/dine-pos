@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import ModifierGroup from '../models/ModifierGroup';
+import Product from '../models/Product';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
@@ -124,6 +125,11 @@ router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
       { new: true }
     );
     if (!group) return res.status(404).json({ message: 'Modifier group not found' });
+    // Cascade: remove the deleted group's ref from all products in this hotel
+    await Product.updateMany(
+      { hotelId: req.hotelId },
+      { $pull: { modifierGroups: group._id } },
+    );
     logAudit(req, 'modifierGroup.deleted', 'modifierGroup', req.params.id, { name: group.name });
     res.json({ message: 'Modifier group deleted' });
   } catch (error) {
@@ -191,7 +197,7 @@ router.delete('/:id/options/:optId', requireAdmin, async (req: AuthRequest, res:
       return res.status(400).json({ message: 'Invalid id' });
     }
     const group = await ModifierGroup.findOneAndUpdate(
-      { _id: req.params.id, hotelId: req.hotelId },
+      { _id: req.params.id, hotelId: req.hotelId, isDeleted: false },
       { $pull: { options: { _id: new mongoose.Types.ObjectId(req.params.optId) } } },
       { new: true }
     );
