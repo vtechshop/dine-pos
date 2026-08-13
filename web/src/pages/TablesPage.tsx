@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, Pencil, Trash2, LayoutGrid, Circle, Users,
+  Plus, Pencil, Trash2, LayoutGrid, Circle,
   RefreshCw, X, Check, Search, MoreHorizontal,
 } from 'lucide-react';
 import type { Table } from '../types';
 import { fetchTables, createTable, updateTable, deleteTable } from '../api/tables';
 import { Spinner } from '../components/ui/Spinner';
-import { StatusChip } from '../components/ui/StatusChip';
 import { useAuth } from '../context/AuthContext';
 import { useShortcut } from '../hooks/useShortcut';
 
@@ -223,14 +222,23 @@ function DeleteDialog({ table, onConfirm, onCancel, saving }: DeleteDialogProps)
   );
 }
 
-// ── Card border by status ─────────────────────────────────────────────────────
+// ── Compact tile fill colors (mirrors CashierTablePanel) ─────────────────────
 
-function cardBorderCls(status: Table['status']): string {
+function tileFillCls(status: Table['status']): string {
   switch (status) {
-    case 'occupied': return 'border-green-300/70';
-    case 'reserved': return 'border-amber-300/70';
-    case 'inactive': return 'border-dashed border-ink/20';
-    default:         return 'border-border';
+    case 'occupied': return 'bg-blue-50 border-blue-200';
+    case 'reserved': return 'bg-amber-50 border-amber-200';
+    case 'inactive': return 'bg-ink/[0.03] border-dashed border-ink/15';
+    default:         return 'bg-canvas border-dashed border-border/60';
+  }
+}
+
+function tileNameCls(status: Table['status']): string {
+  switch (status) {
+    case 'occupied': return 'text-blue-900';
+    case 'reserved': return 'text-amber-900';
+    case 'inactive': return 'text-ink/30';
+    default:         return 'text-ink';
   }
 }
 
@@ -470,85 +478,68 @@ export function TablesPage() {
           </div>
 
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {visible.map(table => {
               const label = table.name || `T${table.number}`;
               return (
                 <div
                   key={table._id}
-                  className={`rounded-xl border bg-canvas p-4 transition-shadow hover:shadow-sm ${cardBorderCls(table.status)}`}
+                  onClick={() => isAdmin && openEditDrawer(table)}
+                  className={`relative flex min-h-[82px] flex-col items-center justify-center rounded-xl border p-2 text-center transition-all hover:shadow-md ${tileFillCls(table.status)} ${isAdmin ? 'cursor-pointer active:scale-[0.97]' : ''}`}
                 >
-                  {/* Top: shape + name + status chip */}
-                  <div className="mb-3 flex items-start justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      {table.shape === 'round'
-                        ? <Circle size={15} className="shrink-0 text-brand" />
-                        : <LayoutGrid size={15} className="shrink-0 text-brand" />
-                      }
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-ink">{label}</p>
-                        <p className="text-[10px] text-ink/35">#{table.number}</p>
-                      </div>
-                    </div>
-                    <StatusChip status={table.status} size="xs" />
+                  {/* Shape indicator — top-left */}
+                  <div className="absolute left-1.5 top-1.5 text-ink/25">
+                    {table.shape === 'round'
+                      ? <Circle size={8} />
+                      : <LayoutGrid size={8} />
+                    }
                   </div>
 
-                  {/* Middle: capacity */}
-                  <div className="flex items-center gap-1.5 text-xs text-ink/50">
-                    <Users size={11} />
-                    <span>{table.capacity} seat{table.capacity !== 1 ? 's' : ''}</span>
-                  </div>
-
-                  {/* Bottom: admin actions */}
+                  {/* ⋮ More dropdown — top-right, admin only */}
                   {isAdmin && (
-                    <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+                    <div className="more-menu-root absolute right-1 top-1">
                       <button
-                        onClick={() => openEditDrawer(table)}
-                        className="flex items-center gap-1.5 text-xs text-ink/45 transition-colors hover:text-ink"
+                        onClick={e => { e.stopPropagation(); setMoreOpen(moreOpen === table._id ? null : table._id); }}
+                        aria-label="More options"
+                        aria-expanded={moreOpen === table._id}
+                        aria-haspopup="menu"
+                        className="rounded p-0.5 text-ink/25 hover:text-ink/60"
                       >
-                        <Pencil size={11} />
-                        Edit
+                        <MoreHorizontal size={12} />
                       </button>
 
-                      {/* ⋮ More dropdown */}
-                      <div className="more-menu-root relative">
-                        <button
-                          onClick={() => setMoreOpen(moreOpen === table._id ? null : table._id)}
-                          aria-label="More options"
-                          aria-expanded={moreOpen === table._id}
-                          aria-haspopup="menu"
-                          className="rounded-lg p-1 text-ink/35 transition-colors hover:bg-ink/5 hover:text-ink/70"
+                      {moreOpen === table._id && (
+                        <div
+                          role="menu"
+                          className="more-menu-root absolute right-0 top-full z-20 mt-1 min-w-[144px] overflow-hidden rounded-lg border border-border bg-canvas shadow-lg"
                         >
-                          <MoreHorizontal size={15} />
-                        </button>
-
-                        {moreOpen === table._id && (
-                          <div
-                            role="menu"
-                            className="more-menu-root absolute right-0 top-full z-20 mt-1 min-w-[152px] overflow-hidden rounded-lg border border-border bg-canvas shadow-lg"
+                          <button
+                            role="menuitem"
+                            onClick={e => { e.stopPropagation(); openEditDrawer(table); }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink/70 hover:bg-mist"
                           >
-                            <button
-                              role="menuitem"
-                              onClick={() => openEditDrawer(table)}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink/70 hover:bg-mist"
-                            >
-                              <Pencil size={12} />
-                              Edit Table
-                            </button>
-                            <div className="mx-2 border-t border-border" />
-                            <button
-                              role="menuitem"
-                              onClick={() => { setMoreOpen(null); setDeleteTarget(table); }}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-brand hover:bg-brand/5"
-                            >
-                              <Trash2 size={12} />
-                              Delete Table
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                            <Pencil size={12} />
+                            Edit Table
+                          </button>
+                          <div className="mx-2 border-t border-border" />
+                          <button
+                            role="menuitem"
+                            onClick={e => { e.stopPropagation(); setMoreOpen(null); setDeleteTarget(table); }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-brand hover:bg-brand/5"
+                          >
+                            <Trash2 size={12} />
+                            Delete Table
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
+
+                  {/* Table name */}
+                  <p className={`text-sm font-bold leading-tight ${tileNameCls(table.status)}`}>{label}</p>
+
+                  {/* Seats */}
+                  <p className="mt-0.5 text-[9px] text-ink/30">{table.capacity} seats</p>
                 </div>
               );
             })}

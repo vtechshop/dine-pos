@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Clock, LayoutGrid, RefreshCw, AlertCircle,
+  LayoutGrid, RefreshCw, AlertCircle,
   UtensilsCrossed, CreditCard, Plus,
   Search, X, ChevronRight, ArrowRightLeft, GitMerge, Scissors, UserCog,
   ShoppingBag, Flame,
@@ -34,7 +34,7 @@ interface TableWithSession extends Table {
   hasPendingBill: boolean;
 }
 
-// ── Status config ─────────────────────────────────────────────────────────────
+// ── Status config (used by TableDetailPanel) ──────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; bg: string; border: string; dot: string; text: string }> = {
   available: {
@@ -67,7 +67,9 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; border: string;
   },
 };
 
-// ── Table card ────────────────────────────────────────────────────────────────
+// ── Compact table tile ────────────────────────────────────────────────────────
+// Petpooja-style: status communicated through fill color, not text label.
+// Table name is the hero; occupied tiles show running total + elapsed.
 
 function TableCard({
   table,
@@ -82,70 +84,71 @@ function TableCard({
   selected: boolean;
   onClick: () => void;
 }) {
-  const cfg = STATUS_CONFIG[table.session ? 'occupied' : (table.status ?? 'available')] ?? STATUS_CONFIG['available']!;
   const isOccupied = !!table.session;
-  const isDelayed = isOccupied && table.session?.openedAt &&
+  const isDelayed  = isOccupied && !!table.session?.openedAt &&
     nowMs - new Date(table.session.openedAt).getTime() > 90 * 60_000;
+
+  const status = isOccupied ? 'occupied' : (table.status ?? 'available');
+
+  // Tile fill + border by status
+  const tileFill = {
+    available: 'bg-canvas border-dashed border-border/60',
+    occupied:  'bg-blue-50 border-blue-200',
+    reserved:  'bg-amber-50 border-amber-200',
+    inactive:  'bg-ink/[0.03] border-dashed border-ink/15',
+  }[status] ?? 'bg-canvas border-border';
+
+  const nameColor = {
+    available: 'text-ink',
+    occupied:  'text-blue-900',
+    reserved:  'text-amber-900',
+    inactive:  'text-ink/30',
+  }[status] ?? 'text-ink';
+
+  const label = table.name || `T${table.number}`;
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`relative rounded-xl border p-3 text-left transition hover:shadow-md active:scale-[0.98] ${cfg.bg} ${cfg.border} ${
-        selected ? 'ring-2 ring-brand' : ''
-      } ${isDelayed ? 'ring-1 ring-amber-400' : ''}`}
+      className={`relative flex min-h-[82px] flex-col items-center justify-center gap-0.5 rounded-xl border p-2 text-center transition-all hover:shadow-md active:scale-[0.97] ${tileFill} ${
+        selected ? 'ring-2 ring-brand ring-offset-1' : ''
+      } ${isDelayed && !selected ? 'ring-1 ring-amber-400' : ''}`}
     >
-      {/* Status dot */}
-      <div className="flex items-start justify-between gap-1 mb-2">
-        <div className="flex items-center gap-1.5">
-          <div className={`h-2 w-2 shrink-0 rounded-full ${cfg.dot}`} />
-          <span className={`text-[10px] font-semibold uppercase tracking-wide ${cfg.text}`}>{cfg.label}</span>
-        </div>
-        {isDelayed && (
-          <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700">
-            Long
-          </span>
-        )}
-      </div>
+      {/* Pending KOT badge — top-right */}
+      {table.pendingOrderCount > 0 && (
+        <span className="absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-500 px-0.5 text-[8px] font-bold text-white">
+          {table.pendingOrderCount}
+        </span>
+      )}
+
+      {/* Bill-ready dot — top-left */}
+      {table.hasPendingBill && (
+        <span className="absolute left-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      )}
 
       {/* Table name */}
-      <p className="text-sm font-bold text-ink leading-tight">
-        {table.name || `T${table.number}`}
-      </p>
-      <div className="flex items-center gap-1 mt-0.5 text-[10px] text-ink/50">
-        <Users size={9} />
-        {table.capacity} seats
-      </div>
+      <p className={`text-sm font-bold leading-tight ${nameColor}`}>{label}</p>
 
-      {/* Session info */}
-      {table.session ? (
-        <div className="mt-2 space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-ink/50">{table.session.activeGuestCount ?? table.session.guestCount} guests</span>
-            <span className="text-[10px] font-semibold text-ink">{fmtINR(sym, table.session.runningTotal)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 text-[10px] text-ink/45">
-              <Clock size={9} />
-              {table.session.openedAt ? fmtElapsed(table.session.openedAt, nowMs) : '—'}
-            </div>
-            {table.pendingOrderCount > 0 && (
-              <div className="flex items-center gap-0.5 text-[9px] font-bold text-amber-600">
-                <Flame size={9} />
-                {table.pendingOrderCount}
-              </div>
-            )}
-          </div>
-          {table.hasPendingBill && (
-            <span className="inline-flex items-center gap-0.5 rounded bg-emerald-100 px-1 py-0.5 text-[9px] font-bold text-emerald-700">
-              <CreditCard size={8} /> Bill ready
-            </span>
-          )}
-        </div>
-      ) : (
-        <div className="mt-2">
-          <p className="text-[10px] text-ink/35">Ready to seat</p>
-        </div>
+      {/* Occupied: running total */}
+      {isOccupied && table.session && (
+        <p className="text-[11px] font-semibold text-blue-700">
+          {fmtINR(sym, table.session.runningTotal)}
+        </p>
+      )}
+
+      {/* Occupied: elapsed + guests */}
+      {isOccupied && table.session?.openedAt && (
+        <p className={`text-[9px] ${isDelayed ? 'font-semibold text-amber-600' : 'text-ink/45'}`}>
+          {fmtElapsed(table.session.openedAt, nowMs)}
+          {' · '}
+          {table.session.activeGuestCount ?? table.session.guestCount}g
+        </p>
+      )}
+
+      {/* Available: seats hint */}
+      {!isOccupied && table.status !== 'inactive' && (
+        <p className="text-[9px] text-ink/30">{table.capacity} seats</p>
       )}
     </button>
   );
@@ -270,7 +273,6 @@ function TableDetailPanel({
         <div className="space-y-1.5">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">More Actions</p>
           <div className="grid grid-cols-2 gap-1.5">
-            {/* Transfer — needs guest ID: go to Billing panel */}
             <button
               type="button"
               disabled
@@ -280,7 +282,6 @@ function TableDetailPanel({
               <ArrowRightLeft size={11} />
               Transfer Guest
             </button>
-            {/* Merge — needs guest IDs */}
             <button
               type="button"
               disabled
@@ -290,7 +291,6 @@ function TableDetailPanel({
               <GitMerge size={11} />
               Merge Guests
             </button>
-            {/* Split — needs guest ID + order IDs */}
             <button
               type="button"
               disabled
@@ -300,7 +300,6 @@ function TableDetailPanel({
               <Scissors size={11} />
               Split Bill
             </button>
-            {/* Change Waiter — no API */}
             <button
               type="button"
               disabled
@@ -316,6 +315,39 @@ function TableDetailPanel({
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Legend strip ──────────────────────────────────────────────────────────────
+
+function LegendStrip() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-border bg-canvas px-3 py-2">
+      <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-ink/30">Legend</p>
+      {[
+        { tileClass: 'border-dashed border-border/60 bg-canvas',    label: 'Available' },
+        { tileClass: 'border-blue-200 bg-blue-50',                   label: 'Running' },
+        { tileClass: 'border-amber-200 bg-amber-50',                 label: 'Reserved' },
+        { tileClass: 'border-dashed border-ink/15 bg-ink/[0.03]',    label: 'Inactive' },
+      ].map(({ tileClass, label }) => (
+        <div key={label} className="flex items-center gap-1.5">
+          <div className={`h-3 w-4 rounded border ${tileClass}`} />
+          <span className="text-[10px] text-ink/50">{label}</span>
+        </div>
+      ))}
+      <div className="flex items-center gap-1.5">
+        <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[7px] font-bold text-white">3</span>
+        <span className="text-[10px] text-ink/50">Pending KOT</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+        <span className="text-[10px] text-ink/50">Bill ready</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="h-3 w-4 rounded border border-amber-400 bg-amber-50" />
+        <span className="text-[10px] text-ink/50">&gt;90 min</span>
+      </div>
     </div>
   );
 }
@@ -348,7 +380,6 @@ export function CashierTablePanel() {
         const sessions: SessionSummary[] = sessRes.status === 'fulfilled' ? sessRes.value : [];
         const orders: CashierOrderItem[] = ordersRes.status === 'fulfilled' ? ordersRes.value : [];
 
-        // Build per-table order stats
         const ordersByTable = orders.reduce<Record<string, CashierOrderItem[]>>((acc, o) => {
           if (o.tableNumber) {
             acc[o.tableNumber] = [...(acc[o.tableNumber] ?? []), o];
@@ -397,8 +428,7 @@ export function CashierTablePanel() {
 
   const occupiedCount  = tables.filter(t => !!t.session).length;
   const availableCount = tables.filter(t => !t.session && t.status !== 'inactive').length;
-  const totalSales     = tables
-    .reduce((sum, t) => sum + (t.session?.runningTotal ?? 0), 0);
+  const totalSales     = tables.reduce((sum, t) => sum + (t.session?.runningTotal ?? 0), 0);
 
   function handleSelectTable(t: TableWithSession) {
     setSelected(prev => prev?._id === t._id ? null : t);
@@ -418,18 +448,17 @@ export function CashierTablePanel() {
   }
 
   return (
-    <div className="space-y-4">
-      {/* ── Header ───────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+    <div className="space-y-3">
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/40">Table Floor</h2>
-          {/* Status summary chips */}
           <div className="flex items-center gap-1.5">
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
               {availableCount} free
             </span>
             <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-              {occupiedCount} occupied
+              {occupiedCount} running
             </span>
             {totalSales > 0 && (
               <span className="rounded-full border border-brand/20 bg-brand/5 px-2 py-0.5 text-[10px] font-semibold text-brand">
@@ -448,7 +477,7 @@ export function CashierTablePanel() {
         </button>
       </div>
 
-      {/* ── Search + filter ───────────────────────────────────────────────── */}
+      {/* ── Search + filter ─────────────────────────────────────────────────── */}
       <div className="flex gap-2">
         <div className="relative flex-1">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/35" />
@@ -481,7 +510,10 @@ export function CashierTablePanel() {
         </div>
       </div>
 
-      {/* ── Error ────────────────────────────────────────────────────────── */}
+      {/* ── Legend ──────────────────────────────────────────────────────────── */}
+      {tables.length > 0 && <LegendStrip />}
+
+      {/* ── Error ───────────────────────────────────────────────────────────── */}
       {error && (
         <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
           <AlertCircle size={13} className="text-red-500" />
@@ -489,9 +521,10 @@ export function CashierTablePanel() {
         </div>
       )}
 
-      {/* ── Content: table grid + detail panel ────────────────────────────── */}
+      {/* ── Table grid + detail panel ────────────────────────────────────────── */}
       <div className={`grid gap-4 ${selected ? 'lg:grid-cols-[1fr_280px]' : ''}`}>
-        {/* Table grid */}
+
+        {/* Tile grid */}
         <div>
           {loading && tables.length === 0 ? (
             <div className="flex items-center justify-center py-12">
@@ -505,7 +538,7 @@ export function CashierTablePanel() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {filtered.map(t => (
                 <TableCard
                   key={t._id}
@@ -531,30 +564,11 @@ export function CashierTablePanel() {
               onNewOrder={() => handleNewOrder(selected)}
               onGoPayment={handleGoPayment}
             />
-
-            {/* Legend */}
-            <div className="mt-3 space-y-1 rounded-xl border border-border bg-canvas p-3">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Legend</p>
-              {[
-                { label: 'Available', cfg: STATUS_CONFIG['available']! },
-                { label: 'Occupied', cfg: STATUS_CONFIG['occupied']! },
-                { label: 'Reserved', cfg: STATUS_CONFIG['reserved']! },
-              ].map(({ label, cfg }) => (
-                <div key={label} className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full ${cfg.dot}`} />
-                  <span className="text-xs text-ink/60">{label}</span>
-                </div>
-              ))}
-              <div className="flex items-center gap-2 pt-1 border-t border-border">
-                <div className="h-2 w-2 rounded-full bg-amber-400" />
-                <span className="text-xs text-ink/60">Long sitting (&gt;90 min)</span>
-              </div>
-            </div>
           </div>
         )}
       </div>
 
-      {/* ── Quick new order CTA (no table selected, bottom strip) ───────────── */}
+      {/* ── Quick new order CTA ──────────────────────────────────────────────── */}
       {!selected && (
         <button
           type="button"
@@ -565,24 +579,6 @@ export function CashierTablePanel() {
           New Dine-In Order (no table)
           <ChevronRight size={14} />
         </button>
-      )}
-
-      {/* ── Inline legend when no side panel ─────────────────────────────── */}
-      {!selected && tables.length > 0 && (
-        <div className="flex items-center gap-4 rounded-xl border border-border bg-canvas px-4 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/35">Legend</p>
-          {[
-            { dot: 'bg-emerald-500', label: 'Available' },
-            { dot: 'bg-blue-500', label: 'Occupied' },
-            { dot: 'bg-amber-500', label: 'Reserved' },
-            { dot: 'bg-ink/20', label: 'Inactive' },
-          ].map(({ dot, label }) => (
-            <div key={label} className="flex items-center gap-1.5">
-              <div className={`h-2 w-2 rounded-full ${dot}`} />
-              <span className="text-[10px] text-ink/50">{label}</span>
-            </div>
-          ))}
-        </div>
       )}
     </div>
   );
