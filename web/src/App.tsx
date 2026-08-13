@@ -58,6 +58,7 @@ const InventoryPage              = lazy(() => import('./pages/InventoryPage').th
 const InventoryIntelligencePage  = lazy(() => import('./pages/InventoryIntelligencePage').then(m => ({ default: m.InventoryIntelligencePage })));
 const PaymentSettingsPage        = lazy(() => import('./pages/PaymentSettingsPage').then(m => ({ default: m.PaymentSettingsPage })));
 const CustomersPage    = lazy(() => import('./pages/CustomersPage').then(m => ({ default: m.CustomersPage })));
+const CampaignsPage    = lazy(() => import('./pages/CampaignsPage').then(m => ({ default: m.CampaignsPage })));
 const ReportsPage      = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
 const SettingsPage     = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const ReservationsPage = lazy(() => import('./pages/ReservationsPage').then(m => ({ default: m.ReservationsPage })));
@@ -175,6 +176,7 @@ export function App() {
                     <Route path="/cashier"     element={<CashierPage />} />
                     <Route path="/orders"      element={<AdminOnly><Suspense fallback={<PageFallback />}><OrdersPage /></Suspense></AdminOnly>} />
                     <Route path="/customers"   element={<AdminOnly><Suspense fallback={<PageFallback />}><CustomersPage /></Suspense></AdminOnly>} />
+                    <Route path="/campaigns"   element={<AdminOnly><Suspense fallback={<PageFallback />}><CampaignsPage /></Suspense></AdminOnly>} />
                     <Route path="/products"    element={<AdminOnly><Suspense fallback={<PageFallback />}><ProductsPage /></Suspense></AdminOnly>} />
                     <Route path="/inventory"               element={<AdminOnly><Suspense fallback={<PageFallback />}><InventoryPage /></Suspense></AdminOnly>} />
                     <Route path="/inventory-intelligence"  element={<AdminOnly><Suspense fallback={<PageFallback />}><InventoryIntelligencePage /></Suspense></AdminOnly>} />

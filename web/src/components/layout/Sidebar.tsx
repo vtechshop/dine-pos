@@ -55,10 +55,11 @@ const NAV_GROUPS: NavGroup[] = [
   {
     heading: 'Customers & Promotions',
     items: [
-      { to: '/customers',    icon: Users,        label: 'Customers',    hint: 'F4' },
-      { to: '/coupons',      icon: Tag,          label: 'Coupons'       },
-      { to: '/gift-vouchers', icon: Gift,        label: 'Gift Vouchers' },
-      { to: '/reservations', icon: CalendarDays, label: 'Reservations'  },
+      { to: '/customers',    icon: Users,          label: 'Customers',    hint: 'F4' },
+      { to: '/campaigns',    icon: MessageSquare,  label: 'Campaigns'     },
+      { to: '/coupons',      icon: Tag,            label: 'Coupons'       },
+      { to: '/gift-vouchers', icon: Gift,          label: 'Gift Vouchers' },
+      { to: '/reservations', icon: CalendarDays,   label: 'Reservations'  },
     ],
   },
   {

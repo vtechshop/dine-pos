@@ -130,34 +130,83 @@ router.put('/config', requireAdmin, async (req: AuthRequest, res: Response): Pro
 
 // ────────────────────────────────────────────────────────────────────────────────
 // GET /api/loyalty/customers
-// Search customers by phone or name. Supports pagination.
+// Search by phone/name or filter by segment. Supports pagination.
 // RBAC: cashier | admin
+// segment values: new | repeat | vip | inactive30 | inactive60 | inactive90 |
+//                 birthday | anniversary | loyalty | noloyalty
+// export=true: returns up to 500 records (no pagination) for CSV export
 // ────────────────────────────────────────────────────────────────────────────────
 router.get('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { phone, name, page = '1', limit = '20' } = req.query as Record<string, string>;
-    const pageNum  = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
-    const skip     = (pageNum - 1) * limitNum;
+    const { phone, name, segment, page = '1', limit = '20', export: doExport } = req.query as Record<string, string>;
+    const isExport = doExport === 'true';
+    const pageNum  = isExport ? 1 : Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = isExport ? 500 : Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+    const skip     = isExport ? 0 : (pageNum - 1) * limitNum;
 
-    const filter: Record<string, any> = {
-      hotelId: new mongoose.Types.ObjectId(req.hotelId),
-      status:  { $ne: 'merged' },
-    };
+    const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
+    const filter: Record<string, any> = { hotelId: hotelObjId, status: { $ne: 'merged' } };
+    let sort: Record<string, any> = { lastVisitAt: -1 };
 
-    if (phone) {
+    if (segment) {
+      const now = new Date();
+      const mm  = String(now.getMonth() + 1).padStart(2, '0');
+      switch (segment) {
+        case 'new':
+          filter.visitCount = 1;
+          sort = { firstVisitAt: -1 };
+          break;
+        case 'repeat':
+          filter.visitCount = { $gte: 2 };
+          sort = { visitCount: -1 };
+          break;
+        case 'vip':
+          filter.lifetimeSpend = { $gt: 0 };
+          sort = { lifetimeSpend: -1 };
+          break;
+        case 'inactive30':
+          filter.lastVisitAt = { $lt: new Date(Date.now() - 30 * 86400000), $ne: null };
+          filter.visitCount   = { $gt: 0 };
+          sort = { lastVisitAt: 1 };
+          break;
+        case 'inactive60':
+          filter.lastVisitAt = { $lt: new Date(Date.now() - 60 * 86400000), $ne: null };
+          filter.visitCount   = { $gt: 0 };
+          sort = { lastVisitAt: 1 };
+          break;
+        case 'inactive90':
+          filter.lastVisitAt = { $lt: new Date(Date.now() - 90 * 86400000), $ne: null };
+          filter.visitCount   = { $gt: 0 };
+          sort = { lastVisitAt: 1 };
+          break;
+        case 'birthday':
+          filter.birthday = { $regex: `^${mm}-`, $ne: null };
+          break;
+        case 'anniversary':
+          filter.anniversary = { $regex: `^${mm}-`, $ne: null };
+          break;
+        case 'loyalty':
+          filter.loyaltyBalance = { $gt: 0 };
+          sort = { loyaltyBalance: -1 };
+          break;
+        case 'noloyalty':
+          filter.loyaltyBalance = 0;
+          filter.visitCount     = { $gt: 0 };
+          break;
+      }
+    } else if (phone) {
       const escaped = String(phone).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.phone = { $regex: escaped, $options: 'i' };
     } else if (name) {
       filter.$text = { $search: String(name).trim() };
     }
 
+    const select = isExport
+      ? 'customerId name phone email birthday anniversary marketingOptIn loyaltyBalance walletBalance lifetimeSpend visitCount lastVisitAt firstVisitAt status tags notes createdAt'
+      : 'customerId name phone loyaltyBalance walletBalance lifetimeSpend visitCount lastVisitAt status';
+
     const [customers, total] = await Promise.all([
-      CustomerProfile.find(filter)
-        .sort({ lastVisitAt: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .select('customerId name phone loyaltyBalance walletBalance lifetimeSpend visitCount lastVisitAt status'),
+      CustomerProfile.find(filter).sort(sort).skip(skip).limit(limitNum).select(select),
       CustomerProfile.countDocuments(filter),
     ]);
 
@@ -392,6 +441,115 @@ router.post('/customers/:customerId/adjust', requireAdmin, async (req: AuthReque
       return;
     }
     sendError(res, 500, 'Failed to adjust loyalty points', err);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// GET /api/loyalty/stats
+// Aggregate KPIs for the Loyalty dashboard tab.
+// RBAC: cashier | admin
+// ────────────────────────────────────────────────────────────────────────────────
+router.get('/stats', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
+
+    const [memberAgg, txAgg] = await Promise.all([
+      CustomerProfile.aggregate([
+        { $match: { hotelId: hotelObjId, status: { $ne: 'merged' } } },
+        { $group: {
+          _id: null,
+          totalMembers:           { $sum: 1 },
+          totalOutstandingPoints: { $sum: '$loyaltyBalance' },
+          activeLast30: { $sum: {
+            $cond: [
+              { $and: [
+                { $ne: ['$lastVisitAt', null] },
+                { $gte: ['$lastVisitAt', new Date(Date.now() - 30 * 86400000)] },
+              ]},
+              1, 0,
+            ],
+          }},
+        }},
+      ]),
+      LoyaltyTransaction.aggregate([
+        { $match: { hotelId: hotelObjId } },
+        { $group: { _id: '$transactionType', total: { $sum: { $abs: '$points' } } } },
+      ]),
+    ]);
+
+    const m = memberAgg[0] ?? { totalMembers: 0, totalOutstandingPoints: 0, activeLast30: 0 };
+    const byType: Record<string, number> = {};
+    for (const t of txAgg) byType[t._id] = t.total;
+
+    res.json({
+      totalMembers:           m.totalMembers,
+      totalOutstandingPoints: m.totalOutstandingPoints,
+      activeLast30:           m.activeLast30,
+      pointsIssued:    (byType['earn'] ?? 0) + (byType['transfer_in'] ?? 0),
+      pointsRedeemed:  (byType['redeem'] ?? 0) + (byType['transfer_out'] ?? 0),
+      pointsExpired:   byType['expire'] ?? 0,
+      pointsAdjusted:  byType['adjust'] ?? 0,
+    });
+  } catch (err) {
+    sendError(res, 500, 'Failed to fetch loyalty stats', err);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// GET /api/loyalty/activity?page=1&limit=20
+// Hotel-level loyalty activity log (all transactions across all customers).
+// RBAC: cashier | admin
+// ────────────────────────────────────────────────────────────────────────────────
+router.get('/activity', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const page  = Math.max(1, parseInt(req.query.page  as string || '1',  10));
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string || '20', 10)));
+    const skip  = (page - 1) * limit;
+
+    const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
+
+    const [transactions, total] = await Promise.all([
+      LoyaltyTransaction.find({ hotelId: hotelObjId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate({ path: 'customerId', select: 'name phone customerId', model: CustomerProfile })
+        .lean(),
+      LoyaltyTransaction.countDocuments({ hotelId: hotelObjId }),
+    ]);
+
+    res.json({ transactions, total, page, limit });
+  } catch (err) {
+    sendError(res, 500, 'Failed to fetch loyalty activity', err);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// PATCH /api/loyalty/customers/:customerId/status
+// Block or unblock a customer. Admin only.
+// Body: { status: 'active' | 'blocked' }
+// ────────────────────────────────────────────────────────────────────────────────
+router.patch('/customers/:customerId/status', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { status } = req.body as { status?: string };
+    if (!status || !['active', 'blocked'].includes(status)) {
+      res.status(400).json({ message: 'status must be "active" or "blocked"' });
+      return;
+    }
+
+    const customer = await resolveCustomer(req.params.customerId, req.hotelId!);
+    if (!customer) { res.status(404).json({ message: 'Customer not found' }); return; }
+    if (customer.status === 'merged') {
+      res.status(409).json({ message: 'Cannot change status of a merged customer record' });
+      return;
+    }
+
+    customer.status = status as 'active' | 'blocked';
+    await customer.save();
+
+    res.json({ customer: { customerId: customer.customerId, name: customer.name, status: customer.status } });
+  } catch (err) {
+    sendError(res, 500, 'Failed to update customer status', err);
   }
 });
 
