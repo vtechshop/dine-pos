@@ -6,7 +6,7 @@ import {
 import type { CustomerSummary, LoyaltyConfig, CustomerSegment, LoyaltyStats, LoyaltyActivityEntry } from '../types/customers';
 import {
   searchCustomers, fetchLoyaltyConfig, fetchLoyaltyStats,
-  fetchLoyaltyActivity, searchCustomersBySegment,
+  fetchLoyaltyActivity, searchCustomersBySegment, downloadCustomerExport,
 } from '../api/loyalty';
 import { fetchOrderCustomers } from '../api/orders';
 import type { OrderCustomer } from '../api/orders';
@@ -129,10 +129,12 @@ export function CustomersPage() {
   const [activityPage, setActivityPage]         = useState(1);
   const [loyaltyLoading, setLoyaltyLoading]     = useState(false);
 
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting]           = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const exportMenuRef  = useRef<HTMLDivElement>(null);
 
   // ── Customers tab data ────────────────────────────────────────────────────
 
@@ -288,48 +290,35 @@ export function CustomersPage() {
 
   // ── Export ────────────────────────────────────────────────────────────────
 
-  const handleExport = useCallback(async () => {
-    setExporting(true);
-    try {
-      // Always fetch from server to ensure complete dataset (not limited by local pagination state)
-      let segmentParam: CustomerSegment | undefined;
-      let label = 'customers';
-
-      if (activeTab === 'segments') {
-        segmentParam = activeSegment === 'all' ? undefined : activeSegment;
-        label        = activeSegment;
+  // Close export dropdown on outside click
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
       }
-      // For customers tab: no segment filter (export current search/filter via server)
-      const res = await searchCustomersBySegment({
-        segment:  segmentParam,
-        phone:    activeTab === 'customers' && looksLikePhone(search) ? search.trim() : undefined,
-        name:     activeTab === 'customers' && !looksLikePhone(search) && search.trim() ? search.trim() : undefined,
-        export:   true,
-      });
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showExportMenu]);
 
-      const rows: string[][] = [
-        ['Name', 'Phone', 'Email', 'Visits', 'Lifetime Spend', 'Avg Bill', 'Last Visit', 'Birthday', 'Anniversary', 'Loyalty Points', 'Status', 'Created'],
-        ...res.customers.map(c => {
-          const avg = c.visitCount > 0 ? Math.round(c.lifetimeSpend / c.visitCount) : 0;
-          return [
-            c.name,
-            c.phone ?? '',
-            (c as any).email ?? '',
-            String(c.visitCount),
-            String(Math.round(c.lifetimeSpend)),
-            String(avg),
-            c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString('en-IN') : '',
-            (c as any).birthday ?? '',
-            (c as any).anniversary ?? '',
-            String(c.loyaltyBalance),
-            c.status ?? 'active',
-            (c as any).createdAt ? new Date((c as any).createdAt).toLocaleDateString('en-IN') : '',
-          ];
-        }),
-      ];
-      csvDownload(`dinepos-${label}-${new Date().toLocaleDateString('en-CA')}.csv`, rows);
+  const handleExport = useCallback(async (mode: 'filter' | 'all') => {
+    setExporting(true);
+    setShowExportMenu(false);
+    try {
+      const params: Parameters<typeof downloadCustomerExport>[0] = {};
+      if (mode === 'filter') {
+        if (activeTab === 'segments' && activeSegment !== 'all') {
+          params.segment = activeSegment;
+        } else if (activeTab === 'customers') {
+          if (looksLikePhone(search))       params.phone = search.trim();
+          else if (search.trim())           params.name  = search.trim();
+        }
+      }
+      // mode === 'all': no params — server returns all hotel customers
+      await downloadCustomerExport(params);
     } catch {
-      // silent
+      // silent — export failure shouldn't break the page
     } finally {
       setExporting(false);
     }
@@ -374,13 +363,31 @@ export function CustomersPage() {
           ))}
           {/* Export + total count */}
           <div className="ml-auto flex items-center gap-2 pr-1">
-            <button
-              onClick={() => void handleExport()}
-              disabled={exporting}
-              className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:bg-mist disabled:opacity-40 transition-colors"
-            >
-              <Download size={11}/>{exporting ? 'Exporting…' : 'Export CSV'}
-            </button>
+            <div className="relative" ref={exportMenuRef}>
+              <button
+                onClick={() => setShowExportMenu(v => !v)}
+                disabled={exporting}
+                className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:bg-mist disabled:opacity-40 transition-colors"
+              >
+                <Download size={11} />{exporting ? 'Exporting…' : 'Export CSV'}
+              </button>
+              {showExportMenu && (
+                <div className="absolute right-0 top-full z-50 mt-1 min-w-[140px] rounded-lg border border-border bg-canvas shadow-lg">
+                  <button
+                    onClick={() => void handleExport('filter')}
+                    className="block w-full px-3 py-2 text-left text-xs text-ink hover:bg-mist rounded-t-lg"
+                  >
+                    Current Filter
+                  </button>
+                  <button
+                    onClick={() => void handleExport('all')}
+                    className="block w-full px-3 py-2 text-left text-xs text-ink hover:bg-mist rounded-b-lg"
+                  >
+                    All Customers
+                  </button>
+                </div>
+              )}
+            </div>
             {activeTab === 'customers' && total > 0 && (
               <span className="text-[10px] text-ink/30">{total} total</span>
             )}

@@ -74,6 +74,15 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
+    // Only {name} and {hotel} are substituted at send time
+    const badVars = validateTemplateVars(String(messageTemplate));
+    if (badVars.length > 0) {
+      res.status(400).json({
+        message: `Unknown template variable(s): ${badVars.map(v => `{${v}}`).join(', ')}. Allowed: {name}, {hotel}`,
+      });
+      return;
+    }
+
     const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
 
     // Validate scheduledAt if provided
@@ -145,7 +154,16 @@ router.patch('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
 
     const { name, messageTemplate, scheduledAt, audience, customAudience } = req.body as Record<string, any>;
     if (name)            campaign.name            = String(name).trim().slice(0, 200);
-    if (messageTemplate) campaign.messageTemplate = String(messageTemplate).trim().slice(0, 4000);
+    if (messageTemplate) {
+      const badVars = validateTemplateVars(String(messageTemplate));
+      if (badVars.length > 0) {
+        res.status(400).json({
+          message: `Unknown template variable(s): ${badVars.map(v => `{${v}}`).join(', ')}. Allowed: {name}, {hotel}`,
+        });
+        return;
+      }
+      campaign.messageTemplate = String(messageTemplate).trim().slice(0, 4000);
+    }
     if (scheduledAt !== undefined) campaign.scheduledAt = scheduledAt ? new Date(scheduledAt) : null;
 
     if (audience && VALID_AUDIENCES.includes(audience as CampaignAudience)) {
@@ -183,29 +201,49 @@ router.patch('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// ── POST /api/campaigns/:id/send — mark as sent (provider stub) ───────────────
+// ── POST /api/campaigns/:id/send — manual send trigger (provider stub) ────────
+// No provider is configured: returns no_provider without changing campaign status.
+// When a real provider is integrated, this endpoint should:
+//   1. Atomically lock the campaign (findOneAndUpdate with status condition)
+//   2. Re-resolve recipients at send time
+//   3. Call the provider
+//   4. Update campaign to 'sent' or 'failed'
 router.post('/:id/send', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
     const campaign = await Campaign.findOne({
-      _id: new mongoose.Types.ObjectId(req.params.id),
-      hotelId: new mongoose.Types.ObjectId(req.hotelId),
+      _id:     new mongoose.Types.ObjectId(req.params.id),
+      hotelId: hotelObjId,
     });
     if (!campaign) { res.status(404).json({ message: 'Campaign not found' }); return; }
-    if (campaign.status === 'sent') {
-      res.status(409).json({ message: 'Campaign already sent' });
+    if (['sent', 'cancelled'].includes(campaign.status)) {
+      res.status(409).json({ message: `Campaign is already ${campaign.status}` });
       return;
     }
 
-    // Provider stub — no WhatsApp/SMS integration yet
-    // When a provider is integrated, replace this block with actual delivery logic.
+    // Re-resolve eligible count fresh at send time — stale count from creation may differ
+    let freshEligibleCount = campaign.eligibleCount;
+    try {
+      const { eligibleCount } = await resolveAudienceCount(
+        hotelObjId,
+        campaign.audience,
+        (campaign.customAudience as mongoose.Types.ObjectId[]).map(id => id.toString()),
+      );
+      freshEligibleCount = eligibleCount;
+    } catch {
+      // Non-fatal — fall back to stored count if re-resolve fails
+    }
+
+    // Campaign status is NOT changed — it stays draft/scheduled until a real provider sends.
     res.json({
       status:  'no_provider',
-      message: 'No WhatsApp/SMS provider configured. Connect a provider in Settings to enable delivery.',
+      message: 'No WhatsApp/SMS provider configured. Connect a provider in Settings → Integrations to enable delivery.',
       campaign: {
         _id:            campaign._id,
         name:           campaign.name,
         channel:        campaign.channel,
         recipientCount: campaign.recipientCount,
+        eligibleCount:  freshEligibleCount,
       },
     });
   } catch (err) {
@@ -298,6 +336,16 @@ async function resolveAudienceCount(
     CustomerProfile.countDocuments({ ...base, marketingOptIn: true, phone: { $ne: null } }),
   ]);
   return { count, eligibleCount };
+}
+
+/**
+ * Returns unknown variable names found in a message template.
+ * Allowed: {name}, {hotel}. Any other {word} is rejected server-side.
+ */
+function validateTemplateVars(template: string): string[] {
+  const ALLOWED = new Set(['name', 'hotel']);
+  const found = [...template.matchAll(/\{(\w+)\}/g)].map(m => m[1]);
+  return [...new Set(found.filter(v => !ALLOWED.has(v)))];
 }
 
 export default router;

@@ -1,4 +1,6 @@
-import { apiFetch } from './client';
+import { apiFetch, getStoredToken } from './client';
+
+const _API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:5000/api';
 import type {
   CustomerProfile,
   LoyaltyConfig,
@@ -123,4 +125,47 @@ export async function searchCustomersBySegment(params: {
   if (params.limit)   qs.set('limit',   String(params.limit));
   if (params.export)  qs.set('export',  'true');
   return apiFetch(`/loyalty/customers?${qs}`);
+}
+
+/**
+ * Streams a server-generated CSV of customers matching the given filter and
+ * triggers a browser download. Uses the streaming /export endpoint so there is
+ * no record-count ceiling.
+ *
+ * Security: auth token is always read from localStorage; hotelId is never sent
+ * from the client.
+ */
+export async function downloadCustomerExport(params: {
+  segment?: string;
+  phone?:   string;
+  name?:    string;
+}): Promise<void> {
+  const token = getStoredToken();
+  const qs    = new URLSearchParams();
+  if (params.segment) qs.set('segment', params.segment);
+  if (params.phone)   qs.set('phone',   params.phone);
+  if (params.name)    qs.set('name',    params.name);
+
+  const res = await fetch(`${_API_BASE}/loyalty/customers/export?${qs}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}) as Record<string, string>);
+    throw new Error((body as { message?: string }).message ?? `Export failed: HTTP ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+
+  const cd    = res.headers.get('Content-Disposition');
+  const match = cd?.match(/filename="([^"]+)"/);
+  a.download  = match?.[1] ?? 'customers-export.csv';
+
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

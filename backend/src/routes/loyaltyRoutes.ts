@@ -52,6 +52,52 @@ async function generateCustomerId(hotelId: string): Promise<string> {
   return `CUST-${shortId}-${String(counter!.seq).padStart(4, '0')}`;
 }
 
+// ── Segment helpers ───────────────────────────────────────────────────────────
+
+function nextSevenDayPatterns(): string[] {
+  const patterns: string[] = [];
+  const now = new Date();
+  for (let i = 0; i < 7; i++) {
+    const d   = new Date(now);
+    d.setDate(d.getDate() + i);
+    const m   = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    patterns.push(`${m}-${day}`);
+  }
+  return patterns;
+}
+
+// ── CSV export helpers ────────────────────────────────────────────────────────
+
+function escapeCsv(val: string | number | boolean | null | undefined): string {
+  if (val == null) return '';
+  const s = String(val);
+  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+function customerToCsvRow(doc: Record<string, any>): string {
+  const avg = doc.visitCount > 0 ? Math.round((doc.lifetimeSpend ?? 0) / doc.visitCount) : 0;
+  return [
+    doc.name ?? '',
+    doc.phone ?? '',
+    doc.email ?? '',
+    doc.customerId ?? '',
+    doc.visitCount ?? 0,
+    Math.round(doc.lifetimeSpend ?? 0),
+    avg,
+    doc.lastVisitAt ? new Date(doc.lastVisitAt as string | Date).toISOString().split('T')[0] : '',
+    doc.birthday ?? '',
+    doc.anniversary ?? '',
+    doc.marketingOptIn ? 'Yes' : 'No',
+    doc.loyaltyBalance ?? 0,
+    doc.status ?? 'active',
+    doc.createdAt ? new Date(doc.createdAt as string | Date).toISOString().split('T')[0] : '',
+  ].map(escapeCsv).join(',');
+}
+
 const router = Router();
 
 router.use(authMiddleware);
@@ -151,19 +197,6 @@ router.get('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: Re
     if (segment) {
       const now  = new Date();
       const mm   = String(now.getMonth() + 1).padStart(2, '0');
-
-      // Build a set of MM-DD strings for the next 7 days (for birthday/anniversary week)
-      function nextSevenDayPatterns(): string[] {
-        const patterns: string[] = [];
-        for (let i = 0; i < 7; i++) {
-          const d    = new Date(now);
-          d.setDate(d.getDate() + i);
-          const m    = String(d.getMonth() + 1).padStart(2, '0');
-          const day  = String(d.getDate()).padStart(2, '0');
-          patterns.push(`${m}-${day}`);
-        }
-        return patterns;
-      }
 
       switch (segment) {
         case 'new':
@@ -342,6 +375,104 @@ router.patch('/customers/:customerId', requireCashierOrAdmin, async (req: AuthRe
       return;
     }
     sendError(res, 500, 'Failed to update customer', err);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// GET /api/loyalty/customers/export
+// Streams a CSV of ALL matched customers (no record-count limit).
+// IMPORTANT: registered before /customers/:customerId so 'export' is not treated
+//            as a customerId parameter.
+//
+// Query params: segment | phone | name  (same semantics as GET /customers)
+// Security: hotelId always from JWT; no client-supplied hotelId trusted.
+// RBAC: cashier | admin
+// ────────────────────────────────────────────────────────────────────────────────
+router.get('/customers/export', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { phone, name, segment } = req.query as Record<string, string>;
+    const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
+
+    const filter: Record<string, any> = { hotelId: hotelObjId, status: { $ne: 'merged' } };
+    let sort: Record<string, any> = { lastVisitAt: -1 };
+
+    if (segment) {
+      const now = new Date();
+      const mm  = String(now.getMonth() + 1).padStart(2, '0');
+
+      switch (segment) {
+        case 'new':
+          filter.visitCount = 1;
+          sort = { firstVisitAt: -1 };
+          break;
+        case 'repeat':
+          filter.visitCount = { $gte: 2 };
+          sort = { visitCount: -1 };
+          break;
+        case 'vip':
+          filter.lifetimeSpend = { $gt: 0 };
+          sort = { lifetimeSpend: -1 };
+          break;
+        case 'inactive30':
+          filter.lastVisitAt = { $lt: new Date(Date.now() - 30 * 86400000), $ne: null };
+          filter.visitCount  = { $gt: 0 };
+          sort = { lastVisitAt: 1 };
+          break;
+        case 'inactive60':
+          filter.lastVisitAt = { $lt: new Date(Date.now() - 60 * 86400000), $ne: null };
+          filter.visitCount  = { $gt: 0 };
+          sort = { lastVisitAt: 1 };
+          break;
+        case 'inactive90':
+          filter.lastVisitAt = { $lt: new Date(Date.now() - 90 * 86400000), $ne: null };
+          filter.visitCount  = { $gt: 0 };
+          sort = { lastVisitAt: 1 };
+          break;
+        case 'birthday':        filter.birthday    = { $regex: `^${mm}-`, $ne: null }; break;
+        case 'anniversary':     filter.anniversary = { $regex: `^${mm}-`, $ne: null }; break;
+        case 'birthdayweek':    filter.birthday    = { $in: nextSevenDayPatterns(), $ne: null }; break;
+        case 'anniversaryweek': filter.anniversary = { $in: nextSevenDayPatterns(), $ne: null }; break;
+        case 'loyalty':         filter.loyaltyBalance = { $gt: 0 }; sort = { loyaltyBalance: -1 }; break;
+        case 'noloyalty':
+          filter.loyaltyBalance = 0;
+          filter.visitCount     = { $gt: 0 };
+          break;
+      }
+    } else if (phone) {
+      const escaped = String(phone).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.phone = { $regex: escaped, $options: 'i' };
+    } else if (name) {
+      filter.$text = { $search: String(name).trim() };
+    }
+
+    const today    = new Date().toISOString().split('T')[0];
+    const filename = `dinepos-customers-${today}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // CSV header row
+    res.write('Name,Phone,Email,Customer ID,Visits,Lifetime Spend,Avg Bill,Last Visit,Birthday,Anniversary,Marketing Opt-In,Loyalty Points,Status,Created\r\n');
+
+    const exportSelect = 'customerId name phone email birthday anniversary marketingOptIn loyaltyBalance lifetimeSpend visitCount lastVisitAt createdAt status';
+
+    const cursor = CustomerProfile
+      .find(filter)
+      .sort(sort)
+      .select(exportSelect)
+      .lean<Record<string, any>>()
+      .cursor();
+
+    for await (const doc of cursor) {
+      res.write(customerToCsvRow(doc) + '\r\n');
+    }
+
+    res.end();
+  } catch (err) {
+    if (!res.headersSent) {
+      sendError(res, 500, 'Failed to export customers', err);
+    } else {
+      res.end();
+    }
   }
 });
 
