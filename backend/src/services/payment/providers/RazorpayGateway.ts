@@ -23,10 +23,13 @@ export class RazorpayGateway implements PaymentGateway {
 
   constructor(config: GatewayRuntimeConfig) {
     this.config = config;
-    this.client = new Razorpay({
-      key_id:     config.apiKey,
-      key_secret: config.apiSecret,
-    });
+    // OAuth-connected: Razorpay SDK accepts { oauthToken } in place of key_id/key_secret.
+    // Standard: use the hotel's own API key pair from PaymentGatewayConfig.
+    if (config.oauthAccessToken) {
+      this.client = new Razorpay({ oauthToken: config.oauthAccessToken } as ConstructorParameters<typeof Razorpay>[0]);
+    } else {
+      this.client = new Razorpay({ key_id: config.apiKey, key_secret: config.apiSecret });
+    }
   }
 
   // ── Create a Razorpay Order (step 1 of checkout flow) ─────────────────────────
@@ -50,7 +53,9 @@ export class RazorpayGateway implements PaymentGateway {
       gatewayTransactionId: order.id,   // Razorpay order id (becomes payment id after capture)
       gatewayOrderId:       order.id,
       metadata: {
-        keyId:         this.config.apiKey,
+        // OAuth: public_token replaces key_id for client-side Checkout.js (web + mobile).
+        // Standard: use the hotel's own key_id directly.
+        keyId:         this.config.publicToken || this.config.apiKey,
         orderId:       order.id,
         amount:        order.amount,
         currency:      order.currency,

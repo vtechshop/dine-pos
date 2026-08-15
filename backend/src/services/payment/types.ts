@@ -97,4 +97,9 @@ export interface GatewayRuntimeConfig {
   apiSecret:     string;    // already decrypted
   webhookSecret: string;    // already decrypted
   environment:   GatewayEnvironment;
+  // OAuth fields — present only for OAuth-connected configs (Technology Partner model).
+  // oauthAccessToken replaces key_id/key_secret for Razorpay SDK initialisation.
+  // publicToken replaces key_id in client-side Checkout.js flows.
+  oauthAccessToken?: string;  // decrypted access_token
+  publicToken?:      string;  // non-sensitive public_token for Checkout.js
 }

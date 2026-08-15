@@ -17,9 +17,12 @@ function safeConfig(c: InstanceType<typeof PaymentGatewayConfig>) {
   const obj = c.toObject();
   return {
     ...obj,
-    apiSecretEnc:      obj.apiSecretEnc      ? REDACTED : '',
-    webhookSecretEnc:  obj.webhookSecretEnc  ? REDACTED : '',
-    isIntegrated:      GatewayFactory.isRegistered(obj.gatewayType),
+    // Encrypted credential fields — never expose ciphertext to the frontend
+    apiSecretEnc:          obj.apiSecretEnc          ? REDACTED : '',
+    webhookSecretEnc:      obj.webhookSecretEnc      ? REDACTED : '',
+    oauthAccessTokenEnc:   obj.oauthAccessTokenEnc   ? REDACTED : '',
+    oauthRefreshTokenEnc:  obj.oauthRefreshTokenEnc  ? REDACTED : '',
+    isIntegrated:          GatewayFactory.isRegistered(obj.gatewayType),
   };
 }
 

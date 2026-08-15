@@ -85,6 +85,8 @@ import { startScheduler, stopScheduler } from './services/scheduler';
 import { startOcrWorker, stopOcrWorker } from './workers/ocrWorker';
 import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
 import GatewayFactory from './services/payment/GatewayFactory';
+import razorpayOAuthRoutes from './routes/razorpayOAuthRoutes';
+import razorpayPartnerWebhookRoutes from './routes/razorpayPartnerWebhookRoutes';
 import * as Sentry from '@sentry/node';
 import helmet from 'helmet';
 
@@ -264,7 +266,12 @@ app.use(express.json({
   limit: '1mb',
   verify: (req, _res, buf, encoding) => {
     const url = (req as express.Request).url ?? '';
-    if (url.startsWith('/api/aggregator') || url.startsWith('/api/payment-webhooks/')) {
+    // Preserve raw body for all webhook endpoints that need signature verification.
+    if (
+      url.startsWith('/api/aggregator') ||
+      url.startsWith('/api/payment-webhooks/') ||
+      url.startsWith('/api/razorpay/partner-webhook')
+    ) {
       (req as any).rawBody = buf.toString((encoding as BufferEncoding) || 'utf8');
     }
   },
@@ -377,6 +384,10 @@ app.use('/api/purchase-invoices', purchaseInvoiceRoutes);
 app.use('/api/payments',                   paymentRoutes);
 app.use('/api/payment-gateway-configs',    paymentGatewayConfigRoutes);
 app.use('/api/payment-webhooks',           paymentWebhookRoutes);
+// Razorpay Technology Partner OAuth — connect / callback / status / disconnect
+app.use('/api/razorpay/oauth',             razorpayOAuthRoutes);
+// Razorpay partner-level webhook — account.app.authorization_revoked (no auth, signature-verified)
+app.use('/api/razorpay/partner-webhook',   razorpayPartnerWebhookRoutes);
 // AI Menu Import — rate-limited to 10 req/min (Gemini calls are expensive)
 app.use('/api/ai-menu', _rl(10, 60_000));
 app.use('/api/ai-menu', aiMenuRoutes);

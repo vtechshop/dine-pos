@@ -17,6 +17,15 @@ export interface IPaymentGatewayConfig extends Document {
     success?:      boolean;
     message?:      string;
   };
+  // ── Razorpay Technology Partner OAuth fields ───────────────────────────────
+  isOAuthConnected:        boolean;
+  oauthAccessTokenEnc:     string;  // AES-256-GCM encrypted access_token
+  oauthRefreshTokenEnc:    string;  // AES-256-GCM encrypted refresh_token (rotates on use)
+  oauthPublicToken:        string;  // non-sensitive; replaces key_id in Checkout.js
+  oauthConnectedAccountId: string;  // Razorpay razorpay_account_id of the connected merchant
+  oauthConnectedAt:        Date | null;
+  oauthExpiresAt:          Date | null;  // access_token expiry (~90 days)
+  oauthRefreshExpiresAt:   Date | null;  // refresh_token expiry (~180 days from generation)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,6 +47,15 @@ const schema = new Schema<IPaymentGatewayConfig>(
       success:      Boolean,
       message:      String,
     },
+    // ── Razorpay OAuth ────────────────────────────────────────────────────────
+    isOAuthConnected:        { type: Boolean, default: false },
+    oauthAccessTokenEnc:     { type: String,  default: '' },
+    oauthRefreshTokenEnc:    { type: String,  default: '' },
+    oauthPublicToken:        { type: String,  default: '' },
+    oauthConnectedAccountId: { type: String,  default: '' },
+    oauthConnectedAt:        { type: Date,    default: null },
+    oauthExpiresAt:          { type: Date,    default: null },
+    oauthRefreshExpiresAt:   { type: Date,    default: null },
   },
   { timestamps: true },
 );

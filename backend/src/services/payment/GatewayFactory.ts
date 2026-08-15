@@ -18,6 +18,8 @@ const GatewayFactory = {
 
   // Create a live gateway instance from a stored DB config.
   // Decrypts secrets before passing to the constructor.
+  // For OAuth-connected configs, decrypts oauthAccessTokenEnc and passes it as
+  // oauthAccessToken; the gateway constructor uses it instead of key_id/key_secret.
   create(dbConfig: IPaymentGatewayConfig): PaymentGateway {
     const Cls = registry.get(dbConfig.gatewayType);
     if (!Cls) {
@@ -30,11 +32,29 @@ const GatewayFactory = {
       gatewayType:   dbConfig.gatewayType,
       merchantId:    dbConfig.merchantId,
       apiKey:        dbConfig.apiKey,
-      apiSecret:     dbConfig.apiSecretEnc  ? decrypt(dbConfig.apiSecretEnc)  : '',
+      apiSecret:     dbConfig.apiSecretEnc     ? decrypt(dbConfig.apiSecretEnc)     : '',
       webhookSecret: dbConfig.webhookSecretEnc ? decrypt(dbConfig.webhookSecretEnc) : '',
       environment:   dbConfig.environment,
+      ...(dbConfig.isOAuthConnected ? {
+        oauthAccessToken: dbConfig.oauthAccessTokenEnc ? decrypt(dbConfig.oauthAccessTokenEnc) : '',
+        publicToken:      dbConfig.oauthPublicToken ?? '',
+      } : {}),
     };
     return new Cls(config);
+  },
+
+  // Returns true when the OAuth access_token expires within the next 7 days.
+  // Use this to trigger a proactive refresh before the token actually expires.
+  isTokenNearExpiry(dbConfig: IPaymentGatewayConfig): boolean {
+    if (!dbConfig.isOAuthConnected || !dbConfig.oauthExpiresAt) return false;
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    return dbConfig.oauthExpiresAt.getTime() - Date.now() < sevenDaysMs;
+  },
+
+  // Returns true when the OAuth access_token has already expired.
+  isTokenExpired(dbConfig: IPaymentGatewayConfig): boolean {
+    if (!dbConfig.isOAuthConnected || !dbConfig.oauthExpiresAt) return false;
+    return dbConfig.oauthExpiresAt < new Date();
   },
 
   isRegistered(type: GatewayType): boolean {
