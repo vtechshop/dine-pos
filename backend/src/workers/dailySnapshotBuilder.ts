@@ -7,6 +7,7 @@ import JobRegistry from '../models/JobRegistry';
 import Hotel from '../models/Hotel';
 import { acquireSchedulerLock, releaseSchedulerLock } from '../utils/schedulerLock';
 import { logger } from '../utils/logger';
+import { yesterdayBusinessDate, startOfBusinessDay, endOfBusinessDay } from '../utils/businessDate';
 
 const DAILY_BATCH_SIZE = 10;
 
@@ -27,11 +28,21 @@ function pct(current: number, baseline: number): number | null {
 // ─── Build a single hotel's daily snapshot ────────────────────────────────────
 
 export async function buildDailySnapshot(
-  hotelId: mongoose.Types.ObjectId,
-  date:    string,  // "YYYY-MM-DD"
+  hotelId:  mongoose.Types.ObjectId,
+  date:     string,  // "YYYY-MM-DD" in hotel-local timezone
+  timezone: string = 'Asia/Kolkata',
 ): Promise<void> {
-  const startOfDay = new Date(`${date}T00:00:00.000Z`);
-  const endOfDay   = new Date(`${date}T23:59:59.999Z`);
+  // Hotel-level lock: prevents duplicate snapshot builds if the scheduler fires twice
+  const hotelLockName = `daily-snap:${hotelId}:${date}`;
+  const acquired      = await acquireSchedulerLock(hotelLockName, 600);
+  if (!acquired) {
+    logger.warn('[dailySnap] hotel lock already held, skipping', { hotelId: hotelId.toString(), date });
+    return;
+  }
+
+  try {
+  const startOfDay = startOfBusinessDay(date, timezone);
+  const endOfDay   = endOfBusinessDay(date, timezone);
   const matchActive = {
     hotelId,
     createdAt: { $gte: startOfDay, $lte: endOfDay },
@@ -204,6 +215,9 @@ export async function buildDailySnapshot(
     },
     { upsert: true, new: false },
   );
+  } finally {
+    await releaseSchedulerLock(hotelLockName);
+  }
 }
 
 // ─── Dispatch daily snapshots for hotels due in this minute ──────────────────
@@ -219,8 +233,9 @@ export async function dispatchDailySnapshots(minuteOfDay: number): Promise<void>
   const acquired = await acquireSchedulerLock(lockName, 5 * 60);
   if (!acquired) return;
 
-  // Yesterday UTC — the day whose data is now complete
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // "Yesterday" is computed per-hotel below using hotel timezone.
+  // This UTC fallback is kept only for the job registry log.
+  const yesterdayUtc = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   await JobRegistry.findOneAndUpdate(
     { jobName },
@@ -230,7 +245,7 @@ export async function dispatchDailySnapshots(minuteOfDay: number): Promise<void>
 
   const hotels = await Hotel.find(
     { status: { $in: ['active', 'trial'] } },
-    { _id: 1 },
+    { _id: 1, timezone: 1 },
   ).lean();
 
   const due = hotels.filter((h) => hotelStaggerSlot(h._id.toString()) === minuteOfDay);
@@ -244,7 +259,7 @@ export async function dispatchDailySnapshots(minuteOfDay: number): Promise<void>
       return;
     }
 
-    logger.info(`[dailySnapshot] minute=${minuteOfDay} dispatching ${due.length} hotel(s) for ${yesterday}`);
+    logger.info(`[dailySnapshot] minute=${minuteOfDay} dispatching ${due.length} hotel(s) (ref UTC yesterday: ${yesterdayUtc})`);
 
     let processed              = 0;
     let failed                 = 0;
@@ -253,7 +268,11 @@ export async function dispatchDailySnapshots(minuteOfDay: number): Promise<void>
     for (let i = 0; i < due.length; i += DAILY_BATCH_SIZE) {
       const batch   = due.slice(i, i + DAILY_BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map((h) => buildDailySnapshot(h._id as mongoose.Types.ObjectId, yesterday)),
+        batch.map((h) => {
+          const tz      = (h as any).timezone ?? 'Asia/Kolkata';
+          const dateStr = yesterdayBusinessDate(tz);
+          return buildDailySnapshot(h._id as mongoose.Types.ObjectId, dateStr, tz);
+        }),
       );
       for (let j = 0; j < results.length; j++) {
         const r   = results[j];

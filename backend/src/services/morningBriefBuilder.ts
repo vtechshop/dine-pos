@@ -14,7 +14,10 @@ import { buildInventoryPrediction } from './inventoryPredictor';
 import { buildRecommendations } from './recommendationEngine';
 import { getCachedForecast, getCachedInventory } from '../utils/forecastCache';
 import { generateNarrative } from '../utils/geminiNarrative';
+import { acquireSchedulerLock, releaseSchedulerLock } from '../utils/schedulerLock';
 import { logger } from '../utils/logger';
+import Expense from '../models/Expense';
+import VendorLedgerEntry from '../models/VendorLedgerEntry';
 
 // ─── Typed interfaces for cached objects ─────────────────────────────────────
 
@@ -44,18 +47,32 @@ function isInventory(v: unknown): v is CachedInventory {
   return typeof v === 'object' && v !== null && 'coverageSummary' in v;
 }
 
+// ─── Retry helper for transient failures ─────────────────────────────────────
+// Returns the first non-null result, or null if all attempts fail.
+// Delays are applied between attempts (not before the first).
+
+async function withRetry<T>(
+  fn:          () => Promise<T | null>,
+  maxAttempts: number,
+  delaysMs:    number[],
+): Promise<T | null> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const result = await fn();
+    if (result !== null) return result;
+    if (attempt < maxAttempts - 1) {
+      const delay = delaysMs[attempt] ?? delaysMs[delaysMs.length - 1] ?? 5000;
+      await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  return null;
+}
+
 // ─── Prompt sanitization ─────────────────────────────────────────────────────
 // Product names and inventory item names are user-created strings — strip
 // characters that could be used to inject instructions into a Gemini prompt.
 function sanitize(s: string): string {
   return String(s).replace(/[<>{}\[\]\\|`]/g, '').slice(0, 80).trim();
 }
-
-// ─── Profit estimation ────────────────────────────────────────────────────────
-// No BOM (Bill-of-Materials) link between menu items and ingredients exists in
-// the current data model. We use a conservative 20% net margin heuristic,
-// typical for mid-range Indian F&B operations, until actual cost tracking is added.
-const ESTIMATED_NET_MARGIN = 0.20;
 
 // ─── Payment method label ─────────────────────────────────────────────────────
 function topPayment(breakdown: { cash: number; upi: number; card: number; split: number }): string {
@@ -69,6 +86,15 @@ export async function buildMorningBrief(
   hotelId: string,
   date:    string,  // YYYY-MM-DD — the date to summarize (yesterday)
 ): Promise<boolean> {
+  // Hotel-level lock: prevents duplicate brief builds if the scheduler fires twice
+  const hotelLockName = `morning-brief:${hotelId}:${date}`;
+  const lockAcquired  = await acquireSchedulerLock(hotelLockName, 900);
+  if (!lockAcquired) {
+    logger.warn('[morningBrief] hotel lock already held, skipping', { hotelId, date });
+    return false;
+  }
+
+  try {
   const hotelOId = new mongoose.Types.ObjectId(hotelId);
 
   // ── Load yesterday's DailySnapshot ──────────────────────────────────────
@@ -84,6 +110,27 @@ export async function buildMorningBrief(
       dataInputHash: 1,
     },
   ).lean();
+
+  const hotelOIdStr = hotelId;
+  const dateStart = new Date(`${date}T00:00:00.000Z`);
+  const dateEnd   = new Date(`${date}T23:59:59.999Z`);
+
+  const [expenseAgg, vendorAgg] = await Promise.allSettled([
+    Expense.aggregate([
+      { $match: { hotelId: hotelOId, date: { $gte: dateStart, $lte: dateEnd } } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
+    VendorLedgerEntry.aggregate([
+      { $match: { hotelId: hotelOId } },
+      { $sort: { createdAt: -1 } },
+      { $group: { _id: '$vendorId', runningBalance: { $first: '$runningBalance' } } },
+      { $match: { runningBalance: { $gt: 0 } } },
+      { $group: { _id: null, outstanding: { $sum: '$runningBalance' } } },
+    ]),
+  ]);
+
+  const totalExpenses     = (expenseAgg.status === 'fulfilled' ? expenseAgg.value[0]?.total : null) ?? 0;
+  const vendorOutstanding = (vendorAgg.status === 'fulfilled' ? vendorAgg.value[0]?.outstanding : null) ?? 0;
 
   if (!snap) {
     logger.warn('[morningBrief] No snapshot for date', { hotelId, date });
@@ -135,8 +182,6 @@ export async function buildMorningBrief(
   const cancelledOrders    = snap.cancelledOrders;
   const totalAttempted     = orders + cancelledOrders;
   const cancelRate         = totalAttempted > 0 ? +(cancelledOrders / totalAttempted).toFixed(4) : 0;
-  const estimatedProfit    = +(revenue * ESTIMATED_NET_MARGIN).toFixed(2);
-  const profitMarginPct    = ESTIMATED_NET_MARGIN * 100;
   const avgBill            = orders > 0 ? +snap.avgOrderValue.toFixed(2) : 0;
   const pb                 = snap.paymentBreakdown as { cash: number; upi: number; card: number; split: number };
   const topPaymentMethod   = topPayment(pb);
@@ -185,12 +230,14 @@ Generate a concise morning briefing for the restaurant manager based on yesterda
 
 BUSINESS SUMMARY:
 - Revenue: ₹${revenue.toFixed(0)} | Orders: ${orders} | Avg Bill: ₹${avgBill.toFixed(0)}
-- Estimated Net Profit: ₹${estimatedProfit.toFixed(0)} (${profitMarginPct.toFixed(0)}% margin heuristic)
+- Net Profit: Not available (no recipe/cost data linked to menu items)
 - Health Score: ${health.score}/100 (${health.grade})
 - Cancellation Rate: ${(cancelRate * 100).toFixed(1)}% (${cancelledOrders} cancelled)
 - Top Seller: ${topItemStr}
 - Peak Hour: ${snap.peakHour}:00 | Top Payment: ${topPaymentMethod}
 - Revenue vs 7-day avg: ${snap.revenueVs7DayAvgPct != null ? `${snap.revenueVs7DayAvgPct > 0 ? '+' : ''}${snap.revenueVs7DayAvgPct.toFixed(1)}%` : 'N/A'}
+- Total Expenses: ${totalExpenses > 0 ? '₹' + totalExpenses.toFixed(0) : 'N/A'}
+- Vendor Outstanding: ${vendorOutstanding > 0 ? '₹' + vendorOutstanding.toFixed(0) : 'None'}
 
 INVENTORY ALERTS:
 - Critical (reorder now): ${critStr}
@@ -209,7 +256,10 @@ REC3: [Specific actionable recommendation #3 based on data]
 OPPORTUNITY: [One business opportunity spotted in the data]
 WARNING: [One warning or risk from the data, or "None" if all clear]`;
 
-  const raw = await generateNarrative(prompt);
+  const raw = await withRetry(() => generateNarrative(prompt), 3, [5000, 10000]);
+  if (raw === null) {
+    logger.warn('[morningBrief] Gemini unavailable after 3 attempts, saving brief without narrative', { hotelId, date });
+  }
 
   // Parse Gemini structured response
   let executiveSummary = `${date} brief: Revenue ₹${revenue.toFixed(0)}, ${orders} orders. Health score ${health.score}/100 (${health.grade}).`;
@@ -248,8 +298,8 @@ WARNING: [One warning or risk from the data, or "None" if all clear]`;
         business: {
           revenue,
           orders,
-          estimatedProfit,
-          estimatedProfitMarginPct: profitMarginPct,
+          estimatedProfit:           null,
+          estimatedProfitMarginPct: null,
           avgBill,
           healthScore:           health.score,
           healthGrade:           health.grade,
@@ -262,6 +312,10 @@ WARNING: [One warning or risk from the data, or "None" if all clear]`;
           ordersVs7DayAvgPct:   snap.ordersVs7DayAvgPct,
           cancelledOrders,
           cancelRate,
+        },
+        expenses: {
+          totalExpenses:     +totalExpenses.toFixed(2),
+          vendorOutstanding: +vendorOutstanding.toFixed(2),
         },
         menu: { topMenuItems, slowMovers },
         inventory: {
@@ -293,4 +347,7 @@ WARNING: [One warning or risk from the data, or "None" if all clear]`;
 
   logger.info('[morningBrief] Brief built', { hotelId, date, healthScore: health.score });
   return true;
+  } finally {
+    await releaseSchedulerLock(hotelLockName);
+  }
 }

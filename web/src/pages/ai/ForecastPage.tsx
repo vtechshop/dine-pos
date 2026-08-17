@@ -18,6 +18,12 @@ function fmt2(n: number) { return n.toLocaleString('en-IN', { maximumFractionDig
 function dow(date: string) {
   return new Date(date + 'T00:00:00Z').toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' });
 }
+function utcToIST(utcHour: number): string {
+  const istHour = ((utcHour + 5) % 24);
+  const h12  = istHour % 12 === 0 ? 12 : istHour % 12;
+  const ampm = istHour >= 12 ? 'PM' : 'AM';
+  return `${h12}:30 ${ampm} IST`;
+}
 
 // ── Mini components ───────────────────────────────────────────────────────────
 
@@ -105,11 +111,26 @@ function IngTable({ items, rowCls, title }: {
 
 // ── Sales tab ─────────────────────────────────────────────────────────────────
 
+// ── Accuracy grade badge ──────────────────────────────────────────────────────
+
+function AccuracyBadge({ grade }: { grade: 'good' | 'fair' | 'poor' }) {
+  const cfg = {
+    good: { cls: 'bg-green-50 border-green-200 text-green-700', label: 'Good accuracy' },
+    fair: { cls: 'bg-amber-50 border-amber-200 text-amber-700', label: 'Fair accuracy' },
+    poor: { cls: 'bg-red-50  border-red-200   text-red-700',   label: 'Low accuracy'  },
+  }[grade];
+  return (
+    <span className={`ml-2 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cfg.cls}`}>
+      {cfg.label}
+    </span>
+  );
+}
+
 function SalesTab({ data }: { data: SalesForecast }) {
   const {
     forecastWeekRevenue, forecastWeekOrders, avgForecastAOV,
     revenueForecastMeta, dataPoints, revenueNext7d,
-    itemDemand, topPeakHours, narrative, narrativeSource,
+    itemDemand, topPeakHours, narrative, narrativeSource, revenueAccuracy,
   } = data;
 
   if (dataPoints < 3) {
@@ -117,6 +138,7 @@ function SalesTab({ data }: { data: SalesForecast }) {
   }
 
   const { method, confidence, mape } = revenueForecastMeta;
+  const hasCI = revenueNext7d.some(pt => pt.confidenceLow != null);
 
   return (
     <div className="space-y-5">
@@ -129,9 +151,20 @@ function SalesTab({ data }: { data: SalesForecast }) {
 
       {/* Confidence strip */}
       <div className="rounded-xl border border-border bg-canvas px-4 py-3 text-sm text-ink/60">
-        <span className="font-semibold text-ink">{(confidence * 100).toFixed(0)}% confidence</span>
-        {' — '}{method} model — {dataPoints} data points
-        {mape > 0 && <span className="ml-2 text-ink/40">(MAPE {mape.toFixed(1)}%)</span>}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-semibold text-ink">{(confidence * 100).toFixed(0)}% model confidence</span>
+          <span>—</span>
+          <span>{method} model</span>
+          <span>—</span>
+          <span>{dataPoints} data points</span>
+          {mape > 0 && <span className="text-ink/40">(MAPE {mape.toFixed(1)}%)</span>}
+          {revenueAccuracy && <AccuracyBadge grade={revenueAccuracy.grade} />}
+        </div>
+        {hasCI && (
+          <p className="mt-1.5 text-[11px] text-ink/40 leading-snug">
+            Confidence range shown below is based on historical forecast error (MAPE), not a statistical prediction interval.
+          </p>
+        )}
       </div>
 
       {/* 7-day revenue table */}
@@ -144,7 +177,13 @@ function SalesTab({ data }: { data: SalesForecast }) {
                 <tr className="bg-mist rounded-lg text-left">
                   <th className="px-3 py-2 text-xs text-ink/50 font-medium rounded-l-lg">Date</th>
                   <th className="px-3 py-2 text-xs text-ink/50 font-medium">Day</th>
-                  <th className="px-3 py-2 text-xs text-ink/50 font-medium text-right rounded-r-lg">Expected Revenue</th>
+                  <th className="px-3 py-2 text-xs text-ink/50 font-medium text-right">Expected Revenue</th>
+                  {hasCI && (
+                    <th className="px-3 py-2 text-xs text-ink/50 font-medium text-right rounded-r-lg">
+                      Likely Range
+                    </th>
+                  )}
+                  {!hasCI && <th className="rounded-r-lg" />}
                 </tr>
               </thead>
               <tbody>
@@ -153,6 +192,14 @@ function SalesTab({ data }: { data: SalesForecast }) {
                     <td className="px-3 py-2 text-ink/70 tabular-nums">{pt.date}</td>
                     <td className="px-3 py-2 text-ink/60">{dow(pt.date)}</td>
                     <td className="px-3 py-2 text-right font-semibold tabular-nums text-ink">₹{fmt0(pt.value)}</td>
+                    {hasCI && (
+                      <td className="px-3 py-2 text-right tabular-nums text-ink/50 text-xs">
+                        {pt.confidenceLow != null && pt.confidenceHigh != null
+                          ? `₹${fmt0(pt.confidenceLow)} – ₹${fmt0(pt.confidenceHigh)}`
+                          : '—'
+                        }
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -199,12 +246,12 @@ function SalesTab({ data }: { data: SalesForecast }) {
           <div className="flex items-center gap-2 mb-3">
             <Clock size={14} className="text-ink/40" />
             <h3 className="font-semibold text-sm text-ink">Peak Hours</h3>
-            <span className="text-xs text-ink/40">(hours stored as UTC)</span>
+            <span className="text-xs text-ink/40">(Times in IST)</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {topPeakHours.map(h => (
               <span key={h} className="px-3 py-1 rounded-full border border-border bg-mist text-sm font-medium text-ink">
-                {String(h).padStart(2, '0')}:00
+                {utcToIST(h)}
               </span>
             ))}
           </div>

@@ -6,6 +6,7 @@ import Hotel from '../models/Hotel';
 import { setHotMetrics, upsertLeaderboard } from '../utils/aiMetricsCache';
 import { acquireSchedulerLock, releaseSchedulerLock } from '../utils/schedulerLock';
 import { logger } from '../utils/logger';
+import { toBusinessDate } from '../utils/businessDate';
 
 const BATCH_SIZE = 20;
 
@@ -15,7 +16,18 @@ export async function aggregateHotelHour(
   hotelId:     mongoose.Types.ObjectId,
   startOfHour: Date,
   endOfHour:   Date,
+  timezone:    string = 'Asia/Kolkata',
 ): Promise<void> {
+  // Hotel-level lock: prevents duplicate processing if the job fires twice for the same hotel+hour
+  const hourSlot      = startOfHour.toISOString().slice(0, 13); // e.g. "2024-08-17T14"
+  const hotelLockName = `hourly:${hotelId}:${hourSlot}`;
+  const acquired      = await acquireSchedulerLock(hotelLockName, 120);
+  if (!acquired) {
+    logger.warn('[hourlyAgg] hotel lock already held, skipping', { hotelId: hotelId.toString(), hourSlot });
+    return;
+  }
+
+  try {
   const matchBase = {
     hotelId,
     createdAt: { $gte: startOfHour, $lte: endOfHour },
@@ -101,7 +113,7 @@ export async function aggregateHotelHour(
   const uniqueTables = tableNums.length;
 
   // ── Build date / hour keys ────────────────────────────────────────────────
-  const date = startOfHour.toISOString().slice(0, 10);
+  const date = toBusinessDate(startOfHour, timezone);
   const hour = startOfHour.getUTCHours();
 
   // ── Upsert HourlyMetrics ──────────────────────────────────────────────────
@@ -123,6 +135,9 @@ export async function aggregateHotelHour(
     },
     { upsert: true, new: false },
   );
+  } finally {
+    await releaseSchedulerLock(hotelLockName);
+  }
 }
 
 // ─── Update Redis hot metrics + leaderboard for a hotel from today's HourlyMetrics ──
@@ -195,7 +210,7 @@ export async function runHourlyAggregation(
   const prevHour    = new Date(Date.now() - 60 * 60 * 1000);
   const date        = targetDate ?? prevHour.toISOString().slice(0, 10);
   const hour        = targetHour ?? prevHour.getUTCHours();
-  const today       = new Date().toISOString().slice(0, 10);
+  const today       = new Date().toISOString().slice(0, 10); // kept for job log only
   const startOfHour = new Date(`${date}T${String(hour).padStart(2, '0')}:00:00.000Z`);
   const endOfHour   = new Date(`${date}T${String(hour).padStart(2, '0')}:59:59.999Z`);
 
@@ -209,7 +224,7 @@ export async function runHourlyAggregation(
 
   const hotels = await Hotel.find(
     { status: { $in: ['active', 'trial'] } },
-    { _id: 1 },
+    { _id: 1, timezone: 1 },
   ).lean();
 
   let processed    = 0;
@@ -221,10 +236,13 @@ export async function runHourlyAggregation(
       const batch   = hotels.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
         batch.map(async (h) => {
-          const hotelId = h._id as mongoose.Types.ObjectId;
-          await aggregateHotelHour(hotelId, startOfHour, endOfHour);
-          if (date === today) {
-            await refreshRedisForHotel(hotelId, today);
+          const hotelId   = h._id as mongoose.Types.ObjectId;
+          const hotelTz   = (h as any).timezone ?? 'Asia/Kolkata';
+          const localDate = toBusinessDate(startOfHour, hotelTz);
+          await aggregateHotelHour(hotelId, startOfHour, endOfHour, hotelTz);
+          const localToday = toBusinessDate(new Date(), hotelTz);
+          if (localDate === localToday) {
+            await refreshRedisForHotel(hotelId, localToday);
           }
         }),
       );

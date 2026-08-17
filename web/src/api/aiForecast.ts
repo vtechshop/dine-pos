@@ -1,8 +1,10 @@
 import { apiFetch } from './client';
 
 export interface ForecastPoint {
-  date:  string;
-  value: number;
+  date:           string;
+  value:          number;
+  confidenceLow?: number;   // MAPE-based lower bound — may be absent on older data
+  confidenceHigh?: number;  // MAPE-based upper bound
 }
 
 export interface ForecastMeta {
@@ -41,6 +43,11 @@ export interface SalesForecast {
   topPeakHours:         number[];
   itemDemand:           ItemDemandForecast[];
   tableUtilNext7d:      ForecastPoint[];
+  revenueAccuracy?: {
+    mape:       number;
+    dataPoints: number;
+    grade:      'good' | 'fair' | 'poor';
+  };
   narrative:            string | null;
   narrativeSource:      'cache' | 'gemini' | 'unavailable';
 }
@@ -85,4 +92,28 @@ export function fetchSalesForecast(): Promise<SalesForecast> {
 
 export function fetchInventoryForecast(): Promise<InventoryForecast> {
   return apiFetch('/ai/forecast/inventory');
+}
+
+// ── Purchase suggestions ──────────────────────────────────────────────────────
+
+export interface PurchaseSuggestion {
+  itemName:       string;
+  currentStock:   number;
+  unit:           string;
+  urgency:        'critical' | 'soon' | 'plan';
+  suggestedQty:   number;
+  estimatedCost?: number;
+  hasPendingPO:   boolean;
+  reason:         string;
+}
+
+export interface PurchaseSuggestionResult {
+  suggestions:        PurchaseSuggestion[];
+  totalEstimatedCost: number;
+  limitations:        string[];
+  generatedAt:        string;
+}
+
+export function fetchPurchaseSuggestions(): Promise<PurchaseSuggestionResult> {
+  return apiFetch('/ai/forecast/purchase');
 }

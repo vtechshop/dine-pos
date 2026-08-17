@@ -68,8 +68,33 @@ export interface RecommendationSet {
   highMarginItems: MenuItemScore[];
 }
 
+export interface AlertRecord {
+  _id:        string;   // MongoDB ObjectId — used for PATCH /:id/read
+  type:       string;
+  severity:   'critical' | 'warning' | 'info';
+  title:      string;
+  message:    string;
+  value:      number;
+  baseline:   number;
+  changePct:  number;
+  dedupDate:  string;
+  isRead:     boolean;
+  readAt?:    string;
+  resolvedAt?: string;
+  createdAt:  string;   // Mongoose timestamps — when the alert was first persisted
+  updatedAt:  string;
+}
+
 export function fetchAlerts(): Promise<AlertResult> {
   return apiFetch('/ai/alerts');
+}
+
+export function fetchAlertHistory(): Promise<{ alerts: AlertRecord[] }> {
+  return apiFetch('/ai/alerts/history');
+}
+
+export function markAlertRead(alertId: string): Promise<{ success: boolean }> {
+  return apiFetch(`/ai/alerts/${alertId}/read`, { method: 'PATCH' });
 }
 
 export function fetchAlertsByDate(date: string): Promise<AlertResult> {
