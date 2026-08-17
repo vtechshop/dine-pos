@@ -911,8 +911,8 @@ export function IntegrationsPage() {
         fetchWebhookLogs(),
         fetchMessagingProvider(),
       ]);
-      if (intRes.status === 'fulfilled') setIntegrations(intRes.value);
-      if (logRes.status === 'fulfilled') setLogs(logRes.value.slice(0, 20));
+      if (intRes.status === 'fulfilled') setIntegrations(intRes.value.integrations);
+      if (logRes.status === 'fulfilled') setLogs(logRes.value.logs.slice(0, 20));
       if (msgRes.status === 'fulfilled') setMessagingConfig(msgRes.value.config);
     } finally {
       setLoadingMain(false);
@@ -942,7 +942,7 @@ export function IntegrationsPage() {
       await retryWebhook(logId);
       toast('success', 'Webhook retry queued.');
       const refreshed = await fetchWebhookLogs();
-      setLogs(refreshed.slice(0, 20));
+      setLogs(refreshed.logs.slice(0, 20));
     } catch (err) {
       toast('error', err instanceof Error ? err.message : 'Retry failed.');
     }

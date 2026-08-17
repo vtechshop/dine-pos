@@ -60,7 +60,7 @@ export interface WebhookLog {
 // ── Integration settings ──────────────────────────────────────────────────────
 
 export const fetchIntegrations = () =>
-  apiFetch<AggregatorIntegration[]>('/aggregator/integrations');
+  apiFetch<{ integrations: AggregatorIntegration[] }>('/aggregator/integrations');
 
 export const fetchIntegration = (platform: AggregatorPlatform) =>
   apiFetch<AggregatorIntegration>(`/aggregator/integrations/${platform}`);
@@ -119,7 +119,7 @@ export const fetchWebhookLogs = (params?: { platform?: string; status?: string }
   const q = new URLSearchParams();
   if (params?.platform) q.set('platform', params.platform);
   if (params?.status)   q.set('status',   params.status);
-  return apiFetch<WebhookLog[]>(`/aggregator/webhook-logs?${q}`);
+  return apiFetch<{ logs: WebhookLog[]; total: number; page: number; pages: number }>(`/aggregator/webhook-logs?${q}`);
 };
 
 export const retryWebhook = (logId: string) =>

@@ -324,7 +324,7 @@ export function MenuSyncPage() {
     setError(null);
     try {
       const res = await fetchIntegrations();
-      setIntegrations(res);
+      setIntegrations(res.integrations);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load integrations');
     } finally {
