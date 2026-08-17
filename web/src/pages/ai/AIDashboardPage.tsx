@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import {
   RefreshCw, TrendingUp, ShoppingCart, AlertTriangle,
   FileText, MessageSquare, BarChart2, Bell, Star, ShoppingBag,
-  CheckCircle, Calendar,
+  CheckCircle, Calendar, Sparkles,
 } from 'lucide-react';
 import { fetchExecutiveDashboard, type ExecutiveDashboard } from '../../api/aiReport';
 import { fetchAnomalies, type AnomalyReport } from '../../api/aiAnalytics';
+import { ApiError } from '../../api/client';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -100,6 +101,7 @@ export function AIDashboardPage() {
   const [dashError, setDashError] = useState<string | null>(null);
   const [anomError, setAnomaliesError] = useState<string | null>(null);
   const [anomInsufficient, setAnomaliesInsufficient] = useState(false);
+  const [featureDisabled, setFeatureDisabled] = useState(false);
 
   const loadDash = useCallback(async () => {
     setDashLoading(true);
@@ -107,8 +109,12 @@ export function AIDashboardPage() {
     try {
       const data = await fetchExecutiveDashboard();
       setDash(data);
-    } catch {
-      setDashError('Failed to load dashboard data.');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403 && err.code === 'FEATURE_DISABLED') {
+        setFeatureDisabled(true);
+      } else {
+        setDashError('Failed to load dashboard data.');
+      }
     } finally {
       setDashLoading(false);
     }
@@ -141,6 +147,23 @@ export function AIDashboardPage() {
     loadDash();
     loadAnomalies();
   }, [loadDash, loadAnomalies]);
+
+  if (featureDisabled) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
+        <div className="h-16 w-16 rounded-2xl bg-brand/10 flex items-center justify-center">
+          <Sparkles size={32} className="text-brand" />
+        </div>
+        <h2 className="text-xl font-bold text-ink">AI Features Not Enabled</h2>
+        <p className="text-sm text-ink/50 max-w-sm text-center">
+          The AI Platform is a premium feature. Contact support to enable it for your account.
+        </p>
+        <a href="mailto:support@dinepos.in" className="rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white">
+          Contact Support
+        </a>
+      </div>
+    );
+  }
 
   const hs = dash?.latestHealthScore ?? null;
   const wc = dash?.weekComparison ?? null;

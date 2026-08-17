@@ -119,6 +119,7 @@ export function MorningBriefPage() {
   const [error, setError]               = useState<string | null>(null);
   const [histLoading, setHistLoading]   = useState(true);
   const [regenLoading, setRegenLoading] = useState(false);
+  const [regenError, setRegenError]     = useState<string | null>(null);
   const [mobileOpen, setMobileOpen]     = useState(false);
 
   // Load history once on mount
@@ -159,7 +160,12 @@ export function MorningBriefPage() {
 
   const handleRegen = useCallback(async () => {
     if (regenLoading) return;
+    if (!selectedDate) {
+      setRegenError('Select a date to regenerate. Briefs can only be regenerated for past dates.');
+      return;
+    }
     setRegenLoading(true);
+    setRegenError(null);
     try {
       await apiFetch<unknown>('/ai/morning-brief/regenerate', {
         method: 'POST',
@@ -168,8 +174,9 @@ export function MorningBriefPage() {
       await loadBrief(selectedDate ?? undefined);
       // Refresh sidebar history after regeneration
       fetchBriefHistory(30).then((r) => setHistory(r.briefs)).catch(() => {});
-    } catch {
-      // Brief stays; silently ignore regen errors
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to regenerate brief';
+      setRegenError(msg);
     } finally {
       setRegenLoading(false);
     }
@@ -192,14 +199,19 @@ export function MorningBriefPage() {
               )}
             </div>
           </div>
-          <button
-            onClick={() => { void handleRegen(); }}
-            disabled={regenLoading || loading}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-mist disabled:opacity-50"
-          >
-            <RefreshCw size={12} className={regenLoading ? 'animate-spin' : ''} />
-            Regenerate
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={() => { void handleRegen(); }}
+              disabled={regenLoading || loading}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-mist disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={regenLoading ? 'animate-spin' : ''} />
+              {regenLoading ? 'Regenerating…' : 'Regenerate'}
+            </button>
+            {regenError && (
+              <p className="max-w-xs text-right text-[11px] text-red-600">{regenError}</p>
+            )}
+          </div>
         </div>
       </div>
 

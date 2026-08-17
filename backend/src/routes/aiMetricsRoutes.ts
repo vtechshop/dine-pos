@@ -72,14 +72,19 @@ router.get('/metrics/today', authMiddleware, requireFeature('ai'), async (req: A
 
 // ─── GET /api/ai/metrics/snapshot/:date ──────────────────────────────────────
 // Returns the pre-built DailySnapshot for a given date (YYYY-MM-DD).
-router.get('/metrics/snapshot/:date', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/metrics/snapshot/:date', authMiddleware, requireFeature('ai'), async (req: AuthRequest, res: Response) => {
   try {
     const hotelId = req.hotelId!;
-    const { date } = req.params;
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return res.status(400).json({ message: 'date must be YYYY-MM-DD' });
+    const dateStr = req.params.date;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD' });
     }
+    // Prevent future date requests (no data can exist for the future)
+    const today = new Date().toISOString().slice(0, 10);
+    if (dateStr > today) {
+      return res.status(400).json({ message: 'Cannot request snapshot for a future date' });
+    }
+    const date = dateStr;
 
     const snapshot = await DailySnapshot.findOne(
       { hotelId: new mongoose.Types.ObjectId(hotelId), date },

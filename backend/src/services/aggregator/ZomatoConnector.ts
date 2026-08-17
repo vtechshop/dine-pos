@@ -1,26 +1,31 @@
 import crypto from 'crypto';
 import { BaseConnector } from './BaseConnector';
-import type { IAggregatorIntegration } from '../../models/AggregatorIntegration';
-import type { ParsedAggregatorOrder, MenuSyncResult } from './types';
+import type { ParsedAggregatorOrder, MenuSyncResult, ConnectorContext } from './types';
 
 const BASE_URL = 'https://api.zomato.com/business/v1';
+
+function zomatoAvailable(p: Record<string, unknown>): 0 | 1 {
+  const override = (p.channelAvailability as Record<string, boolean | null> | undefined)?.zomato;
+  if (override === null || override === undefined) {
+    return (p.isAvailable && !p.isDeleted) ? 1 : 0;
+  }
+  return (override && !p.isDeleted) ? 1 : 0;
+}
 
 export class ZomatoConnector extends BaseConnector {
   readonly platform = 'zomato';
 
   // ── Webhook signature verification ─────────────────────────────────────────
   // Header: x-zomato-signature: sha256=<hex>
-  // Falls back to shared AGGREGATOR_SECRET if integration.webhookSecret is not configured.
   verifyWebhookSignature(
-    rawBody:     string,
-    headers:     Record<string, string>,
-    integration: IAggregatorIntegration,
+    rawBody:       string,
+    headers:       Record<string, string>,
+    webhookSecret: string,
   ): boolean {
-    const secret = integration.webhookSecret || process.env.AGGREGATOR_SECRET || '';
+    const secret = webhookSecret || process.env.AGGREGATOR_SECRET || '';
     if (!secret) return false;
 
-    const sigHeader = headers['x-zomato-signature'] || '';
-    // Expected format: "sha256=<hex>"
+    const sigHeader   = headers['x-zomato-signature'] || '';
     const incomingHex = sigHeader.startsWith('sha256=')
       ? sigHeader.slice('sha256='.length)
       : sigHeader;
@@ -35,7 +40,7 @@ export class ZomatoConnector extends BaseConnector {
     try {
       return crypto.timingSafeEqual(
         Buffer.from(incomingHex, 'hex'),
-        Buffer.from(expected, 'hex'),
+        Buffer.from(expected,    'hex'),
       );
     } catch {
       return false;
@@ -43,11 +48,6 @@ export class ZomatoConnector extends BaseConnector {
   }
 
   // ── Parse incoming Zomato order ────────────────────────────────────────────
-  // Zomato webhook payload fields:
-  //   order_id, res_id, customer.name, customer.contact,
-  //   delivery_address.address, order_items[].name/.quantity/.price/.menu_item_id,
-  //   order_amount, delivery_charge, order_tax, total_amount,
-  //   payment_type ('prepaid'/'cod'), pickup_time, order_instructions
   parseIncomingOrder(rawBody: string): ParsedAggregatorOrder {
     const data = JSON.parse(rawBody);
 
@@ -91,28 +91,33 @@ export class ZomatoConnector extends BaseConnector {
       taxTotal:            Number(data.order_tax || data.tax_amount) || 0,
       grandTotal:          Number(data.total_amount || data.order_amount) || subtotal,
       paymentMethod,
-      estimatedPickupTime: data.pickup_time ? String(data.pickup_time) : undefined,
-      notes:               String(data.order_instructions || data.order_notes || ''),
+      estimatedPickupTime: (() => {
+        if (!data.pickup_time) return undefined;
+        const raw    = String(data.pickup_time);
+        const asDate = new Date(raw);
+        if (!isNaN(asDate.getTime())) return asDate.toISOString();
+        const mins = parseInt(raw, 10);
+        if (!isNaN(mins) && mins > 0) return new Date(Date.now() + mins * 60_000).toISOString();
+        return undefined;
+      })(),
+      notes: String(data.order_instructions || data.order_notes || ''),
     };
   }
 
   // ── Accept order ────────────────────────────────────────────────────────────
   async acceptOrder(
-    integration:           IAggregatorIntegration,
+    ctx:                   ConnectorContext,
     platformOrderId:       string,
     estimatedPrepMinutes = 20,
   ): Promise<void> {
     if (!this.externalEnabled()) {
-      this.logExternalSkip('acceptOrder', { platformOrderId, estimatedPrepMinutes, storeId: integration.storeId });
+      this.logExternalSkip('acceptOrder', { platformOrderId, estimatedPrepMinutes, storeId: ctx.storeId });
       return;
     }
 
     const res = await fetch(`${BASE_URL}/orders/${platformOrderId}/status`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey':       integration.apiKey,
-      },
+      headers: { 'Content-Type': 'application/json', 'apikey': ctx.apiKey },
       body: JSON.stringify({ status: 'Accepted', prep_time: estimatedPrepMinutes }),
     });
 
@@ -124,21 +129,18 @@ export class ZomatoConnector extends BaseConnector {
 
   // ── Reject order ────────────────────────────────────────────────────────────
   async rejectOrder(
-    integration:     IAggregatorIntegration,
+    ctx:             ConnectorContext,
     platformOrderId: string,
     reason:          string,
   ): Promise<void> {
     if (!this.externalEnabled()) {
-      this.logExternalSkip('rejectOrder', { platformOrderId, reason, storeId: integration.storeId });
+      this.logExternalSkip('rejectOrder', { platformOrderId, reason, storeId: ctx.storeId });
       return;
     }
 
     const res = await fetch(`${BASE_URL}/orders/${platformOrderId}/status`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey':       integration.apiKey,
-      },
+      headers: { 'Content-Type': 'application/json', 'apikey': ctx.apiKey },
       body: JSON.stringify({ status: 'Rejected', rejection_reason: reason }),
     });
 
@@ -150,20 +152,17 @@ export class ZomatoConnector extends BaseConnector {
 
   // ── Mark ready ──────────────────────────────────────────────────────────────
   async markReady(
-    integration:     IAggregatorIntegration,
+    ctx:             ConnectorContext,
     platformOrderId: string,
   ): Promise<void> {
     if (!this.externalEnabled()) {
-      this.logExternalSkip('markReady', { platformOrderId, storeId: integration.storeId });
+      this.logExternalSkip('markReady', { platformOrderId, storeId: ctx.storeId });
       return;
     }
 
     const res = await fetch(`${BASE_URL}/orders/${platformOrderId}/status`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey':       integration.apiKey,
-      },
+      headers: { 'Content-Type': 'application/json', 'apikey': ctx.apiKey },
       body: JSON.stringify({ status: 'Ready' }),
     });
 
@@ -175,20 +174,17 @@ export class ZomatoConnector extends BaseConnector {
 
   // ── Mark dispatched ─────────────────────────────────────────────────────────
   async markDispatched(
-    integration:     IAggregatorIntegration,
+    ctx:             ConnectorContext,
     platformOrderId: string,
   ): Promise<void> {
     if (!this.externalEnabled()) {
-      this.logExternalSkip('markDispatched', { platformOrderId, storeId: integration.storeId });
+      this.logExternalSkip('markDispatched', { platformOrderId, storeId: ctx.storeId });
       return;
     }
 
     const res = await fetch(`${BASE_URL}/orders/${platformOrderId}/status`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey':       integration.apiKey,
-      },
+      headers: { 'Content-Type': 'application/json', 'apikey': ctx.apiKey },
       body: JSON.stringify({ status: 'Dispatched' }),
     });
 
@@ -200,27 +196,21 @@ export class ZomatoConnector extends BaseConnector {
 
   // ── Sync menu ───────────────────────────────────────────────────────────────
   async syncMenu(
-    integration: IAggregatorIntegration,
-    categories:  unknown[],
-    products:    unknown[],
+    ctx:        ConnectorContext,
+    categories: unknown[],
+    products:   unknown[],
   ): Promise<MenuSyncResult> {
     if (!this.externalEnabled()) {
       this.logExternalSkip('syncMenu', {
-        storeId:       integration.storeId,
+        storeId:       ctx.storeId,
         categoryCount: (categories as any[]).length,
         productCount:  (products as any[]).length,
       });
-      return {
-        success:      true,
-        syncedCount:  (products as any[]).length,
-        failedCount:  0,
-        failedItems:  [],
-      };
+      return { success: true, syncedCount: (products as any[]).length, failedCount: 0, failedItems: [] };
     }
 
-    // Build Zomato menu format
     const menu = {
-      res_id: integration.storeId,
+      res_id:     ctx.storeId,
       categories: (categories as any[]).map(cat => ({
         name:  cat.name,
         items: (products as any[])
@@ -230,7 +220,7 @@ export class ZomatoConnector extends BaseConnector {
             price:        p.channelPrices?.zomato ?? p.price,
             description:  p.description || '',
             is_veg:       p.isVeg ? 1 : 0,
-            availability: p.isAvailable && !p.isDeleted ? 1 : 0,
+            availability: zomatoAvailable(p),
             menu_item_id: p.platformIds?.zomato || undefined,
           })),
       })),
@@ -238,10 +228,7 @@ export class ZomatoConnector extends BaseConnector {
 
     const res = await fetch(`${BASE_URL}/menu/upload`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey':       integration.apiKey,
-      },
+      headers: { 'Content-Type': 'application/json', 'apikey': ctx.apiKey },
       body: JSON.stringify(menu),
     });
 
@@ -270,25 +257,18 @@ export class ZomatoConnector extends BaseConnector {
 
   // ── Update product availability ─────────────────────────────────────────────
   async updateProductAvailability(
-    integration:    IAggregatorIntegration,
+    ctx:            ConnectorContext,
     platformItemId: string,
     available:      boolean,
   ): Promise<void> {
     if (!this.externalEnabled()) {
-      this.logExternalSkip('updateProductAvailability', {
-        platformItemId,
-        available,
-        storeId: integration.storeId,
-      });
+      this.logExternalSkip('updateProductAvailability', { platformItemId, available, storeId: ctx.storeId });
       return;
     }
 
     const res = await fetch(`${BASE_URL}/menu/items/${platformItemId}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey':       integration.apiKey,
-      },
+      headers: { 'Content-Type': 'application/json', 'apikey': ctx.apiKey },
       body: JSON.stringify({ availability: available ? 1 : 0 }),
     });
 

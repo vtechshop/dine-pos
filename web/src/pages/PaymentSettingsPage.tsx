@@ -204,6 +204,25 @@ function RazorpayOAuthBanner({ rzpConfig, onRefresh }: {
         </div>
       </div>
 
+      {/* KYC notice — shown whenever the account is connected.
+          Required by Razorpay Technology Partner agreement: we must instruct
+          each hotel to complete their own KYC to avoid settlement holds.
+          DinePOS has no visibility into the hotel's KYC status on Razorpay's
+          side and cannot complete it on their behalf. */}
+      {isConnected && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-800/40 dark:bg-amber-900/20 dark:text-amber-300">
+          <AlertCircle size={13} className="mt-0.5 shrink-0" />
+          <span>
+            <strong>Razorpay KYC required.</strong>{' '}
+            Your Razorpay account is connected, but settlements may be held if your
+            Razorpay merchant KYC is incomplete. Log in to your Razorpay merchant
+            dashboard and complete any pending KYC steps.
+            DinePOS cannot complete KYC on your behalf — this must be done directly
+            with Razorpay by the business owner.
+          </span>
+        </div>
+      )}
+
       {accessTokenWarning && !refreshWarning && (
         <div className="mt-3 flex items-center gap-2 rounded-lg bg-yellow-50 px-3 py-2 text-xs text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400">
           <AlertCircle size={13} />

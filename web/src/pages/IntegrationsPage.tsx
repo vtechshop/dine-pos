@@ -7,11 +7,12 @@ import {
   fetchIntegrations,
   saveIntegration,
   disconnectIntegration,
+  testIntegration,
   syncMenu,
   fetchWebhookLogs,
   retryWebhook,
 } from '../api/aggregator';
-import type { AggregatorIntegration, WebhookLog, AggregatorPlatform } from '../api/aggregator';
+import type { AggregatorIntegration, SaveIntegrationBody, WebhookLog, AggregatorPlatform } from '../api/aggregator';
 import {
   fetchMessagingProvider,
   saveMessagingProvider,
@@ -111,12 +112,13 @@ function ConnectionBadge({ status }: { status: AggregatorIntegration['connection
 // ── Sync status badge ─────────────────────────────────────────────────────────
 
 function SyncBadge({ status }: { status: AggregatorIntegration['menuSyncStatus'] }) {
-  const cfg = {
+  const cfg = ({
     idle:    'bg-ink/5 border-ink/10 text-ink/40',
     syncing: 'bg-blue-50 border-blue-200 text-blue-700',
     success: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+    partial: 'bg-amber-50 border-amber-200 text-amber-700',
     failed:  'bg-red-50 border-red-200 text-red-700',
-  }[status];
+  } as Record<string, string>)[status] ?? 'bg-ink/5 border-ink/10 text-ink/40';
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${cfg}`}>
       {status === 'syncing' && <RefreshCw size={10} className="animate-spin" />}
@@ -185,29 +187,30 @@ interface IntegrationCardProps {
 }
 
 function IntegrationCard({ platform, data, loading, onSaved, onToast }: IntegrationCardProps) {
+  // Write-only secret fields always start empty — never pre-fill from API
   const [form, setForm] = useState({
-    storeId:       data?.storeId       ?? '',
-    apiKey:        data?.apiKey        ?? '',
-    apiSecret:     data?.apiSecret     ?? '',
-    webhookSecret: data?.webhookSecret ?? '',
-    enabled:       data?.enabled       ?? false,
-    autoAccept:    data?.autoAccept    ?? false,
+    storeId:       data?.storeId    ?? '',
+    apiKey:        '',
+    apiSecret:     '',
+    webhookSecret: '',
+    enabled:       data?.enabled    ?? false,
+    autoAccept:    data?.autoAccept ?? false,
   });
-  const [saving,       setSaving]       = useState(false);
-  const [syncing,      setSyncing]      = useState(false);
-  const [disconnecting,setDisconnecting]= useState(false);
+  const [saving,        setSaving]        = useState(false);
+  const [syncing,       setSyncing]       = useState(false);
+  const [testing,       setTesting]       = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
-  // Sync form when parent data loads or refreshes
+  // Sync non-secret fields when parent data changes
   useEffect(() => {
     if (!data) return;
-    setForm({
-      storeId:       data.storeId,
-      apiKey:        data.apiKey,
-      apiSecret:     data.apiSecret,
-      webhookSecret: data.webhookSecret,
-      enabled:       data.enabled,
-      autoAccept:    data.autoAccept,
-    });
+    setForm(f => ({
+      ...f,
+      storeId:    data.storeId,
+      enabled:    data.enabled,
+      autoAccept: data.autoAccept,
+      // Keep secret fields empty — write-only pattern
+    }));
   }, [data]);
 
   function set(field: keyof typeof form, value: string | boolean) {
@@ -218,7 +221,19 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
     e.preventDefault();
     setSaving(true);
     try {
-      const updated = await saveIntegration(platform, form);
+      const body: SaveIntegrationBody = {
+        storeId:    form.storeId,
+        enabled:    form.enabled,
+        autoAccept: form.autoAccept,
+      };
+      // Only include secret fields if the user typed a value
+      if (form.apiKey.trim())        body.apiKey        = form.apiKey.trim();
+      if (form.apiSecret.trim())     body.apiSecret     = form.apiSecret.trim();
+      if (form.webhookSecret.trim()) body.webhookSecret = form.webhookSecret.trim();
+
+      const { integration: updated } = await saveIntegration(platform, body);
+      // Clear write-only fields after successful save
+      setForm(f => ({ ...f, apiKey: '', apiSecret: '', webhookSecret: '' }));
       onSaved(updated);
       onToast('success', `${PLATFORM_LABEL[platform]} settings saved.`);
     } catch (err) {
@@ -240,15 +255,28 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
     }
   }
 
+  async function handleTest() {
+    setTesting(true);
+    try {
+      const res = await testIntegration(platform);
+      onSaved(res.integration);
+      if (res.success === true)  onToast('success', res.message);
+      else if (res.success === false) onToast('error', res.message);
+      else onToast('info', res.message);
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : 'Test failed.');
+    } finally {
+      setTesting(false);
+    }
+  }
+
   async function handleDisconnect() {
     if (!window.confirm(`Disconnect ${PLATFORM_LABEL[platform]} integration?`)) return;
     setDisconnecting(true);
     try {
-      await disconnectIntegration(platform);
-      onToast('info', `${PLATFORM_LABEL[platform]} disconnected.`);
-      // Reload to reflect disconnected state
-      const updated = await import('../api/aggregator').then(m => m.fetchIntegration(platform));
+      const { integration: updated } = await disconnectIntegration(platform);
       onSaved(updated);
+      onToast('info', `${PLATFORM_LABEL[platform]} disconnected.`);
     } catch (err) {
       onToast('error', err instanceof Error ? err.message : 'Disconnect failed.');
     } finally {
@@ -270,7 +298,7 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
         {loading && <Spinner size="sm" />}
       </div>
 
-      {/* Sync meta row */}
+      {/* Meta row */}
       {data && (
         <div className="flex flex-wrap gap-x-6 gap-y-1 border-b border-border px-5 py-2.5">
           <span className="flex items-center gap-1.5 text-xs text-ink/50">
@@ -291,11 +319,29 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
             Last order: {fmtElapsed(data.lastOrderAt)}
           </span>
           <span className="text-xs text-ink/50">
+            Today: <span className="font-semibold text-ink/70">{data.todayOrderCount ?? 0}</span> orders
+          </span>
+          <span className="text-xs text-ink/50">
             Synced: {data.syncedItemCount ?? 0} items
           </span>
           {(data.failedItemCount ?? 0) > 0 && (
             <span className="text-xs text-red-600">Failed: {data.failedItemCount} items</span>
           )}
+        </div>
+      )}
+
+      {/* Last test result */}
+      {data?.lastTestAt && (
+        <div className={`flex items-center gap-2 border-b border-border px-5 py-2 text-xs ${
+          data.lastTestSuccess === true  ? 'bg-emerald-50 text-emerald-700' :
+          data.lastTestSuccess === false ? 'bg-red-50 text-red-700' :
+                                           'bg-amber-50 text-amber-700'
+        }`}>
+          {data.lastTestSuccess === true  && <Check size={11} />}
+          {data.lastTestSuccess === false && <AlertCircle size={11} />}
+          {data.lastTestSuccess === null  && <FlaskConical size={11} />}
+          Test: {data.lastTestMessage}
+          <span className="ml-auto text-ink/40">{fmtElapsed(data.lastTestAt)}</span>
         </div>
       )}
 
@@ -332,45 +378,42 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
           />
         </div>
 
-        {/* API Key */}
+        {/* API Key — write-only */}
         <div>
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink/50">
-            API Key
+            API Key {data?.hasApiKey && <span className="ml-1 normal-case text-emerald-600">(saved — enter to replace)</span>}
           </label>
-          <input
-            type="text"
+          <MaskedInput
+            id={`${platform}-apikey`}
             value={form.apiKey}
-            onChange={e => set('apiKey', e.target.value)}
-            placeholder="API key"
-            className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink/30 focus:border-brand focus:outline-none"
+            onChange={v => set('apiKey', v)}
+            placeholder={data?.hasApiKey ? '••••••••••••••• (stored)' : 'API key'}
           />
         </div>
 
-        {/* API Secret */}
+        {/* API Secret — write-only */}
         <div>
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink/50">
-            API Secret
+            API Secret {data?.hasApiSecret && <span className="ml-1 normal-case text-emerald-600">(saved — enter to replace)</span>}
           </label>
-          <input
-            type="password"
+          <MaskedInput
+            id={`${platform}-apisecret`}
             value={form.apiSecret}
-            onChange={e => set('apiSecret', e.target.value)}
-            placeholder="API secret"
-            className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink/30 focus:border-brand focus:outline-none"
+            onChange={v => set('apiSecret', v)}
+            placeholder={data?.hasApiSecret ? '••••••••••••••• (stored)' : 'API secret'}
           />
         </div>
 
-        {/* Webhook Secret */}
+        {/* Webhook Secret — write-only */}
         <div>
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink/50">
-            Webhook Secret
+            Webhook Secret {data?.hasWebhookSecret && <span className="ml-1 normal-case text-emerald-600">(saved — enter to replace)</span>}
           </label>
-          <input
-            type="password"
+          <MaskedInput
+            id={`${platform}-webhooksecret`}
             value={form.webhookSecret}
-            onChange={e => set('webhookSecret', e.target.value)}
-            placeholder="Webhook signing secret"
-            className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink/30 focus:border-brand focus:outline-none"
+            onChange={v => set('webhookSecret', v)}
+            placeholder={data?.hasWebhookSecret ? '••••••••••••••• (stored)' : 'Webhook signing secret'}
           />
         </div>
 
@@ -410,7 +453,18 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
             className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-ink hover:bg-mist disabled:opacity-40"
           >
             {syncing ? <Spinner size="sm" /> : <RefreshCw size={14} />}
-            Sync Menu Now
+            Sync Menu
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void handleTest()}
+            disabled={testing || !data?.hasApiKey}
+            className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-ink hover:bg-mist disabled:opacity-40"
+            title={!data?.hasApiKey ? 'Save an API key first' : ''}
+          >
+            {testing ? <Spinner size="sm" /> : <FlaskConical size={14} />}
+            Test Connection
           </button>
 
           {data?.enabled && (
@@ -447,26 +501,111 @@ function WebhookStatusBadge({ status }: { status: WebhookLog['status'] }) {
 
 // ── Webhook logs table ────────────────────────────────────────────────────────
 
-function WebhookLogsTable({
-  logs,
-  loading,
-  onRetry,
-}: {
-  logs: WebhookLog[];
-  loading: boolean;
-  onRetry: (id: string) => void;
-}) {
+function WebhookLogsTable() {
+  const [logs,       setLogs]       = useState<WebhookLog[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [total,      setTotal]      = useState(0);
+  const [pages,      setPages]      = useState(1);
+  const [page,       setPage]       = useState(1);
+  const [search,     setSearch]     = useState('');
+  const [platFilter, setPlatFilter] = useState('');
+  const [statFilter, setStatFilter] = useState('');
+
+  const load = useCallback(async (p = page, q = search, plat = platFilter, stat = statFilter) => {
+    setLoading(true);
+    try {
+      const res = await fetchWebhookLogs({ platform: plat || undefined, status: stat || undefined, search: q || undefined, page: p, limit: 25 });
+      setLogs(res.logs);
+      setTotal(res.total);
+      setPages(res.pages);
+      setPage(res.page);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, [page, search, platFilter, statFilter]);
+
+  useEffect(() => { void load(1, search, platFilter, statFilter); }, [search, platFilter, statFilter]);
+
+  function exportCSV() {
+    const rows = [
+      ['Time', 'Platform', 'Event', 'Status', 'Platform Order ID', 'Retries', 'Processing (ms)', 'Error'],
+      ...logs.map(l => [
+        l.createdAt, l.platform, l.event, l.status, l.platformOrderId,
+        String(l.retryCount), String(l.processingTimeMs ?? ''), l.errorMessage ?? '',
+      ]),
+    ];
+    const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `webhook-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleRetry(id: string) {
+    try {
+      await retryWebhook(id);
+      void load(page, search, platFilter, statFilter);
+    } catch { /* silent */ }
+  }
+
+  const PLATS  = ['', 'swiggy', 'zomato'];
+  const STATS  = ['', 'success', 'failed', 'retrying'];
+  const PLAT_L: Record<string, string> = { '': 'All platforms', swiggy: 'Swiggy', zomato: 'Zomato' };
+  const STAT_L: Record<string, string> = { '': 'All statuses', success: 'Success', failed: 'Failed', retrying: 'Retrying' };
+
   return (
     <div className="rounded-2xl border border-border bg-canvas shadow-sm">
-      <div className="flex items-center justify-between border-b border-border px-5 py-3">
+      <div className="flex flex-wrap items-center gap-3 border-b border-border px-5 py-3">
         <p className="font-semibold text-ink">Webhook Logs</p>
         {loading && <Spinner size="sm" />}
+        <span className="text-xs text-ink/40">{total} total</span>
+
+        {/* Search */}
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search order ID or event…"
+          className="ml-auto h-8 w-52 rounded-lg border border-border bg-mist px-3 text-xs text-ink placeholder:text-ink/30 focus:border-brand focus:outline-none"
+        />
+
+        {/* Platform filter */}
+        <select
+          value={platFilter}
+          onChange={e => setPlatFilter(e.target.value)}
+          className="h-8 rounded-lg border border-border bg-canvas px-2 text-xs text-ink focus:border-brand focus:outline-none"
+        >
+          {PLATS.map(p => <option key={p} value={p}>{PLAT_L[p]}</option>)}
+        </select>
+
+        {/* Status filter */}
+        <select
+          value={statFilter}
+          onChange={e => setStatFilter(e.target.value)}
+          className="h-8 rounded-lg border border-border bg-canvas px-2 text-xs text-ink focus:border-brand focus:outline-none"
+        >
+          {STATS.map(s => <option key={s} value={s}>{STAT_L[s]}</option>)}
+        </select>
+
+        {/* CSV export */}
+        {logs.length > 0 && (
+          <button
+            type="button"
+            onClick={exportCSV}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-ink/60 hover:bg-mist hover:text-ink"
+          >
+            Export CSV
+          </button>
+        )}
       </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              {['Time', 'Platform', 'Event', 'Status', 'Platform Order ID', 'Error', ''].map(h => (
+              {['Time', 'Platform', 'Event', 'Status', 'Order ID', 'Retries', 'ms', 'Error', ''].map(h => (
                 <th key={h} className="whitespace-nowrap px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">
                   {h}
                 </th>
@@ -474,18 +613,16 @@ function WebhookLogsTable({
             </tr>
           </thead>
           <tbody>
-            {logs.length === 0 && (
+            {logs.length === 0 && !loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-ink/40">
-                  No webhook logs
+                <td colSpan={9} className="px-4 py-8 text-center text-sm text-ink/40">
+                  {search || platFilter || statFilter ? 'No matching logs' : 'No webhook logs yet'}
                 </td>
               </tr>
             )}
             {logs.map(log => (
               <tr key={log._id} className="border-b border-border/60 hover:bg-mist/30 last:border-0">
-                <td className="whitespace-nowrap px-4 py-2.5 text-xs text-ink/60">
-                  {fmtDate(log.createdAt)}
-                </td>
+                <td className="whitespace-nowrap px-4 py-2.5 text-xs text-ink/60">{fmtDate(log.createdAt)}</td>
                 <td className="px-4 py-2.5">
                   <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold text-white ${
                     log.platform === 'swiggy' ? 'bg-brand' : 'bg-red-600'
@@ -494,22 +631,22 @@ function WebhookLogsTable({
                   </span>
                 </td>
                 <td className="px-4 py-2.5 text-xs text-ink/70">{log.event}</td>
-                <td className="px-4 py-2.5">
-                  <WebhookStatusBadge status={log.status} />
-                </td>
+                <td className="px-4 py-2.5"><WebhookStatusBadge status={log.status} /></td>
                 <td className="px-4 py-2.5 font-mono text-xs text-ink/50">{log.platformOrderId || '—'}</td>
-                <td className="max-w-xs px-4 py-2.5 text-xs text-red-600">
-                  {log.errorMessage ? (
-                    <span className="truncate block max-w-[200px]" title={log.errorMessage}>
-                      {log.errorMessage}
-                    </span>
-                  ) : '—'}
+                <td className="px-4 py-2.5 text-center text-xs text-ink/50">{log.retryCount > 0 ? log.retryCount : '—'}</td>
+                <td className="px-4 py-2.5 text-right text-xs text-ink/40 font-variant-numeric tabular-nums">
+                  {log.processingTimeMs != null ? log.processingTimeMs : '—'}
+                </td>
+                <td className="max-w-[180px] px-4 py-2.5 text-xs text-red-600">
+                  {log.errorMessage
+                    ? <span className="block truncate" title={log.errorMessage}>{log.errorMessage}</span>
+                    : '—'}
                 </td>
                 <td className="px-4 py-2.5">
                   {log.status === 'failed' && (
                     <button
                       type="button"
-                      onClick={() => onRetry(log._id)}
+                      onClick={() => void handleRetry(log._id)}
                       className="flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] font-semibold text-ink/60 hover:bg-mist hover:text-ink"
                     >
                       <RefreshCw size={10} />
@@ -522,6 +659,31 @@ function WebhookLogsTable({
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {pages > 1 && (
+        <div className="flex items-center justify-between border-t border-border px-5 py-3">
+          <span className="text-xs text-ink/40">Page {page} of {pages}</span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => { const p = page - 1; setPage(p); void load(p, search, platFilter, statFilter); }}
+              className="rounded border border-border px-3 py-1 text-xs font-semibold text-ink/60 hover:bg-mist disabled:opacity-40"
+            >
+              ← Prev
+            </button>
+            <button
+              type="button"
+              disabled={page >= pages}
+              onClick={() => { const p = page + 1; setPage(p); void load(p, search, platFilter, statFilter); }}
+              className="rounded border border-border px-3 py-1 text-xs font-semibold text-ink/60 hover:bg-mist disabled:opacity-40"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -892,10 +1054,8 @@ function MessagingProviderCard({ config, loading, onSaved, onRemoved, onToast }:
 
 export function IntegrationsPage() {
   const [integrations,    setIntegrations]    = useState<AggregatorIntegration[]>([]);
-  const [logs,            setLogs]            = useState<WebhookLog[]>([]);
   const [messagingConfig, setMessagingConfig] = useState<MessagingProviderConfig | null>(null);
   const [loadingMain,     setLoadingMain]     = useState(true);
-  const [loadingLogs,     setLoadingLogs]     = useState(true);
   const [loadingMsg,      setLoadingMsg]      = useState(true);
   const { toasts, add: toast } = useToasts();
 
@@ -903,20 +1063,16 @@ export function IntegrationsPage() {
 
   const loadAll = useCallback(async () => {
     setLoadingMain(true);
-    setLoadingLogs(true);
     setLoadingMsg(true);
     try {
-      const [intRes, logRes, msgRes] = await Promise.allSettled([
+      const [intRes, msgRes] = await Promise.allSettled([
         fetchIntegrations(),
-        fetchWebhookLogs(),
         fetchMessagingProvider(),
       ]);
       if (intRes.status === 'fulfilled') setIntegrations(intRes.value.integrations);
-      if (logRes.status === 'fulfilled') setLogs(logRes.value.logs.slice(0, 20));
       if (msgRes.status === 'fulfilled') setMessagingConfig(msgRes.value.config);
     } finally {
       setLoadingMain(false);
-      setLoadingLogs(false);
       setLoadingMsg(false);
     }
   }, []);
@@ -935,17 +1091,6 @@ export function IntegrationsPage() {
       next[idx] = updated;
       return next;
     });
-  }
-
-  async function handleRetry(logId: string) {
-    try {
-      await retryWebhook(logId);
-      toast('success', 'Webhook retry queued.');
-      const refreshed = await fetchWebhookLogs();
-      setLogs(refreshed.logs.slice(0, 20));
-    } catch (err) {
-      toast('error', err instanceof Error ? err.message : 'Retry failed.');
-    }
   }
 
   return (
@@ -996,12 +1141,8 @@ export function IntegrationsPage() {
         />
       </div>
 
-      {/* Webhook logs */}
-      <WebhookLogsTable
-        logs={logs}
-        loading={loadingLogs}
-        onRetry={id => void handleRetry(id)}
-      />
+      {/* Webhook logs — self-contained with search, filter, pagination, CSV */}
+      <WebhookLogsTable />
 
       <ToastList toasts={toasts} />
     </div>

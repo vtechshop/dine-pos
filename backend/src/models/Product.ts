@@ -34,6 +34,11 @@ export interface IProduct extends Document {
     swiggy?: string;
     zomato?: string;
   };
+  // ── Per-channel availability overrides — null means inherit from isAvailable
+  channelAvailability: {
+    swiggy?: boolean | null;
+    zomato?: boolean | null;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -129,6 +134,11 @@ const ProductSchema: Schema = new Schema(
     platformIds: {
       swiggy: { type: String, default: '' },
       zomato: { type: String, default: '' },
+    },
+    // ── Per-channel availability — null = inherit from isAvailable ────────────
+    channelAvailability: {
+      swiggy: { type: Boolean, default: null },
+      zomato: { type: Boolean, default: null },
     },
   },
   { timestamps: true }

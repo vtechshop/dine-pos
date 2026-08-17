@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { BarChart2, TrendingUp, TrendingDown, RefreshCw, Calendar, AlertTriangle, Info } from 'lucide-react';
+import { BarChart2, TrendingUp, TrendingDown, RefreshCw, Calendar, AlertTriangle, Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetchAIReport } from '../../api/aiReport';
 import type { DailyReportPayload } from '../../api/aiReport';
 import { ApiError } from '../../api/client';
@@ -244,6 +244,19 @@ export function AIReportsPage() {
 
   useEffect(() => { void load(date); }, [date, load]);
 
+  function prevDay() {
+    const d = new Date(date + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - 1);
+    setDate(d.toISOString().slice(0, 10));
+  }
+  function nextDay() {
+    const today = new Date().toISOString().slice(0, 10);
+    const d = new Date(date + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + 1);
+    const next = d.toISOString().slice(0, 10);
+    if (next <= today) setDate(next);
+  }
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
 
@@ -255,6 +268,14 @@ export function AIReportsPage() {
             <h1 className="text-base font-bold text-ink">AI Reports</h1>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={prevDay}
+              disabled={loading}
+              aria-label="Previous day"
+              className="rounded-lg border border-border bg-mist p-1.5 text-ink/50 hover:bg-ink/5 hover:text-ink disabled:opacity-40"
+            >
+              <ChevronLeft size={15} />
+            </button>
             <Calendar size={13} className="text-ink/40" />
             <input
               type="date"
@@ -263,6 +284,14 @@ export function AIReportsPage() {
               onChange={e => setDate(e.target.value)}
               className="rounded-lg border border-border bg-mist px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
+            <button
+              onClick={nextDay}
+              disabled={loading || date >= yesterday()}
+              aria-label="Next day"
+              className="rounded-lg border border-border bg-mist p-1.5 text-ink/50 hover:bg-ink/5 hover:text-ink disabled:opacity-40"
+            >
+              <ChevronRight size={15} />
+            </button>
             <button
               onClick={() => void load(date)}
               disabled={loading}

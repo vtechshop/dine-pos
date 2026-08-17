@@ -14,6 +14,10 @@ function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function yesterday(): string {
+  return new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+}
+
 function fmtRupee(n: number): string {
   return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 }
@@ -92,7 +96,7 @@ function LoadingSkeleton() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function RecommendationsPage() {
-  const [date, setDate] = useState<string>(todayStr());
+  const [date, setDate] = useState<string>(yesterday());
   const [data, setData] = useState<RecommendationSet | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -121,7 +125,7 @@ export function RecommendationsPage() {
 
   useEffect(() => { void load(date); }, [date, load]);
 
-  const isToday = date === todayStr();
+  const isYesterday = date === yesterday();
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -134,12 +138,12 @@ export function RecommendationsPage() {
             <p className="text-xs text-ink/50">Menu engineering + upsell intelligence</p>
           </div>
           <div className="flex items-center gap-2">
-            {!isToday && (
+            {!isYesterday && (
               <button
-                onClick={() => setDate(todayStr())}
+                onClick={() => setDate(yesterday())}
                 className="rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-mist transition-colors"
               >
-                Today
+                Yesterday
               </button>
             )}
             <input
@@ -171,9 +175,9 @@ export function RecommendationsPage() {
         {!loading && notFound && (
           <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
             <p className="text-3xl">📭</p>
-            <p className="text-sm font-medium text-ink">No snapshot available for {date}.</p>
+            <p className="text-sm font-medium text-ink">No data available for {date}.</p>
             <p className="text-xs text-ink/50 max-w-xs">
-              Recommendations require a completed daily snapshot.
+              Select a date when the restaurant was open.
             </p>
           </div>
         )}

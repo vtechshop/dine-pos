@@ -60,6 +60,100 @@ function isAnomaly(z: number): boolean {
   return z > 1.5;
 }
 
+// ─── Cashier anomaly detector ─────────────────────────────────────────────────
+// Flags cashiers whose cancellation or discount rate is a statistical outlier
+// vs other cashiers on the same day. Requires >= 3 cashiers to be meaningful.
+
+async function detectCashierAnomalies(
+  hotelOId: mongoose.Types.ObjectId,
+  todayStart: Date,
+): Promise<AnomalyResult[]> {
+  const cashierStats = await Order.aggregate([
+    { $match: { hotelId: hotelOId, createdAt: { $gte: todayStart } } },
+    {
+      $group: {
+        _id:             '$cashierId',
+        totalOrders:     { $sum: 1 },
+        cancelledOrders: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+        totalDiscount:   { $sum: '$discountAmount' },
+        totalRevenue:    { $sum: { $cond: [{ $ne: ['$status', 'cancelled'] }, '$grandTotal', 0] } },
+      },
+    },
+    { $match: { totalOrders: { $gte: 5 } } },  // only cashiers with >= 5 orders
+  ]);
+
+  if (cashierStats.length < 3) return [];  // not enough cashiers for meaningful comparison
+
+  const cancelRates = cashierStats.map((c) => c.cancelledOrders / c.totalOrders);
+  const { mean: cancelMean, std: cancelStd } = stats(cancelRates);
+
+  const results: AnomalyResult[] = [];
+
+  for (let i = 0; i < cashierStats.length; i++) {
+    const c = cashierStats[i];
+    const cancelRate = c.cancelledOrders / c.totalOrders;
+    const z = zScore(cancelRate, cancelMean, cancelStd);
+
+    if (isAnomaly(z) && cancelRate > cancelMean) {
+      const confidence = confidenceFromZ(z);
+      results.push({
+        type:      'cashier_anomaly',
+        label:     'Cashier Cancellation Outlier',
+        severity:  severityFromConfidence(confidence),
+        confidence: +confidence.toFixed(2),
+        evidence:  `Cashier has ${(cancelRate * 100).toFixed(1)}% cancellation rate vs team average ${(cancelMean * 100).toFixed(1)}% (${c.cancelledOrders} of ${c.totalOrders} orders).`,
+        metric: {
+          cashierId:    c._id?.toString() ?? 'unknown',
+          cancelRate:   +cancelRate.toFixed(3),
+          teamAvg:      +cancelMean.toFixed(3),
+          zScore:       +z.toFixed(2),
+          totalOrders:  c.totalOrders,
+          cancelledOrders: c.cancelledOrders,
+        },
+      });
+    }
+  }
+
+  return results;
+}
+
+// ─── Duplicate transaction detector ──────────────────────────────────────────
+// Finds orders with the same table + very similar grandTotal within 5 minutes.
+// Indicates possible double-billing (real) or test orders (usually fine).
+
+async function detectDuplicateTransactions(
+  hotelOId: mongoose.Types.ObjectId,
+  todayStart: Date,
+): Promise<AnomalyResult[]> {
+  const orders = await Order.find(
+    { hotelId: hotelOId, createdAt: { $gte: todayStart }, status: { $ne: 'cancelled' }, tableId: { $ne: null } },
+    { tableId: 1, grandTotal: 1, createdAt: 1, _id: 1 },
+  ).sort({ tableId: 1, createdAt: 1 }).lean();
+
+  let duplicatePairs = 0;
+  for (let i = 1; i < orders.length; i++) {
+    const prev = orders[i - 1] as any;
+    const curr = orders[i] as any;
+    const sameTable    = String(prev.tableId) === String(curr.tableId);
+    const similarTotal = Math.abs(prev.grandTotal - curr.grandTotal) < 1;  // within ₹1
+    const within5Min   = Math.abs(curr.createdAt.getTime() - prev.createdAt.getTime()) < 5 * 60_000;
+    if (sameTable && similarTotal && within5Min && curr.grandTotal > 0) {
+      duplicatePairs++;
+    }
+  }
+
+  if (duplicatePairs < 2) return [];
+
+  return [{
+    type:      'duplicate_transaction',
+    label:     'Possible Duplicate Transactions',
+    severity:  duplicatePairs >= 4 ? 'high' : 'medium',
+    confidence: Math.min(0.85, 0.5 + duplicatePairs * 0.08),
+    evidence:  `${duplicatePairs} order pair(s) found with same table + near-identical total within 5 minutes. Verify these were not double-billed.`,
+    metric: { duplicatePairs },
+  }];
+}
+
 // ─── Main detector ────────────────────────────────────────────────────────────
 
 export async function buildAnomalyReport(hotelId: string): Promise<AnomalyReport | null> {
@@ -355,6 +449,14 @@ export async function buildAnomalyReport(hotelId: string): Promise<AnomalyReport
       });
     }
   }
+
+  // ── 5. Cashier anomaly ─────────────────────────────────────────────────────
+  const cashierAnomalies = await detectCashierAnomalies(hotelOId, todayStart);
+  anomalies.push(...cashierAnomalies);
+
+  // ── 6. Duplicate transactions ──────────────────────────────────────────────
+  const dupAnomalies = await detectDuplicateTransactions(hotelOId, todayStart);
+  anomalies.push(...dupAnomalies);
 
   // ── Gemini explanation (one call for all anomalies) ───────────────────────
   let summary = 'No anomalies detected for today. Operations appear within normal parameters.';

@@ -114,6 +114,7 @@ export interface IHotel extends Document {
   // Super admin internal note
   saNote: string;
   saNotedAt: Date | null;
+  timezone: string;
 
   createdAt: Date;
   updatedAt: Date;
@@ -224,6 +225,7 @@ const HotelSchema: Schema = new Schema(
     // Super admin internal note
     saNote:             { type: String, default: '' },
     saNotedAt:          { type: Date, default: null },
+    timezone:           { type: String, default: 'Asia/Kolkata' },
   },
   { timestamps: true }
 );

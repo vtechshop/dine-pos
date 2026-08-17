@@ -3,9 +3,11 @@
 // Gemini NEVER calculates KPIs. All numbers come from the pre-built context.
 
 import { randomUUID } from 'crypto';
-import { generateNarrative } from '../utils/geminiNarrative';
+import { generateWithTools, ToolDeclaration } from '../utils/geminiNarrative';
+import { executeTool, AVAILABLE_TOOLS } from './chatTools';
 import { buildBusinessContext } from './contextBuilder';
 import {
+  getCachedContext,
   getHistory,
   appendHistory,
   clearHistory,
@@ -38,10 +40,146 @@ const SYSTEM_INSTRUCTIONS = `You are DinePOS AI, an intelligent restaurant busin
 Core rules (non-negotiable):
 1. NEVER calculate, estimate, or derive any business number yourself.
 2. ONLY use metrics explicitly stated in the BUSINESS INTELLIGENCE CONTEXT block above.
-3. If a metric is not in the context, say "I don't have that data right now."
+3. If a metric is not in the context, use the available tools to look it up. Only say "I don't have that data" if no tool can answer it.
 4. Keep answers concise (3–5 sentences), specific, and actionable.
 5. Always cite the specific number you're referencing.
 6. For operational questions outside the data (recipes, staff schedules, etc.), decline politely and redirect to the business data you do have.`;
+
+// ─── Tool declarations for Gemini function calling ───────────────────────────
+// Parameter schemas NEVER include hotelId — it's always server-enforced.
+const CHAT_TOOL_DECLARATIONS: ToolDeclaration[] = [
+  {
+    name: 'getRevenue',
+    description: 'Get revenue and order statistics for a date range. Use for revenue, sales, order count queries.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        startDate: { type: 'string', description: 'Start date YYYY-MM-DD' },
+        endDate:   { type: 'string', description: 'End date YYYY-MM-DD' },
+      },
+    },
+  },
+  {
+    name: 'getOrders',
+    description: 'Get detailed order statistics including hourly breakdown.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        startDate:   { type: 'string', description: 'Start date YYYY-MM-DD' },
+        endDate:     { type: 'string', description: 'End date YYYY-MM-DD' },
+      },
+    },
+  },
+  {
+    name: 'getTopProducts',
+    description: 'Get top selling products by revenue for a date range.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        startDate: { type: 'string', description: 'Start date YYYY-MM-DD' },
+        endDate:   { type: 'string', description: 'End date YYYY-MM-DD' },
+        limit:     { type: 'number', description: 'Max number of products (default 10, max 20)' },
+      },
+    },
+  },
+  {
+    name: 'getLowStockItems',
+    description: 'Get ingredients that are at or below their low stock threshold.',
+    parameters: { type: 'object' as const, properties: {} },
+  },
+  {
+    name: 'getVendorBalances',
+    description: 'Get outstanding vendor payable balances.',
+    parameters: { type: 'object' as const, properties: {} },
+  },
+  {
+    name: 'getPaymentBreakdown',
+    description: 'Get payment method breakdown (cash, UPI, card, split) for a date range.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        startDate: { type: 'string', description: 'Start date YYYY-MM-DD' },
+        endDate:   { type: 'string', description: 'End date YYYY-MM-DD' },
+      },
+    },
+  },
+  {
+    name: 'getOnlineOrderMetrics',
+    description: 'Get online platform order breakdown (Swiggy, Zomato, QR) for a date range.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        startDate: { type: 'string', description: 'Start date YYYY-MM-DD' },
+        endDate:   { type: 'string', description: 'End date YYYY-MM-DD' },
+      },
+    },
+  },
+  {
+    name: 'getExpenses',
+    description: 'Get expense totals by category for a date range.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        startDate: { type: 'string', description: 'Start date YYYY-MM-DD' },
+        endDate:   { type: 'string', description: 'End date YYYY-MM-DD' },
+      },
+    },
+  },
+  {
+    name: 'getCancellations',
+    description: 'Get order cancellation statistics and revenue lost for a date range.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        startDate: { type: 'string', description: 'Start date YYYY-MM-DD' },
+        endDate:   { type: 'string', description: 'End date YYYY-MM-DD' },
+      },
+    },
+  },
+  {
+    name: 'getDiscounts',
+    description: 'Get discount analysis for a date range — total discounts, discount rate, top discounted items.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        startDate: { type: 'string', description: 'Start date YYYY-MM-DD' },
+        endDate:   { type: 'string', description: 'End date YYYY-MM-DD' },
+      },
+    },
+  },
+  {
+    name: 'getRefunds',
+    description: 'Get refund statistics for a date range.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        startDate: { type: 'string', description: 'Start date YYYY-MM-DD' },
+        endDate:   { type: 'string', description: 'End date YYYY-MM-DD' },
+      },
+    },
+  },
+  {
+    name: 'getCustomerMetrics',
+    description: 'Get customer/guest statistics — repeat customers, new customers, loyalty points.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        startDate: { type: 'string', description: 'Start date YYYY-MM-DD' },
+        endDate:   { type: 'string', description: 'End date YYYY-MM-DD' },
+      },
+    },
+  },
+  {
+    name: 'getAlerts',
+    description: 'Get active smart alerts for the hotel.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        date: { type: 'string', description: 'Date YYYY-MM-DD (default: today)' },
+      },
+    },
+  },
+];
 
 // Hard caps — gemini-2.5-flash supports 1M context but we cap well below
 // to keep latency and cost predictable. Context is the biggest variable.
@@ -91,19 +229,45 @@ export async function processChat(
   // Sanitize input — 2000 char limit
   const cleanMessage = userMessage.trim().slice(0, 2000);
 
+  // ── Prompt injection protection ──────────────────────────────────────────────
+  const INJECTION_PATTERNS = [
+    /ignore (all )?(previous|prior|above) instructions/i,
+    /you are now/i,
+    /pretend (you are|to be)/i,
+    /act as (a|an) /i,
+    /system prompt/i,
+    /reveal (your|the) (system|instructions|prompt)/i,
+    /jailbreak/i,
+    /\\n\\n(Human|User|Assistant):/i,
+  ];
+  const hasInjection = INJECTION_PATTERNS.some((p) => p.test(cleanMessage));
+  if (hasInjection) {
+    return {
+      sessionId:    sid,
+      reply:        "I can only help with restaurant business questions based on your actual data. How can I assist with your restaurant operations today?",
+      timestamp:    now,
+      isNewSession,
+      contextAge:   'cache',
+    };
+  }
+
   // ── Load context + history in parallel ──────────────────────────────────
-  const [context, history] = await Promise.all([
-    buildBusinessContext(hotelId),
+  // Check cache first so we can accurately report contextAge to the caller.
+  const [cachedCtx, history] = await Promise.all([
+    getCachedContext(hotelId),
     getHistory(hotelId, sid),
   ]);
+  const contextAge: ChatResponse['contextAge'] = cachedCtx ? 'cache' : 'fresh';
+  const context = cachedCtx ?? await buildBusinessContext(hotelId);
 
-  // Track if context came from cache (contextBuilder handles that internally;
-  // we use a simple heuristic: if context already stored, it was from cache).
-  const contextAge: ChatResponse['contextAge'] = 'cache'; // always "cache" from caller's POV since contextBuilder manages the TTL internally
-
-  // ── Build prompt and call Gemini ─────────────────────────────────────────
+  // ── Build prompt and call Gemini with function calling ───────────────────
   const prompt = buildPrompt(context, history, cleanMessage);
-  const reply  = await generateNarrative(prompt);
+
+  // The tool executor closes over hotelId from JWT — Gemini NEVER provides it
+  const toolExecutor = (name: string, args: Record<string, unknown>) =>
+    executeTool(name, hotelId, args);
+
+  const reply = await generateWithTools(prompt, CHAT_TOOL_DECLARATIONS, toolExecutor);
 
   const assistantReply = reply ?? "I'm unable to respond right now. Please try again in a moment.";
 

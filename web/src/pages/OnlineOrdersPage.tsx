@@ -9,6 +9,7 @@ import {
   fetchOnlineOrders,
   acceptDeliveryOrder,
   rejectDeliveryOrder,
+  markOrderReady,
   dispatchDeliveryOrder,
 } from '../api/aggregator';
 import type { OnlineOrder, AggregatorPlatform } from '../api/aggregator';
@@ -424,12 +425,14 @@ function OrderCard({
   order,
   onAccepted,
   onRejected,
+  onReady,
   onDispatched,
   onToast,
 }: {
   order: OnlineOrder;
   onAccepted: (id: string) => void;
   onRejected: (id: string) => void;
+  onReady: (id: string) => void;
   onDispatched: (id: string) => void;
   onToast: (type: Toast['type'], msg: string) => void;
 }) {
@@ -464,12 +467,23 @@ function OrderCard({
     } finally { setBusy(null); setShowReject(false); }
   }
 
+  async function handleReady() {
+    setBusy('ready');
+    try {
+      await markOrderReady(order._id);
+      onReady(order._id);
+      onToast('success', `Order ${order.orderNumber} marked ready for pickup.`);
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : 'Failed to mark ready');
+    } finally { setBusy(null); }
+  }
+
   async function handleDispatch() {
     setBusy('dispatch');
     try {
       await dispatchDeliveryOrder(order._id);
       onDispatched(order._id);
-      onToast('success', `Order ${order.orderNumber} updated.`);
+      onToast('success', `Order ${order.orderNumber} dispatched.`);
     } catch (err) {
       onToast('error', err instanceof Error ? err.message : 'Failed to dispatch');
     } finally { setBusy(null); }
@@ -581,9 +595,9 @@ function OrderCard({
             </>
           )}
           {order.status === 'preparing' && (
-            <button type="button" onClick={() => void handleDispatch()} disabled={busy === 'dispatch'}
+            <button type="button" onClick={() => void handleReady()} disabled={busy === 'ready'}
               className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-50">
-              {busy === 'dispatch' ? <Spinner size="sm" /> : <Check size={12} />}
+              {busy === 'ready' ? <Spinner size="sm" /> : <Check size={12} />}
               Mark Ready
             </button>
           )}
@@ -683,6 +697,7 @@ export function OnlineOrdersPage() {
   const [error,       setError]       = useState<string | null>(null);
   const [platFilter,  setPlatFilter]  = useState<PlatformFilter>('all');
   const [statFilter,  setStatFilter]  = useState<StatusFilter>('all');
+  const [search,      setSearch]      = useState('');
   const { toasts, add: toast } = useToasts();
   const { socket } = useSocket();
   const shownRef = useRef<Set<string>>(new Set());
@@ -702,6 +717,13 @@ export function OnlineOrdersPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // Auto-refresh every 2 minutes as fallback for missed socket events
+  useEffect(() => {
+    const id = setInterval(() => { void load(); }, 120_000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  // Socket: new delivery order arrives
   useEffect(() => {
     if (!socket) return;
     const handler = (order: OnlineOrder) => {
@@ -709,8 +731,8 @@ export function OnlineOrdersPage() {
         if (prev.some(o => o._id === order._id)) return prev;
         return [order, ...prev];
       });
-      if (!shownRef.current.has(order._id)) {
-        shownRef.current.add(order._id);
+      if (!shownRef.current.has(String(order._id))) {
+        shownRef.current.add(String(order._id));
         playNewOrderSound();
         toast('info', `New order from ${order.orderSource.toUpperCase()}: ${order.orderNumber}`);
       }
@@ -719,13 +741,42 @@ export function OnlineOrdersPage() {
     return () => { socket.off('new_delivery_order', handler); };
   }, [socket, toast]);
 
+  // Socket: status changes (accept, reject, ready, dispatch, platform cancel)
+  useEffect(() => {
+    if (!socket) return;
+    const statusHandler = (data: { _id: string; status: OnlineOrder['status'] }) => {
+      setOrders(prev => prev.map(o => String(o._id) === String(data._id) ? { ...o, status: data.status } : o));
+    };
+    const acceptHandler = (data: { _id: string }) => {
+      setOrders(prev => prev.map(o => String(o._id) === String(data._id) ? { ...o, status: 'preparing' } : o));
+    };
+    const rejectHandler = (data: { _id: string }) => {
+      setOrders(prev => prev.map(o => String(o._id) === String(data._id) ? { ...o, status: 'cancelled' } : o));
+    };
+    const dispatchHandler = (data: { _id: string }) => {
+      setOrders(prev => prev.map(o => String(o._id) === String(data._id) ? { ...o, status: 'completed' } : o));
+    };
+    socket.on('order_status_change', statusHandler);
+    socket.on('order_accepted',      acceptHandler);
+    socket.on('order_rejected',      rejectHandler);
+    socket.on('order_dispatched',    dispatchHandler);
+    return () => {
+      socket.off('order_status_change', statusHandler);
+      socket.off('order_accepted',      acceptHandler);
+      socket.off('order_rejected',      rejectHandler);
+      socket.off('order_dispatched',    dispatchHandler);
+    };
+  }, [socket]);
+
   function updateOrderStatus(id: string, status: OnlineOrder['status']) {
     setOrders(prev => prev.map(o => o._id === id ? { ...o, status } : o));
   }
 
+  const q = search.trim().toLowerCase();
   const visible = orders.filter(o => {
     if (platFilter !== 'all' && o.orderSource !== platFilter) return false;
     if (statFilter !== 'all' && o.status !== statFilter) return false;
+    if (q && !o.orderNumber.toLowerCase().includes(q) && !o.customerName.toLowerCase().includes(q)) return false;
     return true;
   });
 
@@ -747,6 +798,13 @@ export function OnlineOrdersPage() {
       <div className="space-y-2">
         <FilterTabs tabs={PLATFORM_TABS} active={platFilter} onSelect={setPlatFilter} />
         <FilterTabs tabs={STATUS_TABS}   active={statFilter} onSelect={setStatFilter} />
+        <input
+          type="search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by order number or customer name…"
+          className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink/35 focus:border-brand focus:outline-none"
+        />
       </div>
 
       {loading && orders.length === 0 ? (
@@ -760,7 +818,7 @@ export function OnlineOrdersPage() {
           <ShoppingBag size={32} className="mb-3 text-ink/20" />
           <p className="font-semibold text-ink/50">No orders</p>
           <p className="mt-1 text-xs text-ink/35">
-            {statFilter !== 'all' || platFilter !== 'all' ? 'Try adjusting your filters' : "Today's delivery orders will appear here"}
+            {statFilter !== 'all' || platFilter !== 'all' || q ? 'Try adjusting your filters' : "Today's delivery orders will appear here"}
           </p>
         </div>
       ) : (
@@ -769,9 +827,10 @@ export function OnlineOrdersPage() {
             <OrderCard
               key={order._id}
               order={order}
-              onAccepted={id   => updateOrderStatus(id, 'preparing')}
-              onRejected={id   => updateOrderStatus(id, 'cancelled')}
-              onDispatched={id => updateOrderStatus(id, order.status === 'preparing' ? 'ready' : 'completed')}
+              onAccepted={id  => updateOrderStatus(id, 'preparing')}
+              onRejected={id  => updateOrderStatus(id, 'cancelled')}
+              onReady={id     => updateOrderStatus(id, 'ready')}
+              onDispatched={id => updateOrderStatus(id, 'completed')}
               onToast={toast}
             />
           ))}

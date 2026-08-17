@@ -1,13 +1,15 @@
 import { Router, Response } from 'express';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import { buildDailyReport } from '../services/dailyReport';
 import { buildExecutiveDashboard } from '../services/executiveDashboard';
 import { sendError } from '../utils/sendError';
+import { requireAiQuota } from '../utils/aiUsageTracker';
 
 const router = Router();
 router.use(authMiddleware);
 router.use(requireFeature('ai'));
+router.use(requireAdmin);
 
 // ─── GET /api/ai/report/:date ─────────────────────────────────────────────────
 // Returns the AI-enhanced daily business report for a completed day.
@@ -15,7 +17,7 @@ router.use(requireFeature('ai'));
 // Gemini response is cached in Redis (7d for past dates, 1h for today).
 // If Gemini is unavailable, returns snapshot + health without narrative.
 
-router.get('/report/:date', async (req: AuthRequest, res: Response) => {
+router.get('/report/:date', requireAiQuota('report'), async (req: AuthRequest, res: Response) => {
   try {
     const hotelId = req.hotelId!;
     const { date } = req.params;

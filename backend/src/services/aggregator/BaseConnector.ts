@@ -1,49 +1,48 @@
-import type { IAggregatorIntegration } from '../../models/AggregatorIntegration';
-import type { ParsedAggregatorOrder, MenuSyncResult } from './types';
+import type { ParsedAggregatorOrder, MenuSyncResult, ConnectorContext } from './types';
 
 export abstract class BaseConnector {
   abstract readonly platform: string;
 
   abstract verifyWebhookSignature(
-    rawBody:     string,
-    headers:     Record<string, string>,
-    integration: IAggregatorIntegration,
+    rawBody:       string,
+    headers:       Record<string, string>,
+    webhookSecret: string,
   ): boolean;
 
   abstract parseIncomingOrder(rawBody: string): ParsedAggregatorOrder;
 
   abstract acceptOrder(
-    integration:           IAggregatorIntegration,
+    ctx:                   ConnectorContext,
     platformOrderId:       string,
     estimatedPrepMinutes?: number,
   ): Promise<void>;
 
   abstract rejectOrder(
-    integration:     IAggregatorIntegration,
+    ctx:             ConnectorContext,
     platformOrderId: string,
     reason:          string,
   ): Promise<void>;
 
   abstract markReady(
-    integration:     IAggregatorIntegration,
+    ctx:             ConnectorContext,
     platformOrderId: string,
   ): Promise<void>;
 
   abstract markDispatched(
-    integration:     IAggregatorIntegration,
+    ctx:             ConnectorContext,
     platformOrderId: string,
   ): Promise<void>;
 
   abstract syncMenu(
-    integration: IAggregatorIntegration,
-    categories:  unknown[],
-    products:    unknown[],
+    ctx:        ConnectorContext,
+    categories: unknown[],
+    products:   unknown[],
   ): Promise<MenuSyncResult>;
 
   abstract updateProductAvailability(
-    integration:     IAggregatorIntegration,
-    platformItemId:  string,
-    available:       boolean,
+    ctx:            ConnectorContext,
+    platformItemId: string,
+    available:      boolean,
   ): Promise<void>;
 
   protected externalEnabled(): boolean {

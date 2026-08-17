@@ -7,6 +7,8 @@ import DailySnapshot from '../models/DailySnapshot';
 import HourlyMetrics from '../models/HourlyMetrics';
 import Order from '../models/Order';
 import Ingredient from '../models/Ingredient';
+import Alert from '../models/Alert';
+import { toBusinessDate } from '../utils/businessDate';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -435,6 +437,38 @@ export async function computeAlerts(
     if (invAlert) candidates.push(invAlert);
 
     const alerts = candidates.filter((a): a is SmartAlert => a !== null);
+
+    // ── Persist alerts to MongoDB (upsert — deduplicate by type+date) ────────
+    const dedupDate = toBusinessDate(new Date(), 'Asia/Kolkata');
+    if (alerts.length > 0) {
+      const upsertOps = alerts.map((a) => ({
+        updateOne: {
+          filter: { hotelId: hotelOId, type: a.type, dedupDate },
+          update: {
+            $set: {
+              severity:  a.severity,
+              title:     a.title,
+              message:   a.message,
+              value:     a.value,
+              baseline:  a.baseline,
+              changePct: a.changePct,
+              resolvedAt: null,
+            },
+            $setOnInsert: { isRead: false, readAt: null },
+          },
+          upsert: true,
+        },
+      }));
+      await Alert.bulkWrite(upsertOps, { ordered: false }).catch(() => {});
+
+      // Mark old alerts of types NOT in today's compute as resolved
+      const activeTypes = alerts.map((a) => a.type);
+      await Alert.updateMany(
+        { hotelId: hotelOId, dedupDate, type: { $nin: activeTypes }, resolvedAt: null },
+        { $set: { resolvedAt: new Date() } },
+      ).catch(() => {});
+    }
+
     return { date, alerts, checkedAt: new Date().toISOString(), dataSource };
 
   } else {
@@ -487,6 +521,37 @@ export async function computeAlerts(
       detectDiscountAnomaly(current, baseline),
       detectPaymentAnomaly(current, baseline),
     ].filter((a): a is SmartAlert => a !== null);
+
+    // ── Persist alerts to MongoDB (upsert — deduplicate by type+date) ────────
+    const dedupDate = toBusinessDate(new Date(), 'Asia/Kolkata');
+    if (alerts.length > 0) {
+      const upsertOps = alerts.map((a) => ({
+        updateOne: {
+          filter: { hotelId: hotelOId, type: a.type, dedupDate },
+          update: {
+            $set: {
+              severity:  a.severity,
+              title:     a.title,
+              message:   a.message,
+              value:     a.value,
+              baseline:  a.baseline,
+              changePct: a.changePct,
+              resolvedAt: null,
+            },
+            $setOnInsert: { isRead: false, readAt: null },
+          },
+          upsert: true,
+        },
+      }));
+      await Alert.bulkWrite(upsertOps, { ordered: false }).catch(() => {});
+
+      // Mark old alerts of types NOT in today's compute as resolved
+      const activeTypes = alerts.map((a) => a.type);
+      await Alert.updateMany(
+        { hotelId: hotelOId, dedupDate, type: { $nin: activeTypes }, resolvedAt: null },
+        { $set: { resolvedAt: new Date() } },
+      ).catch(() => {});
+    }
 
     return { date, alerts, checkedAt: new Date().toISOString(), dataSource };
   }

@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import { buildForecast } from '../services/forecastEngine';
 import { buildInventoryPrediction } from '../services/inventoryPredictor';
@@ -67,4 +67,19 @@ router.get('/forecast/inventory', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ─── GET /api/ai/forecast/purchase ───────────────────────────────────────────
+// Returns data-driven purchase suggestions based on current stock + thresholds.
+
+router.get('/purchase', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const hotelId = req.hotelId!;
+    const { buildPurchaseSuggestions } = await import('../services/purchaseSuggestion');
+    const result = await buildPurchaseSuggestions(hotelId);
+    return res.json(result);
+  } catch (err) {
+    sendError(res, 500, 'Failed to build purchase suggestions', err);
+  }
+});
+
 export default router;
+

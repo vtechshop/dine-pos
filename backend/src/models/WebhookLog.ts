@@ -1,17 +1,18 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IWebhookLog extends Document {
-  hotelId:         mongoose.Types.ObjectId | null;
-  platform:        'swiggy' | 'zomato' | 'generic';
-  event:           string;
-  rawBody:         string;
-  headers:         Record<string, string>;
-  status:          'success' | 'failed' | 'retrying';
-  errorMessage:    string | null;
-  orderId:         mongoose.Types.ObjectId | null;
-  platformOrderId: string;
-  retryCount:      number;
-  nextRetryAt:     Date | null;
+  hotelId:          mongoose.Types.ObjectId | null;
+  platform:         'swiggy' | 'zomato' | 'generic';
+  event:            string;
+  rawBody:          string;
+  headers:          Record<string, string>;
+  status:           'success' | 'failed' | 'retrying';
+  errorMessage:     string | null;
+  orderId:          mongoose.Types.ObjectId | null;
+  platformOrderId:  string;
+  retryCount:       number;
+  nextRetryAt:      Date | null;
+  processingTimeMs: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,8 +28,9 @@ const schema = new Schema<IWebhookLog>(
     errorMessage:    { type: String, default: null },
     orderId:         { type: Schema.Types.ObjectId, ref: 'Order', default: null },
     platformOrderId: { type: String, default: '' },
-    retryCount:      { type: Number, default: 0 },
-    nextRetryAt:     { type: Date, default: null },
+    retryCount:       { type: Number, default: 0 },
+    nextRetryAt:      { type: Date, default: null },
+    processingTimeMs: { type: Number, default: null },
   },
   { timestamps: true },
 );

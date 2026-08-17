@@ -1,26 +1,31 @@
 import crypto from 'crypto';
 import { BaseConnector } from './BaseConnector';
-import type { IAggregatorIntegration } from '../../models/AggregatorIntegration';
-import type { ParsedAggregatorOrder, MenuSyncResult } from './types';
+import type { ParsedAggregatorOrder, MenuSyncResult, ConnectorContext } from './types';
 
 const BASE_URL = 'https://partner.swiggy.com/api/v2';
+
+function swiggyAvailable(p: Record<string, unknown>): 0 | 1 {
+  const override = (p.channelAvailability as Record<string, boolean | null> | undefined)?.swiggy;
+  if (override === null || override === undefined) {
+    return (p.isAvailable && !p.isDeleted) ? 1 : 0;
+  }
+  return (override && !p.isDeleted) ? 1 : 0;
+}
 
 export class SwiggyConnector extends BaseConnector {
   readonly platform = 'swiggy';
 
   // ── Webhook signature verification ─────────────────────────────────────────
   // Header: x-swiggy-signature: sha256=<hex>
-  // Falls back to shared AGGREGATOR_SECRET if integration.webhookSecret is not configured.
   verifyWebhookSignature(
-    rawBody:     string,
-    headers:     Record<string, string>,
-    integration: IAggregatorIntegration,
+    rawBody:       string,
+    headers:       Record<string, string>,
+    webhookSecret: string,
   ): boolean {
-    const secret = integration.webhookSecret || process.env.AGGREGATOR_SECRET || '';
+    const secret = webhookSecret || process.env.AGGREGATOR_SECRET || '';
     if (!secret) return false;
 
-    const sigHeader = headers['x-swiggy-signature'] || '';
-    // Expected format: "sha256=<hex>"
+    const sigHeader  = headers['x-swiggy-signature'] || '';
     const incomingHex = sigHeader.startsWith('sha256=')
       ? sigHeader.slice('sha256='.length)
       : sigHeader;
@@ -35,7 +40,7 @@ export class SwiggyConnector extends BaseConnector {
     try {
       return crypto.timingSafeEqual(
         Buffer.from(incomingHex, 'hex'),
-        Buffer.from(expected, 'hex'),
+        Buffer.from(expected,    'hex'),
       );
     } catch {
       return false;
@@ -43,11 +48,6 @@ export class SwiggyConnector extends BaseConnector {
   }
 
   // ── Parse incoming Swiggy order ────────────────────────────────────────────
-  // Swiggy webhook payload fields:
-  //   order_id, restaurant_id, customer.name, customer.mobile,
-  //   delivery_address.full_address, order_items[].name/.quantity/.price/.catalog_id,
-  //   order_total, delivery_fee, vat_amount, payable_amount,
-  //   payment_method, sla_time, special_instructions
   parseIncomingOrder(rawBody: string): ParsedAggregatorOrder {
     const data = JSON.parse(rawBody);
 
@@ -91,19 +91,24 @@ export class SwiggyConnector extends BaseConnector {
       taxTotal:            Number(data.vat_amount || data.tax_amount) || 0,
       grandTotal:          Number(data.payable_amount || data.order_total) || subtotal,
       paymentMethod,
-      estimatedPickupTime: data.sla_time ? String(data.sla_time) : undefined,
-      notes:               String(data.special_instructions || data.order_notes || ''),
+      estimatedPickupTime: (() => {
+        if (data.sla_time == null) return undefined;
+        const mins = parseInt(String(data.sla_time), 10);
+        if (isNaN(mins) || mins <= 0) return undefined;
+        return new Date(Date.now() + mins * 60_000).toISOString();
+      })(),
+      notes: String(data.special_instructions || data.order_notes || ''),
     };
   }
 
   // ── Accept order ────────────────────────────────────────────────────────────
   async acceptOrder(
-    integration:           IAggregatorIntegration,
+    ctx:                   ConnectorContext,
     platformOrderId:       string,
     estimatedPrepMinutes = 20,
   ): Promise<void> {
     if (!this.externalEnabled()) {
-      this.logExternalSkip('acceptOrder', { platformOrderId, estimatedPrepMinutes, storeId: integration.storeId });
+      this.logExternalSkip('acceptOrder', { platformOrderId, estimatedPrepMinutes, storeId: ctx.storeId });
       return;
     }
 
@@ -111,7 +116,7 @@ export class SwiggyConnector extends BaseConnector {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
-        'Authorization': `Bearer ${integration.apiKey}`,
+        'Authorization': `Bearer ${ctx.apiKey}`,
       },
       body: JSON.stringify({ prep_time: estimatedPrepMinutes }),
     });
@@ -124,12 +129,12 @@ export class SwiggyConnector extends BaseConnector {
 
   // ── Reject order ────────────────────────────────────────────────────────────
   async rejectOrder(
-    integration:     IAggregatorIntegration,
+    ctx:             ConnectorContext,
     platformOrderId: string,
     reason:          string,
   ): Promise<void> {
     if (!this.externalEnabled()) {
-      this.logExternalSkip('rejectOrder', { platformOrderId, reason, storeId: integration.storeId });
+      this.logExternalSkip('rejectOrder', { platformOrderId, reason, storeId: ctx.storeId });
       return;
     }
 
@@ -137,7 +142,7 @@ export class SwiggyConnector extends BaseConnector {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
-        'Authorization': `Bearer ${integration.apiKey}`,
+        'Authorization': `Bearer ${ctx.apiKey}`,
       },
       body: JSON.stringify({ reason }),
     });
@@ -150,11 +155,11 @@ export class SwiggyConnector extends BaseConnector {
 
   // ── Mark ready ──────────────────────────────────────────────────────────────
   async markReady(
-    integration:     IAggregatorIntegration,
+    ctx:             ConnectorContext,
     platformOrderId: string,
   ): Promise<void> {
     if (!this.externalEnabled()) {
-      this.logExternalSkip('markReady', { platformOrderId, storeId: integration.storeId });
+      this.logExternalSkip('markReady', { platformOrderId, storeId: ctx.storeId });
       return;
     }
 
@@ -162,7 +167,7 @@ export class SwiggyConnector extends BaseConnector {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
-        'Authorization': `Bearer ${integration.apiKey}`,
+        'Authorization': `Bearer ${ctx.apiKey}`,
       },
     });
 
@@ -174,11 +179,11 @@ export class SwiggyConnector extends BaseConnector {
 
   // ── Mark dispatched ─────────────────────────────────────────────────────────
   async markDispatched(
-    integration:     IAggregatorIntegration,
+    ctx:             ConnectorContext,
     platformOrderId: string,
   ): Promise<void> {
     if (!this.externalEnabled()) {
-      this.logExternalSkip('markDispatched', { platformOrderId, storeId: integration.storeId });
+      this.logExternalSkip('markDispatched', { platformOrderId, storeId: ctx.storeId });
       return;
     }
 
@@ -186,7 +191,7 @@ export class SwiggyConnector extends BaseConnector {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
-        'Authorization': `Bearer ${integration.apiKey}`,
+        'Authorization': `Bearer ${ctx.apiKey}`,
       },
     });
 
@@ -198,27 +203,21 @@ export class SwiggyConnector extends BaseConnector {
 
   // ── Sync menu ───────────────────────────────────────────────────────────────
   async syncMenu(
-    integration: IAggregatorIntegration,
-    categories:  unknown[],
-    products:    unknown[],
+    ctx:        ConnectorContext,
+    categories: unknown[],
+    products:   unknown[],
   ): Promise<MenuSyncResult> {
     if (!this.externalEnabled()) {
       this.logExternalSkip('syncMenu', {
-        storeId:       integration.storeId,
+        storeId:       ctx.storeId,
         categoryCount: (categories as any[]).length,
         productCount:  (products as any[]).length,
       });
-      return {
-        success:      true,
-        syncedCount:  (products as any[]).length,
-        failedCount:  0,
-        failedItems:  [],
-      };
+      return { success: true, syncedCount: (products as any[]).length, failedCount: 0, failedItems: [] };
     }
 
-    // Build Swiggy catalog format
     const catalog = {
-      restaurant_id: integration.storeId,
+      restaurant_id: ctx.storeId,
       categories: (categories as any[]).map(cat => ({
         name:  cat.name,
         items: (products as any[])
@@ -228,7 +227,7 @@ export class SwiggyConnector extends BaseConnector {
             price:       p.channelPrices?.swiggy ?? p.price,
             description: p.description || '',
             is_veg:      p.isVeg ? 1 : 0,
-            in_stock:    p.isAvailable && !p.isDeleted ? 1 : 0,
+            in_stock:    swiggyAvailable(p),
             catalog_id:  p.platformIds?.swiggy || undefined,
           })),
       })),
@@ -236,10 +235,7 @@ export class SwiggyConnector extends BaseConnector {
 
     const res = await fetch(`${BASE_URL}/catalog/upload`, {
       method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${integration.apiKey}`,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ctx.apiKey}` },
       body: JSON.stringify(catalog),
     });
 
@@ -268,25 +264,18 @@ export class SwiggyConnector extends BaseConnector {
 
   // ── Update product availability ─────────────────────────────────────────────
   async updateProductAvailability(
-    integration:    IAggregatorIntegration,
+    ctx:            ConnectorContext,
     platformItemId: string,
     available:      boolean,
   ): Promise<void> {
     if (!this.externalEnabled()) {
-      this.logExternalSkip('updateProductAvailability', {
-        platformItemId,
-        available,
-        storeId: integration.storeId,
-      });
+      this.logExternalSkip('updateProductAvailability', { platformItemId, available, storeId: ctx.storeId });
       return;
     }
 
     const res = await fetch(`${BASE_URL}/catalog/items/${platformItemId}/availability`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${integration.apiKey}`,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ctx.apiKey}` },
       body: JSON.stringify({ in_stock: available }),
     });
 

@@ -1,8 +1,10 @@
 import mongoose from 'mongoose';
 import DailySnapshot from '../models/DailySnapshot';
 import HourlyMetrics from '../models/HourlyMetrics';
+import Hotel from '../models/Hotel';
 import { getHotMetrics, getTopItems } from '../utils/aiMetricsCache';
 import { computeHealthScore } from './healthScore';
+import { todayBusinessDate, toBusinessDate } from '../utils/businessDate';
 
 // ─── Return shapes ────────────────────────────────────────────────────────────
 
@@ -34,17 +36,18 @@ export interface ExecutiveDashboard {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function daysAgo(n: number): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - n);
-  return d.toISOString().slice(0, 10);
+function daysAgo(n: number, timezone: string): string {
+  return toBusinessDate(new Date(Date.now() - n * 86_400_000), timezone);
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export async function buildExecutiveDashboard(hotelId: string): Promise<ExecutiveDashboard> {
-  const today    = new Date().toISOString().slice(0, 10);
   const hotelOId = new mongoose.Types.ObjectId(hotelId);
+
+  const hotelDoc = await Hotel.findById(hotelOId, { timezone: 1 }).lean();
+  const timezone = (hotelDoc as any)?.timezone ?? 'Asia/Kolkata';
+  const today    = todayBusinessDate(timezone);
 
   // ── Today's metrics: Redis hot cache → HourlyMetrics fallback ─────────────
   const [hot, topItemsRedis] = await Promise.all([
@@ -96,10 +99,10 @@ export async function buildExecutiveDashboard(hotelId: string): Promise<Executiv
   // ── Rolling week comparison — last 7 complete days vs the 7 before that ───
   // "this week" = [today-7, today-1]  (7 complete days just ended)
   // "last week" = [today-14, today-8] (7 complete days before that)
-  const thisWeekStart = daysAgo(7);     // e.g. Jul 20
-  const thisWeekEnd   = daysAgo(1);     // yesterday
-  const lastWeekStart = daysAgo(14);    // Jul 13
-  const lastWeekEnd   = daysAgo(8);     // Jul 19
+  const thisWeekStart = daysAgo(7, timezone);
+  const thisWeekEnd   = daysAgo(1, timezone);
+  const lastWeekStart = daysAgo(14, timezone);
+  const lastWeekEnd   = daysAgo(8, timezone);
 
   const [thisWeekSnaps, lastWeekSnaps] = await Promise.all([
     DailySnapshot.find(

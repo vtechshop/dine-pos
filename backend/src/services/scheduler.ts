@@ -3,12 +3,16 @@ import { dispatchDailySnapshots } from '../workers/dailySnapshotBuilder';
 import { dispatchMorningBriefs } from '../workers/morningBriefWorker';
 import { runLoyaltyExpiry } from '../workers/loyaltyExpiryWorker';
 import { dispatchScheduledCampaigns } from '../workers/campaignWorker';
+import { runMenuSyncWorker } from '../workers/menuSyncWorker';
+import { runRazorpayTokenRefreshWorker } from '../workers/razorpayTokenRefreshWorker';
 import { logger } from '../utils/logger';
 
-let hourlyTimer:  ReturnType<typeof setTimeout>  | null = null;
-let hourlyTick:   ReturnType<typeof setInterval> | null = null;
-let dailyTick:    ReturnType<typeof setInterval> | null = null;
-let expiryLastDate = -1;
+let hourlyTimer:             ReturnType<typeof setTimeout>  | null = null;
+let hourlyTick:              ReturnType<typeof setInterval> | null = null;
+let dailyTick:               ReturnType<typeof setInterval> | null = null;
+let expiryLastDate         = -1;
+let menuSyncLastRun        = 0;   // epoch ms — checked every 5 minutes
+let tokenRefreshLastRun    = 0;   // epoch ms — checked every 4 hours
 
 // ─── Hourly aggregation ───────────────────────────────────────────────────────
 // Fires at :05 past every UTC hour (to let the last few stragglers land),
@@ -75,6 +79,25 @@ function scheduleDailyDispatch(): void {
     void dispatchScheduledCampaigns().catch((err) =>
       logger.error('[scheduler] campaign dispatch error', { err: String(err) }),
     );
+
+    // Menu sync worker — checks auto-sync integrations every 5 minutes
+    const nowMs = Date.now();
+    if (nowMs - menuSyncLastRun >= 5 * 60 * 1000) {
+      menuSyncLastRun = nowMs;
+      void runMenuSyncWorker().catch((err) =>
+        logger.error('[scheduler] menu sync worker error', { err: String(err) }),
+      );
+    }
+
+    // Razorpay OAuth proactive token refresh — every 4 hours.
+    // Refreshes access tokens that expire within 7 days, before a live payment
+    // transaction discovers the expiry mid-flow.
+    if (nowMs - tokenRefreshLastRun >= 4 * 60 * 60 * 1000) {
+      tokenRefreshLastRun = nowMs;
+      void runRazorpayTokenRefreshWorker().catch((err) =>
+        logger.error('[scheduler] razorpay token refresh error', { err: String(err) }),
+      );
+    }
   }, 60 * 1000);
 }
 

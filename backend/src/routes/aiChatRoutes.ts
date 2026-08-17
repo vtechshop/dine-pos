@@ -8,6 +8,7 @@ import {
   listChatSessions,
 } from '../services/aiChat';
 import { sendError } from '../utils/sendError';
+import { requireAiQuota } from '../utils/aiUsageTracker';
 
 const router = Router();
 router.use(authMiddleware);
@@ -19,7 +20,7 @@ router.use(requireFeature('ai'));
 // If sessionId is omitted, a new session is created and returned.
 // Gemini consumes ONLY the pre-built business context + conversation history.
 
-router.post('/chat', async (req: AuthRequest, res: Response) => {
+router.post('/chat', requireAiQuota('chat'), async (req: AuthRequest, res: Response) => {
   try {
     const hotelId = req.hotelId!;
     const { message, sessionId } = req.body as { message?: unknown; sessionId?: unknown };
@@ -30,6 +31,12 @@ router.post('/chat', async (req: AuthRequest, res: Response) => {
 
     if (message.trim().length > 2000) {
       return res.status(400).json({ message: 'message must not exceed 2000 characters' });
+    }
+
+    // Validate sessionId format if provided
+    const rawSessionId = typeof req.body.sessionId === 'string' ? req.body.sessionId : undefined;
+    if (rawSessionId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawSessionId)) {
+      return res.status(400).json({ message: 'Invalid sessionId format' });
     }
 
     const sid = typeof sessionId === 'string' && sessionId.trim().length > 0

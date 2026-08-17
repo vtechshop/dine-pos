@@ -9,6 +9,7 @@ import {
   fetchOnlineOrders,
   acceptDeliveryOrder,
   rejectDeliveryOrder,
+  markOrderReady,
   dispatchDeliveryOrder,
 } from '../../api/aggregator';
 import type { OnlineOrder } from '../../api/aggregator';
@@ -671,14 +672,25 @@ function OrderCard({
     } finally { setBusy(null); }
   }
 
+  async function handleReady() {
+    setBusy('ready');
+    try {
+      await markOrderReady(order._id);
+      onStatusChange(order._id, 'ready');
+      onToast('success', `Order ${order.orderNumber} marked ready.`);
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : 'Failed to mark ready');
+    } finally { setBusy(null); }
+  }
+
   async function handleDispatch() {
     setBusy('dispatch');
     try {
       await dispatchDeliveryOrder(order._id);
-      onStatusChange(order._id, order.status === 'preparing' ? 'ready' : 'completed');
-      onToast('success', `Updated: ${order.orderNumber}`);
+      onStatusChange(order._id, 'completed');
+      onToast('success', `Dispatched: ${order.orderNumber}`);
     } catch (err) {
-      onToast('error', err instanceof Error ? err.message : 'Failed to update');
+      onToast('error', err instanceof Error ? err.message : 'Failed to dispatch');
     } finally { setBusy(null); }
   }
 
@@ -761,9 +773,9 @@ function OrderCard({
           </>
         )}
         {order.status === 'preparing' && (
-          <button type="button" onClick={() => void handleDispatch()} disabled={busy === 'dispatch'}
+          <button type="button" onClick={() => void handleReady()} disabled={busy === 'ready'}
             className="flex items-center gap-0.5 rounded bg-blue-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-blue-700 disabled:opacity-50">
-            {busy === 'dispatch' ? <Spinner size="sm" /> : <Check size={9} />}
+            {busy === 'ready' ? <Spinner size="sm" /> : <Check size={9} />}
             Mark Ready
           </button>
         )}
@@ -910,6 +922,32 @@ export function OnlineOrdersPanel() {
     };
     socket.on('new_delivery_order', handler);
     return () => { socket.off('new_delivery_order', handler); };
+  }, [socket]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const statusHandler = (data: { _id: string; status: OnlineOrder['status'] }) => {
+      setOrders(prev => prev.map(o => String(o._id) === String(data._id) ? { ...o, status: data.status } : o));
+    };
+    const acceptHandler  = (data: { _id: string }) => {
+      setOrders(prev => prev.map(o => String(o._id) === String(data._id) ? { ...o, status: 'preparing' } : o));
+    };
+    const rejectHandler  = (data: { _id: string }) => {
+      setOrders(prev => prev.map(o => String(o._id) === String(data._id) ? { ...o, status: 'cancelled' } : o));
+    };
+    const dispatchHandler = (data: { _id: string }) => {
+      setOrders(prev => prev.map(o => String(o._id) === String(data._id) ? { ...o, status: 'completed' } : o));
+    };
+    socket.on('order_status_change', statusHandler);
+    socket.on('order_accepted',      acceptHandler);
+    socket.on('order_rejected',      rejectHandler);
+    socket.on('order_dispatched',    dispatchHandler);
+    return () => {
+      socket.off('order_status_change', statusHandler);
+      socket.off('order_accepted',      acceptHandler);
+      socket.off('order_rejected',      rejectHandler);
+      socket.off('order_dispatched',    dispatchHandler);
+    };
   }, [socket]);
 
   function updateOrder(id: string, status: OnlineOrder['status']) {

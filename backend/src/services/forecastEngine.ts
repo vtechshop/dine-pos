@@ -11,8 +11,10 @@ import { getCachedNarrative, setCachedNarrative, hashNarrativeInput } from '../u
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface DayForecast {
-  date:     string;
-  value:    number;
+  date:           string;
+  value:          number;
+  confidenceLow:  number;   // lower bound (MAPE-based 80% interval)
+  confidenceHigh: number;   // upper bound
 }
 
 export interface HourDistribution {
@@ -57,6 +59,9 @@ export interface SalesForecast {
 
   // Table utilization
   tableUtilNext7d:       DayForecast[];
+
+  // Accuracy: backtested MAPE vs actual snapshots available
+  revenueAccuracy: { mape: number; dataPoints: number; grade: 'good' | 'fair' | 'poor' };
 
   // Narrative (Gemini — cached)
   narrative:         string | null;
@@ -267,15 +272,26 @@ export async function buildForecast(hotelId: string): Promise<SalesForecast | nu
   const revFC7  = autoForecast(revenueSeries, 7);
   const revFC30 = autoForecast(revenueSeries, 30);
 
-  const revenueNext7d  = revFC7.values.map((v, i) => ({ date: addDays(lastDate, i + 1), value: v }));
-  const revenueNext30d = revFC30.values.map((v, i) => ({ date: addDays(lastDate, i + 1), value: v }));
+  // Confidence interval: use MAPE as ±uncertainty. 80% prediction interval ≈ ±1.28σ.
+  // We model σ ≈ value * (MAPE/100) giving asymmetric but practical bounds.
+  function withCI(value: number, mape: number): Omit<DayForecast, 'date'> {
+    const err = value * (mape / 100);
+    return {
+      value,
+      confidenceLow:  +Math.max(0, value - err).toFixed(2),
+      confidenceHigh: +(value + err).toFixed(2),
+    };
+  }
+
+  const revenueNext7d  = revFC7.values.map((v, i) => ({ date: addDays(lastDate, i + 1), ...withCI(v, revFC7.mape) }));
+  const revenueNext30d = revFC30.values.map((v, i) => ({ date: addDays(lastDate, i + 1), ...withCI(v, revFC30.mape) }));
 
   // ── Orders forecast (7 + 30 days) ────────────────────────────────────────
   const ordFC7  = autoForecast(ordersSeries, 7);
   const ordFC30 = autoForecast(ordersSeries, 30);
 
-  const ordersNext7d  = ordFC7.values.map((v, i) => ({ date: addDays(lastDate, i + 1), value: v }));
-  const ordersNext30d = ordFC30.values.map((v, i) => ({ date: addDays(lastDate, i + 1), value: v }));
+  const ordersNext7d  = ordFC7.values.map((v, i) => ({ date: addDays(lastDate, i + 1), ...withCI(v, ordFC7.mape) }));
+  const ordersNext30d = ordFC30.values.map((v, i) => ({ date: addDays(lastDate, i + 1), ...withCI(v, ordFC30.mape) }));
 
   // ── Derived aggregates ────────────────────────────────────────────────────
   const forecastWeekRevenue = revenueNext7d.reduce((s, d) => s + d.value, 0);
@@ -287,9 +303,17 @@ export async function buildForecast(hotelId: string): Promise<SalesForecast | nu
   // ── Table utilization (7-day forecast) ───────────────────────────────────
   const tablesFC7     = autoForecast(tablesSeries, 7);
   const tableUtilNext7d = tablesFC7.values.map((v, i) => ({
-    date:  addDays(lastDate, i + 1),
-    value: Math.round(v),
+    date:            addDays(lastDate, i + 1),
+    value:           Math.round(v),
+    confidenceLow:   Math.max(0, Math.round(v - v * (tablesFC7.mape / 100))),
+    confidenceHigh:  Math.round(v + v * (tablesFC7.mape / 100)),
   }));
+
+  // Accuracy grade from backtested MAPE
+  const revMape = revFC7.mape;
+  const accuracyGrade: 'good' | 'fair' | 'poor' =
+    revMape < 10 ? 'good' : revMape < 25 ? 'fair' : 'poor';
+  const revenueAccuracy = { mape: revMape, dataPoints: snapshots.length, grade: accuracyGrade };
 
   // ── Peak hour distribution (last 14 snapshots) ────────────────────────────
   const recent14             = snapshots.slice(-14);
@@ -339,6 +363,7 @@ export async function buildForecast(hotelId: string): Promise<SalesForecast | nu
       topPeakHours,
       itemDemand,
       tableUtilNext7d,
+      revenueAccuracy,
     };
     const prompt    = buildForecastNarrativePrompt(partialFc);
     const generated = await generateNarrative(prompt);
@@ -374,6 +399,7 @@ export async function buildForecast(hotelId: string): Promise<SalesForecast | nu
     topPeakHours,
     itemDemand,
     tableUtilNext7d,
+    revenueAccuracy,
     narrative,
     narrativeSource,
   };

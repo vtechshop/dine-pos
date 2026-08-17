@@ -4,14 +4,34 @@ const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:5000/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+export interface ExtractedVariant {
+  name:  string;
+  price: number;
+}
+
+export interface ExtractedModifierOption {
+  name:  string;
+  price: number;
+}
+
+export interface ExtractedModifierGroup {
+  name:          string;
+  required:      boolean;
+  selectionType: 'single' | 'multi';
+  options:       ExtractedModifierOption[];
+}
+
 export interface ExtractedProduct {
-  name:        string;
-  price:       number | null;
-  variant:     string;
-  veg:         boolean;
-  gst:         number | null;
-  description: string;
-  confidence:  number;
+  name:           string;
+  price:          number | null;
+  variants:       ExtractedVariant[];
+  modifierGroups: ExtractedModifierGroup[];
+  veg:            boolean;
+  gst:            number | null;
+  hsnCode:        string;
+  shortCode:      string;
+  description:    string;
+  confidence:     number;
 }
 
 export interface ExtractedCategory {
@@ -24,7 +44,34 @@ export interface MenuExtractionResult {
   categories:     ExtractedCategory[];
 }
 
-export interface ImportProduct extends ExtractedProduct {
+export interface ImportVariant {
+  name:  string;
+  price: number;
+}
+
+export interface ImportModifierOption {
+  name:  string;
+  price: number;
+}
+
+export interface ImportModifierGroup {
+  name:          string;
+  required:      boolean;
+  selectionType: 'single' | 'multi';
+  options:       ImportModifierOption[];
+}
+
+export interface ImportProduct {
+  name:            string;
+  price:           number | null;
+  variants:        ImportVariant[];
+  modifierGroups:  ImportModifierGroup[];
+  veg:             boolean;
+  gst:             number | null;
+  hsnCode:         string;
+  shortCode:       string;
+  description:     string;
+  confidence:      number;
   duplicateAction?: 'skip' | 'overwrite' | 'copy';
 }
 
@@ -34,15 +81,20 @@ export interface ImportCategory {
 }
 
 export interface ImportResults {
-  categoriesCreated:   number;
-  productsCreated:     number;
-  productsOverwritten: number;
-  productsSkipped:     number;
-  errors:              Array<{ name: string; reason: string }>;
+  categoriesCreated:     number;
+  productsCreated:       number;
+  productsOverwritten:   number;
+  productsSkipped:       number;
+  modifierGroupsCreated: number;
+  errors:                Array<{ name: string; reason: string }>;
 }
 
 export interface DuplicateCheckResult {
-  duplicates: Array<{ productName: string; categoryName: string }>;
+  duplicates: Array<{
+    productName:          string;
+    categoryName:         string;
+    existingCategoryName: string;
+  }>;
 }
 
 // ── API calls ──────────────────────────────────────────────────────────────────
@@ -58,7 +110,7 @@ export async function extractMenu(file: File): Promise<MenuExtractionResult> {
     method:  'POST',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body:    form,
-    signal:  AbortSignal.timeout(120_000), // 2 min — large PDFs are slow
+    signal:  AbortSignal.timeout(180_000), // 3 min — large PDFs via File API can take longer
   });
 
   if (!res.ok) {

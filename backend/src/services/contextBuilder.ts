@@ -13,6 +13,8 @@ import { getCachedRecommendations } from '../utils/alertCache';
 import { getCachedForecast } from '../utils/forecastCache';
 import { getCachedInventory } from '../utils/forecastCache';
 import { getCachedContext, setCachedContext } from '../utils/chatCache';
+import VendorLedgerEntry from '../models/VendorLedgerEntry';
+import Expense from '../models/Expense';
 
 // ─── Type guards for cached payloads ─────────────────────────────────────────
 // Caches store typed objects as `unknown`. These guards safely extract data.
@@ -67,7 +69,7 @@ export async function buildBusinessContext(hotelId: string): Promise<string> {
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
   const hotelOId  = new mongoose.Types.ObjectId(hotelId);
 
-  // ── Parallel: hotel name + snapshots + all Redis caches ───────────────────
+  // ── Parallel: hotel name + snapshots + all Redis caches + vendor/expense ──
   const [
     hotelResult,
     todaySnapResult,
@@ -76,6 +78,8 @@ export async function buildBusinessContext(hotelId: string): Promise<string> {
     recsResult,
     forecastResult,
     inventoryResult,
+    vendorAggResult,
+    expenseAggResult,
   ] = await Promise.allSettled([
     Hotel.findById(hotelOId, { hotelName: 1 }).lean(),
     DailySnapshot.findOne(
@@ -94,18 +98,33 @@ export async function buildBusinessContext(hotelId: string): Promise<string> {
     getCachedRecommendations(hotelId, today),
     getCachedForecast(hotelId),
     getCachedInventory(hotelId),
+    VendorLedgerEntry.aggregate([
+      { $sort: { createdAt: -1 } },
+      { $group: { _id: '$vendorId', runningBalance: { $first: '$runningBalance' } } },
+      { $match: { runningBalance: { $gt: 0 } } },
+      { $group: { _id: null, outstanding: { $sum: '$runningBalance' }, count: { $sum: 1 } } },
+    ]),
+    Expense.aggregate([
+      { $match: { hotelId: hotelOId, date: { $gte: new Date(`${yesterday}T00:00:00.000Z`), $lte: new Date(`${yesterday}T23:59:59.999Z`) } } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
   ]);
 
   const hotelName = hotelResult.status === 'fulfilled' && hotelResult.value
     ? (hotelResult.value as any).hotelName ?? 'Restaurant'
     : 'Restaurant';
 
-  const snap      = todaySnapResult.status === 'fulfilled' ? todaySnapResult.value : null;
-  const last7     = last7SnapResult.status === 'fulfilled'  ? (last7SnapResult.value as any[]) : [];
-  const alerts    = alertsResult.status === 'fulfilled'     ? alertsResult.value   : null;
-  const recs      = recsResult.status === 'fulfilled'       ? recsResult.value     : null;
-  const forecast  = forecastResult.status === 'fulfilled'   ? forecastResult.value : null;
-  const inventory = inventoryResult.status === 'fulfilled'  ? inventoryResult.value : null;
+  const snap           = todaySnapResult.status === 'fulfilled'  ? todaySnapResult.value    : null;
+  const last7          = last7SnapResult.status === 'fulfilled'  ? (last7SnapResult.value as any[]) : [];
+  const alerts         = alertsResult.status === 'fulfilled'     ? alertsResult.value       : null;
+  const recs           = recsResult.status === 'fulfilled'       ? recsResult.value         : null;
+  const forecast       = forecastResult.status === 'fulfilled'   ? forecastResult.value     : null;
+  const inventory      = inventoryResult.status === 'fulfilled'  ? inventoryResult.value    : null;
+  const vendorAgg      = vendorAggResult.status === 'fulfilled'  ? (vendorAggResult.value as any[]) : [];
+  const expenseAgg     = expenseAggResult.status === 'fulfilled' ? (expenseAggResult.value as any[]) : [];
+  const vendorOutstanding = +(vendorAgg[0]?.outstanding ?? 0).toFixed(0);
+  const vendorCount       = vendorAgg[0]?.count ?? 0;
+  const yesterdayExpenses = +(expenseAgg[0]?.total ?? 0).toFixed(0);
 
   const lines: string[] = [
     `=== BUSINESS INTELLIGENCE CONTEXT (${today}) ===`,
@@ -203,8 +222,22 @@ export async function buildBusinessContext(hotelId: string): Promise<string> {
     lines.push('');
   }
 
+  // ── Vendor outstanding ────────────────────────────────────────────────────
+  if (vendorOutstanding > 0) {
+    lines.push('VENDOR PAYABLES:');
+    lines.push(`- Total outstanding: ₹${vendorOutstanding} across ${vendorCount} vendor(s)`);
+    lines.push('');
+  }
+
+  // ── Yesterday expenses ────────────────────────────────────────────────────
+  if (yesterdayExpenses > 0) {
+    lines.push(`EXPENSES (${yesterday}): ₹${yesterdayExpenses}`);
+    lines.push('');
+  }
+
   lines.push('=== END OF CONTEXT ===');
-  lines.push('IMPORTANT: All numbers above are pre-calculated. Do not recalculate or estimate. If asked about something not in this context, state that the data is not available.');
+  lines.push('IMPORTANT: All numbers above are pre-calculated. Do not recalculate or estimate. If asked about something not in this context, use the available chat tools to look up specific data.');
+  lines.push('AVAILABLE TOOLS: getRevenue, getTopProducts, getLowStockItems, getVendorBalances, getPaymentBreakdown, getOnlineOrderMetrics, getExpenses, getCancellations');
 
   const contextStr = lines.join('\n');
   await setCachedContext(hotelId, contextStr);

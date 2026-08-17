@@ -1,3 +1,11 @@
+/** Decrypted credentials passed to connector methods — never store or log these. */
+export interface ConnectorContext {
+  storeId:   string;
+  apiKey:    string;   // decrypted
+  apiSecret: string;   // decrypted
+  autoAccept: boolean;
+}
+
 export interface AggregatorOrderItem {
   productName:     string;
   quantity:        number;
