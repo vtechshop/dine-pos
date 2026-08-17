@@ -166,3 +166,27 @@ export async function revokeRazorpayOAuthTokens(
     revoke(config.oauthRefreshTokenEnc, 'refresh_token'),
   ]);
 }
+
+// ── Ensure valid OAuth token before gateway use ────────────────────────────────
+// Call before GatewayFactory.create() when config.isOAuthConnected is true.
+// Returns config unchanged if token is still valid, or the refreshed config if expired.
+// Throws if the token is expired and refresh fails — caller should surface this to the user.
+export async function ensureValidOAuthConfig(
+  config: IPaymentGatewayConfig,
+): Promise<IPaymentGatewayConfig> {
+  if (!config.isOAuthConnected) return config;
+  if (config.oauthExpiresAt && config.oauthExpiresAt > new Date()) return config;
+
+  logger.info('razorpayTokenRefresh: access_token expired, refreshing before use', {
+    configId: String(config._id),
+  });
+
+  const updated = await refreshRazorpayOAuthToken(config);
+  if (!updated) {
+    throw new Error(
+      'Razorpay OAuth access token expired and refresh failed. ' +
+      'Please reconnect via Payment Settings → Gateways.',
+    );
+  }
+  return updated;
+}

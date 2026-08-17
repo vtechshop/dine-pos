@@ -38,6 +38,8 @@ import ticketRoutes from './routes/ticketRoutes';
 import uploadRoutes from './routes/uploadRoutes';
 import tableRoutes from './routes/tableRoutes';
 import reservationRoutes from './routes/reservationRoutes';
+import waitlistRoutes from './routes/waitlistRoutes';
+import publicReservationRoutes from './routes/publicReservationRoutes';
 import expenseRoutes from './routes/expenseRoutes';
 import wasteRoutes from './routes/wasteRoutes';
 import aggregatorRoutes from './routes/aggregatorRoutes';
@@ -53,6 +55,8 @@ import sessionRoutes from './routes/sessionRoutes';
 import qrRoutes from './routes/qrRoutes';
 import loyaltyRoutes  from './routes/loyaltyRoutes';
 import campaignRoutes from './routes/campaignRoutes';
+import messagingProviderRoutes from './routes/messagingProviderRoutes';
+import messagingWebhookRoutes from './routes/messagingWebhookRoutes';
 import printRoutes from './routes/printRoutes';
 import inquiryRoutes from './routes/inquiryRoutes';
 import modifierRoutes from './routes/modifierRoutes';
@@ -61,6 +65,7 @@ import purchaseOrderRoutes from './routes/purchaseOrderRoutes';
 import grnRoutes from './routes/grnRoutes';
 import vendorPaymentRoutes from './routes/vendorPaymentRoutes';
 import vendorLedgerRoutes from './routes/vendorLedgerRoutes';
+import vendorReturnRoutes from './routes/vendorReturnRoutes';
 import financeRoutes from './routes/financeRoutes';
 import inventoryIntelligenceRoutes from './routes/inventoryIntelligenceRoutes';
 import couponRoutes from './routes/couponRoutes';
@@ -270,7 +275,8 @@ app.use(express.json({
     if (
       url.startsWith('/api/aggregator') ||
       url.startsWith('/api/payment-webhooks/') ||
-      url.startsWith('/api/razorpay/partner-webhook')
+      url.startsWith('/api/razorpay/partner-webhook') ||
+      url.startsWith('/api/messaging-webhooks/')
     ) {
       (req as any).rawBody = buf.toString((encoding as BufferEncoding) || 'utf8');
     }
@@ -351,6 +357,8 @@ app.use('/api/public',          menuRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/tables', tableRoutes);
 app.use('/api/reservations', reservationRoutes);
+app.use('/api/waitlist', waitlistRoutes);
+app.use('/api/public/reservations', publicReservationRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/waste', wasteRoutes);
 app.use('/api/aggregator', aggregatorRoutes);
@@ -364,8 +372,10 @@ app.use('/api/cashiers', cashierRoutes);
 app.use('/api/shifts', shiftRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/sessions', sessionRoutes);
-app.use('/api/loyalty',    loyaltyRoutes);
-app.use('/api/campaigns', campaignRoutes);
+app.use('/api/loyalty',              loyaltyRoutes);
+app.use('/api/campaigns',            campaignRoutes);
+app.use('/api/messaging-providers',  messagingProviderRoutes);
+app.use('/api/messaging-webhooks',   messagingWebhookRoutes);
 app.use('/api/print-jobs', printRoutes);
 app.use('/api/inquiries', inquiryRoutes);
 app.use('/api/modifiers', _rl(60, 60_000));
@@ -375,6 +385,7 @@ app.use('/api/purchase-orders',   purchaseOrderRoutes);
 app.use('/api/grn',               grnRoutes);
 app.use('/api/vendor-payments',   vendorPaymentRoutes);
 app.use('/api/vendor-ledger',     vendorLedgerRoutes);
+app.use('/api/vendor-returns',    vendorReturnRoutes);
 app.use('/api/finance',                    financeRoutes);
 app.use('/api/inventory-intelligence',     inventoryIntelligenceRoutes);
 app.use('/api/coupons',           couponRoutes);

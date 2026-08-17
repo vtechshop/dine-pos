@@ -1,0 +1,147 @@
+/*
+ * Dine POS — Design Tokens
+ * Single source of truth for all platforms.
+ * Import this file into every web project.
+ *
+ * Usage (web):
+ *   @import '../../tokens/tokens.css';
+ *   background: var(--dp-bg);
+ *   color: var(--dp-text);
+ */
+
+:root {
+
+  /* ── Brand ────────────────────────────────────── */
+  --dp-brand:         #E8380D;
+  --dp-brand-light:   #FF5E36;
+  --dp-brand-dark:    #C93008;
+  --dp-amber:         #FFA500;
+  --dp-amber-light:   #FFC02A;
+  --dp-amber-dark:    #E08500;
+
+  /* ── Brand red scale ──────────────────────────── */
+  --dp-red-50:   #FFF1EE;
+  --dp-red-100:  #FFD9CF;
+  --dp-red-200:  #FFB3A0;
+  --dp-red-300:  #FF8C6B;
+  --dp-red-400:  #FF5E36;
+  --dp-red-500:  #E8380D;
+  --dp-red-600:  #C93008;
+  --dp-red-700:  #A82506;
+  --dp-red-800:  #841C04;
+  --dp-red-900:  #5E1202;
+
+  /* ── Amber scale ──────────────────────────────── */
+  --dp-amber-50:   #FFF8E7;
+  --dp-amber-100:  #FFEDBA;
+  --dp-amber-200:  #FFE08A;
+  --dp-amber-300:  #FFD15A;
+  --dp-amber-400:  #FFC02A;
+  --dp-amber-500:  #FFA500;
+  --dp-amber-600:  #E08500;
+  --dp-amber-700:  #B86500;
+  --dp-amber-800:  #8C4800;
+  --dp-amber-900:  #5C2C00;
+
+  /* ── Neutral (warm ink) ───────────────────────── */
+  --dp-n0:    #FFFFFF;
+  --dp-n50:   #FFF6EE;
+  --dp-n100:  #F5EDE4;
+  --dp-n200:  #EBD8C8;
+  --dp-n300:  #D4B5A0;
+  --dp-n400:  #B89278;
+  --dp-n500:  #9A6E55;
+  --dp-n600:  #7A4F3A;
+  --dp-n700:  #5C3322;
+  --dp-n800:  #3C1C0E;
+  --dp-n900:  #1C0800;
+
+  /* ── Semantic ─────────────────────────────────── */
+  --dp-success:        #22C55E;
+  --dp-success-dark:   #16A34A;
+  --dp-success-bg:     #F0FDF4;
+  --dp-danger:         #C62828;
+  --dp-danger-dark:    #B71C1C;
+  --dp-danger-bg:      #FFF1EE;
+  --dp-warning:        #E65100;
+  --dp-warning-dark:   #C84600;
+  --dp-warning-bg:     #FFF7ED;
+  --dp-info:           #3B82F6;
+  --dp-info-dark:      #2563EB;
+  --dp-info-bg:        #EFF6FF;
+
+  /* ── Surface tokens (light mode) ─────────────── */
+  --dp-bg:          #FFF6EE;
+  --dp-surface:     #FFFFFF;
+  --dp-surface-2:   #F5EDE4;
+  --dp-border:      #EBD8C8;
+  --dp-text:        #1C0800;
+  --dp-text-2:      #7A4F3A;
+  --dp-text-muted:  #B89278;
+
+  /* ── Typography ───────────────────────────────── */
+  --dp-font-sans: "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --dp-font-mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+
+  /* ── Spacing (4px grid) ───────────────────────── */
+  --dp-space-1:   4px;
+  --dp-space-2:   8px;
+  --dp-space-3:  12px;
+  --dp-space-4:  16px;
+  --dp-space-5:  20px;
+  --dp-space-6:  24px;
+  --dp-space-8:  32px;
+  --dp-space-12: 48px;
+  --dp-space-16: 64px;
+
+  /* ── Border radius ────────────────────────────── */
+  --dp-r-xs:   4px;
+  --dp-r-sm:   6px;
+  --dp-r-md:  10px;
+  --dp-r-lg:  14px;
+  --dp-r-xl:  20px;
+  --dp-r-pill: 999px;
+
+  /* ── Shadows ──────────────────────────────────── */
+  --dp-shadow-sm:    0 1px 3px rgba(28,8,0,.08), 0 1px 2px rgba(28,8,0,.05);
+  --dp-shadow-md:    0 4px 14px rgba(28,8,0,.10), 0 2px 4px rgba(28,8,0,.06);
+  --dp-shadow-lg:    0 10px 40px rgba(28,8,0,.12), 0 4px 8px rgba(28,8,0,.07);
+  --dp-shadow-brand: 0 4px 20px rgba(232,56,13,.35);
+
+  /* ── Transition ───────────────────────────────── */
+  --dp-transition: 150ms ease;
+}
+
+/* ── Dark mode ────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --dp-bg:         #120800;
+    --dp-surface:    #1E0E06;
+    --dp-surface-2:  #2A1810;
+    --dp-border:     #3A2010;
+    --dp-text:       #F5EDE4;
+    --dp-text-2:     #C4A090;
+    --dp-text-muted: #6A4030;
+  }
+}
+
+/* Manual overrides — data-theme wins over OS preference */
+:root[data-theme="dark"] {
+  --dp-bg:         #120800;
+  --dp-surface:    #1E0E06;
+  --dp-surface-2:  #2A1810;
+  --dp-border:     #3A2010;
+  --dp-text:       #F5EDE4;
+  --dp-text-2:     #C4A090;
+  --dp-text-muted: #6A4030;
+}
+
+:root[data-theme="light"] {
+  --dp-bg:         #FFF6EE;
+  --dp-surface:    #FFFFFF;
+  --dp-surface-2:  #F5EDE4;
+  --dp-border:     #EBD8C8;
+  --dp-text:       #1C0800;
+  --dp-text-2:     #7A4F3A;
+  --dp-text-muted: #B89278;
+}

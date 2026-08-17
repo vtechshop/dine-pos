@@ -13,6 +13,7 @@ import { io } from '../server';
 import TableSession from '../models/TableSession';
 import Guest from '../models/Guest';
 import Order from '../models/Order';
+import GiftVoucher from '../models/GiftVoucher';
 import CustomerProfile from '../models/CustomerProfile';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
 import { guestLabel } from '../utils/guestLabel';
@@ -171,13 +172,14 @@ router.get('/:guestId', async (req: AuthRequest, res: Response): Promise<void> =
 router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { sessionId, guestId } = req.params;
-    const { action, paymentMethod, splitDetails, paidAmount, displayLabel, redeemPoints } = req.body as {
+    const { action, paymentMethod, splitDetails, paidAmount, displayLabel, redeemPoints, giftVoucherCode } = req.body as {
       action: 'bill' | 'left' | 'rename';
       paymentMethod?: string;
       splitDetails?: { cash?: number; upi?: number; card?: number };
       paidAmount?: number;
       displayLabel?: string;
       redeemPoints?: number;
+      giftVoucherCode?: string;
     };
 
     if (!action || !['bill', 'left', 'rename'].includes(action)) {
@@ -272,14 +274,37 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         } catch { /* precompute failed — validation uses full amount, redemption retries fresh */ }
       }
 
+      // Voucher resolution (server-side — never trust client amount)
+      const rawGuestVoucherCode = giftVoucherCode
+        ? String(giftVoucherCode).trim().toUpperCase()
+        : '';
+      let guestVoucherDoc: any = null;
+      let guestVoucherAmount   = 0;
+      if (rawGuestVoucherCode) {
+        const vNow = new Date();
+        guestVoucherDoc = await GiftVoucher.findOne({
+          hotelId:     new mongoose.Types.ObjectId(req.hotelId!),
+          voucherCode: rawGuestVoucherCode,
+          isActive:    true,
+          isDeleted:   false,
+          $or: [{ expiresAt: null }, { expiresAt: { $gte: vNow } }],
+          balance:     { $gt: 0 },
+        }).select('_id voucherCode balance').lean();
+        if (!guestVoucherDoc) {
+          res.status(400).json({ message: 'Gift voucher not found, expired, or inactive' });
+          return;
+        }
+        guestVoucherAmount = Math.round(
+          Math.min(guestVoucherDoc.balance, guest.totalAmount - loyaltyDiscount) * 100,
+        ) / 100;
+      }
+
       if (paymentMethod === 'split' && splitDetails) {
         const splitSum     = (splitDetails.cash ?? 0) + (splitDetails.upi ?? 0) + (splitDetails.card ?? 0);
-        const payableTotal = +(guest.totalAmount - loyaltyDiscount).toFixed(2);
+        const payableTotal = +(guest.totalAmount - loyaltyDiscount - guestVoucherAmount).toFixed(2);
         if (Math.abs(splitSum - payableTotal) > 0.01) {
           res.status(400).json({
-            message: loyaltyDiscount > 0
-              ? `Split amounts (₹${splitSum.toFixed(2)}) must equal payable amount (₹${payableTotal.toFixed(2)}) after ₹${loyaltyDiscount.toFixed(2)} loyalty discount`
-              : `Split amounts (₹${splitSum.toFixed(2)}) must equal bill total (₹${guest.totalAmount.toFixed(2)})`,
+            message: `Split amounts (₹${splitSum.toFixed(2)}) must equal payable amount (₹${payableTotal.toFixed(2)}) after discounts`,
           });
           return;
         }
@@ -298,6 +323,48 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
       if (!updated) {
         res.status(409).json({ message: 'Guest has already been billed. Refresh to see the latest status.' });
         return;
+      }
+
+      // Gift voucher deduction (after atomic billing guard — best-effort, logged on failure)
+      if (guestVoucherDoc && guestVoucherAmount > 0) {
+        try {
+          const vNow = new Date();
+          const deducted = await GiftVoucher.findOneAndUpdate(
+            {
+              _id:       guestVoucherDoc._id,
+              hotelId:   new mongoose.Types.ObjectId(req.hotelId!),
+              isActive:  true,
+              isDeleted: false,
+              $or:       [{ expiresAt: null }, { expiresAt: { $gte: vNow } }],
+              balance:   { $gte: guestVoucherAmount },
+            },
+            [
+              { $set: { balance: { $subtract: ['$balance', guestVoucherAmount] } } },
+              { $set: {
+                  isActive:     { $cond: { if: { $lte: ['$balance', 0] }, then: false, else: '$isActive' } },
+                  transactions: { $concatArrays: [{ $ifNull: ['$transactions', []] }, [{ type: 'redeem', amount: guestVoucherAmount, balanceAfter: { $ifNull: ['$balance', 0] }, orderId: null, remarks: `Guest billing: ${guest.displayLabel} (Guest ${String(guest._id)})`, createdBy: `cashier:${req.hotelId}`, createdAt: vNow }]] },
+              }},
+            ] as any,
+            { new: true },
+          );
+          if (deducted) {
+            await Guest.findByIdAndUpdate(updated._id, {
+              $set: {
+                giftVoucherId:     guestVoucherDoc._id,
+                giftVoucherCode:   rawGuestVoucherCode,
+                giftVoucherAmount: guestVoucherAmount,
+              },
+            });
+          } else {
+            logger.warn('[gift-voucher] deduction at guest billing failed — voucher may have changed', {
+              hotelId: req.hotelId, guestId: String(guest._id),
+            });
+          }
+        } catch (vErr: any) {
+          logger.warn('[gift-voucher] deduction error at guest billing', {
+            hotelId: req.hotelId, guestId: String(guest._id), error: vErr?.message,
+          });
+        }
       }
 
       // [Phase 6] Loyalty redemption — runs AFTER the atomic guard.
@@ -345,42 +412,58 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         }
       }
 
-      // [Phase 4] fire-and-forget lifetimeSpend; [Phase 6] fire-and-forget earn points
+      // Lifetimespan update + loyalty earn (both non-blocking after atomic guard)
       if (guest.customerId) {
-        CustomerProfile.findByIdAndUpdate(guest.customerId, {
-          $inc: { lifetimeSpend: guest.totalAmount },
-          $set: { lastVisitAt: new Date() },
+        // Atomic claim on lifetimeSpendAt — prevents double-increment on request replay.
+        // The billing guard above (status: 'active') already prevents most replays; this
+        // is a belt-and-suspenders guard for server-crash-then-retry scenarios.
+        Guest.findOneAndUpdate(
+          { _id: updated._id, hotelId: req.hotelId, lifetimeSpendAt: null },
+          { $set: { lifetimeSpendAt: new Date() } },
+        ).then(claimed => {
+          if (claimed) {
+            CustomerProfile.findByIdAndUpdate(guest.customerId, {
+              $inc: { lifetimeSpend: guest.totalAmount },
+              $set: { lastVisitAt: new Date() },
+            }).catch(() => {});
+          }
         }).catch(() => {});
 
-        // [Phase 6] Earn points after billing
-        ;(async () => {
-          try {
-            const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
-            if (loyaltyCfg.enabled) {
-              // Honour calculationBase: use pre-GST subtotal when configured.
-              let earnBase = guest.totalAmount;
-              if (loyaltyCfg.calculationBase === 'before_gst') {
-                const [sub] = await Order.aggregate([
-                  { $match: { sessionId: session._id, guestId: guest._id, status: { $ne: 'cancelled' } } },
-                  { $group: { _id: null, s: { $sum: '$subtotal' } } },
-                ]);
-                earnBase = sub?.s ?? guest.totalAmount;
+        // Earn points — idempotent via Guest.loyaltyEarnedAt; guard prevents double-earn
+        // on request replay (e.g. network retry after client timeout).
+        if (!updated.loyaltyEarnedAt) {
+          ;(async () => {
+            try {
+              const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+              if (loyaltyCfg.enabled) {
+                let earnBase = guest.totalAmount;
+                if (loyaltyCfg.calculationBase === 'before_gst') {
+                  const [sub] = await Order.aggregate([
+                    { $match: { sessionId: session._id, guestId: guest._id, status: { $ne: 'cancelled' } } },
+                    { $group: { _id: null, s: { $sum: '$subtotal' } } },
+                  ]);
+                  earnBase = sub?.s ?? guest.totalAmount;
+                }
+                const earnableBase = Math.max(0, earnBase - (updateFields.loyaltyDiscountAmount ?? 0));
+                const pts = calculateEarnedPoints(earnableBase, loyaltyCfg);
+                if (pts > 0) {
+                  await earnPoints(
+                    guest.customerId as mongoose.Types.ObjectId,
+                    req.hotelId!,
+                    pts,
+                    loyaltyCfg,
+                    { sessionId: String(session._id), guestId: String(guest._id), createdBy: 'system' },
+                  );
+                  // Stamp idempotency guard so a replay can't double-earn
+                  await Guest.updateOne(
+                    { _id: updated._id, loyaltyEarnedAt: null },
+                    { $set: { loyaltyEarnedAt: new Date() } },
+                  );
+                }
               }
-              // Don't award points on the portion the customer received free via redemption.
-              const earnableBase = Math.max(0, earnBase - (updateFields.loyaltyDiscountAmount ?? 0));
-              const pts = calculateEarnedPoints(earnableBase, loyaltyCfg);
-              if (pts > 0) {
-                await earnPoints(
-                  guest.customerId as mongoose.Types.ObjectId,
-                  req.hotelId!,
-                  pts,
-                  loyaltyCfg,
-                  { sessionId: String(session._id), guestId: String(guest._id), createdBy: 'system' },
-                );
-              }
-            }
-          } catch { /* non-critical */ }
-        })();
+            } catch { /* non-critical */ }
+          })();
+        }
       }
 
       // [Phase 7] Fire-and-forget receipt print
@@ -402,7 +485,7 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
       ).catch(() => {});
 
       const billingDiscount = guestAfterLoyalty.loyaltyDiscountAmount ?? 0;
-      const netPayable = guestAfterLoyalty.totalAmount - billingDiscount;
+      const netPayable = guestAfterLoyalty.totalAmount - billingDiscount - guestVoucherAmount;
 
       io.to(`hotel_${req.hotelId}`).emit('guest_billed', {
         sessionId: session._id,
@@ -969,6 +1052,25 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
       }
     }
 
+    // Gift voucher restoration on reopen (before clearing guest fields)
+    const reopenVoucherAmt = (guest as any).giftVoucherAmount as number | undefined;
+    if (reopenVoucherAmt && reopenVoucherAmt > 0 && (guest as any).giftVoucherId) {
+      try {
+        const reopenNow = new Date();
+        await GiftVoucher.findOneAndUpdate(
+          { _id: (guest as any).giftVoucherId, hotelId: req.hotelId! },
+          [
+            { $set: { balance: { $add: ['$balance', reopenVoucherAmt] }, isActive: true } },
+            { $set: { transactions: { $concatArrays: [{ $ifNull: ['$transactions', []] }, [{ type: 'refund', amount: reopenVoucherAmt, balanceAfter: { $ifNull: ['$balance', 0] }, orderId: null, remarks: `Guest reopened: ${guest.displayLabel} (Guest ${String(guest._id)})`, createdBy: `admin:${req.hotelId}`, createdAt: reopenNow }]] } } },
+          ] as any,
+        );
+      } catch (vErr: any) {
+        logger.warn('[gift-voucher] restoration on guest reopen failed', {
+          hotelId: req.hotelId, guestId: String(guest._id), error: vErr?.message,
+        });
+      }
+    }
+
     const updated = await Guest.findByIdAndUpdate(
       guest._id,
       {
@@ -984,6 +1086,9 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
           qrTokenExpiresAt: null,
           loyaltyPointsRedeemed: 0,
           loyaltyDiscountAmount: 0,
+          giftVoucherId: null,
+          giftVoucherCode: '',
+          giftVoucherAmount: 0,
         },
       },
       { new: true }

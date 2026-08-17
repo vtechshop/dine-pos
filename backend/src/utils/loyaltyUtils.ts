@@ -21,6 +21,25 @@ export interface LoyaltyConfig extends ILoyaltySettings {
   enabled: boolean;
 }
 
+// ── Tier calculation (backend-authoritative) ──────────────────────────────────
+
+/**
+ * Compute the customer tier from lifetime spend using backend-stored thresholds.
+ * Thresholds fall back to the frontend defaults when not configured.
+ */
+export function calculateTier(
+  lifetimeSpend: number,
+  thresholds?: ILoyaltySettings['tierThresholds'],
+): 'Bronze' | 'Silver' | 'Gold' | 'Platinum' {
+  const platinum = thresholds?.platinum ?? 30000;
+  const gold     = thresholds?.gold     ?? 15000;
+  const silver   = thresholds?.silver   ?? 5000;
+  if (lifetimeSpend >= platinum) return 'Platinum';
+  if (lifetimeSpend >= gold)     return 'Gold';
+  if (lifetimeSpend >= silver)   return 'Silver';
+  return 'Bronze';
+}
+
 // ── Config loader (Redis-cached hotel status + Settings lookup) ────────────────
 export async function getLoyaltyConfig(hotelId: string): Promise<LoyaltyConfig> {
   const [entry, settings] = await Promise.all([
@@ -43,6 +62,8 @@ export async function getLoyaltyConfig(hotelId: string): Promise<LoyaltyConfig> 
     expiryDays:             ls.expiryDays              ?? 0,
     roundingRule:           ls.roundingRule            ?? 'floor',
     calculationBase:        ls.calculationBase         ?? 'before_gst',
+    maxEarnPointsPerBill:   ls.maxEarnPointsPerBill    ?? 0,
+    tierThresholds:         ls.tierThresholds           ?? undefined,
   };
 }
 
@@ -58,7 +79,11 @@ function applyRounding(value: number, rule: 'floor' | 'round' | 'ceil'): number 
 export function calculateEarnedPoints(totalAmount: number, config: LoyaltyConfig): number {
   if (!config.enabled || config.pointsPerHundredRupees <= 0) return 0;
   const raw = (totalAmount / 100) * config.pointsPerHundredRupees;
-  return applyRounding(raw, config.roundingRule);
+  let pts   = applyRounding(raw, config.roundingRule);
+  if (config.maxEarnPointsPerBill > 0) {
+    pts = Math.min(pts, config.maxEarnPointsPerBill);
+  }
+  return pts;
 }
 
 /**
@@ -89,15 +114,20 @@ export function calculateRedeemValue(points: number, config: LoyaltyConfig): num
 // ── Ledger operations ─────────────────────────────────────────────────────────
 
 export interface LoyaltyContext {
-  sessionId?: string;
-  guestId?:   string;
-  createdBy?: string;
-  remarks?:   string;
+  sessionId?:  string;
+  guestId?:    string;
+  orderId?:    string;
+  paymentId?:  string;
+  createdBy?:  string;
+  remarks?:    string;
 }
 
 /**
  * Atomically increment loyaltyBalance + append an immutable 'earn' transaction.
- * Uses findByIdAndUpdate (new:true) so balanceAfter is accurate even under concurrency.
+ * Guards:
+ *   - hotelId scoped filter (multi-tenant defence)
+ *   - blocked customer check (no earn on blocked profiles)
+ *   - loyaltyOptOut check (customer opted out)
  */
 export async function earnPoints(
   customerId: mongoose.Types.ObjectId,
@@ -108,12 +138,19 @@ export async function earnPoints(
 ): Promise<void> {
   if (points <= 0) return;
 
-  const updated = await CustomerProfile.findByIdAndUpdate(
-    customerId,
+  const hotelOid = new mongoose.Types.ObjectId(hotelId);
+
+  const updated = await CustomerProfile.findOneAndUpdate(
+    {
+      _id:          customerId,
+      hotelId:      hotelOid,
+      status:       'active',
+      loyaltyOptOut: { $ne: true },
+    },
     { $inc: { loyaltyBalance: points } },
     { new: true },
   );
-  if (!updated) return; // customer deleted between billing and earn — ignore
+  if (!updated) return; // deleted, wrong hotel, blocked, or opted-out — ignore silently
 
   const expiresAt = config.expiryDays > 0
     ? new Date(Date.now() + config.expiryDays * 24 * 60 * 60 * 1000)
@@ -121,9 +158,11 @@ export async function earnPoints(
 
   await LoyaltyTransaction.create({
     customerId,
-    hotelId:         new mongoose.Types.ObjectId(hotelId),
-    sessionId:       ctx.sessionId ? new mongoose.Types.ObjectId(ctx.sessionId) : null,
-    guestId:         ctx.guestId   ? new mongoose.Types.ObjectId(ctx.guestId)   : null,
+    hotelId:         hotelOid,
+    sessionId:       ctx.sessionId  ? new mongoose.Types.ObjectId(ctx.sessionId)  : null,
+    guestId:         ctx.guestId    ? new mongoose.Types.ObjectId(ctx.guestId)    : null,
+    orderId:         ctx.orderId    ? new mongoose.Types.ObjectId(ctx.orderId)    : null,
+    paymentId:       ctx.paymentId  ? new mongoose.Types.ObjectId(ctx.paymentId)  : null,
     transactionType: 'earn',
     points,
     balanceAfter:    updated.loyaltyBalance,
@@ -135,8 +174,11 @@ export async function earnPoints(
 
 /**
  * Atomically decrement loyaltyBalance + append an immutable 'redeem' transaction.
- * Uses a conditional filter { loyaltyBalance: { $gte: points } } so the decrement
- * is atomic — no separate check-then-act race possible.
+ * Guards:
+ *   - hotelId scoped filter (multi-tenant defence)
+ *   - blocked customer check
+ *   - loyaltyOptOut check
+ *   - conditional $gte so the decrement is atomic (no check-then-act race)
  * Returns the rupee discount value for the caller to apply to the bill.
  */
 export async function redeemPoints(
@@ -148,20 +190,30 @@ export async function redeemPoints(
 ): Promise<number> {
   if (points <= 0) return 0;
 
+  const hotelOid = new mongoose.Types.ObjectId(hotelId);
+
   const updated = await CustomerProfile.findOneAndUpdate(
-    { _id: customerId, loyaltyBalance: { $gte: points } },
+    {
+      _id:           customerId,
+      hotelId:       hotelOid,
+      status:        'active',
+      loyaltyOptOut: { $ne: true },
+      loyaltyBalance: { $gte: points },
+    },
     { $inc: { loyaltyBalance: -points } },
     { new: true },
   );
-  if (!updated) throw new Error('Insufficient loyalty points');
+  if (!updated) throw new Error('Insufficient loyalty points or customer ineligible');
 
   const discountAmount = calculateRedeemValue(points, config);
 
   await LoyaltyTransaction.create({
     customerId,
-    hotelId:         new mongoose.Types.ObjectId(hotelId),
-    sessionId:       ctx.sessionId ? new mongoose.Types.ObjectId(ctx.sessionId) : null,
-    guestId:         ctx.guestId   ? new mongoose.Types.ObjectId(ctx.guestId)   : null,
+    hotelId:         hotelOid,
+    sessionId:       ctx.sessionId  ? new mongoose.Types.ObjectId(ctx.sessionId)  : null,
+    guestId:         ctx.guestId    ? new mongoose.Types.ObjectId(ctx.guestId)    : null,
+    orderId:         ctx.orderId    ? new mongoose.Types.ObjectId(ctx.orderId)    : null,
+    paymentId:       ctx.paymentId  ? new mongoose.Types.ObjectId(ctx.paymentId)  : null,
     transactionType: 'redeem',
     points:          -points,
     balanceAfter:    updated.loyaltyBalance,
@@ -170,6 +222,58 @@ export async function redeemPoints(
   });
 
   return discountAmount;
+}
+
+/**
+ * Reverse earned points (used on refund/cancellation).
+ * Idempotent — callers must check Payment.loyaltyReversedAt before calling.
+ * Does not go below zero (caps deduction to current balance).
+ */
+export async function reverseEarnedPoints(
+  customerId: mongoose.Types.ObjectId,
+  hotelId: string,
+  points: number,
+  config: LoyaltyConfig,
+  ctx: LoyaltyContext,
+): Promise<void> {
+  if (points <= 0) return;
+
+  const hotelOid = new mongoose.Types.ObjectId(hotelId);
+
+  // Deduct up to the current balance (can't go negative)
+  const updated = await CustomerProfile.findOneAndUpdate(
+    { _id: customerId, hotelId: hotelOid },
+    [
+      {
+        $set: {
+          loyaltyBalance: {
+            $max: [0, { $subtract: ['$loyaltyBalance', points] }],
+          },
+        },
+      },
+    ],
+    { new: false }, // pre-update doc to compute actual deducted amount
+  );
+  if (!updated) return;
+
+  const actualReversed = Math.min(points, updated.loyaltyBalance);
+  if (actualReversed <= 0) return;
+
+  const newBalance = updated.loyaltyBalance - actualReversed;
+
+  await LoyaltyTransaction.create({
+    customerId,
+    hotelId:         hotelOid,
+    sessionId:       ctx.sessionId  ? new mongoose.Types.ObjectId(ctx.sessionId)  : null,
+    guestId:         ctx.guestId    ? new mongoose.Types.ObjectId(ctx.guestId)    : null,
+    orderId:         ctx.orderId    ? new mongoose.Types.ObjectId(ctx.orderId)    : null,
+    paymentId:       ctx.paymentId  ? new mongoose.Types.ObjectId(ctx.paymentId)  : null,
+    transactionType: 'reverse',
+    points:          -actualReversed,
+    balanceAfter:    newBalance,
+    createdBy:       ctx.createdBy ?? 'system',
+    remarks:         ctx.remarks   ?? `Reversed ${actualReversed} ${config.rewardName} on refund`,
+  });
 }
 
 /**

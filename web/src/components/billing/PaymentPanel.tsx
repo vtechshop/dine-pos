@@ -71,7 +71,7 @@ export const PaymentPanel = memo(function PaymentPanel({
 }: Props) {
   // ── Voucher state ───────────────────────────────────────────────────────────
   const [voucherCode,     setVoucherCode]     = useState('');
-  const [voucherData,     setVoucherData]     = useState<{ balance: number; isActive: boolean } | null>(null);
+  const [voucherData,     setVoucherData]     = useState<{ balance: number } | null>(null);
   const [voucherChecking, setVoucherChecking] = useState(false);
   const [voucherError,    setVoucherError]    = useState<string | null>(null);
   const [voucherRedeemAmt, setVoucherRedeemAmt] = useState('');
@@ -104,16 +104,16 @@ export const PaymentPanel = memo(function PaymentPanel({
     setVoucherRedeemAmt('');
     try {
       const result = await checkGiftVoucher(code);
-      if (!result.isActive) {
+      if (!result.valid || !result.voucher.isActive) {
         setVoucherError('This voucher is inactive or has expired.');
         return;
       }
-      if (result.balance <= 0) {
+      if (result.voucher.balance <= 0) {
         setVoucherError('This voucher has no remaining balance.');
         return;
       }
-      setVoucherData(result);
-      const maxRedeem = Math.min(result.balance, rawBillingAmount);
+      setVoucherData({ balance: result.voucher.balance });
+      const maxRedeem = Math.min(result.voucher.balance, rawBillingAmount);
       setVoucherRedeemAmt(maxRedeem.toFixed(2));
     } catch (err) {
       setVoucherError(err instanceof Error ? err.message : 'Voucher not found');

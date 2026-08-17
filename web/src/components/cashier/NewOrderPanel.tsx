@@ -11,6 +11,10 @@ import { useAuth } from '../../context/AuthContext';
 import { fetchProducts, fetchCategories } from '../../api/products';
 import { fetchTables } from '../../api/tables';
 import { createOrder, completeOrder } from '../../api/orders';
+import { validateCoupon, type CouponValidateResult } from '../../api/coupons';
+import { checkGiftVoucher } from '../../api/giftVouchers';
+import { lookupCustomer } from '../../api/loyalty';
+import type { LoyaltyLookupResult } from '../../api/loyalty';
 import { enqueueOrder } from '../../utils/offlineQueue';
 import { fetchProductSalesReport } from '../../api/reports';
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
@@ -380,6 +384,23 @@ export function NewOrderPanel() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successOrder, setSuccessOrder] = useState<string | null>(null);
 
+  // ── Coupon state ───────────────────────────────────────────────────────────
+  const [couponInput, setCouponInput]       = useState('');
+  const [appliedCoupon, setAppliedCoupon]   = useState<CouponValidateResult | null>(null);
+  const [couponLoading, setCouponLoading]   = useState(false);
+  const [couponError, setCouponError]       = useState<string | null>(null);
+
+  // ── Gift voucher state ─────────────────────────────────────────────────────
+  const [voucherInput, setVoucherInput]     = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<{ code: string; balance: number } | null>(null);
+  const [voucherLoading, setVoucherLoading] = useState(false);
+  const [voucherError, setVoucherError]     = useState<string | null>(null);
+
+  // ── Loyalty lookup ─────────────────────────────────────────────────────────
+  const [loyaltyInfo, setLoyaltyInfo]         = useState<LoyaltyLookupResult | null>(null);
+  const [loyaltyLoading, setLoyaltyLoading]   = useState(false);
+  const [loyaltyRedemption, setLoyaltyRedemption] = useState(0);
+
   // ── Modifier dialog ────────────────────────────────────────────────────────
   const [modifierProduct, setModifierProduct] = useState<Product | null>(null);
 
@@ -486,7 +507,35 @@ export function NewOrderPanel() {
 
   // ── Cart totals ────────────────────────────────────────────────────────────
   const discountAmt = parseFloat(discount) || 0;
-  const { subtotal, taxTotal, grandTotal } = calcCartTotals(cart, discountAmt);
+  const couponDiscountPreview = appliedCoupon?.discountAmount ?? 0;
+  const { subtotal, taxTotal, grandTotal: baseGrandTotal } = calcCartTotals(cart, discountAmt);
+  // voucherDiscountPreview: client-side display only; server computes authoritatively from giftVoucherCode
+  const postCouponTotal = Math.max(0, baseGrandTotal - couponDiscountPreview);
+  const voucherDiscountPreview = appliedVoucher
+    ? Math.round(Math.min(appliedVoucher.balance, postCouponTotal) * 100) / 100
+    : 0;
+  // grandTotal is client-side preview only; server recalculates authoritatively from couponCode/giftVoucherCode
+  const grandTotal = Math.max(0, postCouponTotal - voucherDiscountPreview);
+
+  // ── Loyalty lookup — runs when phone / grand total changes ─────────────────
+  useEffect(() => {
+    if (orderType === 'dine-in') { setLoyaltyInfo(null); setLoyaltyRedemption(0); return; }
+    const rawPhone = orderType === 'takeaway' ? takeAway.phone : delivery.phone;
+    const digits = rawPhone.replace(/\D/g, '');
+    if (digits.length < 10) { setLoyaltyInfo(null); setLoyaltyRedemption(0); return; }
+    let cancelled = false;
+    setLoyaltyLoading(true);
+    const t = setTimeout(() => {
+      void (async () => {
+        const result = await lookupCustomer(rawPhone, grandTotal);
+        if (cancelled) return;
+        setLoyaltyInfo(result.found ? result.data : null);
+        setLoyaltyRedemption(0);
+        setLoyaltyLoading(false);
+      })();
+    }, 500);
+    return () => { cancelled = true; clearTimeout(t); setLoyaltyLoading(false); };
+  }, [orderType, takeAway.phone, delivery.phone, grandTotal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Add to cart (via modifier dialog or direct) ────────────────────────────
   function handleAddProduct(p: Product) {
@@ -525,6 +574,52 @@ export function NewOrderPanel() {
     });
     addToRecent(modifierProduct._id);
     setModifierProduct(null);
+  }
+
+  // ── Coupon apply ───────────────────────────────────────────────────────────
+  async function handleApplyCoupon() {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) return;
+    setCouponLoading(true);
+    setCouponError(null);
+    try {
+      const result = await validateCoupon(code, subtotal + taxTotal);
+      setAppliedCoupon(result);
+      setCouponInput('');
+    } catch (err: any) {
+      setCouponError(err?.message ?? 'Invalid coupon code');
+    } finally {
+      setCouponLoading(false);
+    }
+  }
+
+  // ── Gift voucher check + apply (server validates; amount is NOT trusted from client) ──
+  async function handleApplyVoucher() {
+    const code = voucherInput.trim().toUpperCase();
+    if (!code) return;
+    setVoucherLoading(true);
+    setVoucherError(null);
+    try {
+      const result = await checkGiftVoucher(code);
+      if (!result.valid || !result.voucher.isActive) {
+        setVoucherError('Voucher is inactive or not found');
+        return;
+      }
+      if (result.voucher.expiresAt && new Date(result.voucher.expiresAt) < new Date()) {
+        setVoucherError('Voucher has expired');
+        return;
+      }
+      if (result.voucher.balance <= 0) {
+        setVoucherError('Voucher has no remaining balance');
+        return;
+      }
+      setAppliedVoucher({ code: result.voucher.voucherCode, balance: result.voucher.balance });
+      setVoucherInput('');
+    } catch (err: any) {
+      setVoucherError(err?.message ?? 'Invalid voucher code');
+    } finally {
+      setVoucherLoading(false);
+    }
   }
 
   // ── Hold bill ──────────────────────────────────────────────────────────────
@@ -571,6 +666,8 @@ export function NewOrderPanel() {
     holdBill(bill);
     clearCart();
     setDiscount('');
+    setAppliedCoupon(null); setCouponInput(''); setCouponError(null);
+    setAppliedVoucher(null); setVoucherInput(''); setVoucherError(null);
     setShowPayment(false);
     setActiveTab('hold');
   }
@@ -610,6 +707,8 @@ export function NewOrderPanel() {
         items,
         orderSource,
         discountAmount: discountAmt || undefined,
+        couponCode: appliedCoupon?.code || undefined,
+        giftVoucherCode: appliedVoucher?.code || undefined,
         paymentMethod: payMethod,
         ...(splitDetails ? { splitDetails } : {}),
       };
@@ -628,6 +727,9 @@ export function NewOrderPanel() {
         };
       } else if (orderType === 'takeaway') {
         orderSource = 'takeaway';
+        const loyaltyDisc = loyaltyRedemption > 0 && loyaltyInfo?.config
+          ? Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))
+          : 0;
         payload = {
           ...payload,
           orderSource,
@@ -635,6 +737,7 @@ export function NewOrderPanel() {
           customerPhone: takeAway.phone || undefined,
           notes: takeAway.notes || undefined,
           isParcel: true,
+          ...(loyaltyRedemption > 0 ? { redeemedPoints: loyaltyRedemption, loyaltyDiscount: loyaltyDisc } : {}),
         };
       } else {
         orderSource = 'admin';
@@ -643,6 +746,9 @@ export function NewOrderPanel() {
           delivery.deliveryPartner && `Via: ${delivery.deliveryPartner}`,
           delivery.notes,
         ].filter(Boolean).join(' | ');
+        const loyaltyDiscDel = loyaltyRedemption > 0 && loyaltyInfo?.config
+          ? Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))
+          : 0;
         payload = {
           ...payload,
           orderSource,
@@ -651,6 +757,7 @@ export function NewOrderPanel() {
           notes: deliveryNote || undefined,
           isParcel: true,
           discountAmount: discountAmt || undefined,
+          ...(loyaltyRedemption > 0 ? { redeemedPoints: loyaltyRedemption, loyaltyDiscount: loyaltyDiscDel } : {}),
         };
       }
 
@@ -664,9 +771,12 @@ export function NewOrderPanel() {
       setSuccessOrder(created.orderNumber);
       clearCart();
       setDiscount('');
+      setAppliedCoupon(null); setCouponInput(''); setCouponError(null);
+      setAppliedVoucher(null); setVoucherInput(''); setVoucherError(null);
       setShowPayment(false);
       setCashGiven('');
       setSplitCash(''); setSplitUpi(''); setSplitCard('');
+      setLoyaltyInfo(null); setLoyaltyRedemption(0);
 
       setTimeout(() => setSuccessOrder(null), 3000);
 
@@ -849,6 +959,67 @@ export function NewOrderPanel() {
               />
             </div>
           </div>
+        )}
+
+        {/* ── Loyalty lookup widget (takeaway / delivery) ──────────────────── */}
+        {orderType !== 'dine-in' && (
+          loyaltyLoading ? (
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-canvas px-3 py-2 text-[11px] text-ink/40">
+              <Loader2 size={12} className="animate-spin" />
+              Looking up loyalty…
+            </div>
+          ) : loyaltyInfo ? (
+            <div className="rounded-xl border border-border bg-canvas p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Star size={12} className="text-brand" />
+                  <span className="text-[11px] font-semibold text-ink">{loyaltyInfo.customer.name}</span>
+                  <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${
+                    loyaltyInfo.customer.tier === 'Platinum' ? 'bg-slate-100 text-slate-700 border-slate-300' :
+                    loyaltyInfo.customer.tier === 'Gold'     ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                    loyaltyInfo.customer.tier === 'Silver'   ? 'bg-gray-100 text-gray-600 border-gray-200' :
+                                                               'bg-orange-50 text-orange-700 border-orange-200'
+                  }`}>{loyaltyInfo.customer.tier}</span>
+                </div>
+                <span className="text-[11px] font-bold tabular-nums text-brand">
+                  {loyaltyInfo.customer.loyaltyBalance.toLocaleString()} pts
+                </span>
+              </div>
+              {loyaltyInfo.customer.loyaltyOptOut ? (
+                <p className="text-[10px] text-ink/40">Customer opted out of loyalty</p>
+              ) : loyaltyInfo.redeemablePoints > 0 && loyaltyInfo.config ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] text-ink/50">
+                    <span>Redeem {loyaltyRedemption} pts → {sym}{Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))} off</span>
+                    <span>Max: {loyaltyInfo.redeemablePoints} pts</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={loyaltyInfo.redeemablePoints}
+                    step={loyaltyInfo.config.minimumRedeemPoints || 1}
+                    value={loyaltyRedemption}
+                    onChange={e => setLoyaltyRedemption(Number(e.target.value))}
+                    className="w-full accent-brand"
+                  />
+                  {loyaltyRedemption > 0 && (
+                    <div className="flex items-center justify-between rounded-lg bg-brand/10 px-2 py-1">
+                      <span className="text-[10px] font-medium text-brand">Loyalty discount applied</span>
+                      <span className="text-[11px] font-bold text-brand">
+                        -{sym}{Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-[10px] text-ink/40">
+                  {loyaltyInfo.redeemablePoints === 0
+                    ? `Balance: ${loyaltyInfo.customer.loyaltyBalance} pts (below minimum redeem threshold)`
+                    : 'Loyalty not enabled'}
+                </p>
+              )}
+            </div>
+          ) : null
         )}
 
         {/* Search */}
@@ -1066,6 +1237,89 @@ export function NewOrderPanel() {
                 </span>
               )}
             </div>
+
+            {/* Coupon row */}
+            {appliedCoupon ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-emerald-600">{appliedCoupon.code}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setAppliedCoupon(null); setCouponInput(''); setCouponError(null); }}
+                    className="text-ink/30 hover:text-red-400"
+                    title="Remove coupon"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+                <span className="text-xs font-medium text-emerald-600">-{fmtINR(sym, appliedCoupon.discountAmount)}</span>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-ink/55 shrink-0">Coupon</span>
+                  <input
+                    type="text"
+                    value={couponInput}
+                    onChange={e => { setCouponInput(e.target.value.toUpperCase()); setCouponError(null); }}
+                    onKeyDown={e => { if (e.key === 'Enter') void handleApplyCoupon(); }}
+                    placeholder="Enter code"
+                    className="flex-1 rounded border border-border bg-mist px-2 py-0.5 text-right text-xs font-mono text-ink outline-none focus:border-brand/40 uppercase"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleApplyCoupon()}
+                    disabled={couponLoading || !couponInput.trim()}
+                    className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
+                  >
+                    {couponLoading ? '…' : 'Apply'}
+                  </button>
+                </div>
+                {couponError && <p className="text-[10px] text-red-500 text-right">{couponError}</p>}
+              </div>
+            )}
+
+            {/* Gift voucher row */}
+            {appliedVoucher ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-violet-600">{appliedVoucher.code}</span>
+                  <span className="text-[10px] text-ink/40">bal {fmtINR(sym, appliedVoucher.balance)}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setAppliedVoucher(null); setVoucherInput(''); setVoucherError(null); }}
+                    className="text-ink/30 hover:text-red-400"
+                    title="Remove voucher"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+                <span className="text-xs font-medium text-violet-600">-{fmtINR(sym, voucherDiscountPreview)}</span>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-ink/55 shrink-0">Voucher</span>
+                  <input
+                    type="text"
+                    value={voucherInput}
+                    onChange={e => { setVoucherInput(e.target.value.toUpperCase()); setVoucherError(null); }}
+                    onKeyDown={e => { if (e.key === 'Enter') void handleApplyVoucher(); }}
+                    placeholder="GV-XXXXXXXX"
+                    className="flex-1 rounded border border-border bg-mist px-2 py-0.5 text-right text-xs font-mono text-ink outline-none focus:border-brand/40 uppercase"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleApplyVoucher()}
+                    disabled={voucherLoading || !voucherInput.trim()}
+                    className="shrink-0 rounded border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-40"
+                  >
+                    {voucherLoading ? '…' : 'Apply'}
+                  </button>
+                </div>
+                {voucherError && <p className="text-[10px] text-red-500 text-right">{voucherError}</p>}
+              </div>
+            )}
 
             <div className="flex items-center justify-between border-t border-border pt-2">
               <span className="text-sm font-semibold text-ink">Total</span>

@@ -4,6 +4,7 @@ export type LoyaltyTransactionType =
   | 'earn'
   | 'redeem'
   | 'adjust'
+  | 'reverse'
   | 'expire'
   | 'transfer_in'
   | 'transfer_out';
@@ -12,6 +13,7 @@ export interface ILoyaltyTransaction extends Document {
   customerId: mongoose.Types.ObjectId;
   hotelId: mongoose.Types.ObjectId;
   orderId: mongoose.Types.ObjectId | null;
+  paymentId: mongoose.Types.ObjectId | null;
   sessionId: mongoose.Types.ObjectId | null;
   guestId: mongoose.Types.ObjectId | null;
   transactionType: LoyaltyTransactionType;
@@ -30,12 +32,13 @@ const LoyaltyTransactionSchema: Schema = new Schema(
   {
     customerId:      { type: Schema.Types.ObjectId, ref: 'CustomerProfile', required: true, index: true },
     hotelId:         { type: Schema.Types.ObjectId, ref: 'Hotel', required: true },
-    orderId:         { type: Schema.Types.ObjectId, ref: 'Order', default: null },
+    orderId:         { type: Schema.Types.ObjectId, ref: 'Order',    default: null },
+    paymentId:       { type: Schema.Types.ObjectId, ref: 'Payment',  default: null },
     sessionId:       { type: Schema.Types.ObjectId, ref: 'TableSession', default: null },
     guestId:         { type: Schema.Types.ObjectId, ref: 'Guest', default: null },
     transactionType: {
       type: String,
-      enum: ['earn', 'redeem', 'adjust', 'expire', 'transfer_in', 'transfer_out'],
+      enum: ['earn', 'redeem', 'adjust', 'reverse', 'expire', 'transfer_in', 'transfer_out'],
       required: true,
     },
     points:       { type: Number, required: true },

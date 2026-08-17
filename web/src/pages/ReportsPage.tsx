@@ -11,6 +11,10 @@ import {
   Trash2,
   X,
   Layers,
+  Pencil,
+  Gift,
+  Tag,
+  Truck,
 } from 'lucide-react';
 import type {
   SalesReport,
@@ -23,6 +27,9 @@ import type {
   FinanceDashboard,
   MenuProfitabilityReport,
   CogsTrendPoint,
+  GiftVoucherReport,
+  CouponReport,
+  VendorProcurementReport,
 } from '../types/reports';
 import type { Expense } from '../types';
 import {
@@ -34,10 +41,14 @@ import {
   fetchExpensePnL,
   fetchOrdersForHourly,
   fetchModifierReport,
+  fetchGiftVoucherReport,
+  fetchCouponReport,
+  fetchVendorProcurementReport,
 } from '../api/reports';
 import {
   fetchExpenses as apiFetchExpenses,
   createExpense as apiCreateExpense,
+  updateExpense as apiUpdateExpense,
   deleteExpense as apiDeleteExpense,
 } from '../api/expenses';
 import {
@@ -45,13 +56,14 @@ import {
   fetchMenuProfitability,
   fetchCogsTrend,
 } from '../api/finance';
+import { fetchGiftVoucherStats, type GiftVoucherStats } from '../api/giftVouchers';
 import { ApiError } from '../api/client';
 import { Spinner } from '../components/ui/Spinner';
 import { useSettings } from '../context/SettingsContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'products' | 'gst' | 'expenses' | 'modifiers' | 'foodcost';
+type Tab = 'overview' | 'products' | 'gst' | 'expenses' | 'modifiers' | 'foodcost' | 'giftvouchers' | 'coupons' | 'vendor';
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -310,6 +322,7 @@ export function ReportsPage() {
   const [hourly, setHourly]             = useState<HourlyBucket[]>([]);
   const [overviewLoading, setOvLoading] = useState(false);
   const [overviewError, setOvError]     = useState<string | null>(null);
+  const [gvStats, setGvStats]           = useState<GiftVoucherStats | null>(null);
 
   // ── Products state ──────────────────────────────────────────────────────────
 
@@ -335,6 +348,8 @@ export function ReportsPage() {
   const [showExpModal, setShowExpModal] = useState(false);
   const [expSaving, setExpSaving]       = useState(false);
   const [expDeleting, setExpDeleting]   = useState<string | null>(null);
+  const [expEditId, setExpEditId]       = useState<string | null>(null);
+  const [expUpdating, setExpUpdating]   = useState(false);
   const [expForm, setExpForm]           = useState({
     description: '',
     amount:      '',
@@ -357,6 +372,24 @@ export function ReportsPage() {
   const [fcError,    setFcError]        = useState<string | null>(null);
   const [menuSort,   setMenuSort]       = useState<'margin' | 'revenue' | 'qty'>('revenue');
 
+  // ── Gift Voucher report state ────────────────────────────────────────────────
+
+  const [gvReport,     setGvReport]     = useState<GiftVoucherReport | null>(null);
+  const [gvRptLoading, setGvRptLoading] = useState(false);
+  const [gvRptError,   setGvRptError]   = useState<string | null>(null);
+
+  // ── Coupon report state ──────────────────────────────────────────────────────
+
+  const [couponReport,   setCouponReport]   = useState<CouponReport | null>(null);
+  const [couponLoading,  setCouponLoading]  = useState(false);
+  const [couponError,    setCouponError]    = useState<string | null>(null);
+
+  // ── Vendor / Procurement report state ───────────────────────────────────────
+
+  const [vendorReport,  setVendorReport]  = useState<VendorProcurementReport | null>(null);
+  const [vendorLoading, setVendorLoading] = useState(false);
+  const [vendorError,   setVendorError]   = useState<string | null>(null);
+
   // ── Load overview ───────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -367,15 +400,17 @@ export function ReportsPage() {
 
     void (async () => {
       try {
-        const [salesData, ordersForHourly] = await Promise.all([
+        const [salesData, ordersForHourly, gvData] = await Promise.all([
           fetchSalesReport(from, to),
           isSingleDay
             ? fetchOrdersForHourly(from)
             : Promise.resolve({ orders: [] as Array<{ grandTotal: number; createdAt: string }> }),
+          fetchGiftVoucherStats().catch(() => null),
         ]);
 
         if (cancelled) return;
         setSales(salesData);
+        if (gvData) setGvStats(gvData);
 
         if (isSingleDay) {
           const buckets: HourlyBucket[] = Array.from({ length: 24 }, (_, h) => ({
@@ -530,6 +565,72 @@ export function ReportsPage() {
     return () => { cancelled = true; };
   }, [tab, from, to, days, menuSort]);
 
+  // ── Load gift voucher report ─────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (tab !== 'giftvouchers') return;
+    let cancelled = false;
+    setGvRptLoading(true);
+    setGvRptError(null);
+
+    void (async () => {
+      try {
+        const data = await fetchGiftVoucherReport(from, to);
+        if (!cancelled) setGvReport(data);
+      } catch (e) {
+        if (!cancelled) setGvRptError(e instanceof Error ? e.message : 'Failed to load');
+      } finally {
+        if (!cancelled) setGvRptLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [tab, from, to]);
+
+  // ── Load coupon report ───────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (tab !== 'coupons') return;
+    let cancelled = false;
+    setCouponLoading(true);
+    setCouponError(null);
+
+    void (async () => {
+      try {
+        const data = await fetchCouponReport(from, to);
+        if (!cancelled) setCouponReport(data);
+      } catch (e) {
+        if (!cancelled) setCouponError(e instanceof Error ? e.message : 'Failed to load');
+      } finally {
+        if (!cancelled) setCouponLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [tab, from, to]);
+
+  // ── Load vendor / procurement report ────────────────────────────────────────
+
+  useEffect(() => {
+    if (tab !== 'vendor') return;
+    let cancelled = false;
+    setVendorLoading(true);
+    setVendorError(null);
+
+    void (async () => {
+      try {
+        const data = await fetchVendorProcurementReport(from, to);
+        if (!cancelled) setVendorReport(data);
+      } catch (e) {
+        if (!cancelled) setVendorError(e instanceof Error ? e.message : 'Failed to load');
+      } finally {
+        if (!cancelled) setVendorLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [tab, from, to]);
+
   // ── Expense create / delete ─────────────────────────────────────────────────
 
   const reloadExpenses = useCallback(async (date: string) => {
@@ -570,6 +671,25 @@ export function ReportsPage() {
       setExpDeleting(null);
     }
   }, [expenseDate, reloadExpenses]);
+
+  const handleUpdateExpense = useCallback(async (id: string) => {
+    if (!expForm.description.trim() || !expForm.amount) return;
+    setExpUpdating(true);
+    try {
+      await apiUpdateExpense(id, {
+        description: expForm.description.trim(),
+        amount:      parseFloat(expForm.amount),
+        category:    expForm.category,
+        notes:       expForm.notes.trim(),
+      });
+      setShowExpModal(false);
+      setExpEditId(null);
+      setExpForm({ description: '', amount: '', category: 'other', notes: '' });
+      await reloadExpenses(expenseDate);
+    } catch { /* silent */ } finally {
+      setExpUpdating(false);
+    }
+  }, [expForm, expenseDate, reloadExpenses]);
 
   // ── CSV exports ─────────────────────────────────────────────────────────────
 
@@ -666,15 +786,54 @@ export function ReportsPage() {
     );
   }, [menuProfit, from, to]);
 
+  const exportGiftVouchersCSV = useCallback(() => {
+    if (!gvReport) return;
+    downloadCSV(`gift-vouchers-${from}-${to}.csv`,
+      ['Type', 'Count', 'Amount'],
+      [[
+        ['Issued',   gvReport.issued.count,   gvReport.issued.amount],
+        ['Redeemed', gvReport.redeemed.count, gvReport.redeemed.amount],
+        ['Restored', gvReport.restored.count, gvReport.restored.amount],
+        ['Expired',  gvReport.expired.count,  gvReport.expired.amount],
+        ['Outstanding Balance', gvReport.outstanding.activeVouchers, gvReport.outstanding.balance],
+      ]],
+    );
+  }, [gvReport, from, to]);
+
+  const exportCouponsCSV = useCallback(() => {
+    if (!couponReport) return;
+    downloadCSV(`coupons-${from}-${to}.csv`,
+      ['Coupon Code', 'Uses', 'Total Discount'],
+      [couponReport.rows.map(r => [r.couponCode, r.usageCount, r.totalDiscount])],
+    );
+  }, [couponReport, from, to]);
+
+  const exportVendorCSV = useCallback(() => {
+    if (!vendorReport) return;
+    downloadCSV(`vendor-procurement-${from}-${to}.csv`,
+      ['Category', 'Count', 'Amount'],
+      [[
+        ['Purchase Orders', vendorReport.purchaseOrders.count, vendorReport.purchaseOrders.totalValue],
+        ['GRNs Received',  vendorReport.grns.count,           vendorReport.grns.totalValue],
+        ['Vendor Payments', vendorReport.vendorPayments.count, vendorReport.vendorPayments.totalAmount],
+        ['Vendor Returns',  vendorReport.vendorReturns.count,  vendorReport.vendorReturns.totalValue],
+        ['Outstanding (all vendors)', vendorReport.outstanding.vendorCount, vendorReport.outstanding.totalOutstanding],
+      ]],
+    );
+  }, [vendorReport, from, to]);
+
   // ── Current tab CSV handler ─────────────────────────────────────────────────
 
   const handleCSV = () => {
-    if (tab === 'overview')  exportSalesCSV();
-    if (tab === 'products')  exportProductsCSV();
-    if (tab === 'gst')       exportGSTCSV();
-    if (tab === 'expenses')  exportExpensesCSV();
-    if (tab === 'modifiers') exportModifiersCSV();
-    if (tab === 'foodcost')  exportFoodCostCSV();
+    if (tab === 'overview')      exportSalesCSV();
+    if (tab === 'products')      exportProductsCSV();
+    if (tab === 'gst')           exportGSTCSV();
+    if (tab === 'expenses')      exportExpensesCSV();
+    if (tab === 'modifiers')     exportModifiersCSV();
+    if (tab === 'foodcost')      exportFoodCostCSV();
+    if (tab === 'giftvouchers')  exportGiftVouchersCSV();
+    if (tab === 'coupons')       exportCouponsCSV();
+    if (tab === 'vendor')        exportVendorCSV();
   };
 
   // ── Hourly chart data (trim to 7–22) ────────────────────────────────────────
@@ -689,12 +848,15 @@ export function ReportsPage() {
   // ── Tabs config ─────────────────────────────────────────────────────────────
 
   const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
-    { id: 'overview',  label: 'Overview',  icon: <BarChart2 size={12} />    },
-    { id: 'products',  label: 'Products',  icon: <Package size={12} />      },
-    { id: 'gst',       label: 'GST / Tax', icon: <FileText size={12} />     },
-    { id: 'expenses',  label: 'Expenses',  icon: <TrendingDown size={12} /> },
-    { id: 'modifiers', label: 'Modifiers', icon: <Layers size={12} />       },
-    { id: 'foodcost',  label: 'Food Cost', icon: <RefreshCw size={12} />    },
+    { id: 'overview',     label: 'Overview',     icon: <BarChart2 size={12} />    },
+    { id: 'products',     label: 'Products',     icon: <Package size={12} />      },
+    { id: 'gst',          label: 'GST / Tax',    icon: <FileText size={12} />     },
+    { id: 'expenses',     label: 'Expenses',     icon: <TrendingDown size={12} /> },
+    { id: 'modifiers',    label: 'Modifiers',    icon: <Layers size={12} />       },
+    { id: 'foodcost',     label: 'Food Cost',    icon: <RefreshCw size={12} />    },
+    { id: 'giftvouchers', label: 'Gift Vouchers', icon: <Gift size={12} />        },
+    { id: 'coupons',      label: 'Coupons',      icon: <Tag size={12} />          },
+    { id: 'vendor',       label: 'Procurement',  icon: <Truck size={12} />        },
   ];
 
   const PRESETS: Array<{ id: DatePreset; label: string }> = [
@@ -750,8 +912,8 @@ export function ReportsPage() {
           </div>
         </div>
 
-        {/* Date range bar — shown for overview, gst, modifiers, and foodcost tabs */}
-        {(tab === 'overview' || tab === 'gst' || tab === 'modifiers' || tab === 'foodcost') && (
+        {/* Date range bar — shown for all range-based tabs */}
+        {(tab === 'overview' || tab === 'gst' || tab === 'modifiers' || tab === 'foodcost' || tab === 'giftvouchers' || tab === 'coupons' || tab === 'vendor') && (
           <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5">
             {PRESETS.map(p => (
               <button
@@ -840,6 +1002,13 @@ export function ReportsPage() {
                     }
                     sub={`${sales.parcelOrders} parcels`}
                   />
+                  {(sales.cancelledOrders ?? 0) > 0 && (
+                    <KPICard
+                      label="Cancelled"
+                      value={String(sales.cancelledOrders)}
+                      sub="orders voided"
+                    />
+                  )}
                 </div>
 
                 {/* Payment breakdown + Source breakdown */}
@@ -908,6 +1077,42 @@ export function ReportsPage() {
                             : '—'}
                         </p>
                       </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Gift voucher liability (snapshot — all active vouchers, not date-filtered) */}
+                {gvStats && (
+                  <Card>
+                    <SectionHead title="Gift Voucher Liability" />
+                    <div className="flex flex-wrap gap-8">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-ink/40">Outstanding Balance</p>
+                        <p className="mt-0.5 text-xl font-bold tabular-nums text-brand">
+                          {fmtCur(gvStats.outstandingLiability, sym)}
+                        </p>
+                        <p className="text-[10px] text-ink/30">{gvStats.active} active vouchers</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-ink/40">Issued (All-time)</p>
+                        <p className="mt-0.5 text-xl font-bold tabular-nums text-ink">
+                          {fmtCur(gvStats.totalIssuedValue, sym)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-ink/40">Redeemed (All-time)</p>
+                        <p className="mt-0.5 text-xl font-bold tabular-nums text-ink">
+                          {fmtCur(gvStats.totalRedeemedValue, sym)}
+                        </p>
+                      </div>
+                      {gvStats.totalRestoredValue > 0 && (
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-ink/40">Restored (Refunds)</p>
+                          <p className="mt-0.5 text-xl font-bold tabular-nums text-ink">
+                            {fmtCur(gvStats.totalRestoredValue, sym)}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </Card>
                 )}
@@ -1236,14 +1441,32 @@ export function ReportsPage() {
                                       {fmtCur(e.amount, sym)}
                                     </td>
                                     <td className="px-5 py-2.5 text-right">
-                                      <button
-                                        onClick={() => { void handleDeleteExpense(e._id); }}
-                                        disabled={expDeleting === e._id}
-                                        className="text-ink/30 hover:text-red-500 disabled:opacity-40"
-                                        title="Delete expense"
-                                      >
-                                        <Trash2 size={13} />
-                                      </button>
+                                      <div className="flex items-center justify-end gap-2">
+                                        <button
+                                          onClick={() => {
+                                            setExpEditId(e._id);
+                                            setExpForm({
+                                              description: e.description,
+                                              amount:      String(e.amount),
+                                              category:    e.category,
+                                              notes:       e.notes ?? '',
+                                            });
+                                            setShowExpModal(true);
+                                          }}
+                                          className="text-ink/30 hover:text-brand"
+                                          title="Edit expense"
+                                        >
+                                          <Pencil size={13} />
+                                        </button>
+                                        <button
+                                          onClick={() => { void handleDeleteExpense(e._id); }}
+                                          disabled={expDeleting === e._id}
+                                          className="text-ink/30 hover:text-red-500 disabled:opacity-40"
+                                          title="Delete expense"
+                                        >
+                                          <Trash2 size={13} />
+                                        </button>
+                                      </div>
                                     </td>
                                   </tr>
                                 );
@@ -1446,6 +1669,183 @@ export function ReportsPage() {
             ) : null}
           </div>
         )}
+        {/* ════════════════ GIFT VOUCHERS TAB ════════════════ */}
+        {tab === 'giftvouchers' && (
+          <div className="p-5 space-y-5">
+            {gvRptError && (
+              <div className="rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
+                {gvRptError}
+              </div>
+            )}
+
+            {gvRptLoading ? (
+              <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>
+            ) : gvReport ? (
+              <>
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  <KPICard label="Issued"      value={fmtCur(gvReport.issued.amount, sym)}   sub={`${gvReport.issued.count} vouchers`}   accent />
+                  <KPICard label="Redeemed"    value={fmtCur(gvReport.redeemed.amount, sym)} sub={`${gvReport.redeemed.count} redemptions`} />
+                  <KPICard label="Restored"    value={fmtCur(gvReport.restored.amount, sym)} sub={`${gvReport.restored.count} events`} />
+                  <KPICard label="Expired"     value={fmtCur(gvReport.expired.amount, sym)}  sub={`${gvReport.expired.count} vouchers`} />
+                </div>
+
+                <Card>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">Outstanding Liability (live)</p>
+                      <p className="mt-1 text-2xl font-bold tabular-nums text-brand">
+                        {fmtCur(gvReport.outstanding.balance, sym)}
+                      </p>
+                      <p className="mt-0.5 text-xs text-ink/40">{gvReport.outstanding.activeVouchers} active vouchers with balance</p>
+                    </div>
+                    <button
+                      onClick={exportGiftVouchersCSV}
+                      className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5"
+                    >
+                      <Download size={11} />
+                      CSV
+                    </button>
+                  </div>
+
+                  <HorizBars
+                    sym={sym}
+                    data={[
+                      { label: 'Issued',   value: gvReport.issued.amount   },
+                      { label: 'Redeemed', value: gvReport.redeemed.amount },
+                      { label: 'Restored', value: gvReport.restored.amount },
+                      { label: 'Expired',  value: gvReport.expired.amount  },
+                    ]}
+                  />
+                </Card>
+              </>
+            ) : null}
+          </div>
+        )}
+
+        {/* ════════════════ COUPONS TAB ════════════════ */}
+        {tab === 'coupons' && (
+          <div className="p-5 space-y-5">
+            {couponError && (
+              <div className="rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
+                {couponError}
+              </div>
+            )}
+
+            {couponLoading ? (
+              <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>
+            ) : couponReport ? (
+              <>
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+                  <KPICard label="Total Uses"      value={String(couponReport.totalUsage)}           sub={`${couponReport.uniqueCoupons} unique coupons`} accent />
+                  <KPICard label="Total Discount"  value={fmtCur(couponReport.totalDiscount, sym)}   sub="Discount given" />
+                  <KPICard label="Avg per Use"     value={couponReport.totalUsage > 0 ? fmtCur(+(couponReport.totalDiscount / couponReport.totalUsage).toFixed(2), sym) : `${sym}0`} />
+                </div>
+
+                {couponReport.rows.length > 0 ? (
+                  <Card className="overflow-hidden !p-0">
+                    <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                      <h3 className="text-sm font-semibold text-ink">Top Coupons by Discount</h3>
+                      <button
+                        onClick={exportCouponsCSV}
+                        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5"
+                      >
+                        <Download size={11} />
+                        CSV
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-mist">
+                            <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">#</th>
+                            <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">Coupon Code</th>
+                            <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Uses</th>
+                            <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Total Discount</th>
+                            <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Avg Discount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {couponReport.rows.map((r, i) => (
+                            <tr key={r.couponCode} className="hover:bg-mist">
+                              <td className="px-5 py-2.5 text-xs tabular-nums text-ink/30">{i + 1}</td>
+                              <td className="px-5 py-2.5 text-sm font-mono text-ink">{r.couponCode}</td>
+                              <td className="px-5 py-2.5 text-right tabular-nums text-ink/70">{r.usageCount}</td>
+                              <td className="px-5 py-2.5 text-right font-semibold tabular-nums text-ink">
+                                {fmtCur(r.totalDiscount, sym)}
+                              </td>
+                              <td className="px-5 py-2.5 text-right tabular-nums text-ink/50">
+                                {fmtCur(+(r.totalDiscount / r.usageCount).toFixed(2), sym)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                ) : (
+                  <div className="flex h-48 flex-col items-center justify-center text-center">
+                    <Tag size={36} className="mb-3 text-ink/10" />
+                    <p className="text-sm text-ink/40">No coupon redemptions in this period</p>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+        )}
+
+        {/* ════════════════ VENDOR / PROCUREMENT TAB ════════════════ */}
+        {tab === 'vendor' && (
+          <div className="p-5 space-y-5">
+            {vendorError && (
+              <div className="rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
+                {vendorError}
+              </div>
+            )}
+
+            {vendorLoading ? (
+              <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>
+            ) : vendorReport ? (
+              <>
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  <KPICard label="POs Raised"       value={String(vendorReport.purchaseOrders.count)} sub={fmtCur(vendorReport.purchaseOrders.totalValue, sym)} accent />
+                  <KPICard label="GRNs Received"    value={String(vendorReport.grns.count)}           sub={fmtCur(vendorReport.grns.totalValue, sym)} />
+                  <KPICard label="Payments Made"     value={fmtCur(vendorReport.vendorPayments.totalAmount, sym)} sub={`${vendorReport.vendorPayments.count} payments`} />
+                  <KPICard label="Returns Completed" value={fmtCur(vendorReport.vendorReturns.totalValue, sym)}  sub={`${vendorReport.vendorReturns.count} returns`} />
+                </div>
+
+                <Card>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">Outstanding Payables (live)</p>
+                      <p className="mt-1 text-2xl font-bold tabular-nums text-brand">
+                        {fmtCur(vendorReport.outstanding.totalOutstanding, sym)}
+                      </p>
+                      <p className="mt-0.5 text-xs text-ink/40">{vendorReport.outstanding.vendorCount} vendors with balance</p>
+                    </div>
+                    <button
+                      onClick={exportVendorCSV}
+                      className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5"
+                    >
+                      <Download size={11} />
+                      CSV
+                    </button>
+                  </div>
+
+                  <HorizBars
+                    sym={sym}
+                    data={[
+                      { label: 'PO Value',   value: vendorReport.purchaseOrders.totalValue  },
+                      { label: 'GRN Value',  value: vendorReport.grns.totalValue            },
+                      { label: 'Paid',       value: vendorReport.vendorPayments.totalAmount },
+                      { label: 'Returned',   value: vendorReport.vendorReturns.totalValue   },
+                    ]}
+                  />
+                </Card>
+              </>
+            ) : null}
+          </div>
+        )}
+
         {/* ════ FOOD COST TAB ════ */}
         {tab === 'foodcost' && (
           <div className="p-5 space-y-5">
@@ -1606,14 +2006,14 @@ export function ReportsPage() {
         )}
       </div>
 
-      {/* ════════════════ ADD EXPENSE MODAL ════════════════ */}
+      {/* ════════════════ ADD / EDIT EXPENSE MODAL ════════════════ */}
       {showExpModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="mx-4 w-full max-w-md rounded-xl border border-border bg-canvas p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">Add Expense</h2>
+              <h2 className="text-sm font-semibold text-ink">{expEditId ? 'Edit Expense' : 'Add Expense'}</h2>
               <button
-                onClick={() => setShowExpModal(false)}
+                onClick={() => { setShowExpModal(false); setExpEditId(null); setExpForm({ description: '', amount: '', category: 'other', notes: '' }); }}
                 className="text-ink/40 hover:text-ink"
                 aria-label="Close"
               >
@@ -1674,17 +2074,17 @@ export function ReportsPage() {
 
             <div className="mt-6 flex gap-2">
               <button
-                onClick={() => setShowExpModal(false)}
+                onClick={() => { setShowExpModal(false); setExpEditId(null); setExpForm({ description: '', amount: '', category: 'other', notes: '' }); }}
                 className="flex-1 rounded-lg border border-border py-2 text-sm text-ink/50 hover:bg-mist"
               >
                 Cancel
               </button>
               <button
-                onClick={() => { void handleCreateExpense(); }}
-                disabled={expSaving || !expForm.description.trim() || !expForm.amount}
+                onClick={() => { void (expEditId ? handleUpdateExpense(expEditId) : handleCreateExpense()); }}
+                disabled={(expEditId ? expUpdating : expSaving) || !expForm.description.trim() || !expForm.amount}
                 className="flex-1 rounded-lg bg-brand py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-40"
               >
-                {expSaving ? 'Saving…' : 'Add Expense'}
+                {expEditId ? (expUpdating ? 'Saving…' : 'Save Changes') : (expSaving ? 'Saving…' : 'Add Expense')}
               </button>
             </div>
           </div>

@@ -501,6 +501,7 @@ export function CustomersPage() {
                 rewardName={rewardName}
                 isAdmin={isAdmin}
                 currencySymbol={currencySymbol}
+                expiryDays={config?.expiryDays ?? 0}
                 onAdjusted={() => void loadCustomers(search, 1, false)}
               />
             ) : (
@@ -588,6 +589,7 @@ export function CustomersPage() {
                 rewardName={rewardName}
                 isAdmin={isAdmin}
                 currencySymbol={currencySymbol}
+                expiryDays={config?.expiryDays ?? 0}
                 onAdjusted={() => void loadSegment(activeSegment, 1)}
               />
             ) : (

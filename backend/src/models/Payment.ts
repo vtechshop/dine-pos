@@ -2,12 +2,14 @@ import mongoose, { Document, Schema } from 'mongoose';
 import type { PaymentStatus, PaymentMethod, RefundStatus, SettlementStatus } from '../services/payment/types';
 
 export interface IPaymentRefund {
-  refundId:        string;
-  amount:          number;        // in paise
-  reason:          string;
-  initiatedBy:     string;
-  refundedAt:      Date;
-  gatewayResponse: Record<string, unknown>;
+  refundId:          string;
+  amount:            number;        // in paise
+  reason:            string;
+  initiatedBy:       string;
+  refundedAt:        Date;
+  gatewayResponse:   Record<string, unknown>;
+  loyaltyReversedAt:      Date | null;  // set after per-refund loyalty reversal; idempotency guard
+  giftVoucherRestoredAt:  Date | null;  // set after per-refund voucher restoration; idempotency guard
 }
 
 export interface IPayment extends Document {
@@ -31,18 +33,23 @@ export interface IPayment extends Document {
   failureReason:         string;
   initiatedBy:           string;   // userId | 'webhook' | 'system'
   refundInProgress:      boolean;  // advisory lock: true while a refund gateway call is in flight
+  loyaltyEarnedAt:       Date | null;  // set after earn succeeds; idempotency guard
+  loyaltyEarnPoints:     number;       // points awarded for this payment (0 = none)
+  loyaltyReversedAt:     Date | null;  // set after reversal on refund; idempotency guard
   createdAt:             Date;
   updatedAt:             Date;
 }
 
 const refundSchema = new Schema<IPaymentRefund>(
   {
-    refundId:        { type: String, required: true },
-    amount:          { type: Number, required: true, min: 0 },
-    reason:          { type: String, default: '' },
-    initiatedBy:     { type: String, default: '' },
-    refundedAt:      { type: Date, default: Date.now },
-    gatewayResponse: { type: Schema.Types.Mixed, default: {} },
+    refundId:          { type: String, required: true },
+    amount:            { type: Number, required: true, min: 0 },
+    reason:            { type: String, default: '' },
+    initiatedBy:       { type: String, default: '' },
+    refundedAt:        { type: Date, default: Date.now },
+    gatewayResponse:   { type: Schema.Types.Mixed, default: {} },
+    loyaltyReversedAt:     { type: Date, default: null },
+    giftVoucherRestoredAt: { type: Date, default: null },
   },
   { _id: false },
 );
@@ -69,6 +76,9 @@ const schema = new Schema<IPayment>(
     failureReason:         { type: String, default: '' },
     initiatedBy:           { type: String, default: '' },
     refundInProgress:      { type: Boolean, default: false },
+    loyaltyEarnedAt:       { type: Date, default: null },
+    loyaltyEarnPoints:     { type: Number, default: 0 },
+    loyaltyReversedAt:     { type: Date, default: null },
   },
   { timestamps: true },
 );

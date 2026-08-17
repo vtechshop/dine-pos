@@ -80,6 +80,7 @@ export async function runLoyaltyExpiry(): Promise<void> {
       const beforeDoc = await CustomerProfile.findOneAndUpdate(
         {
           _id:            record._id,
+          hotelId:        record.hotelId as mongoose.Types.ObjectId,
           loyaltyBalance: { $gt: 0 },
         },
         [

@@ -41,7 +41,6 @@ const BLANK_FORM: VendorInput = {
   paymentTerms:       'immediate',
   creditLimit:        0,
   openingBalance:     0,
-  currentOutstanding: 0,
   notes:              '',
   isActive:           true,
 };
@@ -339,17 +338,6 @@ function VendorDrawer({
               />
             </FieldRow>
           </div>
-
-          {editing && (
-            <FieldRow label="Current Outstanding">
-              <FormInput
-                value={form.currentOutstanding ?? 0}
-                onChange={v => onChange('currentOutstanding', parseFloat(v) || 0)}
-                placeholder="0"
-                type="number"
-              />
-            </FieldRow>
-          )}
 
           <FieldRow label="Notes">
             <textarea
@@ -685,7 +673,6 @@ export function VendorsPage() {
       paymentTerms:       v.paymentTerms,
       creditLimit:        v.creditLimit,
       openingBalance:     v.openingBalance,
-      currentOutstanding: v.currentOutstanding,
       notes:              v.notes,
       isActive:           v.isActive,
     });

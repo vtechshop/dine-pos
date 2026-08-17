@@ -57,6 +57,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       { new: true, select: '-pin' }
     ).lean();
     if (!cashier) return res.status(404).json({ message: 'Cashier not found' });
+    logAudit(req, 'cashier.updated', 'cashier', req.params.id, { updated: Object.keys(update) });
     return res.json(cashier);
   } catch {
     return res.status(500).json({ message: 'Server error' });

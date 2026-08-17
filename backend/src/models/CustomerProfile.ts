@@ -37,6 +37,7 @@ export interface ICustomerProfile extends Document {
   favouriteItems: IFavouriteItem[];
   tags: string[];
   marketingOptIn: boolean;
+  loyaltyOptOut: boolean;      // when true, customer is excluded from all loyalty earn/redeem
   loyaltyBalance: number;      // denormalised from LoyaltyTransaction ledger
   walletBalance: number;       // prepaid wallet (separate from points)
   lifetimeSpend: number;       // INR; incremented on guest billing
@@ -84,6 +85,7 @@ const CustomerProfileSchema: Schema = new Schema(
     }],
     tags:           [{ type: String, maxlength: 50 }],
     marketingOptIn: { type: Boolean, default: false },
+    loyaltyOptOut:  { type: Boolean, default: false },
     loyaltyBalance: { type: Number, default: 0, min: 0 },
     walletBalance:  { type: Number, default: 0, min: 0 },
     lifetimeSpend:  { type: Number, default: 0, min: 0 },

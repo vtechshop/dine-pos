@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, ToggleLeft, ToggleRight, X, Gift, RefreshCw, Minus } from 'lucide-react';
+import { Plus, Search, ToggleLeft, ToggleRight, X, Gift, RefreshCw, Minus, History, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 import {
   fetchGiftVouchers, issueGiftVoucher, topupGiftVoucher, redeemGiftVoucher,
-  deactivateGiftVoucher,
-  type GiftVoucher, type IssueVoucherInput,
+  deactivateGiftVoucher, reactivateGiftVoucher,
+  fetchGiftVoucherStats, fetchGiftVoucherTransactions,
+  type GiftVoucher, type IssueVoucherInput, type GiftVoucherStats,
+  type GiftVoucherTransaction,
 } from '../api/giftVouchers';
 
 const BLANK_ISSUE: IssueVoucherInput = {
@@ -11,6 +13,22 @@ const BLANK_ISSUE: IssueVoucherInput = {
   issuedToName: '',
   issuedToPhone: '',
   expiresAt: '',
+};
+
+const TX_TYPE_LABEL: Record<string, string> = {
+  issue:  'Issued',
+  topup:  'Top-Up',
+  redeem: 'Redeemed',
+  refund: 'Restored',
+  expire: 'Expired',
+};
+
+const TX_TYPE_COLOR: Record<string, string> = {
+  issue:  'bg-brand/10 text-brand',
+  topup:  'bg-green-100 text-green-700',
+  redeem: 'bg-orange-100 text-orange-700',
+  refund: 'bg-blue-100 text-blue-700',
+  expire: 'bg-ink/5 text-ink/40',
 };
 
 export function GiftVouchersPage() {
@@ -21,6 +39,9 @@ export function GiftVouchersPage() {
   const [error, setError]     = useState<string | null>(null);
   const [search, setSearch]   = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+
+  const [stats, setStats]           = useState<GiftVoucherStats | null>(null);
+  const [statsLoading, setStatsLod] = useState(false);
 
   const [issueOpen, setIssueOpen]     = useState(false);
   const [issueForm, setIssueForm]     = useState<IssueVoucherInput>(BLANK_ISSUE);
@@ -37,7 +58,26 @@ export function GiftVouchersPage() {
   const [redeemSaving, setRedeemSaving] = useState(false);
   const [redeemError, setRedeemError]   = useState<string | null>(null);
 
+  // Transaction history modal
+  const [txVoucher, setTxVoucher]         = useState<GiftVoucher | null>(null);
+  const [txs, setTxs]                     = useState<GiftVoucherTransaction[]>([]);
+  const [txTotal, setTxTotal]             = useState(0);
+  const [txPage, setTxPage]               = useState(1);
+  const [txLoading, setTxLoading]         = useState(false);
+  const [txError, setTxError]             = useState<string | null>(null);
+  const TX_LIMIT = 20;
+
   const LIMIT = 25;
+
+  const loadStats = useCallback(async () => {
+    setStatsLod(true);
+    try {
+      const s = await fetchGiftVoucherStats();
+      setStats(s);
+    } catch { /* non-fatal */ } finally {
+      setStatsLod(false);
+    }
+  }, []);
 
   const load = useCallback(async (p = 1) => {
     setLoading(true);
@@ -55,7 +95,31 @@ export function GiftVouchersPage() {
     }
   }, [activeFilter]);
 
-  useEffect(() => { load(1); }, [load]);
+  useEffect(() => { load(1); loadStats(); }, [load, loadStats]);
+
+  const loadTxs = useCallback(async (voucherId: string, p = 1) => {
+    setTxLoading(true);
+    setTxError(null);
+    try {
+      const res = await fetchGiftVoucherTransactions(voucherId, { page: p, limit: TX_LIMIT });
+      setTxs(res.transactions);
+      setTxTotal(res.total);
+      setTxPage(p);
+    } catch (e) {
+      setTxError((e as Error).message);
+    } finally {
+      setTxLoading(false);
+    }
+  }, []);
+
+  const openTxModal = (v: GiftVoucher) => {
+    setTxVoucher(v);
+    setTxs([]);
+    setTxTotal(0);
+    setTxPage(1);
+    setTxError(null);
+    loadTxs(v._id, 1);
+  };
 
   const handleIssue = async () => {
     if (!issueForm.amount || issueForm.amount <= 0) { setIssueError('Amount must be greater than 0.'); return; }
@@ -71,6 +135,7 @@ export function GiftVouchersPage() {
       setIssueOpen(false);
       setIssueForm(BLANK_ISSUE);
       load(1);
+      loadStats();
     } catch (e) {
       setIssueError((e as Error).message);
     } finally {
@@ -85,10 +150,11 @@ export function GiftVouchersPage() {
     setTopupSaving(true);
     setTopupError(null);
     try {
-      await topupGiftVoucher(topupTarget.code, amt);
+      await topupGiftVoucher(topupTarget.voucherCode, amt);
       setTopupTarget(null);
       setTopupAmount('');
       load(page);
+      loadStats();
     } catch (e) {
       setTopupError((e as Error).message);
     } finally {
@@ -104,10 +170,11 @@ export function GiftVouchersPage() {
     setRedeemSaving(true);
     setRedeemError(null);
     try {
-      await redeemGiftVoucher(redeemTarget.code, amt);
+      await redeemGiftVoucher(redeemTarget.voucherCode, amt);
       setRedeemTarget(null);
       setRedeemAmount('');
       load(page);
+      loadStats();
     } catch (e) {
       setRedeemError((e as Error).message);
     } finally {
@@ -116,24 +183,36 @@ export function GiftVouchersPage() {
   };
 
   const toggleActive = async (v: GiftVoucher) => {
-    if (!v.isActive) return;
-    try {
-      await deactivateGiftVoucher(v._id);
-      load(page);
-    } catch (e) {
-      alert((e as Error).message);
+    if (v.isActive) {
+      try {
+        await deactivateGiftVoucher(v._id);
+        load(page);
+        loadStats();
+      } catch (e) {
+        alert((e as Error).message);
+      }
+    } else {
+      try {
+        await reactivateGiftVoucher(v._id);
+        load(page);
+        loadStats();
+      } catch (e) {
+        alert((e as Error).message);
+      }
     }
   };
 
   const filtered = search
     ? items.filter(v =>
-        v.code.toLowerCase().includes(search.toLowerCase()) ||
+        v.voucherCode.toLowerCase().includes(search.toLowerCase()) ||
         (v.issuedToName ?? '').toLowerCase().includes(search.toLowerCase()) ||
         (v.issuedToPhone ?? '').includes(search)
       )
     : items;
 
   const pages = Math.ceil(total / LIMIT);
+  const txPages = Math.ceil(txTotal / TX_LIMIT);
+  const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
   return (
     <div className="flex h-full flex-col">
@@ -164,6 +243,18 @@ export function GiftVouchersPage() {
           </button>
         </div>
       </div>
+
+      {/* Stats tiles */}
+      {(stats || statsLoading) && (
+        <div className="shrink-0 border-b border-border bg-canvas px-5 py-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatTile icon={<Wallet size={14} className="text-brand" />} label="Outstanding Liability" value={statsLoading ? '…' : fmt(stats?.outstandingLiability ?? 0)} accent />
+            <StatTile icon={<TrendingDown size={14} className="text-orange-500" />} label="Total Redeemed (All-time)" value={statsLoading ? '…' : fmt(stats?.totalRedeemedValue ?? 0)} />
+            <StatTile icon={<TrendingUp size={14} className="text-green-600" />} label="Total Issued (All-time)" value={statsLoading ? '…' : fmt(stats?.totalIssuedValue ?? 0)} />
+            <StatTile icon={<Gift size={14} className="text-ink/40" />} label="Active / Total" value={statsLoading ? '…' : `${stats?.active ?? 0} / ${stats?.total ?? 0}`} />
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="shrink-0 border-b border-border bg-canvas px-5 py-2.5">
@@ -208,13 +299,13 @@ export function GiftVouchersPage() {
               <tbody className="divide-y divide-border">
                 {filtered.map(v => (
                   <tr key={v._id} className="hover:bg-mist/50">
-                    <td className="px-4 py-3 font-mono font-bold text-ink">{v.code}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-ink">{v.voucherCode}</td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-ink">{v.issuedToName || '—'}</p>
                       {v.issuedToPhone && <p className="text-xs text-ink/50">{v.issuedToPhone}</p>}
                     </td>
                     <td className="px-4 py-3 font-bold text-brand">₹{v.balance}</td>
-                    <td className="px-4 py-3 text-ink/60">₹{v.amount}</td>
+                    <td className="px-4 py-3 text-ink/60">₹{v.originalAmount}</td>
                     <td className="px-4 py-3 text-ink/60">
                       {v.expiresAt ? new Date(v.expiresAt).toLocaleDateString('en-IN') : '—'}
                     </td>
@@ -227,6 +318,13 @@ export function GiftVouchersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openTxModal(v)}
+                          title="Transaction History"
+                          className="rounded-lg p-1.5 text-ink/40 hover:bg-ink/5 hover:text-ink"
+                        >
+                          <History size={14} />
+                        </button>
                         {v.isActive && (
                           <>
                             <button
@@ -253,7 +351,11 @@ export function GiftVouchersPage() {
                           </>
                         )}
                         {!v.isActive && (
-                          <button disabled title="Deactivated" className="rounded-lg p-1.5 text-ink/30">
+                          <button
+                            onClick={() => toggleActive(v)}
+                            title="Reactivate"
+                            className="rounded-lg p-1.5 text-ink/40 hover:bg-green-50 hover:text-green-700"
+                          >
                             <ToggleLeft size={16} />
                           </button>
                         )}
@@ -286,6 +388,84 @@ export function GiftVouchersPage() {
           </div>
         )}
       </div>
+
+      {/* Transaction History Modal */}
+      {txVoucher && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="flex w-full max-w-lg flex-col rounded-2xl bg-canvas shadow-2xl" style={{ maxHeight: '80vh' }}>
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <History size={15} className="text-brand" />
+                  <h3 className="text-sm font-bold text-ink">Transaction History</h3>
+                </div>
+                <p className="mt-0.5 font-mono text-xs text-ink/50">{txVoucher.voucherCode} · Balance: ₹{txVoucher.balance}</p>
+              </div>
+              <button onClick={() => setTxVoucher(null)} className="rounded-lg p-1.5 text-ink/40 hover:bg-ink/5">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {txError && (
+                <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{txError}</div>
+              )}
+              {txLoading ? (
+                <div className="flex h-24 items-center justify-center text-xs text-ink/40">Loading…</div>
+              ) : txs.length === 0 ? (
+                <div className="flex h-24 items-center justify-center text-xs text-ink/40">No transactions recorded.</div>
+              ) : (
+                <div className="space-y-2">
+                  {txs.map((tx, i) => (
+                    <div key={tx._id ?? i} className="flex items-start justify-between rounded-lg border border-border bg-mist/50 px-4 py-3 gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TX_TYPE_COLOR[tx.type] ?? 'bg-ink/5 text-ink/50'}`}>
+                            {TX_TYPE_LABEL[tx.type] ?? tx.type}
+                          </span>
+                          {tx.orderId && (
+                            <span className="text-[10px] text-ink/40">Order linked</span>
+                          )}
+                        </div>
+                        {tx.remarks && <p className="mt-1 text-[11px] text-ink/50 truncate">{tx.remarks}</p>}
+                        <p className="mt-0.5 text-[10px] text-ink/30">
+                          {new Date(tx.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className={`text-sm font-bold tabular-nums ${['issue', 'topup', 'refund'].includes(tx.type) ? 'text-green-700' : 'text-orange-700'}`}>
+                          {['issue', 'topup', 'refund'].includes(tx.type) ? '+' : '-'}₹{tx.amount}
+                        </p>
+                        <p className="text-[10px] text-ink/40 tabular-nums">Bal: ₹{tx.balanceAfter}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {txPages > 1 && (
+              <div className="shrink-0 flex items-center justify-center gap-2 border-t border-border px-5 py-3">
+                <button
+                  disabled={txPage <= 1}
+                  onClick={() => { const p = txPage - 1; setTxPage(p); loadTxs(txVoucher._id, p); }}
+                  className="rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs font-semibold text-ink disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-ink/60">Page {txPage} of {txPages}</span>
+                <button
+                  disabled={txPage >= txPages}
+                  onClick={() => { const p = txPage + 1; setTxPage(p); loadTxs(txVoucher._id, p); }}
+                  className="rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs font-semibold text-ink disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Issue Voucher Drawer */}
       {issueOpen && (
@@ -364,7 +544,7 @@ export function GiftVouchersPage() {
               <h3 className="text-base font-bold text-ink">Top-up Voucher</h3>
             </div>
             <p className="mb-4 text-xs text-ink/60">
-              {topupTarget.code} · Current balance: <strong>₹{topupTarget.balance}</strong>
+              {topupTarget.voucherCode} · Current balance: <strong>₹{topupTarget.balance}</strong>
             </p>
             {topupError && (
               <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{topupError}</div>
@@ -405,7 +585,7 @@ export function GiftVouchersPage() {
               <h3 className="text-base font-bold text-ink">Manual Redemption</h3>
             </div>
             <p className="mb-4 text-xs text-ink/60">
-              {redeemTarget.code} · Available balance: <strong>₹{redeemTarget.balance}</strong>
+              {redeemTarget.voucherCode} · Available balance: <strong>₹{redeemTarget.balance}</strong>
             </p>
             {redeemError && (
               <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{redeemError}</div>
@@ -436,6 +616,15 @@ export function GiftVouchersPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function StatTile({ icon, label, value, accent = false }: { icon: React.ReactNode; label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="rounded-xl border border-border bg-mist/50 px-4 py-3">
+      <div className="flex items-center gap-1.5 mb-1">{icon}<p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">{label}</p></div>
+      <p className={`text-lg font-bold tabular-nums ${accent ? 'text-brand' : 'text-ink'}`}>{value}</p>
     </div>
   );
 }

@@ -14,15 +14,48 @@
 
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
+import rateLimit from 'express-rate-limit';
 import {
   authMiddleware, requireAdmin, requireCashierOrAdmin, AuthRequest,
 } from '../middleware/auth';
 import { sendError } from '../utils/sendError';
 import GiftVoucher from '../models/GiftVoucher';
+import Order from '../models/Order';
 import { logAudit } from '../utils/audit';
 
 const router = Router();
 router.use(authMiddleware);
+
+// ── Rate limiters (hotel-scoped — auth runs before these) ──────────────────────
+// /check — cashiers check frequently; 60/min per hotel is generous
+const checkLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  keyGenerator: (req: any) => `gv:check:${req.hotelId ?? req.ip}`,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { message: 'Too many voucher check requests, please slow down' },
+});
+
+// /redeem — stricter; normal POS sees at most a few per minute
+const redeemLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyGenerator: (req: any) => `gv:redeem:${req.hotelId ?? req.ip}`,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { message: 'Too many redemption requests, please slow down' },
+});
+
+// /topup and issue — admin actions; 20/min is generous
+const adminActionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  keyGenerator: (req: any) => `gv:admin:${req.hotelId ?? req.ip}`,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please slow down' },
+});
 
 function generateVoucherCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -62,7 +95,7 @@ router.get('/', requireAdmin, async (req: AuthRequest, res: Response): Promise<v
 
 // ── Issue ─────────────────────────────────────────────────────────────────────
 
-router.post('/', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/', requireAdmin, adminActionLimiter, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { amount, issuedToName, issuedToPhone, issuedToCustomerId, expiresAt } = req.body as Record<string, any>;
 
@@ -73,11 +106,16 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response): Promise<
 
     const hotelId     = new mongoose.Types.ObjectId(req.hotelId);
     let voucherCode   = generateVoucherCode();
-    let attempts      = 0;
 
-    while (await GiftVoucher.exists({ hotelId, voucherCode }) && attempts < 5) {
+    // Retry up to 5 times on collision; fail cleanly if all attempts collide
+    let unique = !(await GiftVoucher.exists({ hotelId, voucherCode }));
+    for (let i = 0; i < 5 && !unique; i++) {
       voucherCode = generateVoucherCode();
-      attempts++;
+      unique = !(await GiftVoucher.exists({ hotelId, voucherCode }));
+    }
+    if (!unique) {
+      res.status(503).json({ message: 'Could not generate a unique voucher code, please try again shortly' });
+      return;
     }
 
     const now     = new Date();
@@ -111,9 +149,90 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response): Promise<
   }
 });
 
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+router.get('/stats', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const hotelId = new mongoose.Types.ObjectId(req.hotelId);
+    const [agg] = await GiftVoucher.aggregate([
+      { $match: { hotelId, isDeleted: false } },
+      {
+        $facet: {
+          counts: [
+            {
+              $group: {
+                _id:                 null,
+                total:               { $sum: 1 },
+                active:              { $sum: { $cond: ['$isActive', 1, 0] } },
+                inactive:            { $sum: { $cond: ['$isActive', 0, 1] } },
+                outstandingLiability:{ $sum: { $cond: ['$isActive', '$balance', 0] } },
+              },
+            },
+          ],
+          txAgg: [
+            { $unwind: { path: '$transactions', preserveNullAndEmptyArrays: false } },
+            { $group: { _id: '$transactions.type', totalAmount: { $sum: '$transactions.amount' } } },
+          ],
+        },
+      },
+    ]);
+
+    const counts  = agg?.counts?.[0] ?? { total: 0, active: 0, inactive: 0, outstandingLiability: 0 };
+    const txMap: Record<string, number> = {};
+    for (const row of (agg?.txAgg ?? [])) txMap[row._id] = row.totalAmount;
+
+    res.json({
+      total:                counts.total,
+      active:               counts.active,
+      inactive:             counts.inactive,
+      totalIssuedValue:     txMap['issue']  ?? 0,
+      totalTopupValue:      txMap['topup']  ?? 0,
+      totalRedeemedValue:   txMap['redeem'] ?? 0,
+      totalRestoredValue:   txMap['refund'] ?? 0,
+      outstandingLiability: counts.outstandingLiability,
+    });
+  } catch (err) {
+    sendError(res, 500, 'Failed to fetch gift voucher stats', err);
+  }
+});
+
+// ── Transaction history ───────────────────────────────────────────────────────
+
+router.get('/:id/transactions', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const hotelId = new mongoose.Types.ObjectId(req.hotelId);
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      res.status(404).json({ message: 'Voucher not found' });
+      return;
+    }
+
+    const { page = '1', limit = '50' } = req.query as Record<string, string>;
+    const pageNum  = Math.max(1, parseInt(page, 10)  || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+    const skip     = (pageNum - 1) * limitNum;
+
+    const voucher = await GiftVoucher.findOne({ _id: req.params.id, hotelId, isDeleted: false })
+      .select('voucherCode balance transactions')
+      .lean();
+    if (!voucher) { res.status(404).json({ message: 'Voucher not found' }); return; }
+
+    const allTxs = (voucher.transactions ?? []).slice().reverse(); // newest first
+    res.json({
+      voucherCode:  voucher.voucherCode,
+      balance:      voucher.balance,
+      transactions: allTxs.slice(skip, skip + limitNum),
+      total:        allTxs.length,
+      page:         pageNum,
+      limit:        limitNum,
+    });
+  } catch (err) {
+    sendError(res, 500, 'Failed to fetch voucher transactions', err);
+  }
+});
+
 // ── Check balance ─────────────────────────────────────────────────────────────
 
-router.get('/:code/check', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/:code/check', checkLimiter, requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const hotelId = new mongoose.Types.ObjectId(req.hotelId);
     const code    = String(req.params.code).trim().toUpperCase();
@@ -138,7 +257,7 @@ router.get('/:code/check', requireCashierOrAdmin, async (req: AuthRequest, res: 
 
 // ── Redeem ────────────────────────────────────────────────────────────────────
 
-router.post('/redeem', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/redeem', redeemLimiter, requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { code, amount, orderId, remarks } = req.body as {
       code?: string; amount?: number; orderId?: string; remarks?: string;
@@ -152,6 +271,26 @@ router.post('/redeem', requireCashierOrAdmin, async (req: AuthRequest, res: Resp
     const hotelId    = new mongoose.Types.ObjectId(req.hotelId);
     const voucherCode = String(code).trim().toUpperCase();
     const redeemAmt   = Number(amount);
+
+    // Idempotency: if orderId provided and this orderId was already redeemed, return success
+    if (orderId && mongoose.isValidObjectId(orderId)) {
+      const orderObjId = new mongoose.Types.ObjectId(orderId);
+      const alreadyRedeemed = await GiftVoucher.findOne({
+        hotelId,
+        voucherCode,
+        transactions: { $elemMatch: { type: 'redeem', orderId: orderObjId } },
+      }).select('balance voucherCode').lean();
+      if (alreadyRedeemed) {
+        res.json({ success: true, redeemedAmount: redeemAmt, newBalance: alreadyRedeemed.balance, voucherCode: alreadyRedeemed.voucherCode });
+        return;
+      }
+      // Validate: redeemAmt cannot exceed order grandTotal (when orderId is supplied)
+      const orderDoc = await Order.findOne({ _id: orderObjId, hotelId }).select('grandTotal').lean();
+      if (orderDoc && redeemAmt > (orderDoc as any).grandTotal) {
+        res.status(400).json({ message: `Redeem amount (₹${redeemAmt}) exceeds order total (₹${(orderDoc as any).grandTotal})` });
+        return;
+      }
+    }
 
     const now = new Date();
     const redeemEntry = {
@@ -181,7 +320,7 @@ router.post('/redeem', requireCashierOrAdmin, async (req: AuthRequest, res: Resp
             transactions: {
               $concatArrays: [
                 { $ifNull: ['$transactions', []] },
-                [{ ...redeemEntry, balanceAfter: '$balance' }],
+                [{ ...redeemEntry, balanceAfter: { $ifNull: ['$balance', 0] } }],
               ],
             },
           },
@@ -207,7 +346,7 @@ router.post('/redeem', requireCashierOrAdmin, async (req: AuthRequest, res: Resp
 
 // ── Top-up ────────────────────────────────────────────────────────────────────
 
-router.post('/topup', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/topup', requireAdmin, adminActionLimiter, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { code, amount, remarks } = req.body as { code?: string; amount?: number; remarks?: string };
     if (!code || !amount || Number(amount) <= 0) {
@@ -215,29 +354,31 @@ router.post('/topup', requireAdmin, async (req: AuthRequest, res: Response): Pro
       return;
     }
 
-    const hotelId    = new mongoose.Types.ObjectId(req.hotelId);
+    const hotelId    = new mongoose.Types.ObjectId(req.hotelId!);
     const voucherCode = String(code).trim().toUpperCase();
     const addAmt      = Number(amount);
+    const now         = new Date();
 
-    const voucher = await GiftVoucher.findOne({ hotelId, voucherCode, isDeleted: false });
+    // Atomic: $inc balance, activate, push transaction — no last-write-wins race
+    const voucher = await GiftVoucher.findOneAndUpdate(
+      { hotelId, voucherCode, isDeleted: false },
+      [
+        { $set: {
+            balance:  { $round: [{ $add: ['$balance', addAmt] }, 2] },
+            isActive: true,
+        }},
+        { $set: {
+            transactions: { $concatArrays: [
+              { $ifNull: ['$transactions', []] },
+              [{ type: 'topup', amount: addAmt, balanceAfter: { $ifNull: ['$balance', 0] }, orderId: null, remarks: remarks || 'Top-up by admin', createdBy: `admin:${req.hotelId}`, createdAt: now }],
+            ]},
+        }},
+      ] as any,
+      { new: true },
+    );
     if (!voucher) { res.status(404).json({ message: 'Voucher not found' }); return; }
 
-    const newBalance  = Math.round((voucher.balance + addAmt) * 100) / 100;
-    voucher.balance   = newBalance;
-    voucher.isActive  = true;
-
-    voucher.transactions.push({
-      type:         'topup',
-      amount:       addAmt,
-      balanceAfter: newBalance,
-      orderId:      null,
-      remarks:      remarks || 'Top-up by admin',
-      createdBy:    `admin:${req.hotelId}`,
-      createdAt:    new Date(),
-    } as any);
-
-    await voucher.save();
-
+    const newBalance = voucher.balance;
     logAudit(req, 'giftvoucher.topup', 'GiftVoucher', voucher._id.toString(), { voucherCode, amount: addAmt, newBalance });
     res.json({ success: true, newBalance });
   } catch (err) {
@@ -259,6 +400,32 @@ router.post('/:id/deactivate', requireAdmin, async (req: AuthRequest, res: Respo
     res.json({ success: true });
   } catch (err) {
     sendError(res, 500, 'Failed to deactivate voucher', err);
+  }
+});
+
+// ── Reactivate ────────────────────────────────────────────────────────────────
+
+router.post('/:id/reactivate', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      res.status(404).json({ message: 'Voucher not found' });
+      return;
+    }
+    // isDeleted guard: deleted vouchers cannot be reactivated
+    const voucher = await GiftVoucher.findOneAndUpdate(
+      { _id: req.params.id, hotelId: new mongoose.Types.ObjectId(req.hotelId), isDeleted: false },
+      { $set: { isActive: true } },
+      { new: true },
+    );
+    if (!voucher) { res.status(404).json({ message: 'Voucher not found' }); return; }
+    // Note: expired vouchers may be reactivated (isActive=true) but /check and /redeem
+    // still enforce expiresAt, so they remain non-redeemable until expiry is updated.
+    logAudit(req, 'giftvoucher.reactivate', 'GiftVoucher', voucher._id.toString(), {
+      voucherCode: voucher.voucherCode, balance: voucher.balance,
+    });
+    res.json({ success: true, voucher: { _id: voucher._id, voucherCode: voucher.voucherCode, isActive: voucher.isActive, balance: voucher.balance } });
+  } catch (err) {
+    sendError(res, 500, 'Failed to reactivate voucher', err);
   }
 });
 

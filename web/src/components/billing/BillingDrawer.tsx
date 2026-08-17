@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, RefreshCw, Loader2, Users } from 'lucide-react';
 import type { SessionBill, GuestBill, PaymentMethod, SessionSummary, BillingOrder } from '../../types';
 import { fetchSessionBill, billGuest, bulkBillAndClose } from '../../api/billing';
-import { redeemGiftVoucher } from '../../api/giftVouchers';
 import type { SplitDetails } from '../../api/billing';
 import { GuestPanel } from './GuestPanel';
 import { PaymentPanel } from './PaymentPanel';
@@ -176,12 +175,9 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
           paymentMethod === 'split' ? splitDetails : undefined,
           transactionId || undefined,
           upiApp || undefined,
+          appliedVoucher?.code || undefined,
         );
-        // Redeem voucher after billing succeeds (non-critical: billing already done)
-        if (appliedVoucher) {
-          try { await redeemGiftVoucher(appliedVoucher.code, appliedVoucher.amount); } catch { /* ignore */ }
-          setAppliedVoucher(null);
-        }
+        setAppliedVoucher(null);
         setReceipt({
           mode: 'table',
           guestBill: null,
@@ -197,12 +193,9 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
           paidAmount: paymentMethod === 'cash' && paidAmount > 0 ? paidAmount : undefined,
           transactionId: transactionId || undefined,
           upiApp: upiApp || undefined,
+          giftVoucherCode: appliedVoucher?.code || undefined,
         });
-        // Redeem voucher after billing succeeds (non-critical: billing already done)
-        if (appliedVoucher) {
-          try { await redeemGiftVoucher(appliedVoucher.code, appliedVoucher.amount); } catch { /* ignore */ }
-          setAppliedVoucher(null);
-        }
+        setAppliedVoucher(null);
         setReceipt({
           mode: 'guest',
           guestBill: { guest: billedGuest, orders: selectedGuestBill.orders },

@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   CreditCard, Settings, RefreshCw, CheckCircle, XCircle, AlertCircle,
   Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Wifi, Download,
-  ChevronLeft, ChevronRight, Copy, Check,
+  ChevronLeft, ChevronRight, Copy, Check, Link2, Unlink, ExternalLink,
 } from 'lucide-react';
 import {
   fetchGatewayConfigs, createGatewayConfig, updateGatewayConfig,
   deleteGatewayConfig, toggleGateway, testGatewayConnection,
   fetchPayments, fetchPaymentReport, initiateRefund,
+  getRazorpayOAuthConnectUrl, disconnectRazorpayOAuth,
   type GatewayConfig, type GatewayType, type PaymentRecord, type PaymentReport,
 } from '../api/payments';
 
@@ -66,6 +67,11 @@ function Err({ msg }: { msg: string }) {
   );
 }
 
+function maskAccountId(id: string): string {
+  if (!id || id.length <= 9) return id;
+  return id.slice(0, 5) + '•••' + id.slice(-4);
+}
+
 function WebhookUrlRow({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -87,6 +93,132 @@ function WebhookUrlRow({ url }: { url: string }) {
       >
         {copied ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
       </button>
+    </div>
+  );
+}
+
+// ── Razorpay OAuth Connection Banner ─────────────────────────────────────────
+
+function RazorpayOAuthBanner({ rzpConfig, onRefresh }: {
+  rzpConfig?: GatewayConfig;
+  onRefresh:  () => void;
+}) {
+  const [connecting,    setConnecting]    = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [err,           setErr]           = useState('');
+
+  const isConnected = rzpConfig?.isOAuthConnected === true;
+
+  // Warn when access token expires within 7 days (auto-refresh fires, but let admin know).
+  const accessTokenWarning = isConnected && rzpConfig?.oauthExpiresAt
+    ? (new Date(rzpConfig.oauthExpiresAt).getTime() - Date.now()) < 7 * 24 * 60 * 60 * 1000
+    : false;
+
+  // Warn when refresh token expires within 30 days — no auto-renewal, reconnect required.
+  const refreshWarning = isConnected && rzpConfig?.oauthRefreshExpiresAt
+    ? (new Date(rzpConfig.oauthRefreshExpiresAt).getTime() - Date.now()) < 30 * 24 * 60 * 60 * 1000
+    : false;
+
+  async function handleConnect() {
+    setConnecting(true); setErr('');
+    try {
+      const { authorizeUrl } = await getRazorpayOAuthConnectUrl();
+      window.location.href = authorizeUrl;
+    } catch (e) { setErr((e as Error).message); setConnecting(false); }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm('Disconnect Razorpay OAuth? Payments via OAuth will stop until you reconnect.')) return;
+    setDisconnecting(true); setErr('');
+    try { await disconnectRazorpayOAuth(); onRefresh(); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setDisconnecting(false); }
+  }
+
+  return (
+    <div className={`rounded-xl border p-4 ${isConnected ? 'border-brand/30 bg-brand/5' : 'border-dashed border-border bg-canvas'}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${isConnected ? 'bg-brand text-white' : 'bg-mist text-ink/50'}`}>
+            <Link2 size={16} />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-ink">Razorpay Technology Partner</span>
+              <Badge text="OAuth" color="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" />
+              {isConnected
+                ? <Badge text="Connected" color="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" />
+                : <Badge text="Not Connected" color="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400" />
+              }
+            </div>
+            {isConnected && rzpConfig ? (
+              <div className="mt-0.5 space-y-0.5 text-xs text-ink/50">
+                <p>
+                  Connected account:{' '}
+                  <span className="font-mono text-ink/70">{maskAccountId(rzpConfig.oauthConnectedAccountId)}</span>
+                </p>
+                <p>
+                  Connected {rzpConfig.oauthConnectedAt ? fmtDt(rzpConfig.oauthConnectedAt) : '—'}
+                  {rzpConfig.oauthExpiresAt && (
+                    <>{' · '}Access token expires {fmtDt(rzpConfig.oauthExpiresAt)}</>
+                  )}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-0.5 text-xs text-ink/50">
+                Connect your hotel's own Razorpay account to receive customer payments directly.
+                Payments flow directly to the hotel — no platform wallet.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {isConnected ? (
+            <>
+              <button
+                onClick={handleConnect}
+                disabled={connecting}
+                title="Start a new OAuth authorization to refresh your connection"
+                className="flex items-center gap-1.5 rounded-lg border border-brand/40 px-3 py-1.5 text-xs font-medium text-brand hover:bg-brand/5 disabled:opacity-50"
+              >
+                <RefreshCw size={12} />{connecting ? ' Redirecting…' : ' Reconnect'}
+              </button>
+              <button
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-900/20"
+              >
+                <Unlink size={12} />{disconnecting ? ' Disconnecting…' : ' Disconnect'}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleConnect}
+              disabled={connecting}
+              className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
+            >
+              <ExternalLink size={12} />{connecting ? ' Redirecting…' : ' Connect Razorpay'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {accessTokenWarning && !refreshWarning && (
+        <div className="mt-3 flex items-center gap-2 rounded-lg bg-yellow-50 px-3 py-2 text-xs text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400">
+          <AlertCircle size={13} />
+          Access token expires {rzpConfig?.oauthExpiresAt ? fmtDt(rzpConfig.oauthExpiresAt) : 'soon'}.
+          It will auto-refresh on the next payment — or click Reconnect to rotate it now.
+        </div>
+      )}
+      {refreshWarning && (
+        <div className="mt-3 flex items-center gap-2 rounded-lg bg-orange-50 px-3 py-2 text-xs text-orange-700 dark:bg-orange-900/20 dark:text-orange-400">
+          <AlertCircle size={13} />
+          Refresh token expires {rzpConfig?.oauthRefreshExpiresAt ? fmtDt(rzpConfig.oauthRefreshExpiresAt) : 'soon'}.
+          Click <strong>Reconnect</strong> before that date — once it expires, OAuth access is permanently lost until you reconnect manually.
+        </div>
+      )}
+      {err && <div className="mt-3"><Err msg={err} /></div>}
     </div>
   );
 }
@@ -266,7 +398,8 @@ function GatewaysTab() {
   const [modal,   setModal]   = useState<'add' | GatewayConfig | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [testMsg, setTestMsg] = useState<Record<string, { ok: boolean; msg: string }>>({});
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleting,   setDeleting]   = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true); setErr('');
@@ -276,6 +409,19 @@ function GatewaysTab() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Handle OAuth redirect callback (?razorpay_connected=1 or ?razorpay_error=...)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('razorpay_connected') === '1') {
+      setSuccessMsg('Razorpay account connected successfully.');
+      window.history.replaceState({}, '', window.location.pathname);
+      setTimeout(() => setSuccessMsg(''), 6000);
+    } else if (params.get('razorpay_error')) {
+      setErr('Razorpay connection failed: ' + params.get('razorpay_error'));
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   async function handleSave(form: GWForm) {
     if (modal === 'add') {
@@ -315,6 +461,14 @@ function GatewaysTab() {
 
   return (
     <div className="space-y-4">
+      <RazorpayOAuthBanner rzpConfig={configs.find(c => c.gatewayType === 'razorpay')} onRefresh={load} />
+
+      {successMsg && (
+        <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-400">
+          <CheckCircle size={16} /> {successMsg}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <p className="text-sm text-ink/60">Configure payment gateways. Only one can be active at a time.</p>
         <button onClick={() => setModal('add')} className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white">
@@ -340,10 +494,11 @@ function GatewaysTab() {
                   <CreditCard size={16} />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-ink">{c.displayName}</span>
                     <Badge text={c.gatewayType} />
                     <Badge text={c.environment} color={c.environment === 'live' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800'} />
+                    {c.isOAuthConnected && <Badge text="OAuth" color="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" />}
                     {!c.isIntegrated && <Badge text="SDK pending" color="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400" />}
                   </div>
                   {c.merchantId && <p className="mt-0.5 text-xs text-ink/50">Merchant: {c.merchantId}</p>}
@@ -530,17 +685,21 @@ function TransactionsTab() {
 // ── Tab: Refunds ──────────────────────────────────────────────────────────────
 
 function RefundsTab() {
-  const [data,    setData]    = useState<PaymentRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err,     setErr]     = useState('');
-  const [from,    setFrom]    = useState(daysAgo(30));
-  const [to,      setTo]      = useState(today());
+  const [data,       setData]       = useState<PaymentRecord[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading,    setLoading]    = useState(true);
+  const [err,        setErr]        = useState('');
+  const [from,       setFrom]       = useState(daysAgo(30));
+  const [to,         setTo]         = useState(today());
 
   const load = useCallback(async () => {
     setLoading(true); setErr('');
     try {
-      const res = await fetchPayments({ from, to, status: 'refunded', limit: 200 });
-      const partial = await fetchPayments({ from, to, status: 'partial_refunded', limit: 200 });
+      const [res, partial] = await Promise.all([
+        fetchPayments({ from, to, status: 'refunded',         limit: 2000 }),
+        fetchPayments({ from, to, status: 'partial_refunded', limit: 2000 }),
+      ]);
+      setTotalCount(res.total + partial.total);
       setData([...res.payments, ...partial.payments].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
@@ -573,10 +732,13 @@ function RefundsTab() {
       {!loading && (
         <>
           <div className="grid grid-cols-3 gap-4">
-            <KPI label="Total Refunds" value={String(data.length)} />
+            <KPI label="Total Refunds" value={String(totalCount)} />
             <KPI label="Amount Refunded" value={fmtRs(data.reduce((s, p) => s + p.refundedAmount, 0))} />
             <KPI label="Partial Refunds" value={String(data.filter(p => p.refundStatus === 'partial').length)} />
           </div>
+          {totalCount > data.length && (
+            <p className="text-xs text-amber-600">Showing {data.length} of {totalCount} refund records. Amount shown reflects fetched records only.</p>
+          )}
 
           <div className="overflow-x-auto rounded-xl border border-border">
             <table className="w-full text-sm">

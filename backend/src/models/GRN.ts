@@ -14,6 +14,7 @@ export interface IGRNItem {
   damagedQty:        number;
   rejectedQty:       number;
   pendingQty:        number;
+  returnedQty?:      number;
   unit:              string;
   purchasePrice:     number;
   batchNumber?:      string;
@@ -24,21 +25,22 @@ export interface IGRNItem {
 }
 
 export interface IGRN extends Document {
-  hotelId:        mongoose.Types.ObjectId;
-  grnNumber:      string;
-  poId:           mongoose.Types.ObjectId;
-  poNumber:       string;
-  vendorId:       mongoose.Types.ObjectId;
-  vendorSnapshot: { businessName: string; vendorCode: string; mobile: string; gstNumber: string };
-  receiveDate:    Date;
-  status:         GRNStatus;
-  items:          IGRNItem[];
-  notes:          string;
-  receivedBy:     string;
-  cancelReason:   string;
-  isDeleted:      boolean;
-  createdAt:      Date;
-  updatedAt:      Date;
+  hotelId:         mongoose.Types.ObjectId;
+  grnNumber:       string;
+  poId:            mongoose.Types.ObjectId;
+  poNumber:        string;
+  vendorId:        mongoose.Types.ObjectId;
+  vendorSnapshot:  { businessName: string; vendorCode: string; mobile: string; gstNumber: string };
+  receiveDate:     Date;
+  status:          GRNStatus;
+  items:           IGRNItem[];
+  notes:           string;
+  receivedBy:      string;
+  cancelReason:    string;
+  isDeleted:       boolean;
+  idempotencyKey?: string;
+  createdAt:       Date;
+  updatedAt:       Date;
 }
 
 const GRNItemSchema = new Schema<IGRNItem>(
@@ -54,6 +56,7 @@ const GRNItemSchema = new Schema<IGRNItem>(
     damagedQty:       { type: Number, default: 0, min: 0 },
     rejectedQty:      { type: Number, default: 0, min: 0 },
     pendingQty:       { type: Number, default: 0, min: 0 },
+    returnedQty:      { type: Number, default: 0, min: 0 },
     unit:             { type: String, default: 'pcs', trim: true },
     purchasePrice:    { type: Number, default: 0, min: 0 },
     batchNumber:      { type: String, default: '', trim: true },
@@ -81,14 +84,16 @@ const GRNSchema = new Schema<IGRN>(
     receiveDate:  { type: Date, default: Date.now },
     status:       { type: String, enum: ['pending', 'partial', 'completed', 'cancelled'], default: 'pending' },
     items:        { type: [GRNItemSchema], default: [] },
-    notes:        { type: String, default: '', trim: true },
-    receivedBy:   { type: String, default: '' },
-    cancelReason: { type: String, default: '' },
-    isDeleted:    { type: Boolean, default: false },
+    notes:          { type: String, default: '', trim: true },
+    receivedBy:     { type: String, default: '' },
+    cancelReason:   { type: String, default: '' },
+    isDeleted:      { type: Boolean, default: false },
+    idempotencyKey: { type: String, default: null, trim: true },
   },
   { timestamps: true },
 );
 
+GRNSchema.index({ hotelId: 1, idempotencyKey: 1 }, { unique: true, sparse: true });
 GRNSchema.index({ hotelId: 1, isDeleted: 1, status: 1 });
 GRNSchema.index({ hotelId: 1, grnNumber: 1 }, { unique: true });
 GRNSchema.index({ hotelId: 1, poId: 1, isDeleted: 1 });

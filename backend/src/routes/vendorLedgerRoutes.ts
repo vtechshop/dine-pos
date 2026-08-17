@@ -204,35 +204,39 @@ router.post('/:vendorId/opening-balance', async (req: AuthRequest, res: Response
     const vendor = await Vendor.findOne({ _id: vendorId, hotelId, isDeleted: false });
     if (!vendor) return sendError(res, 404, 'Vendor not found');
 
-    const existing = await VendorLedgerEntry.findOne({
-      hotelId, vendorId: new mongoose.Types.ObjectId(vendorId), entryType: 'opening_balance',
-    });
-
-    const oldBalance = existing?.debit ?? 0;
+    const oldBalance = vendor.openingBalance;
     const diff       = amt - oldBalance;
 
-    if (existing) {
-      existing.debit          = amt;
-      existing.runningBalance = amt;
-      existing.description    = String(notes || 'Opening balance');
-      await existing.save();
-    } else {
-      await VendorLedgerEntry.create({
-        hotelId,
-        vendorId,
-        entryType:       'opening_balance',
-        referenceId:     null,
-        referenceNumber: '',
-        debit:           amt,
-        credit:          0,
-        runningBalance:  amt,
-        description:     String(notes || 'Opening balance'),
-      });
-    }
+    const session = await mongoose.startSession();
+    await session.withTransaction(async () => {
+      const existing = await VendorLedgerEntry.findOne({
+        hotelId, vendorId: new mongoose.Types.ObjectId(vendorId), entryType: 'opening_balance',
+      }).session(session);
 
-    vendor.openingBalance     = amt;
-    vendor.currentOutstanding = vendor.currentOutstanding + diff;
-    await vendor.save();
+      if (existing) {
+        existing.debit          = amt;
+        existing.runningBalance = amt;
+        existing.description    = String(notes || 'Opening balance');
+        await existing.save({ session });
+      } else {
+        await VendorLedgerEntry.create([{
+          hotelId,
+          vendorId,
+          entryType:       'opening_balance',
+          referenceId:     null,
+          referenceNumber: '',
+          debit:           amt,
+          credit:          0,
+          runningBalance:  amt,
+          description:     String(notes || 'Opening balance'),
+        }], { session });
+      }
+
+      vendor.openingBalance     = amt;
+      vendor.currentOutstanding = vendor.currentOutstanding + diff;
+      await vendor.save({ session });
+    });
+    await session.endSession();
 
     logAudit(req, 'vendor_ledger.opening_balance', 'vendor', vendorId, { amount: amt, oldBalance });
 

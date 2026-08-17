@@ -1071,8 +1071,8 @@ export const createCoupon = (data: Partial<Coupon>): Promise<{ coupon: Coupon }>
 export const validateCoupon = (code: string, orderTotal: number, customerId?: string): Promise<CouponValidation> =>
   fetchAPI('/coupons/validate', { method: 'POST', body: JSON.stringify({ code, orderTotal, customerId }) });
 
-export const deactivateCoupon = (id: string): Promise<{ success: boolean }> =>
-  fetchAPI(`/coupons/${id}`, { method: 'DELETE', body: JSON.stringify({}) });
+export const deactivateCoupon = (id: string): Promise<{ coupon: Coupon }> =>
+  fetchAPI(`/coupons/${id}`, { method: 'PATCH', body: JSON.stringify({ isActive: false }) });
 
 // ==================== GIFT VOUCHERS ====================
 

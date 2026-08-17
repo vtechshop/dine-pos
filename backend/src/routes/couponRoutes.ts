@@ -9,7 +9,7 @@
  *   PATCH /:id                    — update coupon (admin)
  *   DELETE /:id                   — soft delete (admin)
  *   POST /validate                — validate a coupon code for an order (cashier)
- *   POST /:id/deactivate          — toggle off without deleting (admin)
+ *   POST /:id/apply               — increment usageCount after payment (cashier)
  */
 
 import { Router, Response } from 'express';
@@ -19,6 +19,7 @@ import {
 } from '../middleware/auth';
 import { sendError } from '../utils/sendError';
 import Coupon from '../models/Coupon';
+import CouponRedemption from '../models/CouponRedemption';
 import { logAudit } from '../utils/audit';
 
 const router = Router();
@@ -262,6 +263,47 @@ router.post('/:id/apply', requireCashierOrAdmin, async (req: AuthRequest, res: R
     res.json({ success: true, usageCount: coupon.usageCount });
   } catch (err) {
     sendError(res, 500, 'Failed to apply coupon', err);
+  }
+});
+
+// ── GET /:id/redemptions — list CouponRedemption records for a coupon (admin) ─
+
+router.get('/:id/redemptions', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const coupon = await Coupon.findOne({
+      _id:       req.params.id,
+      hotelId:   new mongoose.Types.ObjectId(req.hotelId!),
+      isDeleted: false,
+    }).lean();
+    if (!coupon) { res.status(404).json({ message: 'Coupon not found' }); return; }
+
+    const { page = '1', limit = '20', status, customerId } = req.query as Record<string, string>;
+    const pageNum  = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+
+    const filter: Record<string, any> = {
+      hotelId:  new mongoose.Types.ObjectId(req.hotelId!),
+      couponId: new mongoose.Types.ObjectId(req.params.id),
+    };
+    if (status && ['redeemed', 'reversed'].includes(status)) filter.status = status;
+    if (customerId && mongoose.isValidObjectId(customerId)) {
+      filter.customerId = new mongoose.Types.ObjectId(customerId);
+    }
+
+    const [redemptions, total, activeCount, reversedCount] = await Promise.all([
+      CouponRedemption.find(filter)
+        .sort({ redeemedAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      CouponRedemption.countDocuments(filter),
+      CouponRedemption.countDocuments({ hotelId: filter.hotelId, couponId: filter.couponId, status: 'redeemed' }),
+      CouponRedemption.countDocuments({ hotelId: filter.hotelId, couponId: filter.couponId, status: 'reversed' }),
+    ]);
+
+    res.json({ redemptions, total, page: pageNum, limit: limitNum, activeCount, reversedCount });
+  } catch (err) {
+    sendError(res, 500, 'Failed to fetch redemptions', err);
   }
 });
 

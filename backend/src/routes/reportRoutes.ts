@@ -3,6 +3,13 @@ import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import Order from '../models/Order';
 import Settings from '../models/Settings';
+import GiftVoucher from '../models/GiftVoucher';
+import CouponRedemption from '../models/CouponRedemption';
+import PurchaseOrder from '../models/PurchaseOrder';
+import GRN from '../models/GRN';
+import VendorPayment from '../models/VendorPayment';
+import VendorReturn from '../models/VendorReturn';
+import Vendor from '../models/Vendor';
 import mongoose from 'mongoose';
 import { sendError } from '../utils/sendError';
 import { isValidDateParam } from '../utils/dateParam';
@@ -357,6 +364,152 @@ router.get('/modifiers', async (req: AuthRequest, res: Response) => {
   } catch (err) {
     logger.error('Modifier report error', { err });
     sendError(res, 500, 'Failed to generate modifier report', err);
+  }
+});
+
+// GET /api/reports/gift-vouchers?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Aggregates gift voucher transactions (issue / redeem / refund / topup / expire) in the date range
+// Plus a live outstanding snapshot (not date-filtered) for all active vouchers
+router.get('/gift-vouchers', async (req: AuthRequest, res: Response) => {
+  try {
+    const { from, to } = req.query as { from?: string; to?: string };
+    if (from && !isValidDateParam(from)) return res.status(400).json({ message: 'Invalid from date. Use YYYY-MM-DD.' });
+    if (to   && !isValidDateParam(to))   return res.status(400).json({ message: 'Invalid to date. Use YYYY-MM-DD.' });
+    const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
+
+    const fromStr  = from || thisMonthStartISTStr();
+    const toStr    = to   || nowISTDateStr();
+    const fromDate = istDay(fromStr, false);
+    const toDate   = istDay(toStr, true);
+
+    const [txAgg, outstandingAgg] = await Promise.all([
+      GiftVoucher.aggregate([
+        { $match: { hotelId, isDeleted: false } },
+        { $unwind: '$transactions' },
+        { $match: { 'transactions.createdAt': { $gte: fromDate, $lte: toDate } } },
+        { $group: { _id: '$transactions.type', count: { $sum: 1 }, amount: { $sum: '$transactions.amount' } } },
+      ]).option({ maxTimeMS: 30_000 }),
+      GiftVoucher.aggregate([
+        { $match: { hotelId, isDeleted: false, isActive: true, balance: { $gt: 0 } } },
+        { $group: { _id: null, balance: { $sum: '$balance' }, count: { $sum: 1 } } },
+      ]).option({ maxTimeMS: 10_000 }),
+    ]);
+
+    const m: Record<string, { count: number; amount: number }> = {};
+    for (const r of txAgg) m[String(r._id)] = { count: r.count, amount: r.amount };
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      from: fromStr,
+      to:   toStr,
+      issued:   { count: m.issue?.count  ?? 0, amount: +(m.issue?.amount  ?? 0).toFixed(2) },
+      redeemed: { count: m.redeem?.count ?? 0, amount: +(m.redeem?.amount ?? 0).toFixed(2) },
+      restored: {
+        count:  (m.refund?.count ?? 0) + (m.topup?.count ?? 0),
+        amount: +((m.refund?.amount ?? 0) + (m.topup?.amount ?? 0)).toFixed(2),
+      },
+      expired:     { count: m.expire?.count ?? 0, amount: +(m.expire?.amount ?? 0).toFixed(2) },
+      outstanding: { balance: +(outstandingAgg[0]?.balance ?? 0).toFixed(2), activeVouchers: outstandingAgg[0]?.count ?? 0 },
+    });
+  } catch (err) {
+    logger.error('Gift voucher report error', { err });
+    sendError(res, 500, 'Failed to generate gift voucher report', err);
+  }
+});
+
+// GET /api/reports/coupons?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Aggregates coupon redemptions in the date range, ranked by discount given
+router.get('/coupons', async (req: AuthRequest, res: Response) => {
+  try {
+    const { from, to } = req.query as { from?: string; to?: string };
+    if (from && !isValidDateParam(from)) return res.status(400).json({ message: 'Invalid from date. Use YYYY-MM-DD.' });
+    if (to   && !isValidDateParam(to))   return res.status(400).json({ message: 'Invalid to date. Use YYYY-MM-DD.' });
+    const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
+
+    const fromStr  = from || thisMonthStartISTStr();
+    const toStr    = to   || nowISTDateStr();
+    const fromDate = istDay(fromStr, false);
+    const toDate   = istDay(toStr, true);
+
+    const [rows, totalsAgg] = await Promise.all([
+      CouponRedemption.aggregate([
+        { $match: { hotelId, status: 'redeemed', redeemedAt: { $gte: fromDate, $lte: toDate } } },
+        { $group: { _id: '$couponCode', usageCount: { $sum: 1 }, totalDiscount: { $sum: '$discountAmount' } } },
+        { $sort: { totalDiscount: -1 } },
+        { $limit: 50 },
+      ]).option({ maxTimeMS: 30_000 }),
+      CouponRedemption.aggregate([
+        { $match: { hotelId, status: 'redeemed', redeemedAt: { $gte: fromDate, $lte: toDate } } },
+        { $group: { _id: null, totalUsage: { $sum: 1 }, totalDiscount: { $sum: '$discountAmount' }, uniqueCoupons: { $addToSet: '$couponId' } } },
+        { $project: { totalUsage: 1, totalDiscount: 1, uniqueCoupons: { $size: '$uniqueCoupons' } } },
+      ]).option({ maxTimeMS: 10_000 }),
+    ]);
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      from:          fromStr,
+      to:            toStr,
+      rows:          rows.map((r: any) => ({ couponCode: r._id, usageCount: r.usageCount, totalDiscount: +r.totalDiscount.toFixed(2) })),
+      totalUsage:    totalsAgg[0]?.totalUsage    ?? 0,
+      totalDiscount: +((totalsAgg[0]?.totalDiscount ?? 0).toFixed(2)),
+      uniqueCoupons: totalsAgg[0]?.uniqueCoupons ?? 0,
+    });
+  } catch (err) {
+    logger.error('Coupon report error', { err });
+    sendError(res, 500, 'Failed to generate coupon report', err);
+  }
+});
+
+// GET /api/reports/vendor-procurement?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Summary of POs, GRNs, vendor payments, returns, and current outstanding in date range
+router.get('/vendor-procurement', async (req: AuthRequest, res: Response) => {
+  try {
+    const { from, to } = req.query as { from?: string; to?: string };
+    if (from && !isValidDateParam(from)) return res.status(400).json({ message: 'Invalid from date. Use YYYY-MM-DD.' });
+    if (to   && !isValidDateParam(to))   return res.status(400).json({ message: 'Invalid to date. Use YYYY-MM-DD.' });
+    const hotelId = new mongoose.Types.ObjectId(req.hotelId!);
+
+    const fromStr  = from || thisMonthStartISTStr();
+    const toStr    = to   || nowISTDateStr();
+    const fromDate = istDay(fromStr, false);
+    const toDate   = istDay(toStr, true);
+
+    const [poAgg, grnAgg, payAgg, retAgg, outAgg] = await Promise.all([
+      PurchaseOrder.aggregate([
+        { $match: { hotelId, isDeleted: false, createdAt: { $gte: fromDate, $lte: toDate } } },
+        { $group: { _id: null, count: { $sum: 1 }, totalValue: { $sum: '$grandTotal' } } },
+      ]).option({ maxTimeMS: 15_000 }),
+      GRN.aggregate([
+        { $match: { hotelId, isDeleted: false, createdAt: { $gte: fromDate, $lte: toDate } } },
+        { $group: { _id: null, count: { $sum: 1 }, totalValue: { $sum: '$grandTotal' } } },
+      ]).option({ maxTimeMS: 15_000 }),
+      VendorPayment.aggregate([
+        { $match: { hotelId, isDeleted: false, paymentDate: { $gte: fromDate, $lte: toDate } } },
+        { $group: { _id: null, count: { $sum: 1 }, totalAmount: { $sum: '$amount' } } },
+      ]).option({ maxTimeMS: 15_000 }),
+      VendorReturn.aggregate([
+        { $match: { hotelId, isDeleted: false, status: 'completed', completedAt: { $gte: fromDate, $lte: toDate } } },
+        { $group: { _id: null, count: { $sum: 1 }, totalValue: { $sum: '$returnValue' } } },
+      ]).option({ maxTimeMS: 15_000 }),
+      Vendor.aggregate([
+        { $match: { hotelId, isDeleted: false, currentOutstanding: { $gt: 0 } } },
+        { $group: { _id: null, totalOutstanding: { $sum: '$currentOutstanding' }, vendorCount: { $sum: 1 } } },
+      ]).option({ maxTimeMS: 10_000 }),
+    ]);
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      from: fromStr,
+      to:   toStr,
+      purchaseOrders: { count: poAgg[0]?.count ?? 0, totalValue:  +((poAgg[0]?.totalValue  ?? 0).toFixed(2)) },
+      grns:           { count: grnAgg[0]?.count ?? 0, totalValue:  +((grnAgg[0]?.totalValue  ?? 0).toFixed(2)) },
+      vendorPayments: { count: payAgg[0]?.count ?? 0, totalAmount: +((payAgg[0]?.totalAmount ?? 0).toFixed(2)) },
+      vendorReturns:  { count: retAgg[0]?.count ?? 0, totalValue:  +((retAgg[0]?.totalValue  ?? 0).toFixed(2)) },
+      outstanding:    { totalOutstanding: +((outAgg[0]?.totalOutstanding ?? 0).toFixed(2)), vendorCount: outAgg[0]?.vendorCount ?? 0 },
+    });
+  } catch (err) {
+    logger.error('Vendor procurement report error', { err });
+    sendError(res, 500, 'Failed to generate vendor procurement report', err);
   }
 });
 

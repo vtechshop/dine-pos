@@ -94,6 +94,10 @@ export interface CreateOrderPayload {
   notes?: string;
   isParcel?: boolean;
   discountAmount?: number;
+  couponCode?: string;
+  giftVoucherCode?: string;
+  redeemedPoints?: number;
+  loyaltyDiscount?: number;
   paymentMethod?: 'cash' | 'upi' | 'card' | 'split';
   splitDetails?: { cash: number; upi: number; card: number };
   offlineId?: string;

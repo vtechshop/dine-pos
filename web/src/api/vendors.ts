@@ -4,23 +4,22 @@ import type { Vendor, VendorReport, PaymentTerms } from '../types';
 export type { Vendor, VendorReport, PaymentTerms };
 
 export interface VendorInput {
-  businessName:       string;
-  contactPerson?:     string;
-  mobile:             string;
-  alternateMobile?:   string;
-  email?:             string;
-  gstNumber?:         string;
-  pan?:               string;
-  address?:           string;
-  city?:              string;
-  state?:             string;
-  pincode?:           string;
-  paymentTerms?:      PaymentTerms;
-  creditLimit?:       number;
-  openingBalance?:    number;
-  currentOutstanding?: number;
-  notes?:             string;
-  isActive?:          boolean;
+  businessName:    string;
+  contactPerson?:  string;
+  mobile:          string;
+  alternateMobile?: string;
+  email?:          string;
+  gstNumber?:      string;
+  pan?:            string;
+  address?:        string;
+  city?:           string;
+  state?:          string;
+  pincode?:        string;
+  paymentTerms?:   PaymentTerms;
+  creditLimit?:    number;
+  openingBalance?: number;
+  notes?:          string;
+  isActive?:       boolean;
 }
 
 export interface VendorsResponse {

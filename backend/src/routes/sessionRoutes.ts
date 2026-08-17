@@ -16,6 +16,7 @@ import TableSession from '../models/TableSession';
 import Guest from '../models/Guest';
 import Table from '../models/Table';
 import Order from '../models/Order';
+import GiftVoucher from '../models/GiftVoucher';
 import Settings from '../models/Settings';
 import CustomerProfile from '../models/CustomerProfile';
 import guestRouter from './guestRoutes';
@@ -333,10 +334,11 @@ router.get('/:sessionId/bill', requireCashierOrAdmin, async (req: AuthRequest, r
 router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { sessionId } = req.params;
-    const { bulkBill, paymentMethod, splitDetails } = req.body as {
+    const { bulkBill, paymentMethod, splitDetails, giftVoucherCode } = req.body as {
       bulkBill?: boolean;
       paymentMethod?: string;
       splitDetails?: { cash?: number; upi?: number; card?: number };
+      giftVoucherCode?: string;
     };
 
     if (!mongoose.isValidObjectId(sessionId)) {
@@ -370,12 +372,38 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
 
       // Capture active guests before bulk-bill so we can update loyalty after
       const activeBeforeBill = guests.filter((g) => g.status === 'active');
+      const totalActiveAmount = activeBeforeBill.reduce((sum, g) => sum + g.totalAmount, 0);
+
+      // Voucher resolution for bulk bill (server-side — never trust client amount)
+      const rawSessionVoucherCode = giftVoucherCode
+        ? String(giftVoucherCode).trim().toUpperCase()
+        : '';
+      let sessionVoucherDoc: any = null;
+      let sessionVoucherAmount   = 0;
+      if (rawSessionVoucherCode) {
+        const vNow = new Date();
+        sessionVoucherDoc = await GiftVoucher.findOne({
+          hotelId:     new mongoose.Types.ObjectId(req.hotelId!),
+          voucherCode: rawSessionVoucherCode,
+          isActive:    true,
+          isDeleted:   false,
+          $or: [{ expiresAt: null }, { expiresAt: { $gte: vNow } }],
+          balance:     { $gt: 0 },
+        }).select('_id voucherCode balance').lean();
+        if (!sessionVoucherDoc) {
+          res.status(400).json({ message: 'Gift voucher not found, expired, or inactive' });
+          return;
+        }
+        sessionVoucherAmount = Math.round(
+          Math.min(sessionVoucherDoc.balance, totalActiveAmount) * 100,
+        ) / 100;
+      }
 
       if (paymentMethod === 'split' && splitDetails) {
-        const totalActiveAmount = activeBeforeBill.reduce((sum, g) => sum + g.totalAmount, 0);
+        const payableTotal = +(totalActiveAmount - sessionVoucherAmount).toFixed(2);
         const splitSum = (splitDetails.cash ?? 0) + (splitDetails.upi ?? 0) + (splitDetails.card ?? 0);
-        if (Math.abs(splitSum - totalActiveAmount) > 0.01) {
-          res.status(400).json({ message: `Split amounts (₹${splitSum.toFixed(2)}) must equal table total (₹${totalActiveAmount.toFixed(2)})` });
+        if (Math.abs(splitSum - payableTotal) > 0.01) {
+          res.status(400).json({ message: `Split amounts (₹${splitSum.toFixed(2)}) must equal table total (₹${payableTotal.toFixed(2)}) after discounts` });
           return;
         }
       }
@@ -401,25 +429,63 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
         }
       );
 
-      // [Phase 4] fire-and-forget lifetimeSpend; [Phase 6] fire-and-forget earn points
-      for (const g of activeBeforeBill) {
-        if (g.customerId) {
-          CustomerProfile.findByIdAndUpdate(g.customerId, {
-            $inc: { lifetimeSpend: g.totalAmount },
-            $set: { lastVisitAt: now },
-          }).catch(() => {});
+      // Gift voucher deduction for bulk bill (best-effort, logged on failure)
+      if (sessionVoucherDoc && sessionVoucherAmount > 0) {
+        try {
+          const vNow = new Date();
+          await GiftVoucher.findOneAndUpdate(
+            {
+              _id:       sessionVoucherDoc._id,
+              hotelId:   new mongoose.Types.ObjectId(req.hotelId!),
+              isActive:  true,
+              isDeleted: false,
+              $or:       [{ expiresAt: null }, { expiresAt: { $gte: vNow } }],
+              balance:   { $gte: sessionVoucherAmount },
+            },
+            [
+              { $set: { balance: { $subtract: ['$balance', sessionVoucherAmount] } } },
+              { $set: {
+                  isActive:     { $cond: { if: { $lte: ['$balance', 0] }, then: false, else: '$isActive' } },
+                  transactions: { $concatArrays: [{ $ifNull: ['$transactions', []] }, [{ type: 'redeem', amount: sessionVoucherAmount, balanceAfter: { $ifNull: ['$balance', 0] }, orderId: null, remarks: `Bulk bill: Session ${sessionId}`, createdBy: `cashier:${req.hotelId}`, createdAt: vNow }]] },
+              }},
+            ] as any,
+            { new: true },
+          );
+        } catch (vErr: any) {
+          logger.warn('[gift-voucher] deduction error at bulk bill', {
+            hotelId: req.hotelId, sessionId, error: vErr?.message,
+          });
         }
       }
 
-      // [Phase 6] Earn loyalty points for every billed guest with a CustomerProfile
+      // [Phase 4+6] Merged fire-and-forget: lifetimeSpend (all guests, atomic guard)
+      //             + loyalty earn (eligible guests, existing loyaltyEarnedAt guard).
       ;(async () => {
         try {
+          // lifetimeSpend — idempotent via Guest.lifetimeSpendAt; runs regardless of loyalty status
+          await Promise.allSettled(
+            activeBeforeBill
+              .filter(g => !!g.customerId)
+              .map(async g => {
+                const claimed = await Guest.findOneAndUpdate(
+                  { _id: g._id, hotelId: req.hotelId!, lifetimeSpendAt: null },
+                  { $set: { lifetimeSpendAt: new Date() } },
+                );
+                if (!claimed) return;
+                await CustomerProfile.findByIdAndUpdate(g.customerId, {
+                  $inc: { lifetimeSpend: g.totalAmount },
+                  $set: { lastVisitAt: now },
+                });
+              }),
+          );
+
+          // Loyalty earn — idempotent via Guest.loyaltyEarnedAt
           const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
           if (loyaltyCfg.enabled && loyaltyCfg.pointsPerHundredRupees > 0) {
             await Promise.allSettled(
               activeBeforeBill
-                .filter((g) => g.customerId)
-                .map((g) => (async () => {
+                .filter(g => g.customerId && !g.loyaltyEarnedAt)
+                .map(g => (async () => {
                   let earnBase = g.totalAmount;
                   if (loyaltyCfg.calculationBase === 'before_gst') {
                     const [sub] = await Order.aggregate([
@@ -437,8 +503,12 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
                       loyaltyCfg,
                       { sessionId: String(session._id), guestId: String(g._id), createdBy: 'system:bulkBill' },
                     );
+                    await Guest.updateOne(
+                      { _id: g._id, loyaltyEarnedAt: null },
+                      { $set: { loyaltyEarnedAt: new Date() } },
+                    );
                   }
-                })())
+                })()),
             );
           }
         } catch { /* non-critical */ }

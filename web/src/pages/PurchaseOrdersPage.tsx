@@ -11,7 +11,7 @@ import {
   fetchPOReport,
   type PurchaseOrder, type POInput, type POReport,
 } from '../api/purchaseOrders';
-import { fetchVendors, type Vendor } from '../api/vendors';
+import { fetchVendors, fetchVendor, type Vendor } from '../api/vendors';
 import { fetchProducts } from '../api/products';
 import type { Product, POItem, POStatus } from '../types';
 import { useSettings } from '../context/SettingsContext';
@@ -276,8 +276,8 @@ function PODrawer({
         tax:      editing.tax,
         shipping: editing.shipping,
       });
-      setSelectedVendor({ _id: editing.vendorId, ...editing.vendorSnapshot } as any);
       setVendorSearch(editing.vendorSnapshot.businessName);
+      fetchVendor(editing.vendorId).then(setSelectedVendor).catch(() => {});
     } else {
       setForm(blankForm());
       setSelectedVendor(null);

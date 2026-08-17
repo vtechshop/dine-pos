@@ -324,11 +324,13 @@ Thank you for dining with us! 🍽️`;
     const manualDiscount    = discountVal > 0
       ? (discountType === 'percent' ? (preTax * discountVal) / 100 : Math.min(discountVal, preTax))
       : 0;
-    const couponDiscount    = appliedCoupon?.discountAmount ?? 0;
     const voucherRedeem     = appliedVoucher?.redeemAmount  ?? 0;
-    const walletDeduct      = useWallet && walletInfo ? Math.min(walletInfo.walletBalance, Math.max(0, preTax - manualDiscount - couponDiscount - voucherRedeem)) : 0;
-    const discountAmount    = manualDiscount + couponDiscount + voucherRedeem + walletDeduct;
-    const finalGrandTotal   = Math.max(0, preTax - discountAmount);
+    const walletDeduct      = useWallet && walletInfo ? Math.min(walletInfo.walletBalance, Math.max(0, preTax - manualDiscount - voucherRedeem)) : 0;
+    // coupon discount intentionally excluded — server applies from couponCode
+    // voucherRedeem excluded from payload — server applies from giftVoucherCode
+    const payloadDiscountAmount = manualDiscount + walletDeduct;
+    const discountAmount    = manualDiscount + voucherRedeem + walletDeduct;
+    const finalGrandTotal   = Math.max(0, preTax - discountAmount - (appliedCoupon?.discountAmount ?? 0));
     applyDiscount();
 
     const isOrderParcel = ['swiggy', 'zomato', 'takeaway'].includes(orderSource);
@@ -356,7 +358,9 @@ Thank you for dining with us! 🍽️`;
       subtotal:      cart.subtotal,
       taxTotal:      cart.taxTotal,
       grandTotal:    finalGrandTotal,
-      discountAmount,
+      discountAmount: payloadDiscountAmount,
+      couponCode:    appliedCoupon?.code || undefined,
+      giftVoucherCode: appliedVoucher?.voucherCode || undefined,
       status:        'pending',
       tableNumber:   getTableNumber(),
       customerName:  cart.customerName,
@@ -367,9 +371,8 @@ Thank you for dining with us! 🍽️`;
       offlineId,
     };
     setPendingOrder(orderData as Record<string, unknown>);
-    const promos: { couponId?: string; giftVoucherCode?: string; giftVoucherAmount?: number; walletCustomerId?: string; walletAmount?: number } = {};
-    if (appliedCoupon?.couponId) promos.couponId = appliedCoupon.couponId;
-    if (appliedVoucher && appliedVoucher.redeemAmount > 0) { promos.giftVoucherCode = appliedVoucher.voucherCode; promos.giftVoucherAmount = appliedVoucher.redeemAmount; }
+    const promos: { walletCustomerId?: string; walletAmount?: number } = {};
+    // giftVoucherCode now sent directly in orderData — server-authoritative; removed from promos
     if (walletDeduct > 0 && walletInfo) { promos.walletCustomerId = walletInfo.customerId; promos.walletAmount = walletDeduct; }
     navigation.navigate('PaymentScreen', { mode: 'billing', grandTotal: finalGrandTotal, promos: Object.keys(promos).length ? promos : undefined });
   };
@@ -409,6 +412,7 @@ Thank you for dining with us! 🍽️`;
       taxTotal:      cart.taxTotal,
       grandTotal:    cart.grandTotal,
       discountAmount:cart.discountAmount,
+      couponCode:    appliedCoupon?.code || undefined,
       paymentMethod: 'razorpay' as const,
       status:        'pending' as const,
       tableNumber:   getTableNumber(),
@@ -437,8 +441,8 @@ Thank you for dining with us! 🍽️`;
       // 1. Create the order
       const order = await api.createOrder(orderData);
 
-      // 2. Create Razorpay order on backend (links payment to this order)
-      const intent = await api.createPaymentIntent(order._id, cart.grandTotal, {
+      // 2. Create Razorpay order on backend — use server's grandTotal (includes coupon discount)
+      const intent = await api.createPaymentIntent(order._id, order.grandTotal, {
         currency:     'INR',
         customerName: cart.customerName || undefined,
         description:  `Order ${order.orderNumber}`,
@@ -452,7 +456,7 @@ Thank you for dining with us! 🍽️`;
 
       const keyId         = intent.gatewayData?.metadata?.keyId;
       const razorpayOrder = intent.gatewayData?.metadata?.orderId ?? intent.gatewayData?.gatewayOrderId;
-      const amountPaise   = intent.gatewayData?.metadata?.amount ?? Math.round(cart.grandTotal * 100);
+      const amountPaise   = intent.gatewayData?.metadata?.amount ?? Math.round(order.grandTotal * 100);
 
       if (!keyId || !razorpayOrder) {
         showAlert('Payment Error', 'Gateway returned invalid checkout parameters.');
@@ -484,7 +488,7 @@ Thank you for dining with us! 🍽️`;
 
       // 5. Success
       const tokenNum = order.orderNumber.split('-').pop() || '1';
-      setShowSuccess({ orderNumber: order.orderNumber, token: tokenNum, ...cartSnapshot, grandTotal: order.grandTotal, kot: { orderNumber: order.orderNumber, ...kotSnapshot } });
+      setShowSuccess({ orderNumber: order.orderNumber, token: tokenNum, ...cartSnapshot, discountAmount: (order.discountAmount || 0) + (order.couponDiscount || 0), grandTotal: order.grandTotal, kot: { orderNumber: order.orderNumber, ...kotSnapshot } });
       Vibration.vibrate([0, 100, 80, 200]);
       clearCart();
       setDiscountInput('');

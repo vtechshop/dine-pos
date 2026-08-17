@@ -95,7 +95,7 @@ export const fetchOnlineOrders = (params?: {
   if (params?.platform) q.set('platform', params.platform);
   if (params?.status)   q.set('status',   params.status);
   if (params?.date)     q.set('date',     params.date);
-  return apiFetch<OnlineOrder[]>(`/aggregator/orders?${q}`);
+  return apiFetch<{ orders: OnlineOrder[]; total: number; page: number; pages: number }>(`/aggregator/orders?${q}`);
 };
 
 export const acceptDeliveryOrder = (orderId: string, prepMin?: number) =>

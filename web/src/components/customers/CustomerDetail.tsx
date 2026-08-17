@@ -74,6 +74,22 @@ function TagChip({ tag, onRemove }: { tag: string; onRemove?: () => void }) {
   );
 }
 
+// ── Tier helper ───────────────────────────────────────────────────────────────
+
+const TIER_COLORS: Record<string, string> = {
+  Platinum: 'bg-slate-100 text-slate-700 border-slate-300',
+  Gold:     'bg-amber-50 text-amber-700 border-amber-200',
+  Silver:   'bg-gray-100 text-gray-600 border-gray-200',
+  Bronze:   'bg-orange-50 text-orange-700 border-orange-200',
+};
+
+function getTier(lifetimeSpend: number): string {
+  if (lifetimeSpend >= 30000) return 'Platinum';
+  if (lifetimeSpend >= 15000) return 'Gold';
+  if (lifetimeSpend >= 5000)  return 'Silver';
+  return 'Bronze';
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -81,10 +97,11 @@ interface Props {
   rewardName: string;
   isAdmin: boolean;
   currencySymbol: string;
+  expiryDays?: number;
   onAdjusted: () => void;
 }
 
-export function CustomerDetail({ customerId, rewardName, isAdmin, currencySymbol, onAdjusted }: Props) {
+export function CustomerDetail({ customerId, rewardName, isAdmin, currencySymbol, expiryDays = 0, onAdjusted }: Props) {
   const [customer, setCustomer]     = useState<CustomerProfile | null>(null);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
@@ -378,6 +395,14 @@ export function CustomerDetail({ customerId, rewardName, isAdmin, currencySymbol
           <div className="flex items-center gap-2">
             <Star size={13} className="text-brand" />
             <span className="text-sm font-semibold text-ink">{rewardName} Balance</span>
+            {(() => {
+              const tier = getTier(customer.lifetimeSpend ?? 0);
+              return (
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${TIER_COLORS[tier]}`}>
+                  {tier}
+                </span>
+              );
+            })()}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xl font-bold tabular-nums text-brand">
@@ -388,6 +413,11 @@ export function CustomerDetail({ customerId, rewardName, isAdmin, currencySymbol
         </div>
 
         <p className="text-[10px] text-ink/30">Member since {formatDate(customer.firstVisitAt)}</p>
+        {expiryDays > 0 && customer.loyaltyBalance > 0 && (
+          <p className="mt-1 text-[10px] text-amber-600/70">
+            Points expire after {expiryDays} days of inactivity
+          </p>
+        )}
 
         {isAdmin && (
           <div className="mt-3">

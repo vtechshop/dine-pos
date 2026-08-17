@@ -74,8 +74,11 @@ export class RazorpayGateway implements PaymentGateway {
   async verifyPayment(params: VerifyPaymentParams): Promise<VerifyPaymentResult> {
     const { gatewayTransactionId, gatewayOrderId, signature } = params;
 
-    // Signature check: HMAC-SHA256(order_id + "|" + payment_id, key_secret)
-    if (signature && gatewayOrderId && gatewayTransactionId) {
+    // Standard configs: verify Razorpay signature locally using key_secret.
+    // OAuth configs: key_secret is not available — skip local HMAC.
+    // Security is maintained by the authenticated live payments.fetch() below,
+    // which uses the OAuth access_token and returns Razorpay's live payment state.
+    if (!this.config.oauthAccessToken && signature && gatewayOrderId && gatewayTransactionId) {
       const expected = crypto
         .createHmac('sha256', this.config.apiSecret)
         .update(`${gatewayOrderId}|${gatewayTransactionId}`)
@@ -93,6 +96,16 @@ export class RazorpayGateway implements PaymentGateway {
     // Fetch live payment status from Razorpay
     const payment = await this.client.payments.fetch(gatewayTransactionId);
     const raw     = payment as unknown as Record<string, unknown>;
+
+    // Cross-check order_id: ties the payment to the expected order.
+    // Primary integrity check for OAuth configs (where local HMAC is skipped).
+    if (gatewayOrderId && raw.order_id && raw.order_id !== gatewayOrderId) {
+      return {
+        success:         false,
+        status:          'failed',
+        gatewayResponse: { error: 'Order ID mismatch — payment does not belong to expected order', payment_id: gatewayTransactionId },
+      };
+    }
 
     return {
       success:         payment.status === 'captured',

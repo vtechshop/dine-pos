@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Trash2, ToggleLeft, ToggleRight, Edit2, X, Tag } from 'lucide-react';
+import { Plus, Search, Trash2, ToggleLeft, ToggleRight, Edit2, X, Tag, List } from 'lucide-react';
 import {
   fetchCoupons, createCoupon, updateCoupon, deleteCoupon,
-  deactivateCoupon, activateCoupon,
-  type Coupon, type CouponInput,
+  deactivateCoupon, activateCoupon, fetchCouponRedemptions,
+  type Coupon, type CouponInput, type CouponRedemption, type RedemptionsResponse,
 } from '../api/coupons';
 
 const BLANK: CouponInput = {
@@ -41,6 +41,11 @@ export function CouponsPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<Coupon | null>(null);
   const [deleting, setDeleting]         = useState(false);
+
+  const [redemptionsTarget, setRedemptionsTarget]     = useState<Coupon | null>(null);
+  const [redemptionsData, setRedemptionsData]         = useState<RedemptionsResponse | null>(null);
+  const [redemptionsPage, setRedemptionsPage]         = useState(1);
+  const [redemptionsLoading, setRedemptionsLoading]   = useState(false);
 
   const LIMIT = 25;
 
@@ -137,6 +142,20 @@ export function CouponsPage() {
       alert((e as Error).message);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const showRedemptions = async (coupon: Coupon, p = 1) => {
+    setRedemptionsTarget(coupon);
+    setRedemptionsPage(p);
+    setRedemptionsLoading(true);
+    try {
+      const res = await fetchCouponRedemptions(coupon._id, { page: p, limit: 20 });
+      setRedemptionsData(res);
+    } catch {
+      setRedemptionsData(null);
+    } finally {
+      setRedemptionsLoading(false);
     }
   };
 
@@ -251,6 +270,13 @@ export function CouponsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => showRedemptions(c)}
+                          title="View Redemptions"
+                          className="rounded-lg p-1.5 text-ink/40 hover:bg-ink/5 hover:text-ink"
+                        >
+                          <List size={14} />
+                        </button>
                         <button
                           onClick={() => openEdit(c)}
                           title="Edit"
@@ -437,6 +463,117 @@ export function CouponsPage() {
                 {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Coupon'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Redemptions Modal */}
+      {redemptionsTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setRedemptionsTarget(null)} />
+          <div className="relative z-10 flex w-full max-w-2xl flex-col rounded-xl bg-canvas shadow-2xl" style={{ maxHeight: '90vh' }}>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <div>
+                <h2 className="text-sm font-bold text-ink">
+                  Redemptions — <span className="font-mono">{redemptionsTarget.code}</span>
+                </h2>
+                <p className="mt-0.5 text-xs text-ink/50">
+                  {redemptionsData ? `${redemptionsData.total} total record${redemptionsData.total !== 1 ? 's' : ''}` : ''}
+                </p>
+              </div>
+              <button onClick={() => setRedemptionsTarget(null)} className="rounded-lg p-1.5 text-ink/40 hover:bg-ink/5">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-px border-b border-border bg-border shrink-0">
+              <div className="bg-canvas px-4 py-3 text-center">
+                <p className="text-xs text-ink/50">Used / Limit</p>
+                <p className="mt-0.5 text-sm font-bold text-ink">
+                  {redemptionsTarget.usageCount}{redemptionsTarget.usageLimit ? ` / ${redemptionsTarget.usageLimit}` : ''}
+                </p>
+              </div>
+              <div className="bg-canvas px-4 py-3 text-center">
+                <p className="text-xs text-ink/50">Active / Reversed</p>
+                <p className="mt-0.5 text-sm font-bold text-ink">
+                  {redemptionsData ? `${redemptionsData.activeCount} / ${redemptionsData.reversedCount}` : '—'}
+                </p>
+              </div>
+              <div className="bg-canvas px-4 py-3 text-center">
+                <p className="text-xs text-ink/50">Per-Customer Limit</p>
+                <p className="mt-0.5 text-sm font-bold text-ink">
+                  {redemptionsTarget.perCustomerLimit || 'Unlimited'}
+                </p>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 overflow-y-auto">
+              {redemptionsLoading ? (
+                <div className="flex h-32 items-center justify-center text-sm text-ink/40">Loading…</div>
+              ) : !redemptionsData || redemptionsData.redemptions.length === 0 ? (
+                <div className="flex h-32 items-center justify-center text-sm text-ink/40">No redemptions yet.</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-mist text-left text-xs font-semibold uppercase tracking-wide text-ink/50">
+                      <th className="px-4 py-2">Date</th>
+                      <th className="px-4 py-2">Phone</th>
+                      <th className="px-4 py-2">Discount</th>
+                      <th className="px-4 py-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {redemptionsData.redemptions.map((r: CouponRedemption) => (
+                      <tr key={r._id} className="hover:bg-mist/50">
+                        <td className="px-4 py-2 text-ink/70">
+                          {new Date(r.redeemedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                        </td>
+                        <td className="px-4 py-2 font-mono text-ink/70">{r.phone || '—'}</td>
+                        <td className="px-4 py-2 text-ink">₹{r.discountAmount.toFixed(2)}</td>
+                        <td className="px-4 py-2">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            r.status === 'redeemed' ? 'bg-green-100 text-green-700' : 'bg-ink/5 text-ink/40'
+                          }`}>
+                            {r.status === 'redeemed' ? 'Active' : 'Reversed'}
+                          </span>
+                          {r.status === 'reversed' && r.reversedReason && (
+                            <span className="ml-1 text-xs text-ink/40">
+                              ({r.reversedReason.replace(/_/g, ' ')})
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Pagination */}
+            {redemptionsData && redemptionsData.total > 20 && (
+              <div className="shrink-0 border-t border-border flex items-center justify-between px-5 py-3">
+                <button
+                  disabled={redemptionsPage <= 1 || redemptionsLoading}
+                  onClick={() => showRedemptions(redemptionsTarget, redemptionsPage - 1)}
+                  className="rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs font-semibold text-ink disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-ink/60">
+                  Page {redemptionsPage} of {Math.ceil(redemptionsData.total / 20)}
+                </span>
+                <button
+                  disabled={redemptionsPage >= Math.ceil(redemptionsData.total / 20) || redemptionsLoading}
+                  onClick={() => showRedemptions(redemptionsTarget, redemptionsPage + 1)}
+                  className="rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs font-semibold text-ink disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

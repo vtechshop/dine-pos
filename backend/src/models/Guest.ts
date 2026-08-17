@@ -26,8 +26,13 @@ export interface IGuest extends Document {
   splitDetails: IGuestSplitDetails;
   paidAmount: number | null;
   billedAt: Date | null;
-  loyaltyPointsRedeemed: number;   // points redeemed at billing (0 = none); Phase 6
-  loyaltyDiscountAmount: number;   // rupee value of redeemed points; Phase 6
+  loyaltyPointsRedeemed: number;   // points redeemed at billing (0 = none)
+  loyaltyDiscountAmount: number;   // rupee value of redeemed points
+  loyaltyEarnedAt: Date | null;    // set after earn succeeds; idempotency guard
+  lifetimeSpendAt: Date | null;    // set after lifetimeSpend is incremented; idempotency guard
+  giftVoucherId:    mongoose.Types.ObjectId | null;
+  giftVoucherCode:  string;
+  giftVoucherAmount: number;
   notes: string;
   createdAt: Date;
   updatedAt: Date;
@@ -60,6 +65,11 @@ const GuestSchema: Schema = new Schema(
     billedAt:               { type: Date, default: null },
     loyaltyPointsRedeemed:  { type: Number, default: 0, min: 0 },
     loyaltyDiscountAmount:  { type: Number, default: 0, min: 0 },
+    loyaltyEarnedAt:        { type: Date, default: null },
+    lifetimeSpendAt:        { type: Date, default: null },
+    giftVoucherId:          { type: Schema.Types.ObjectId, ref: 'GiftVoucher', default: null },
+    giftVoucherCode:        { type: String, default: '' },
+    giftVoucherAmount:      { type: Number, default: 0, min: 0 },
     notes:                  { type: String, default: '', maxlength: 500 },
   },
   { timestamps: true }

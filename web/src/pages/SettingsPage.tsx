@@ -712,6 +712,8 @@ const LOYALTY_DEFAULTS: LoyaltySettings = {
   expiryDays: 365,
   roundingRule: 'floor',
   calculationBase: 'before_gst',
+  maxEarnPointsPerBill: 0,
+  tierThresholds: { silver: 5000, gold: 15000, platinum: 30000 },
 };
 
 function LoyaltySection({ settings, refresh }: { settings: Settings; refresh: () => Promise<void> }) {
@@ -762,6 +764,23 @@ function LoyaltySection({ settings, refresh }: { settings: Settings; refresh: ()
               <option value="after_gst">Bill after GST</option>
             </select>
           </F>
+          <F label="Max Earn Points Per Bill (0 = unlimited)">
+            <input type="number" min={0} value={d.maxEarnPointsPerBill ?? 0} onChange={e => setD(p => ({ ...p, maxEarnPointsPerBill: Number(e.target.value) }))} className={inp} />
+          </F>
+        </div>
+        <div className="mt-4">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ink/40">Tier Thresholds (Lifetime Spend in ₹)</p>
+          <div className="grid grid-cols-3 gap-4">
+            <F label="Silver tier (₹)">
+              <input type="number" min={0} value={d.tierThresholds?.silver ?? 5000} onChange={e => setD(p => ({ ...p, tierThresholds: { ...p.tierThresholds, silver: Number(e.target.value) } }))} className={inp} />
+            </F>
+            <F label="Gold tier (₹)">
+              <input type="number" min={0} value={d.tierThresholds?.gold ?? 15000} onChange={e => setD(p => ({ ...p, tierThresholds: { ...p.tierThresholds, gold: Number(e.target.value) } }))} className={inp} />
+            </F>
+            <F label="Platinum tier (₹)">
+              <input type="number" min={0} value={d.tierThresholds?.platinum ?? 30000} onChange={e => setD(p => ({ ...p, tierThresholds: { ...p.tierThresholds, platinum: Number(e.target.value) } }))} className={inp} />
+            </F>
+          </div>
         </div>
         <SaveRow onSave={() => void save({ loyaltySettings: d })} saving={saving} msg={msg} />
       </SectionCard>

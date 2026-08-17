@@ -3,11 +3,18 @@ import mongoose from 'mongoose';
 import Payment from '../models/Payment';
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
 import Order from '../models/Order';
+import CustomerProfile from '../models/CustomerProfile';
+import Coupon from '../models/Coupon';
+import CouponRedemption from '../models/CouponRedemption';
+import GiftVoucher from '../models/GiftVoucher';
 import GatewayFactory from '../services/payment/GatewayFactory';
+import { ensureValidOAuthConfig } from '../services/payment/razorpayTokenRefresh';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import { sendError } from '../utils/sendError';
 import { logAudit } from '../utils/audit';
+import { logger } from '../utils/logger';
+import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, reverseEarnedPoints } from '../utils/loyaltyUtils';
 
 const router = Router();
 router.use(authMiddleware);
@@ -191,11 +198,21 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
     const order = await Order.findOne({ _id: orderId, hotelId: req.hotelId });
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    // P0-1: Prevent client-controlled over-payment — amount must not exceed order total
-    if (amount > order.grandTotal + 1) {
+    // P0-1: Prevent client-controlled under/over-payment — amount must be within ₹1 of order total
+    if (Math.abs(amount - order.grandTotal) > 1) {
       return res.status(400).json({
-        message: `Payment amount ₹${amount.toFixed(2)} exceeds order total ₹${order.grandTotal.toFixed(2)}`,
+        message: `Payment amount ₹${amount.toFixed(2)} does not match order total ₹${order.grandTotal.toFixed(2)}`,
       });
+    }
+
+    // Reject duplicate payment if the order already has a successful payment.
+    const existingSuccess = await Payment.findOne({
+      orderId: new mongoose.Types.ObjectId(orderId),
+      hotelId: req.hotelId,
+      status:  'success',
+    });
+    if (existingSuccess) {
+      return res.status(409).json({ message: 'Order already has a successful payment.' });
     }
 
     // Find active gateway
@@ -225,7 +242,10 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
 
     if (GatewayFactory.isRegistered(gatewayConfig.gatewayType)) {
       try {
-        const gateway = GatewayFactory.create(gatewayConfig);
+        const effectiveConfig = gatewayConfig.isOAuthConnected
+          ? await ensureValidOAuthConfig(gatewayConfig)
+          : gatewayConfig;
+        const gateway = GatewayFactory.create(effectiveConfig);
         const result = await gateway.createPayment({
           amount:                amountPaise,
           currency,
@@ -301,7 +321,10 @@ router.post('/verify', async (req: AuthRequest, res: Response) => {
     }
 
     try {
-      const gateway = GatewayFactory.create(gatewayConfig);
+      const effectiveConfig = gatewayConfig.isOAuthConnected
+        ? await ensureValidOAuthConfig(gatewayConfig)
+        : gatewayConfig;
+      const gateway = GatewayFactory.create(effectiveConfig);
       const result = await gateway.verifyPayment({
         gatewayTransactionId: gatewayTransactionId ?? payment.gatewayTransactionId,
         gatewayOrderId:       payment.gatewayOrderId,
@@ -313,6 +336,64 @@ router.post('/verify', async (req: AuthRequest, res: Response) => {
       payment.gatewayResponse = { ...payment.gatewayResponse, verify: result.gatewayResponse };
       if (gatewayTransactionId) payment.gatewayTransactionId = gatewayTransactionId;
       await payment.save();
+
+      // Loyalty earn — atomic claim prevents double-earn with concurrent webhook
+      if (result.status === 'success') {
+        ;(async () => {
+          try {
+            // Atomic claim: only the first caller (verify OR webhook) wins this update.
+            // findOneAndUpdate returns the OLD doc; null means loyaltyEarnedAt was already set.
+            const claimed = await Payment.findOneAndUpdate(
+              { _id: payment._id, hotelId: req.hotelId, loyaltyEarnedAt: null },
+              { $set: { loyaltyEarnedAt: new Date() } },
+            );
+            if (!claimed) return; // webhook already claimed the earn slot
+
+            const order = await Order.findOne({ _id: payment.orderId, hotelId: req.hotelId }).lean();
+            if (!order) return;
+            const customerPhone: string | undefined = (order as any).customerPhone;
+            if (!customerPhone) return;
+
+            const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+            if (!loyaltyCfg.enabled) return;
+
+            const profile = await CustomerProfile.findOne({
+              hotelId: new mongoose.Types.ObjectId(req.hotelId),
+              phone:   customerPhone,
+              status:  'active',
+              loyaltyOptOut: { $ne: true },
+            }).select('_id').lean();
+            if (!profile) return;
+
+            const billAmount = (order as any).grandTotal ?? ((payment.amount - payment.refundedAmount) / 100);
+            const pts = calculateEarnedPoints(billAmount, loyaltyCfg);
+            if (pts <= 0) return;
+
+            await earnPoints(
+              (profile as any)._id,
+              req.hotelId!,
+              pts,
+              loyaltyCfg,
+              {
+                orderId:   String(payment.orderId),
+                paymentId: String(payment._id),
+                createdBy: 'system:payment_verify',
+              },
+            );
+
+            // Stamp loyaltyEarnPoints (loyaltyEarnedAt already set by the atomic claim above)
+            await Payment.updateOne(
+              { _id: payment._id },
+              { $set: { loyaltyEarnPoints: pts } },
+            );
+          } catch (e) {
+            logger.warn('[loyalty] earn on payment verify failed', {
+              paymentId: String(payment._id),
+              err: String(e),
+            });
+          }
+        })();
+      }
 
       logAudit(req, 'payment_verified', 'Payment', String(payment._id), { status: result.status });
       return res.json({ verified: result.success, payment: { ...payment.toObject(), amount: +((payment.amount / 100).toFixed(2)) } });
@@ -374,7 +455,10 @@ router.post('/:id/refund', async (req: AuthRequest, res: Response) => {
 
     if (gatewayConfig && GatewayFactory.isRegistered(snapshot.gatewayType as Parameters<typeof GatewayFactory.isRegistered>[0])) {
       try {
-        const gateway = GatewayFactory.create(gatewayConfig);
+        const effectiveConfig = gatewayConfig.isOAuthConnected
+          ? await ensureValidOAuthConfig(gatewayConfig)
+          : gatewayConfig;
+        const gateway = GatewayFactory.create(effectiveConfig);
         const result  = await gateway.initiateRefund({ gatewayTransactionId: snapshot.gatewayTransactionId, amount: amountPaise, reason });
         gatewayRefundId = result.refundId;
         gatewayStatus   = result.status;
@@ -414,6 +498,147 @@ router.post('/:id/refund', async (req: AuthRequest, res: Response) => {
       // Extremely unlikely — lock was somehow broken; release and surface error
       await Payment.updateOne({ _id: locked._id }, { $set: { refundInProgress: false } }).catch(() => {});
       return res.status(500).json({ message: 'Refund commit failed. Check payment status and retry.' });
+    }
+
+    // Loyalty reversal — reverse earned points on full or partial refund.
+    // Idempotent via loyaltyReversedAt. Only reverses if points were earned for this payment.
+    if (updated.loyaltyEarnPoints > 0 && !updated.loyaltyReversedAt) {
+      ;(async () => {
+        try {
+          const order = await Order.findOne({ _id: updated.orderId, hotelId: req.hotelId }).lean();
+          if (!order) return;
+          const customerPhone: string | undefined = (order as any).customerPhone;
+          if (!customerPhone) return;
+
+          const profile = await CustomerProfile.findOne({
+            hotelId: new mongoose.Types.ObjectId(req.hotelId),
+            phone:   customerPhone,
+            status:  { $ne: 'merged' },
+          }).select('_id').lean();
+          if (!profile) return;
+
+          const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+
+          // Partial refund: reverse proportional points; full refund: reverse all.
+          const refundFraction = amountPaise / locked.amount;
+          const ptsToReverse   = Math.round(updated.loyaltyEarnPoints * refundFraction);
+
+          await reverseEarnedPoints(
+            (profile as any)._id,
+            req.hotelId!,
+            ptsToReverse,
+            loyaltyCfg,
+            {
+              orderId:   String(updated.orderId),
+              paymentId: String(updated._id),
+              createdBy: `system:refund`,
+              remarks:   `Reversed ${ptsToReverse} points on refund of ₹${amount}`,
+            },
+          );
+
+          await Payment.updateOne(
+            { _id: updated._id, loyaltyReversedAt: null },
+            { $set: { loyaltyReversedAt: new Date() } },
+          );
+        } catch (e) {
+          logger.warn('[loyalty] reversal on refund failed', {
+            paymentId: String(updated._id),
+            err: String(e),
+          });
+        }
+      })();
+    }
+
+    // Gift voucher partial restoration (fire-and-forget, idempotent via per-refund giftVoucherRestoredAt)
+    if (newRefStatus === 'partial') {
+      const thisRefundAmt = amountPaise;
+      ;(async () => {
+        try {
+          const orderForVoucher = await Order.findOne({ _id: updated.orderId, hotelId: req.hotelId })
+            .select('giftVoucherId giftVoucherAmount giftVoucherRestoredAt').lean();
+          const vAmt = (orderForVoucher as any)?.giftVoucherAmount as number | undefined;
+          if (!orderForVoucher || !(orderForVoucher as any).giftVoucherId || !vAmt || vAmt <= 0) return;
+          if ((orderForVoucher as any).giftVoucherRestoredAt) return; // full restoration already claimed
+          // Proportional: payment.amount is the post-voucher charge (paise); denominator is consistent
+          const restoreAmt = Math.round(vAmt * (thisRefundAmt / updated.amount) * 100) / 100;
+          if (restoreAmt <= 0) return;
+          // Atomic per-refund claim via arrayFilters — returns null if already claimed
+          const claimed = await Payment.findOneAndUpdate(
+            {
+              _id:     updated._id,
+              hotelId: req.hotelId,
+              refunds: { $elemMatch: { refundId: actualRefundId, giftVoucherRestoredAt: null } },
+            },
+            { $set: { 'refunds.$[rf].giftVoucherRestoredAt': new Date() } },
+            { arrayFilters: [{ 'rf.refundId': actualRefundId, 'rf.giftVoucherRestoredAt': null }], new: false },
+          );
+          if (!claimed) return;
+          const refNow = new Date();
+          await GiftVoucher.findOneAndUpdate(
+            { _id: (orderForVoucher as any).giftVoucherId, hotelId: req.hotelId },
+            [
+              { $set: { balance: { $add: ['$balance', restoreAmt] }, isActive: true } },
+              { $set: { transactions: { $concatArrays: [{ $ifNull: ['$transactions', []] }, [{ type: 'refund', amount: restoreAmt, balanceAfter: { $ifNull: ['$balance', 0] }, orderId: updated.orderId, remarks: `Partial refund: Payment ${String(updated._id)} (₹${amount})`, createdBy: 'system:refund', createdAt: refNow }]] } } },
+            ] as any,
+          );
+        } catch (e) {
+          logger.warn('[gift-voucher] restoration on partial refund failed', { paymentId: String(updated._id), err: String(e) });
+        }
+      })();
+    }
+
+    // Coupon reversal on full refund (fire-and-forget, idempotent via status field)
+    if (newRefStatus === 'full') {
+      ;(async () => {
+        try {
+          const orderForCoupon = await Order.findOne({ _id: updated.orderId, hotelId: req.hotelId }).select('couponId').lean();
+          if (!orderForCoupon || !(orderForCoupon as any).couponId) return;
+          const claimedRed = await CouponRedemption.findOneAndUpdate(
+            { hotelId: req.hotelId, orderId: updated.orderId, status: 'redeemed' },
+            { $set: { status: 'reversed', reversedAt: new Date(), reversedReason: 'full_refund' } },
+          );
+          if (claimedRed) {
+            await Coupon.findOneAndUpdate(
+              { _id: claimedRed.couponId, hotelId: req.hotelId, usageCount: { $gt: 0 } },
+              { $inc: { usageCount: -1 } },
+            );
+          }
+        } catch (e) {
+          logger.warn('[coupon] reversal on full refund failed', { paymentId: String(updated._id), err: String(e) });
+        }
+      })();
+    }
+
+    // Gift voucher restoration on full refund (fire-and-forget, idempotent via giftVoucherRestoredAt)
+    if (newRefStatus === 'full') {
+      ;(async () => {
+        try {
+          const orderForVoucher = await Order.findOne({ _id: updated.orderId, hotelId: req.hotelId })
+            .select('giftVoucherId giftVoucherAmount giftVoucherRestoredAt orderNumber').lean();
+          const vAmt = (orderForVoucher as any)?.giftVoucherAmount as number | undefined;
+          if (!orderForVoucher || !(orderForVoucher as any).giftVoucherId || !vAmt || vAmt <= 0) return;
+          if ((orderForVoucher as any).giftVoucherRestoredAt) return;
+          const claimedOrder = await Order.findOneAndUpdate(
+            { _id: updated.orderId, hotelId: req.hotelId, giftVoucherRestoredAt: null },
+            { $set: { giftVoucherRestoredAt: new Date() } },
+          );
+          if (!claimedOrder) return;
+          const refNow = new Date();
+          await GiftVoucher.findOneAndUpdate(
+            {
+              _id: (orderForVoucher as any).giftVoucherId,
+              hotelId: req.hotelId,
+              transactions: { $not: { $elemMatch: { type: 'refund', orderId: updated.orderId } } },
+            },
+            [
+              { $set: { balance: { $add: ['$balance', vAmt] }, isActive: true } },
+              { $set: { transactions: { $concatArrays: [{ $ifNull: ['$transactions', []] }, [{ type: 'refund', amount: vAmt, balanceAfter: { $ifNull: ['$balance', 0] }, orderId: updated.orderId, remarks: `Full refund: Payment ${String(updated._id)}`, createdBy: 'system:refund', createdAt: refNow }]] } } },
+            ] as any,
+          );
+        } catch (e) {
+          logger.warn('[gift-voucher] restoration on full refund failed', { paymentId: String(updated._id), err: String(e) });
+        }
+      })();
     }
 
     const isPendingGateway = !gatewayRefundId;

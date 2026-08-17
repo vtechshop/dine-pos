@@ -8,7 +8,8 @@ export type StockMovementType =
   | 'waste'          // Waste-log deduction
   | 'adjustment'     // Physical-count correction
   | 'opening_stock'  // Initial stock set when ingredient is created with stock > 0
-  | 'grn';           // Goods-received note receipt
+  | 'grn'            // Goods-received note receipt
+  | 'vendor_return'; // Return to vendor — stock removed, vendor outstanding reduced
 
 export interface IStockMovement extends Document {
   hotelId: mongoose.Types.ObjectId;
@@ -21,7 +22,7 @@ export interface IStockMovement extends Document {
   costPerUnit: number | null;
   totalCost: number | null;
   referenceId: string;         // orderId, wasteLogId, grnId, etc.
-  referenceType: 'order' | 'grn' | 'waste' | 'manual' | null;
+  referenceType: 'order' | 'grn' | 'waste' | 'manual' | 'vendor_return' | null;
   reason: string;
   notes: string;
   supplier: string;
@@ -38,7 +39,7 @@ const StockMovementSchema: Schema = new Schema(
     ingredientName: { type: String, required: true, trim: true },
     type: {
       type: String,
-      enum: ['stock_in', 'restock', 'sale', 'sale_reversal', 'waste', 'adjustment', 'opening_stock', 'grn'],
+      enum: ['stock_in', 'restock', 'sale', 'sale_reversal', 'waste', 'adjustment', 'opening_stock', 'grn', 'vendor_return'],
       required: true,
     },
     delta:          { type: Number, required: true },
@@ -47,7 +48,7 @@ const StockMovementSchema: Schema = new Schema(
     costPerUnit:    { type: Number, default: null },
     totalCost:      { type: Number, default: null },
     referenceId:    { type: String, default: '' },
-    referenceType:  { type: String, enum: ['order', 'grn', 'waste', 'manual', null], default: null },
+    referenceType:  { type: String, enum: ['order', 'grn', 'waste', 'manual', 'vendor_return', null], default: null },
     reason:         { type: String, default: '' },
     notes:          { type: String, default: '' },
     supplier:       { type: String, default: '' },

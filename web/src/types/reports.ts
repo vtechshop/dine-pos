@@ -8,6 +8,7 @@ export interface SalesReport {
   totalOrders: number;
   parcelOrders: number;
   parcelRevenue: number;
+  cancelledOrders?: number;
   paymentBreakdown: {
     cash: number;
     upi: number;
@@ -169,4 +170,39 @@ export interface CogsTrendPoint {
   grossProfit: number;
   grossMarginPct: number;
   orders: number;
+}
+
+export interface GiftVoucherReport {
+  from: string;
+  to: string;
+  issued:   { count: number; amount: number };
+  redeemed: { count: number; amount: number };
+  restored: { count: number; amount: number };
+  expired:  { count: number; amount: number };
+  outstanding: { balance: number; activeVouchers: number };
+}
+
+export interface CouponReportRow {
+  couponCode:    string;
+  usageCount:    number;
+  totalDiscount: number;
+}
+
+export interface CouponReport {
+  from:          string;
+  to:            string;
+  rows:          CouponReportRow[];
+  totalUsage:    number;
+  totalDiscount: number;
+  uniqueCoupons: number;
+}
+
+export interface VendorProcurementReport {
+  from: string;
+  to:   string;
+  purchaseOrders: { count: number; totalValue:  number };
+  grns:           { count: number; totalValue:  number };
+  vendorPayments: { count: number; totalAmount: number };
+  vendorReturns:  { count: number; totalValue:  number };
+  outstanding:    { totalOutstanding: number; vendorCount: number };
 }

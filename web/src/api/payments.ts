@@ -22,6 +22,12 @@ export interface GatewayConfig {
   isActive:        boolean;
   isDeleted:       boolean;
   isIntegrated:    boolean;
+  isOAuthConnected:        boolean;
+  oauthPublicToken:        string;
+  oauthConnectedAccountId: string;
+  oauthConnectedAt:        string | null;
+  oauthExpiresAt:          string | null;
+  oauthRefreshExpiresAt:   string | null;
   testResult?: {
     lastTestedAt?: string;
     success?:      boolean;
@@ -184,3 +190,24 @@ export const verifyPaymentIntent = (
     method: 'POST',
     body:   JSON.stringify({ internalTransactionId, gatewayTransactionId, signature }),
   });
+
+// ── Razorpay OAuth APIs ───────────────────────────────────────────────────────
+
+export interface RazorpayOAuthStatus {
+  connected:            boolean;
+  accountId?:           string;
+  connectedAt?:         string;
+  expiresAt?:           string;
+  refreshExpiresAt?:    string;
+  environment?:         string;
+  refreshTokenWarning?: boolean;
+}
+
+export const getRazorpayOAuthConnectUrl = (): Promise<{ authorizeUrl: string }> =>
+  apiFetch<{ authorizeUrl: string }>('/razorpay/oauth/connect');
+
+export const getRazorpayOAuthStatus = (): Promise<RazorpayOAuthStatus> =>
+  apiFetch<RazorpayOAuthStatus>('/razorpay/oauth/status');
+
+export const disconnectRazorpayOAuth = (): Promise<{ message: string }> =>
+  apiFetch<{ message: string }>('/razorpay/oauth/disconnect', { method: 'DELETE' });

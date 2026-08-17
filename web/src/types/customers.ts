@@ -59,27 +59,38 @@ export interface LoyaltyActivityEntry {
 export type CampaignAudience =
   | 'all' | 'new' | 'repeat' | 'vip'
   | 'inactive30' | 'inactive60' | 'inactive90'
-  | 'birthday' | 'anniversary' | 'loyalty' | 'noloyalty' | 'custom';
+  | 'birthday' | 'anniversary' | 'birthdayweek' | 'anniversaryweek'
+  | 'loyalty' | 'noloyalty' | 'custom';
 
-export type CampaignStatus = 'draft' | 'scheduled' | 'sent' | 'failed' | 'cancelled';
+export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'partial' | 'failed' | 'cancelled';
 
 export interface Campaign {
-  _id:             string;
-  hotelId:         string;
-  name:            string;
-  channel:         'whatsapp' | 'sms';
-  audience:        CampaignAudience;
-  customAudience:  string[];
-  messageTemplate: string;
-  status:          CampaignStatus;
-  scheduledAt:     string | null;
-  sentAt:          string | null;
-  recipientCount:  number;   // total audience size
-  eligibleCount:   number;   // opted-in with phone (will actually receive)
-  failureReason:   string;
-  createdBy:       string;
-  createdAt:       string;
-  updatedAt:       string;
+  _id:                string;
+  hotelId:            string;
+  name:               string;
+  channel:            'whatsapp' | 'sms';
+  audience:           CampaignAudience;
+  customAudience:     string[];
+  messageTemplate:    string;
+  status:             CampaignStatus;
+  scheduledAt:        string | null;
+  sentAt:             string | null;
+  recipientCount:     number;   // total audience size at creation
+  eligibleCount:      number;   // opted-in with phone at creation
+  sentCount:          number;   // actual sent after dispatch
+  failedCount:        number;   // actual failed after dispatch
+  failureReason:      string;
+  createdBy:          string;
+  /** WhatsApp pre-approved MSG91 template name (required at dispatch for WA campaigns) */
+  waTemplateName:     string | null;
+  /** BCP-47 language code, e.g. "en" */
+  waTemplateLanguage: string;
+  /** WABA template namespace — may be empty for Cloud API WABA accounts */
+  waTemplateNamespace: string;
+  /** Ordered variable names mapping to body_1, body_2, ... positions */
+  waTemplateVars:     string[];
+  createdAt:          string;
+  updatedAt:          string;
 }
 
 export type CustomerSegment =
@@ -93,6 +104,7 @@ export type LoyaltyTransactionType =
   | 'earn'
   | 'redeem'
   | 'adjust'
+  | 'reverse'
   | 'expire'
   | 'transfer_in'
   | 'transfer_out';

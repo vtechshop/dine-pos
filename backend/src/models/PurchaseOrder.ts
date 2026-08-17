@@ -16,6 +16,7 @@ export interface IPOItem {
   variantName: string;
   orderedQty: number;
   receivedQty: number;
+  returnedQty?: number;
   unit: string;
   unitPrice: number;
   discount: number;
@@ -62,6 +63,7 @@ const POItemSchema = new Schema<IPOItem>(
     variantName: { type: String, default: '' },
     orderedQty:  { type: Number, required: true, min: 0.001 },
     receivedQty: { type: Number, default: 0, min: 0 },
+    returnedQty: { type: Number, default: 0, min: 0 },
     unit:        { type: String, default: 'pcs', trim: true },
     unitPrice:   { type: Number, required: true, min: 0 },
     discount:    { type: Number, default: 0, min: 0 },

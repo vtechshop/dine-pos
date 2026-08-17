@@ -15,6 +15,38 @@ export async function fetchLoyaltyConfig(): Promise<{ config: LoyaltyConfig }> {
   return apiFetch('/loyalty/config');
 }
 
+export interface LoyaltyLookupResult {
+  customer: {
+    customerId:    string;
+    name:          string;
+    phone:         string;
+    loyaltyBalance: number;
+    tier:          string;
+    loyaltyOptOut?: boolean;
+  };
+  redeemablePoints: number;
+  discountValue:    number;
+  config: {
+    rewardName:           string;
+    minimumRedeemPoints:  number;
+    maximumRedeemPercent: number;
+    pointValueInPaisa:    number;
+  } | null;
+}
+
+export async function lookupCustomer(
+  phone: string,
+  amount: number,
+): Promise<{ found: true; data: LoyaltyLookupResult } | { found: false }> {
+  try {
+    const qs = new URLSearchParams({ phone, amount: String(Math.round(amount)) });
+    const data = await apiFetch<LoyaltyLookupResult>(`/loyalty/customers/lookup?${qs}`);
+    return { found: true, data };
+  } catch {
+    return { found: false };
+  }
+}
+
 export async function searchCustomers(params?: {
   phone?: string;
   name?: string;

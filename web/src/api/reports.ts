@@ -6,6 +6,9 @@ import type {
   ExpensePnL,
   TallyReport,
   ModifierReport,
+  GiftVoucherReport,
+  CouponReport,
+  VendorProcurementReport,
 } from '../types/reports';
 
 function qs(params: Record<string, string>): string {
@@ -47,4 +50,16 @@ export async function fetchOrdersForHourly(
 
 export async function fetchModifierReport(from: string, to: string): Promise<ModifierReport> {
   return apiFetch(`/reports/modifiers?${qs({ from, to })}`);
+}
+
+export async function fetchGiftVoucherReport(from: string, to: string): Promise<GiftVoucherReport> {
+  return apiFetch(`/reports/gift-vouchers?${qs({ from, to })}`);
+}
+
+export async function fetchCouponReport(from: string, to: string): Promise<CouponReport> {
+  return apiFetch(`/reports/coupons?${qs({ from, to })}`);
+}
+
+export async function fetchVendorProcurementReport(from: string, to: string): Promise<VendorProcurementReport> {
+  return apiFetch(`/reports/vendor-procurement?${qs({ from, to })}`);
 }

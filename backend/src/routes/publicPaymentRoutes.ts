@@ -4,6 +4,7 @@ import Order from '../models/Order';
 import Payment from '../models/Payment';
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
 import GatewayFactory from '../services/payment/GatewayFactory';
+import { ensureValidOAuthConfig } from '../services/payment/razorpayTokenRefresh';
 
 const router = Router();
 
@@ -91,9 +92,21 @@ router.post('/razorpay-order', async (req: Request, res: Response) => {
       return res.status(422).json({ message: `Gateway '${config.gatewayType}' SDK is not integrated.` });
     }
 
+    // Reject duplicate payment if the order already has a confirmed successful payment.
+    const existingSuccess = await Payment.findOne({
+      orderId:  new mongoose.Types.ObjectId(orderId),
+      hotelId:  new mongoose.Types.ObjectId(hotelId),
+      status:   'success',
+    });
+    if (existingSuccess) {
+      return res.status(409).json({ message: 'Order has already been paid.' });
+    }
+
     const internalTransactionId = generateTxnId();
     const amountPaise           = Math.round(amount * 100);
 
+    // Create the Payment record in 'pending' state before calling the gateway.
+    // If the gateway call fails, we mark it 'failed' so it never stays stuck at 'pending'.
     const payment = await Payment.create({
       hotelId:               new mongoose.Types.ObjectId(hotelId),
       orderId:               new mongoose.Types.ObjectId(orderId),
@@ -105,31 +118,44 @@ router.post('/razorpay-order', async (req: Request, res: Response) => {
       initiatedBy:           'customer-qr',
     });
 
-    const gateway = GatewayFactory.create(config);
-    const result  = await gateway.createPayment({
-      amount:                amountPaise,
-      currency,
-      orderId,
-      hotelId,
-      internalTransactionId,
-      customerName,
-      description: `Order ${order.orderNumber}`,
-    });
+    try {
+      const effectiveConfig = config.isOAuthConnected
+        ? await ensureValidOAuthConfig(config)
+        : config;
+      const gateway = GatewayFactory.create(effectiveConfig);
+      const result  = await gateway.createPayment({
+        amount:                amountPaise,
+        currency,
+        orderId,
+        hotelId,
+        internalTransactionId,
+        customerName,
+        description: `Order ${order.orderNumber}`,
+      });
 
-    payment.gatewayTransactionId = result.gatewayTransactionId;
-    payment.gatewayOrderId       = result.gatewayOrderId ?? '';
-    payment.status               = 'processing';
-    await payment.save();
+      payment.gatewayTransactionId = result.gatewayTransactionId;
+      payment.gatewayOrderId       = result.gatewayOrderId ?? '';
+      payment.status               = 'processing';
+      await payment.save();
 
-    const meta = result.metadata as Record<string, unknown> | undefined;
+      const meta = result.metadata as Record<string, unknown> | undefined;
 
-    return res.json({
-      keyId:                 (meta?.keyId         as string | undefined) ?? '',
-      razorpayOrderId:       (meta?.orderId       as string | undefined) ?? result.gatewayOrderId,
-      internalTransactionId,
-      amount:                amountPaise,
-      currency:              currency.toUpperCase(),
-    });
+      return res.json({
+        keyId:                 (meta?.keyId         as string | undefined) ?? '',
+        razorpayOrderId:       (meta?.orderId       as string | undefined) ?? result.gatewayOrderId,
+        internalTransactionId,
+        amount:                amountPaise,
+        currency:              currency.toUpperCase(),
+      });
+    } catch (gatewayErr) {
+      // Mark failed so the Payment record doesn't stay stuck at 'pending'.
+      payment.status        = 'failed';
+      payment.failureReason = gatewayErr instanceof Error ? gatewayErr.message : String(gatewayErr);
+      await payment.save().catch(() => {});
+      return res.status(500).json({
+        message: 'Failed to create payment: ' + (gatewayErr instanceof Error ? gatewayErr.message : String(gatewayErr)),
+      });
+    }
   } catch (err) {
     return res.status(500).json({
       message: 'Failed to create payment: ' + (err instanceof Error ? err.message : String(err)),

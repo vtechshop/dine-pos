@@ -166,6 +166,13 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     if (!paymentMethod)                 return sendError(res, 400, 'paymentMethod is required');
     if (!amount || Number(amount) <= 0) return sendError(res, 400, 'amount must be greater than 0');
 
+    // M-9: idempotency check (hotel-scoped)
+    const idemKey = req.headers['x-idempotency-key'] as string | undefined;
+    if (idemKey) {
+      const existing = await VendorPayment.findOne({ hotelId, idempotencyKey: idemKey }).lean();
+      if (existing) return res.status(201).json(existing);
+    }
+
     const vendor = await Vendor.findOne({ _id: String(vendorId), hotelId, isDeleted: false });
     if (!vendor) return sendError(res, 404, 'Vendor not found');
 
@@ -175,50 +182,49 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       { upsert: true, new: true },
     );
     const paymentNumber = `PAY-${String(ctr.seq).padStart(4, '0')}`;
-
     const amt = Number(amount);
 
-    const payment = await VendorPayment.create({
-      hotelId,
-      paymentNumber,
-      vendorId: new mongoose.Types.ObjectId(String(vendorId)),
-      vendorSnapshot: {
-        businessName: vendor.businessName,
-        vendorCode:   vendor.vendorCode,
-        mobile:       vendor.mobile,
-      },
-      paymentDate:     paymentDate ? new Date(String(paymentDate)) : new Date(),
-      paymentMethod:   String(paymentMethod),
-      amount:          amt,
-      referenceNumber: String(referenceNumber || ''),
-      notes:           String(notes || ''),
-      attachment:      String(attachment || ''),
-      createdBy:       req.hotelId || '',
+    const session = await mongoose.startSession();
+    let payment: InstanceType<typeof VendorPayment>;
+    await session.withTransaction(async () => {
+      [payment] = await VendorPayment.create([{
+        hotelId,
+        paymentNumber,
+        vendorId:        new mongoose.Types.ObjectId(String(vendorId)),
+        vendorSnapshot:  { businessName: vendor.businessName, vendorCode: vendor.vendorCode, mobile: vendor.mobile },
+        paymentDate:     paymentDate ? new Date(String(paymentDate)) : new Date(),
+        paymentMethod:   String(paymentMethod),
+        amount:          amt,
+        referenceNumber: String(referenceNumber || ''),
+        notes:           String(notes || ''),
+        attachment:      String(attachment || ''),
+        createdBy:       req.cashierId || req.waiterId || req.hotelId || '',
+        ...(idemKey ? { idempotencyKey: idemKey } : {}),
+      }], { session });
+      const updatedVendor = await Vendor.findOneAndUpdate(
+        { _id: vendor._id, hotelId },
+        { $inc: { currentOutstanding: -amt } },
+        { new: true, session },
+      );
+      await VendorLedgerEntry.create([{
+        hotelId,
+        vendorId:        vendor._id,
+        entryType:       'payment',
+        referenceId:     payment!._id,
+        referenceNumber: paymentNumber,
+        debit:           0,
+        credit:          amt,
+        runningBalance:  updatedVendor?.currentOutstanding ?? 0,
+        description:     `Payment via ${paymentMethod}${referenceNumber ? ` (ref: ${referenceNumber})` : ''}`,
+      }], { session });
     });
+    await session.endSession();
 
-    const updatedVendor = await Vendor.findByIdAndUpdate(
-      vendor._id,
-      { $inc: { currentOutstanding: -amt } },
-      { new: true },
-    );
-
-    await VendorLedgerEntry.create({
-      hotelId,
-      vendorId:        vendor._id,
-      entryType:       'payment',
-      referenceId:     payment._id,
-      referenceNumber: paymentNumber,
-      debit:           0,
-      credit:          amt,
-      runningBalance:  updatedVendor?.currentOutstanding ?? 0,
-      description:     `Payment via ${paymentMethod}${referenceNumber ? ` (ref: ${referenceNumber})` : ''}`,
-    });
-
-    logAudit(req, 'vendor_payment.created', 'vendor_payment', String(payment._id), {
+    logAudit(req, 'vendor_payment.created', 'vendor_payment', String(payment!._id), {
       paymentNumber, vendorId, amount: amt, paymentMethod,
     });
 
-    return res.status(201).json(payment);
+    return res.status(201).json(payment!);
   } catch (err) {
     return sendError(res, 500, 'Failed to create payment', err);
   }
@@ -238,27 +244,30 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (amount !== undefined) {
       const newAmt = Number(amount);
       if (newAmt <= 0) return sendError(res, 400, 'amount must be greater than 0');
-      const diff = newAmt - payment.amount; // positive = paying more
+      const diff = newAmt - payment.amount;
 
-      const updatedVendor = await Vendor.findByIdAndUpdate(
-        payment.vendorId,
-        { $inc: { currentOutstanding: -diff } },
-        { new: true },
-      );
-
-      await VendorLedgerEntry.create({
-        hotelId,
-        vendorId:        payment.vendorId,
-        entryType:       'adjustment',
-        referenceId:     payment._id,
-        referenceNumber: payment.paymentNumber,
-        debit:           diff < 0 ? Math.abs(diff) : 0,
-        credit:          diff > 0 ? diff : 0,
-        runningBalance:  updatedVendor?.currentOutstanding ?? 0,
-        description:     `Payment ${payment.paymentNumber} amount updated (${diff > 0 ? '+' : ''}${diff.toFixed(2)})`,
+      const session = await mongoose.startSession();
+      await session.withTransaction(async () => {
+        const updatedVendor = await Vendor.findOneAndUpdate(
+          { _id: payment.vendorId, hotelId },
+          { $inc: { currentOutstanding: -diff } },
+          { new: true, session },
+        );
+        await VendorLedgerEntry.create([{
+          hotelId,
+          vendorId:        payment.vendorId,
+          entryType:       'adjustment',
+          referenceId:     payment._id,
+          referenceNumber: payment.paymentNumber,
+          debit:           diff < 0 ? Math.abs(diff) : 0,
+          credit:          diff > 0 ? diff : 0,
+          runningBalance:  updatedVendor?.currentOutstanding ?? 0,
+          description:     `Payment ${payment.paymentNumber} amount updated (${diff > 0 ? '+' : ''}${diff.toFixed(2)})`,
+        }], { session });
+        payment.amount = newAmt;
+        await payment.save({ session });
       });
-
-      payment.amount = newAmt;
+      await session.endSession();
     }
 
     if (paymentDate     !== undefined) payment.paymentDate     = new Date(String(paymentDate));
@@ -267,7 +276,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (notes           !== undefined) payment.notes           = String(notes);
     if (attachment      !== undefined) payment.attachment      = String(attachment);
 
-    await payment.save();
+    if (amount === undefined) await payment.save();
 
     logAudit(req, 'vendor_payment.updated', 'vendor_payment', String(payment._id), {
       paymentNumber: payment.paymentNumber,
@@ -287,28 +296,30 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     const payment = await VendorPayment.findOne({ _id: req.params.id, hotelId, isDeleted: false });
     if (!payment) return sendError(res, 404, 'Payment not found');
 
-    if (!payment.isReversed) {
-      const updatedVendor = await Vendor.findByIdAndUpdate(
-        payment.vendorId,
-        { $inc: { currentOutstanding: payment.amount } },
-        { new: true },
-      );
-
-      await VendorLedgerEntry.create({
-        hotelId,
-        vendorId:        payment.vendorId,
-        entryType:       'adjustment',
-        referenceId:     payment._id,
-        referenceNumber: payment.paymentNumber,
-        debit:           payment.amount,
-        credit:          0,
-        runningBalance:  updatedVendor?.currentOutstanding ?? 0,
-        description:     `Payment ${payment.paymentNumber} deleted (auto-reversal)`,
-      });
-    }
-
-    payment.isDeleted = true;
-    await payment.save();
+    const session = await mongoose.startSession();
+    await session.withTransaction(async () => {
+      if (!payment.isReversed) {
+        const updatedVendor = await Vendor.findOneAndUpdate(
+          { _id: payment.vendorId, hotelId },
+          { $inc: { currentOutstanding: payment.amount } },
+          { new: true, session },
+        );
+        await VendorLedgerEntry.create([{
+          hotelId,
+          vendorId:        payment.vendorId,
+          entryType:       'adjustment',
+          referenceId:     payment._id,
+          referenceNumber: payment.paymentNumber,
+          debit:           payment.amount,
+          credit:          0,
+          runningBalance:  updatedVendor?.currentOutstanding ?? 0,
+          description:     `Payment ${payment.paymentNumber} deleted (auto-reversal)`,
+        }], { session });
+      }
+      payment.isDeleted = true;
+      await payment.save({ session });
+    });
+    await session.endSession();
 
     logAudit(req, 'vendor_payment.deleted', 'vendor_payment', String(payment._id), {
       paymentNumber: payment.paymentNumber, amount: payment.amount,
@@ -331,29 +342,31 @@ router.post('/:id/reverse', async (req: AuthRequest, res: Response) => {
 
     const { reason } = req.body as { reason?: string };
 
-    const updatedVendor = await Vendor.findByIdAndUpdate(
-      payment.vendorId,
-      { $inc: { currentOutstanding: payment.amount } },
-      { new: true },
-    );
-
-    await VendorLedgerEntry.create({
-      hotelId,
-      vendorId:        payment.vendorId,
-      entryType:       'adjustment',
-      referenceId:     payment._id,
-      referenceNumber: payment.paymentNumber,
-      debit:           payment.amount,
-      credit:          0,
-      runningBalance:  updatedVendor?.currentOutstanding ?? 0,
-      description:     `Reversal of payment ${payment.paymentNumber}${reason ? `: ${reason}` : ''}`,
+    const session = await mongoose.startSession();
+    await session.withTransaction(async () => {
+      const updatedVendor = await Vendor.findOneAndUpdate(
+        { _id: payment.vendorId, hotelId },
+        { $inc: { currentOutstanding: payment.amount } },
+        { new: true, session },
+      );
+      await VendorLedgerEntry.create([{
+        hotelId,
+        vendorId:        payment.vendorId,
+        entryType:       'adjustment',
+        referenceId:     payment._id,
+        referenceNumber: payment.paymentNumber,
+        debit:           payment.amount,
+        credit:          0,
+        runningBalance:  updatedVendor?.currentOutstanding ?? 0,
+        description:     `Reversal of payment ${payment.paymentNumber}${reason ? `: ${reason}` : ''}`,
+      }], { session });
+      payment.isReversed     = true;
+      payment.reversedBy     = req.cashierId || req.waiterId || req.hotelId || '';
+      payment.reversedAt     = new Date();
+      payment.reversalReason = String(reason || '');
+      await payment.save({ session });
     });
-
-    payment.isReversed     = true;
-    payment.reversedBy     = req.hotelId || '';
-    payment.reversedAt     = new Date();
-    payment.reversalReason = String(reason || '');
-    await payment.save();
+    await session.endSession();
 
     logAudit(req, 'vendor_payment.reversed', 'vendor_payment', String(payment._id), {
       paymentNumber: payment.paymentNumber, amount: payment.amount, reason,

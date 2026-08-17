@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import Vendor from '../models/Vendor';
+import VendorLedgerEntry from '../models/VendorLedgerEntry';
 import DailyCounter from '../models/DailyCounter';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
@@ -135,8 +136,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       businessName: String(businessName).trim(),
       mobile:       String(mobile).trim(),
       gstNumber:    gstNumber ? String(gstNumber).trim().toUpperCase() : '',
-      createdBy:    req.hotelId ?? '',
-      updatedBy:    req.hotelId ?? '',
+      createdBy:    req.cashierId || req.waiterId || req.hotelId || '',
+      updatedBy:    req.cashierId || req.waiterId || req.hotelId || '',
     });
 
     logAudit(req, 'vendor.created', 'vendor', String(vendor._id), {
@@ -152,7 +153,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 // ── PUT /:id — update ─────────────────────────────────────────────────────────
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { vendorCode: _vc, hotelId: _h, isDeleted: _d, createdBy: _c, ...body } = req.body;
+    const { vendorCode: _vc, hotelId: _h, isDeleted: _d, createdBy: _c,
+            currentOutstanding: _co, openingBalance: _ob, ...body } = req.body;
     const { businessName, mobile, gstNumber } = body;
 
     if (businessName !== undefined && !String(businessName).trim()) {
@@ -223,12 +225,32 @@ router.patch('/:id/outstanding', async (req: AuthRequest, res: Response) => {
     if (typeof amount !== 'number') {
       return res.status(400).json({ message: 'amount must be a number' });
     }
-    const vendor = await Vendor.findOneAndUpdate(
-      { _id: req.params.id, hotelId: req.hotelId, isDeleted: false },
-      { $inc: { currentOutstanding: amount }, updatedBy: req.hotelId ?? '' },
-      { new: true },
-    );
+
+    const vendor = await Vendor.findOne({ _id: req.params.id, hotelId: req.hotelId, isDeleted: false });
     if (!vendor) return res.status(404).json({ message: 'Vendor not found' });
+
+    const session = await mongoose.startSession();
+    await session.withTransaction(async () => {
+      await Vendor.updateOne(
+        { _id: vendor._id },
+        { $inc: { currentOutstanding: amount }, $set: { updatedBy: req.cashierId || req.waiterId || req.hotelId || '' } },
+        { session },
+      );
+      await VendorLedgerEntry.create([{
+        hotelId:         req.hotelId,
+        vendorId:        vendor._id,
+        entryType:       'adjustment',
+        referenceId:     null,
+        referenceNumber: '',
+        debit:           amount > 0 ? amount : 0,
+        credit:          amount < 0 ? Math.abs(amount) : 0,
+        runningBalance:  vendor.currentOutstanding + amount,
+        description:     `Manual outstanding adjustment (${amount > 0 ? '+' : ''}${amount})`,
+      }], { session });
+    });
+    await session.endSession();
+
+    vendor.currentOutstanding += amount;
     logAudit(req, 'vendor.outstanding.updated', 'vendor', req.params.id, {
       delta: amount, currentOutstanding: vendor.currentOutstanding,
     });

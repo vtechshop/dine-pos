@@ -20,6 +20,7 @@ export interface IVendorPayment extends Document {
   reversedAt:      Date | null;
   reversalReason:  string;
   isDeleted:       boolean;
+  idempotencyKey?: string;
   createdAt:       Date;
   updatedAt:       Date;
 }
@@ -51,10 +52,12 @@ const VendorPaymentSchema = new Schema<IVendorPayment>(
     reversedAt:      { type: Date, default: null },
     reversalReason:  { type: String, default: '', trim: true },
     isDeleted:       { type: Boolean, default: false },
+    idempotencyKey:  { type: String, default: null, trim: true },
   },
   { timestamps: true },
 );
 
+VendorPaymentSchema.index({ hotelId: 1, idempotencyKey: 1 }, { unique: true, sparse: true });
 VendorPaymentSchema.index({ hotelId: 1, isDeleted: 1, paymentDate: -1 });
 VendorPaymentSchema.index({ hotelId: 1, vendorId: 1, isDeleted: 1 });
 VendorPaymentSchema.index({ hotelId: 1, paymentNumber: 1 }, { unique: true });

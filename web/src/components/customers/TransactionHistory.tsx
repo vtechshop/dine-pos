@@ -4,12 +4,13 @@ import type { LoyaltyTransaction, LoyaltyTransactionType } from '../../types/cus
 import { Spinner } from '../ui/Spinner';
 
 const TYPE_CFG: Record<LoyaltyTransactionType, { label: string; cls: string }> = {
-  earn:         { label: 'Earn',   cls: 'bg-green-50 text-green-700'  },
-  redeem:       { label: 'Redeem', cls: 'bg-amber-50 text-amber-700'  },
-  adjust:       { label: 'Adj',    cls: 'bg-blue-50 text-blue-700'    },
-  expire:       { label: 'Exp',    cls: 'bg-gray-100 text-gray-500'   },
-  transfer_in:  { label: 'In',     cls: 'bg-teal-50 text-teal-700'    },
-  transfer_out: { label: 'Out',    cls: 'bg-red-50 text-red-600'      },
+  earn:         { label: 'Earn',    cls: 'bg-green-50 text-green-700'  },
+  redeem:       { label: 'Redeem',  cls: 'bg-amber-50 text-amber-700'  },
+  adjust:       { label: 'Adj',     cls: 'bg-blue-50 text-blue-700'    },
+  reverse:      { label: 'Rev',     cls: 'bg-orange-50 text-orange-700' },
+  expire:       { label: 'Exp',     cls: 'bg-gray-100 text-gray-500'   },
+  transfer_in:  { label: 'In',      cls: 'bg-teal-50 text-teal-700'    },
+  transfer_out: { label: 'Out',     cls: 'bg-red-50 text-red-600'      },
 };
 
 function fmtDateTime(iso: string): string {

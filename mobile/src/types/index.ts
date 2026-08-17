@@ -152,6 +152,9 @@ export interface Order {
   customerPhone: string;
   tableNumber: string;
   notes: string;
+  couponId?: string;
+  couponCode?: string;
+  couponDiscount?: number;
   // Delivery / aggregator fields (present only for Swiggy/Zomato orders)
   platformOrderId?: string;
   deliveryAddress?: string;
@@ -494,16 +497,28 @@ export interface Table {
 }
 
 // Reservation
+export type ReservationStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'arrived'
+  | 'seated'
+  | 'completed'
+  | 'cancelled'
+  | 'no_show';
+
 export interface Reservation {
   _id: string;
   tableId?: string;
   tableNumber?: number;
   customerName: string;
   phone: string;
+  email?: string;
   partySize: number;
   date: string;
   time: string;
-  status: 'confirmed' | 'seated' | 'cancelled' | 'no-show';
+  durationMinutes?: number;
+  status: ReservationStatus;
+  occasion?: string;
   notes: string;
   createdAt: string;
 }
@@ -925,8 +940,6 @@ export type RootStackParamList = {
     grandTotal: number;
     promos?: {
       couponId?: string;
-      giftVoucherCode?: string;
-      giftVoucherAmount?: number;
       walletCustomerId?: string;
       walletAmount?: number;
     };

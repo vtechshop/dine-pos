@@ -12,10 +12,13 @@ import { Reservation } from '../types';
 import { PremiumGate } from '../components/PremiumGate';
 
 const STATUS_COLORS: Record<Reservation['status'], { text: string; bg: string }> = {
+  pending:   { text: Colors.warning ?? Colors.textMuted, bg: Colors.elevated },
   confirmed: { text: Colors.info,    bg: Colors.infoBg },
+  arrived:   { text: Colors.info,    bg: Colors.infoBg },
   seated:    { text: Colors.success, bg: Colors.successBg },
+  completed: { text: Colors.textMuted, bg: Colors.elevated },
   cancelled: { text: Colors.danger,  bg: Colors.dangerBg },
-  'no-show': { text: Colors.textMuted, bg: Colors.elevated },
+  no_show:   { text: Colors.textMuted, bg: Colors.elevated },
 };
 
 const todayStr = () => new Date().toLocaleDateString('en-CA');
@@ -93,7 +96,7 @@ const ReservationScreen: React.FC = () => {
   };
 
   const changeStatus = (r: Reservation) => {
-    const opts: Reservation['status'][] = ['confirmed', 'seated', 'cancelled', 'no-show'];
+    const opts: Reservation['status'][] = ['pending', 'confirmed', 'arrived', 'seated', 'completed', 'cancelled', 'no_show'];
     Alert.alert('Update Status', `${r.customerName} — ${r.time}`, [
       ...opts.map(s => ({
         text: s.charAt(0).toUpperCase() + s.slice(1),

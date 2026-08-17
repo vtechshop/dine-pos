@@ -16,6 +16,12 @@ export interface LoyaltySettings {
   expiryDays: number;
   roundingRule: 'floor' | 'round' | 'ceil';
   calculationBase: 'before_gst' | 'after_gst';
+  maxEarnPointsPerBill?: number;
+  tierThresholds?: {
+    silver?:   number;
+    gold?:     number;
+    platinum?: number;
+  };
 }
 
 export interface Settings {
@@ -248,18 +254,66 @@ export interface KDSOrder {
 
 // ── Reservation ───────────────────────────────────────────────────────────────
 
+export type ReservationStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'arrived'
+  | 'seated'
+  | 'completed'
+  | 'cancelled'
+  | 'no_show';
+
 export interface Reservation {
   _id: string;
   tableId?: string | null;
   tableNumber?: number | null;
+  customerId?: string | null;
   customerName: string;
   phone: string;
+  email?: string;
   partySize: number;
   date: string;
   time: string;
-  status: 'confirmed' | 'seated' | 'cancelled' | 'no-show';
+  startMinutes?: number;
+  durationMinutes?: number;
+  status: ReservationStatus;
+  occasion?: string;
+  source?: 'walk_in' | 'phone' | 'website' | 'whatsapp' | 'instagram' | 'other';
+  depositAmount?: number;
+  depositStatus?: 'none' | 'pending' | 'paid';
   notes: string;
+  cancellationReason?: string | null;
+  cancelledAt?: string | null;
+  noShowAt?: string | null;
+  confirmedAt?: string | null;
+  arrivedAt?: string | null;
   createdAt: string;
+}
+
+// ── Waitlist ──────────────────────────────────────────────────────────────────
+
+export interface WaitlistEntry {
+  _id: string;
+  guestName: string;
+  phone: string;
+  partySize: number;
+  seatingPreference?: string;
+  priority?: number;
+  estimatedWaitMinutes?: number;
+  status: 'waiting' | 'notified' | 'seated' | 'cancelled' | 'expired';
+  notifiedAt?: string | null;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface ReservationStats {
+  pending: number;
+  confirmed: number;
+  arrived: number;
+  seated: number;
+  completed: number;
+  cancelled: number;
+  no_show: number;
 }
 
 // ── Printer ───────────────────────────────────────────────────────────────────
@@ -420,6 +474,7 @@ export interface GRNItem {
   damagedQty:        number;
   rejectedQty:       number;
   pendingQty:        number;
+  returnedQty?:      number;
   unit:              string;
   purchasePrice:     number;
   batchNumber?:      string;
@@ -518,6 +573,55 @@ export interface VendorLedgerReport {
   }>;
   recentPayments: VendorPayment[];
   aging: { current: number; days31_60: number; days61_90: number; over90: number };
+}
+
+// ── Vendor Returns ────────────────────────────────────────────────────────────
+
+export type VendorReturnStatus = 'draft' | 'approved' | 'completed' | 'cancelled';
+
+export interface VendorReturnItem {
+  _id?:          string;
+  grnItemIndex:  number;
+  ingredientId?: string;
+  productName:   string;
+  unit:          string;
+  purchasePrice: number;
+  returnQty:     number;
+  reason:        string;
+  notes?:        string;
+}
+
+export interface VendorReturn {
+  _id:          string;
+  returnNumber: string;
+  vendorId:     string;
+  vendorSnapshot: { businessName: string; vendorCode: string; mobile: string };
+  poId:         string;
+  poNumber:     string;
+  grnId:        string;
+  grnNumber:    string;
+  status:       VendorReturnStatus;
+  items:        VendorReturnItem[];
+  returnValue:  number;
+  notes:        string;
+  createdBy:    string;
+  approvedBy:   string;
+  approvedAt:   string | null;
+  completedBy:  string;
+  completedAt:  string | null;
+  cancelledBy:  string;
+  cancelledAt:  string | null;
+  cancelReason: string;
+  isDeleted:    boolean;
+  createdAt:    string;
+  updatedAt:    string;
+}
+
+export interface VendorReturnsResponse {
+  returns: VendorReturn[];
+  total:   number;
+  limit:   number;
+  skip:    number;
 }
 
 // ── Expenses ──────────────────────────────────────────────────────────────────

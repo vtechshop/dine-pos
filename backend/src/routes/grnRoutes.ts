@@ -159,10 +159,31 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     if (!poId) return sendError(res, 400, 'poId is required');
     if (!Array.isArray(items) || items.length === 0) return sendError(res, 400, 'items array is required');
 
+    // M-9: idempotency check (hotel-scoped, safe for concurrent duplicates)
+    const idemKey = req.headers['x-idempotency-key'] as string | undefined;
+    if (idemKey) {
+      const existing = await GRN.findOne({ hotelId: req.hotelId, idempotencyKey: idemKey }).lean();
+      if (existing) return res.status(201).json(existing);
+    }
+
     const po = await PurchaseOrder.findOne({ _id: poId, hotelId: req.hotelId, isDeleted: false });
     if (!po) return sendError(res, 404, 'Purchase Order not found');
     if (!RECEIVABLE_STATUSES.includes(po.status)) {
       return sendError(res, 409, `Cannot receive against PO in status "${po.status}". Must be approved, sent, or partially_received.`);
+    }
+
+    // H-7 + H-4: validate all items before any mutations
+    for (const raw of items) {
+      const poIdx = raw.poItemIndex !== undefined && raw.poItemIndex !== null ? Number(raw.poItemIndex) : -1;
+      if (!Number.isInteger(poIdx) || poIdx < 0 || poIdx >= po.items.length) {
+        return sendError(res, 400, `Invalid or missing poItemIndex: ${raw.poItemIndex}. Must be an integer 0–${po.items.length - 1}`);
+      }
+      const pi = po.items[poIdx];
+      const receivedQty = Math.max(0, Number(raw.receivedQty) || 0);
+      const maxAllowed  = Math.max(0, pi.orderedQty - (pi.receivedQty || 0));
+      if (receivedQty > maxAllowed) {
+        return sendError(res, 400, `Over-receiving: "${raw.productName || `item[${poIdx}]`}" ordered ${pi.orderedQty}, already received ${pi.receivedQty || 0}, trying to receive ${receivedQty} (max ${maxAllowed})`);
+      }
     }
 
     // Generate GRN number
@@ -184,18 +205,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       const orderedQty   = Math.max(0, Number(raw.orderedQty) || 0);
       const acceptedQty  = Math.max(0, receivedQty - damagedQty - rejectedQty);
 
-      // Update PO item cumulative receivedQty
-      const poIdx = raw.poItemIndex !== undefined ? Number(raw.poItemIndex) : -1;
-      let cumulativeReceived = receivedQty;
-      if (poIdx >= 0 && poIdx < po.items.length) {
-        po.items[poIdx].receivedQty = (po.items[poIdx].receivedQty || 0) + receivedQty;
-        cumulativeReceived = po.items[poIdx].receivedQty;
-      }
+      // Update PO item cumulative receivedQty (poItemIndex already validated above)
+      const poIdx = Number(raw.poItemIndex);
+      po.items[poIdx].receivedQty = (po.items[poIdx].receivedQty || 0) + receivedQty;
+      const cumulativeReceived = po.items[poIdx].receivedQty;
 
       const pendingQty = Math.max(0, orderedQty - cumulativeReceived);
 
       processedItems.push({
-        poItemIndex:      poIdx >= 0 ? poIdx : undefined,
+        poItemIndex:      poIdx,
         productId:        raw.productId ? new mongoose.Types.ObjectId(String(raw.productId)) : null,
         ingredientId:     raw.ingredientId ? new mongoose.Types.ObjectId(String(raw.ingredientId)) : null,
         productName:      String(raw.productName || ''),
@@ -234,9 +252,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const anyReceived = po.items.some(pi => (pi.receivedQty || 0) > 0);
     if (allReceived)       po.status = 'received';
     else if (anyReceived)  po.status = 'partially_received';
-    // grnValue is pure arithmetic — calculated before entering the transaction
+    // grnValue uses same acceptedQty formula as stock increment: damaged goods excluded from vendor billing
     const grnValue = processedItems.reduce((sum, item) => {
-      const accepted = Math.max(0, (item.receivedQty as number) - (item.rejectedQty as number));
+      const accepted = Math.max(0, (item.receivedQty as number) - (item.damagedQty as number) - (item.rejectedQty as number));
       return sum + accepted * ((item.purchasePrice as number) || 0);
     }, 0);
 
@@ -259,9 +277,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         status:         allReceived ? 'completed' : 'partial',
         items:          processedItems,
         notes:          String(notes || ''),
-        receivedBy:     String(req.cashierId || req.waiterId || ''),
+        receivedBy:     req.cashierId || req.waiterId || req.hotelId || '',
         cancelReason:   '',
         isDeleted:      false,
+        ...(idemKey ? { idempotencyKey: idemKey } : {}),
       }], { session });
 
       // 3. Ingredient stock increments
@@ -302,8 +321,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
       // 5. Vendor outstanding and ledger entry
       if (grnValue > 0) {
-        const updatedVendor = await Vendor.findByIdAndUpdate(
-          grn.vendorId,
+        const updatedVendor = await Vendor.findOneAndUpdate(
+          { _id: grn.vendorId, hotelId: req.hotelId },
           { $inc: { currentOutstanding: grnValue } },
           { new: true, session },
         );
@@ -387,18 +406,10 @@ router.post('/:id/cancel', async (req: AuthRequest, res: Response) => {
     if (!grn) return sendError(res, 404, 'GRN not found');
     if (grn.status === 'cancelled') return sendError(res, 409, 'GRN is already cancelled');
 
-    grn.status = 'cancelled';
-    grn.cancelReason = String(req.body.reason || '');
-    await grn.save();
-
-    // Reverse ingredient stock incremented at GRN creation
     const stockReverseOps = (grn.items as any[])
       .filter((item) => item.ingredientId)
       .map((item) => {
-        const accepted = Math.max(
-          0,
-          (item.receivedQty || 0) - (item.damagedQty || 0) - (item.rejectedQty || 0),
-        );
+        const accepted = Math.max(0, (item.receivedQty || 0) - (item.damagedQty || 0) - (item.rejectedQty || 0));
         if (accepted <= 0) return null;
         return {
           updateOne: {
@@ -407,33 +418,44 @@ router.post('/:id/cancel', async (req: AuthRequest, res: Response) => {
           },
         };
       })
-      .filter(Boolean);
-    if (stockReverseOps.length > 0) {
-      await Ingredient.bulkWrite(stockReverseOps as Parameters<typeof Ingredient.bulkWrite>[0]);
-    }
+      .filter(Boolean) as Parameters<typeof Ingredient.bulkWrite>[0];
 
-    // Reverse any ledger entry created for this GRN
-    const grnLedger = await VendorLedgerEntry.findOne({
-      hotelId: req.hotelId, referenceId: grn._id, entryType: 'grn',
+    const session = await mongoose.startSession();
+    await session.withTransaction(async () => {
+      // 1. Reverse ingredient stock
+      if (stockReverseOps.length > 0) {
+        await Ingredient.bulkWrite(stockReverseOps, { session });
+      }
+
+      // 2. Reverse vendor outstanding and create credit ledger entry
+      const grnLedger = await VendorLedgerEntry.findOne({
+        hotelId: req.hotelId, referenceId: grn._id, entryType: 'grn',
+      }).session(session);
+      if (grnLedger && grnLedger.debit > 0) {
+        const updatedVendor = await Vendor.findOneAndUpdate(
+          { _id: grn.vendorId, hotelId: req.hotelId },
+          { $inc: { currentOutstanding: -grnLedger.debit } },
+          { new: true, session },
+        );
+        await VendorLedgerEntry.create([{
+          hotelId:         req.hotelId,
+          vendorId:        grn.vendorId,
+          entryType:       'adjustment',
+          referenceId:     grn._id,
+          referenceNumber: grn.grnNumber,
+          debit:           0,
+          credit:          grnLedger.debit,
+          runningBalance:  updatedVendor?.currentOutstanding ?? 0,
+          description:     `GRN ${grn.grnNumber} cancelled`,
+        }], { session });
+      }
+
+      // 3. Mark GRN cancelled (last — so stock/ledger are consistent first)
+      grn.status = 'cancelled';
+      grn.cancelReason = String(req.body.reason || '');
+      await grn.save({ session });
     });
-    if (grnLedger && grnLedger.debit > 0) {
-      const updatedVendor = await Vendor.findByIdAndUpdate(
-        grn.vendorId,
-        { $inc: { currentOutstanding: -grnLedger.debit } },
-        { new: true },
-      );
-      await VendorLedgerEntry.create({
-        hotelId:         req.hotelId,
-        vendorId:        grn.vendorId,
-        entryType:       'adjustment',
-        referenceId:     grn._id,
-        referenceNumber: grn.grnNumber,
-        debit:           0,
-        credit:          grnLedger.debit,
-        runningBalance:  updatedVendor?.currentOutstanding ?? 0,
-        description:     `GRN ${grn.grnNumber} cancelled`,
-      });
-    }
+    await session.endSession();
 
     logAudit(req, 'grn.cancelled', 'grn', String(grn._id), {
       grnNumber:    grn.grnNumber,

@@ -63,10 +63,23 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+const SETTINGS_ALLOWED_FIELDS = new Set([
+  'hotelName', 'ownerName', 'businessType', 'phone', 'email', 'address',
+  'hotelLogo', 'roleImageAdmin', 'roleImageCustomer', 'roleImageStaff',
+  'currencySymbol', 'currency', 'defaultTaxPercent', 'printerWidth', 'footerText',
+  'qrGuestTimeoutMinutes', 'gstNumber', 'fssaiNumber', 'panNumber',
+  'bankName', 'bankAccountNumber', 'bankIfscCode', 'bankAccountHolder', 'upiId',
+  'printerMode', 'kitchenPrinterAddress', 'cashierPrinterAddress', 'kotAutoPrint',
+  'loyaltySettings', 'kitchenPin',
+]);
+
 // PUT update settings for this hotel
 router.put('/', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const body = { ...req.body };
+    const body: Record<string, any> = {};
+    for (const [k, v] of Object.entries(req.body)) {
+      if (SETTINGS_ALLOWED_FIELDS.has(k)) body[k] = v;
+    }
     if (body.kitchenPin && typeof body.kitchenPin === 'string') {
       const pinCheck = validatePin(body.kitchenPin);
       if (!pinCheck.valid) {

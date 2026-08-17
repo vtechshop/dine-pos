@@ -10,6 +10,12 @@ export interface ILoyaltySettings {
   expiryDays: number;               // 0 = never expires
   roundingRule: 'floor' | 'round' | 'ceil';
   calculationBase: 'before_gst' | 'after_gst';
+  maxEarnPointsPerBill: number;     // 0 = unlimited cap per single bill
+  tierThresholds?: {
+    silver?:   number;    // min lifetime spend for Silver tier
+    gold?:     number;    // min lifetime spend for Gold tier
+    platinum?: number;    // min lifetime spend for Platinum tier
+  };
 }
 
 export interface ISettings extends Document {
@@ -152,18 +158,24 @@ const SettingsSchema: Schema = new Schema(
     kotAutoPrint:           { type: Boolean, default: true },
 
     // ── QR Session Timeout (Architecture v1.1) ────────────────────────────
-    qrGuestTimeoutMinutes:  { type: Number, default: 15, min: 1, max: 60 },
+    qrGuestTimeoutMinutes:  { type: Number, default: 15, min: 1, max: 180 },
 
     // ── Loyalty Settings (Architecture v1.1) ─────────────────────────────
     loyaltySettings: {
       rewardName:               { type: String, default: 'Points', maxlength: 30 },
       pointsPerHundredRupees:   { type: Number, default: 10, min: 0, max: 1000 },
-      minimumRedeemPoints:      { type: Number, default: 100, min: 0, max: 100000 },
+      minimumRedeemPoints:      { type: Number, default: 50, min: 0, max: 100000 },
       maximumRedeemPercent:     { type: Number, default: 10, min: 0, max: 100 },
       pointValueInPaisa:        { type: Number, default: 100, min: 1, max: 10000 },
       expiryDays:               { type: Number, default: 0, min: 0, max: 3650 },
       roundingRule:             { type: String, enum: ['floor', 'round', 'ceil'], default: 'floor' },
       calculationBase:          { type: String, enum: ['before_gst', 'after_gst'], default: 'before_gst' },
+      maxEarnPointsPerBill:     { type: Number, default: 0, min: 0, max: 100000 },
+      tierThresholds: {
+        silver:   { type: Number, default: 5000,  min: 0 },
+        gold:     { type: Number, default: 15000, min: 0 },
+        platinum: { type: Number, default: 30000, min: 0 },
+      },
     },
   },
   { timestamps: true }

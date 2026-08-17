@@ -30,16 +30,12 @@ import Settings from '../models/Settings';
 import CustomerProfile from '../models/CustomerProfile';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
 import DailyCounter from '../models/DailyCounter';
-import { getLoyaltyConfig, adjustPoints } from '../utils/loyaltyUtils';
-
-function normalizePhone(raw: string): string | null {
-  const digits = raw.replace(/\D/g, '');
-  if (digits.length === 10) return `+91${digits}`;
-  if (digits.length === 12 && digits.startsWith('91')) return `+${digits}`;
-  if (digits.length === 11 && digits.startsWith('0')) return `+91${digits.slice(1)}`;
-  if (raw.startsWith('+') && digits.length >= 10) return `+${digits}`;
-  return null;
-}
+import { getLoyaltyConfig, adjustPoints, calculateMaxRedeemablePoints, calculateRedeemValue, calculateTier, redeemPoints } from '../utils/loyaltyUtils';
+import { normalizePhone } from '../utils/phoneUtils';
+import LoyaltyOtp from '../models/LoyaltyOtp';
+import crypto from 'crypto';
+import { getMessagingProvider } from '../services/messagingProvider';
+import { logger } from '../utils/logger';
 
 async function generateCustomerId(hotelId: string): Promise<string> {
   const key     = `LOYALTYCUST-${hotelId}`;
@@ -144,6 +140,7 @@ router.put('/config', requireAdmin, async (req: AuthRequest, res: Response): Pro
       'expiryDays',
       'roundingRule',
       'calculationBase',
+      'maxEarnPointsPerBill',
     ] as const;
 
     const update: Record<string, any> = {};
@@ -353,7 +350,7 @@ router.patch('/customers/:customerId', requireCashierOrAdmin, async (req: AuthRe
     const allowed = [
       'name', 'email', 'birthday', 'anniversary',
       'gstCustomer', 'companyName', 'gstin',
-      'tags', 'notes', 'marketingOptIn',
+      'tags', 'notes', 'marketingOptIn', 'loyaltyOptOut',
       'deliveryAddresses',
     ] as const;
 
@@ -375,6 +372,95 @@ router.patch('/customers/:customerId', requireCashierOrAdmin, async (req: AuthRe
       return;
     }
     sendError(res, 500, 'Failed to update customer', err);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// GET /api/loyalty/customers/lookup?phone=9876543210&amount=500
+// POS cashier lookup: find a customer by phone and compute redeemable points for
+// a given bill amount. Returns 404 when no profile exists (offer enrollment).
+// IMPORTANT: must be registered before /customers/:customerId to avoid capture.
+// RBAC: cashier | admin
+// ────────────────────────────────────────────────────────────────────────────────
+router.get('/customers/lookup', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { phone, amount } = req.query as Record<string, string>;
+    if (!phone) {
+      res.status(400).json({ message: 'phone is required' });
+      return;
+    }
+
+    const e164 = normalizePhone(phone);
+    if (!e164) {
+      res.status(400).json({ message: 'Invalid phone number format' });
+      return;
+    }
+
+    const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
+    const customer = await CustomerProfile.findOne({
+      hotelId: hotelObjId,
+      phone:   e164,
+      status:  { $ne: 'merged' },
+    }).select('customerId name phone loyaltyBalance loyaltyOptOut status lifetimeSpend').lean();
+
+    if (!customer) {
+      res.status(404).json({ message: 'No loyalty profile found for this phone number' });
+      return;
+    }
+
+    if ((customer as any).status === 'blocked') {
+      res.status(403).json({ message: 'Customer account is blocked' });
+      return;
+    }
+
+    const config      = await getLoyaltyConfig(req.hotelId!);
+    const lifetimeSpend = (customer as any).lifetimeSpend ?? 0;
+    const tier         = calculateTier(lifetimeSpend, config.tierThresholds);
+
+    if ((customer as any).loyaltyOptOut) {
+      res.json({
+        customer: {
+          customerId:    (customer as any).customerId,
+          name:          (customer as any).name,
+          phone:         (customer as any).phone,
+          loyaltyBalance: (customer as any).loyaltyBalance,
+          loyaltyOptOut: true,
+          tier,
+        },
+        redeemablePoints: 0,
+        discountValue:    0,
+        config:           null,
+      });
+      return;
+    }
+
+    const billAmount   = parseFloat(amount) || 0;
+    const balance      = (customer as any).loyaltyBalance ?? 0;
+    const redeemable   = billAmount > 0 && config.enabled
+      ? calculateMaxRedeemablePoints(billAmount, balance, balance, config)
+      : 0;
+    const discountValue = redeemable > 0 ? calculateRedeemValue(redeemable, config) : 0;
+
+    res.json({
+      customer: {
+        customerId:    (customer as any).customerId,
+        name:          (customer as any).name,
+        phone:         (customer as any).phone,
+        loyaltyBalance: balance,
+        loyaltyOptOut: false,
+        tier,
+      },
+      redeemablePoints: redeemable,
+      discountValue,
+      config: config.enabled ? {
+        rewardName:           config.rewardName,
+        minimumRedeemPoints:  config.minimumRedeemPoints,
+        maximumRedeemPercent: config.maximumRedeemPercent,
+        pointValueInPaisa:    config.pointValueInPaisa,
+      } : null,
+    });
+  } catch (err) {
+    sendError(res, 500, 'Failed to lookup customer', err);
   }
 });
 
@@ -723,6 +809,226 @@ router.patch('/customers/:customerId/status', requireAdmin, async (req: AuthRequ
     res.json({ customer: { customerId: customer.customerId, name: customer.name, status: customer.status } });
   } catch (err) {
     sendError(res, 500, 'Failed to update customer status', err);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// POST /api/loyalty/otp/send
+// Generate a 6-digit OTP for loyalty point redemption and store it (hashed).
+// Rate limit: max 3 pending OTPs per customer per 10-minute window.
+// RBAC: cashier | admin
+// Body: { phone: string }
+// ────────────────────────────────────────────────────────────────────────────────
+router.post('/otp/send', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { phone } = req.body as { phone?: string };
+    if (!phone) { res.status(400).json({ message: 'phone is required' }); return; }
+
+    const e164 = normalizePhone(phone);
+    if (!e164) { res.status(400).json({ message: 'Invalid phone number format' }); return; }
+
+    const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
+
+    const customer = await CustomerProfile.findOne({
+      hotelId: hotelObjId,
+      phone:   e164,
+      status:  'active',
+      loyaltyOptOut: { $ne: true },
+    }).select('_id customerId name loyaltyBalance').lean();
+
+    if (!customer) {
+      res.status(404).json({ message: 'No active loyalty profile found for this phone number' });
+      return;
+    }
+
+    // Rate limit: max 3 OTP requests per customer per 10 minutes
+    const windowStart = new Date(Date.now() - 10 * 60 * 1000);
+    const recentCount = await LoyaltyOtp.countDocuments({
+      hotelId:    hotelObjId,
+      customerId: (customer as any)._id,
+      purpose:    'redemption',
+      createdAt:  { $gte: windowStart },
+    });
+    if (recentCount >= 3) {
+      res.status(429).json({ message: 'Too many OTP requests. Please wait 10 minutes before trying again.' });
+      return;
+    }
+
+    // Generate 6-digit OTP — hashed before storage, never logged or returned
+    const rawOtp    = String(crypto.randomInt(100000, 1000000));
+    const hashedOtp = crypto.createHash('sha256').update(rawOtp).digest('hex');
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5-minute TTL
+
+    await LoyaltyOtp.create({
+      hotelId:    hotelObjId,
+      customerId: (customer as any)._id,
+      phone:      e164,
+      purpose:    'redemption',
+      otp:        hashedOtp,
+      expiresAt,
+    });
+
+    // Deliver OTP via configured SMS/WhatsApp provider (hotel-scoped, async)
+    const provider = await getMessagingProvider(req.hotelId!, 'sms');
+    const sendResult = await provider.sendMessages(
+      `otp-${(customer as any)._id}-${Date.now()}`,
+      'sms',
+      [{
+        phone:      e164,
+        message:    `Your loyalty redemption OTP is ${rawOtp}. Valid for 5 minutes. Do not share this code.`,
+        customerId: String((customer as any)._id),
+      }],
+    );
+
+    if (sendResult.status === 'no_provider') {
+      // No SMS provider configured — OTP cannot be delivered.
+      // In development environments, operators must configure a provider.
+      logger.warn('[loyalty/otp] OTP generated but no SMS provider configured', {
+        hotelId: req.hotelId,
+        phone:   e164,
+      });
+      res.status(503).json({
+        message:  'OTP generated but no SMS/WhatsApp provider is configured. Configure a provider in Settings → Integrations before enabling loyalty redemption.',
+        code:     'OTP_PROVIDER_NOT_CONFIGURED',
+        customer: {
+          customerId:    (customer as any).customerId,
+          name:          (customer as any).name,
+          loyaltyBalance: (customer as any).loyaltyBalance,
+        },
+      });
+      return;
+    }
+
+    if (sendResult.status === 'failed') {
+      logger.warn('[loyalty/otp] OTP delivery failed', {
+        hotelId: req.hotelId,
+        phone:   e164,
+        reason:  sendResult.reason,
+      });
+      res.status(502).json({
+        message: 'OTP could not be delivered. Please try again.',
+        code:    'OTP_DELIVERY_FAILED',
+      });
+      return;
+    }
+
+    // OTP was sent successfully — do NOT include rawOtp in the response
+    res.json({
+      message:   'OTP sent successfully',
+      expiresIn: 300, // seconds
+      customer: {
+        customerId:    (customer as any).customerId,
+        name:          (customer as any).name,
+        loyaltyBalance: (customer as any).loyaltyBalance,
+      },
+    });
+  } catch (err) {
+    sendError(res, 500, 'Failed to generate OTP', err);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// POST /api/loyalty/otp/verify
+// Verify OTP and deduct loyalty points from the customer's balance.
+// Body: { phone, otp, points, orderId? }
+// RBAC: cashier | admin
+// ────────────────────────────────────────────────────────────────────────────────
+router.post('/otp/verify', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { phone, otp, points, orderId } = req.body as {
+      phone?: string; otp?: string; points?: number; orderId?: string;
+    };
+
+    if (!phone) { res.status(400).json({ message: 'phone is required' }); return; }
+    if (!otp)   { res.status(400).json({ message: 'otp is required' }); return; }
+    if (!points || typeof points !== 'number' || points <= 0) {
+      res.status(400).json({ message: 'points must be a positive number' });
+      return;
+    }
+
+    const e164 = normalizePhone(phone);
+    if (!e164) { res.status(400).json({ message: 'Invalid phone number format' }); return; }
+
+    const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
+
+    const customer = await CustomerProfile.findOne({
+      hotelId: hotelObjId,
+      phone:   e164,
+      status:  'active',
+      loyaltyOptOut: { $ne: true },
+    }).select('_id customerId name loyaltyBalance').lean();
+
+    if (!customer) {
+      res.status(404).json({ message: 'No active loyalty profile found' });
+      return;
+    }
+
+    const hashedInput = crypto.createHash('sha256').update(String(otp)).digest('hex');
+
+    // Find the most recent unused, unexpired OTP for this customer
+    const otpDoc = await LoyaltyOtp.findOne({
+      hotelId:    hotelObjId,
+      customerId: (customer as any)._id,
+      purpose:    'redemption',
+      usedAt:     null,
+      expiresAt:  { $gt: new Date() },
+    }).sort({ createdAt: -1 });
+
+    if (!otpDoc) {
+      res.status(400).json({ message: 'No valid OTP found. Please request a new OTP.' });
+      return;
+    }
+
+    // Increment attempt count atomically — max 5 attempts per OTP
+    const updated = await LoyaltyOtp.findOneAndUpdate(
+      { _id: otpDoc._id, attempts: { $lt: 5 }, usedAt: null },
+      { $inc: { attempts: 1 } },
+      { new: true },
+    );
+    if (!updated) {
+      res.status(429).json({ message: 'Too many incorrect attempts. Please request a new OTP.' });
+      return;
+    }
+
+    if (updated.otp !== hashedInput) {
+      const remaining = 5 - updated.attempts;
+      res.status(400).json({ message: `Incorrect OTP. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.` });
+      return;
+    }
+
+    // OTP is correct — mark as used
+    await LoyaltyOtp.updateOne({ _id: otpDoc._id }, { $set: { usedAt: new Date() } });
+
+    // Deduct points
+    const config = await getLoyaltyConfig(req.hotelId!);
+    const discountValue = await redeemPoints(
+      (customer as any)._id,
+      req.hotelId!,
+      Math.round(points),
+      config,
+      {
+        orderId:   orderId || undefined,
+        createdBy: req.cashierName || 'cashier',
+        remarks:   `OTP-verified redemption: ${Math.round(points)} ${config.rewardName}`,
+      },
+    );
+
+    res.json({
+      success:       true,
+      discountValue,
+      pointsRedeemed: Math.round(points),
+      customer: {
+        customerId:    (customer as any).customerId,
+        name:          (customer as any).name,
+        loyaltyBalance: (customer as any).loyaltyBalance - Math.round(points),
+      },
+    });
+  } catch (err: any) {
+    if (err.message?.startsWith('Insufficient')) {
+      res.status(400).json({ message: err.message });
+      return;
+    }
+    sendError(res, 500, 'Failed to verify OTP', err);
   }
 });
 

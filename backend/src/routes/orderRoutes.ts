@@ -18,6 +18,14 @@ import { logAudit } from '../utils/audit';
 import { logger } from '../utils/logger';
 import { io } from '../server';
 import { sendError } from '../utils/sendError';
+import { normalizePhone } from '../utils/phoneUtils';
+import Payment from '../models/Payment';
+import LoyaltyTransaction from '../models/LoyaltyTransaction';
+import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, redeemPoints, reverseEarnedPoints } from '../utils/loyaltyUtils';
+import Coupon from '../models/Coupon';
+import CouponRedemption from '../models/CouponRedemption';
+import GiftVoucher from '../models/GiftVoucher';
+import { resolveCoupon, CouponResult } from '../utils/couponUtils';
 
 const router = Router();
 
@@ -27,8 +35,9 @@ const router = Router();
 // ignored and recomputed from the raw items before any Order is persisted.
 function recalcOrderTotals(
   rawItems: any[],
-  rawDiscount: unknown,
+  rawManualDiscount: unknown,
   rawLoyaltyDiscount: unknown,
+  serverCouponDiscount = 0,
 ) {
   let subtotal = 0;
   let taxTotal = 0;
@@ -42,7 +51,6 @@ function recalcOrderTotals(
     const lineTotal = Math.round((lineBase + taxAmt) * 100) / 100;
     subtotal += lineBase;
     taxTotal += taxAmt;
-    // Keep modifierTotal consistent with the normalised quantity
     const selectedModifiers = (item.selectedModifiers ?? []).map((m: any) => ({
       ...m,
       modifierTotal: Math.round((Number(m.modifierPrice) || 0) * qty * 100) / 100,
@@ -53,11 +61,12 @@ function recalcOrderTotals(
   subtotal = Math.round(subtotal * 100) / 100;
   taxTotal = Math.round(taxTotal * 100) / 100;
   const available        = subtotal + taxTotal;
-  const discountAmount   = Math.min(Math.max(0, Number(rawDiscount) || 0), available);
-  const loyaltyDiscount  = Math.min(Math.max(0, Number(rawLoyaltyDiscount) || 0), available - discountAmount);
-  const grandTotal       = Math.max(0, Math.round((available - discountAmount - loyaltyDiscount) * 100) / 100);
+  const discountAmount   = Math.min(Math.max(0, Number(rawManualDiscount) || 0), available);
+  const couponDiscount   = Math.min(Math.max(0, serverCouponDiscount), available - discountAmount);
+  const loyaltyDiscount  = Math.min(Math.max(0, Number(rawLoyaltyDiscount) || 0), available - discountAmount - couponDiscount);
+  const grandTotal       = Math.max(0, Math.round((available - discountAmount - couponDiscount - loyaltyDiscount) * 100) / 100);
 
-  return { items, subtotal, taxTotal, discountAmount, loyaltyDiscount, grandTotal };
+  return { items, subtotal, taxTotal, discountAmount, couponDiscount, loyaltyDiscount, grandTotal };
 }
 
 
@@ -248,9 +257,12 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
 
     // Loyalty discounts applied at Guest level (session billing) are not reflected in
     // Order.grandTotal. Subtract them so totalSales is net actual revenue.
-    const [loyaltyAgg] = await Guest.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: 'billed', loyaltyDiscountAmount: { $gt: 0 }, billedAt: { $gte: startOfDay, $lte: endOfDay } } },
-      { $group: { _id: null, total: { $sum: '$loyaltyDiscountAmount' } } },
+    const [[loyaltyAgg], cancelledOrders] = await Promise.all([
+      Guest.aggregate([
+        { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: 'billed', loyaltyDiscountAmount: { $gt: 0 }, billedAt: { $gte: startOfDay, $lte: endOfDay } } },
+        { $group: { _id: null, total: { $sum: '$loyaltyDiscountAmount' } } },
+      ]),
+      Order.countDocuments({ hotelId: new mongoose.Types.ObjectId(req.hotelId!), status: 'cancelled', createdAt: { $gte: startOfDay, $lte: endOfDay } }),
     ]);
     const sessionLoyaltyDiscount = loyaltyAgg?.total ?? 0;
 
@@ -274,6 +286,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
       totalOrders: r.totalOrders,
       parcelOrders: r.parcelOrders,
       parcelRevenue: r.parcelRevenue,
+      cancelledOrders,
       paymentBreakdown: {
         cash: r.cashTotal,
         upi: r.upiTotal,
@@ -338,9 +351,12 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
       }},
     ]);
 
-    const [rangeLoyaltyAgg] = await Guest.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: 'billed', loyaltyDiscountAmount: { $gt: 0 }, billedAt: { $gte: start, $lte: end } } },
-      { $group: { _id: null, total: { $sum: '$loyaltyDiscountAmount' } } },
+    const [[rangeLoyaltyAgg], rangeCancelledOrders] = await Promise.all([
+      Guest.aggregate([
+        { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: 'billed', loyaltyDiscountAmount: { $gt: 0 }, billedAt: { $gte: start, $lte: end } } },
+        { $group: { _id: null, total: { $sum: '$loyaltyDiscountAmount' } } },
+      ]),
+      Order.countDocuments({ hotelId: new mongoose.Types.ObjectId(req.hotelId!), status: 'cancelled', createdAt: { $gte: start, $lte: end } }),
     ]);
     const rangeSessionLoyaltyDiscount = rangeLoyaltyAgg?.total ?? 0;
 
@@ -357,6 +373,7 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
       from: fromStr, to: toStr,
       totalSales: netRangeSales, totalTax: r.totalTax, totalDiscount: r.totalDiscount,
       totalOrders: r.totalOrders, parcelOrders: r.parcelOrders, parcelRevenue: r.parcelRevenue,
+      cancelledOrders: rangeCancelledOrders,
       paymentBreakdown: {
         cash: r.cashTotal,
         upi: r.upiTotal,
@@ -624,42 +641,51 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
         try {
           const entry = await resolveHotelStatus(req.hotelId!);
           if ((entry.features as any)?.customerIdentification === 'name_mobile') {
-            const cleanPhone = String(customerPhone).trim().slice(0, 20);
-            const cleanName  = String(customerName || '').trim().slice(0, 100);
+            // E-5 fix: always normalize to E.164 before matching/storing
+            const e164Phone = normalizePhone(String(customerPhone));
+            const cleanName = String(customerName || '').trim().slice(0, 100);
 
-            let profile = await CustomerProfile.findOne({
-              hotelId: new mongoose.Types.ObjectId(req.hotelId),
-              phone:   cleanPhone,
-              status:  { $ne: 'merged' },
-            });
-
-            if (!profile && cleanName) {
-              const counterKey = `CUST-${req.hotelId}`;
-              const counter = await DailyCounter.findOneAndUpdate(
-                { key: counterKey },
-                { $inc: { seq: 1 }, $setOnInsert: { key: counterKey } },
-                { upsert: true, new: true }
-              );
-              const newCustomerId = `CUST-${req.hotelId!.slice(-6).toUpperCase()}-${String(counter!.seq).padStart(4, '0')}`;
-              profile = await CustomerProfile.create({
-                hotelId:     new mongoose.Types.ObjectId(req.hotelId),
-                customerId:  newCustomerId,
-                name:        cleanName,
-                phone:       cleanPhone,
-                lastVisitAt: new Date(),
-                visitCount:  1,
+            if (e164Phone) {
+              let profile = await CustomerProfile.findOne({
+                hotelId: new mongoose.Types.ObjectId(req.hotelId),
+                phone:   e164Phone,
+                status:  { $ne: 'merged' },
               });
-              logger.info('CustomerProfile created', { customerId: String(newCustomerId), hotelId: req.hotelId });
-            } else if (profile) {
-              CustomerProfile.findByIdAndUpdate(profile._id, {
-                $set: { lastVisitAt: new Date(), ...(cleanName ? { name: cleanName } : {}) },
-                $inc: { visitCount: 1 },
-              }).catch(() => {});
-            }
 
-            if (profile) {
-              // Link profile to guest — non-blocking
-              Guest.findByIdAndUpdate(linkedGuest._id, { $set: { customerId: profile._id } }).catch(() => {});
+              if (!profile && cleanName) {
+                const counterKey = `CUST-${req.hotelId}`;
+                const counter = await DailyCounter.findOneAndUpdate(
+                  { key: counterKey },
+                  { $inc: { seq: 1 }, $setOnInsert: { key: counterKey } },
+                  { upsert: true, new: true }
+                );
+                const newCustomerId = `CUST-${req.hotelId!.slice(-6).toUpperCase()}-${String(counter!.seq).padStart(4, '0')}`;
+                profile = await CustomerProfile.create({
+                  hotelId:     new mongoose.Types.ObjectId(req.hotelId),
+                  customerId:  newCustomerId,
+                  name:        cleanName,
+                  phone:       e164Phone,
+                  lastVisitAt: new Date(),
+                  firstVisitAt: new Date(),
+                  visitCount:  1,
+                });
+                logger.info('CustomerProfile created', { customerId: String(newCustomerId), hotelId: req.hotelId });
+              } else if (profile) {
+                // E-6 fix: only increment visitCount when the guest has no prior profile link
+                // (i.e., this is the first order linking this customer to this session/guest).
+                // visitCount increments once per guest session, not per order.
+                CustomerProfile.findByIdAndUpdate(profile._id, {
+                  $set: { lastVisitAt: new Date(), ...(cleanName ? { name: cleanName } : {}) },
+                  $inc: { visitCount: 1 },
+                }).catch(() => {});
+              }
+
+              if (profile) {
+                // Link profile to guest — non-blocking; subsequent orders for the same
+                // guest already have customerId set, so the outer `!linkedGuest.customerId`
+                // guard prevents further increments for the same guest.
+                Guest.findByIdAndUpdate(linkedGuest._id, { $set: { customerId: profile._id } }).catch(() => {});
+              }
             }
           }
         } catch (profileErr) {
@@ -725,8 +751,71 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       return res.status(422).json({ message: itemError });
     }
 
+    // ── Server-side coupon resolution ─────────────────────────────────────────
+    // Compute item totals first (needed for coupon minimum order check).
+    const preCoupon     = recalcOrderTotals(validatedItems, 0, 0);
+    const orderTotal    = preCoupon.subtotal + preCoupon.taxTotal;
+    let couponResult: CouponResult | null = null;
+    try {
+      couponResult = await resolveCoupon(
+        req.body.couponCode,
+        req.hotelId!,
+        orderTotal,
+        validatedItems,
+      );
+    } catch (couponErr: any) {
+      return res.status(400).json({ message: couponErr.message, code: couponErr.code ?? 'COUPON_ERROR' });
+    }
+
+    // Resolve customer identity for per-customer coupon limit enforcement
+    let couponCustomerId: mongoose.Types.ObjectId | null = null;
+    let couponCustomerPhone = '';
+    if (couponResult) {
+      const rawPhone = String(req.body.customerPhone || '');
+      const np = rawPhone ? normalizePhone(rawPhone) : '';
+      if (np) {
+        couponCustomerPhone = np;
+        const cpDoc = await CustomerProfile.findOne({
+          hotelId: new mongoose.Types.ObjectId(req.hotelId!),
+          phone:   np,
+          status:  { $ne: 'merged' },
+        }).select('_id').lean();
+        if (cpDoc) couponCustomerId = (cpDoc as any)._id;
+      }
+    }
+
+    // ── Server-side gift voucher resolution ──────────────────────────────────
+    // hotelId is always from JWT (req.hotelId) — never from req.body
+    const rawVoucherCode = req.body.giftVoucherCode
+      ? String(req.body.giftVoucherCode).trim().toUpperCase()
+      : '';
+    let voucherDoc: any = null;
+    if (rawVoucherCode) {
+      const voucherNow = new Date();
+      voucherDoc = await GiftVoucher.findOne({
+        hotelId:     new mongoose.Types.ObjectId(req.hotelId!),
+        voucherCode: rawVoucherCode,
+        isActive:    true,
+        isDeleted:   false,
+        $or: [{ expiresAt: null }, { expiresAt: { $gte: voucherNow } }],
+      }).select('_id voucherCode balance').lean();
+      if (!voucherDoc) {
+        return res.status(400).json({ message: 'Gift voucher not found, expired, or inactive' });
+      }
+    }
+
     const orderNumber = await generateOrderNumber(req.hotelId!);
-    const recalc = recalcOrderTotals(validatedItems, req.body.discountAmount, req.body.loyaltyDiscount);
+    const recalc = recalcOrderTotals(
+      validatedItems,
+      req.body.discountAmount,
+      req.body.loyaltyDiscount,
+      couponResult?.couponDiscount ?? 0,
+    );
+    // Server-authoritative voucher amount: min(voucher balance, post-coupon grand total)
+    const serverVoucherAmount = voucherDoc && voucherDoc.balance > 0
+      ? Math.round(Math.min(voucherDoc.balance, recalc.grandTotal) * 100) / 100
+      : 0;
+    const finalGrandTotal = Math.round(Math.max(0, recalc.grandTotal - serverVoucherAmount) * 100) / 100;
 
     // Explicit field allowlist — never spread req.body to prevent mass-assignment of
     // server-controlled fields (status, completedBy, completedAt, cashierId, hotelId).
@@ -757,8 +846,14 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       subtotal:            recalc.subtotal,
       taxTotal:            recalc.taxTotal,
       discountAmount:      recalc.discountAmount,
+      couponId:            couponResult?.couponId ?? null,
+      couponCode:          couponResult?.couponCode ?? '',
+      couponDiscount:      recalc.couponDiscount,
       loyaltyDiscount:     recalc.loyaltyDiscount,
-      grandTotal:          recalc.grandTotal,
+      giftVoucherId:       voucherDoc ? voucherDoc._id : null,
+      giftVoucherCode:     rawVoucherCode || '',
+      giftVoucherAmount:   serverVoucherAmount,
+      grandTotal:          finalGrandTotal,
     });
     // ── Atomic transaction: persist order + deduct stock atomically ──────────
     // order.save() and both stock-deduction writes must succeed or fail together.
@@ -780,6 +875,101 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     const txSession = await mongoose.startSession();
     try {
       await txSession.withTransaction(async () => {
+        // Atomically claim one coupon usage slot inside the transaction.
+        // If the limit is exhausted by a concurrent order, the transaction aborts.
+        if (couponResult) {
+          const couponDoc = await Coupon.findOneAndUpdate(
+            {
+              _id:       couponResult.couponId,
+              hotelId:   new mongoose.Types.ObjectId(req.hotelId!),
+              isActive:  true,
+              isDeleted: false,
+              $or: [
+                { usageLimit: { $lte: 0 } },
+                { $expr: { $lt: ['$usageCount', '$usageLimit'] } },
+              ],
+            },
+            { $inc: { usageCount: 1 } },
+            { session: txSession },
+          );
+          if (!couponDoc) {
+            const e = new Error('Coupon usage limit reached — please try a different coupon');
+            (e as any).isCouponError = true;
+            throw e;
+          }
+
+          // Per-customer limit check (enforced inside the transaction)
+          if (couponDoc.perCustomerLimit > 0 && (couponCustomerId || couponCustomerPhone)) {
+            const custFilter: Record<string, any> = {
+              hotelId:  new mongoose.Types.ObjectId(req.hotelId!),
+              couponId: couponResult!.couponId,
+              status:   'redeemed',
+            };
+            if (couponCustomerId) custFilter.customerId = couponCustomerId;
+            else custFilter.phone = couponCustomerPhone;
+            const ccount = await CouponRedemption.countDocuments(custFilter, { session: txSession });
+            if (ccount >= couponDoc.perCustomerLimit) {
+              const e = new Error('You have reached the per-customer usage limit for this coupon');
+              (e as any).isCouponError = true;
+              (e as any).code = 'COUPON_CUSTOMER_LIMIT';
+              throw e;
+            }
+          }
+
+          // Record the redemption atomically alongside the order
+          await CouponRedemption.create([{
+            hotelId:        new mongoose.Types.ObjectId(req.hotelId!),
+            couponId:       couponResult!.couponId,
+            couponCode:     couponResult!.couponCode,
+            orderId:        order._id,
+            customerId:     couponCustomerId,
+            phone:          couponCustomerPhone,
+            discountAmount: recalc.couponDiscount,
+            status:         'redeemed',
+            redeemedAt:     new Date(),
+          }], { session: txSession });
+        }
+        // Atomically deduct gift voucher balance inside the transaction
+        if (voucherDoc && serverVoucherAmount > 0) {
+          const vNow = new Date();
+          const deducted = await GiftVoucher.findOneAndUpdate(
+            {
+              _id:       voucherDoc._id,
+              hotelId:   new mongoose.Types.ObjectId(req.hotelId!),
+              isActive:  true,
+              isDeleted: false,
+              $or: [{ expiresAt: null }, { expiresAt: { $gte: vNow } }],
+              balance:   { $gte: serverVoucherAmount },
+            },
+            [
+              { $set: { balance: { $subtract: ['$balance', serverVoucherAmount] } } },
+              {
+                $set: {
+                  isActive: { $cond: { if: { $lte: ['$balance', 0] }, then: false, else: '$isActive' } },
+                  transactions: {
+                    $concatArrays: [
+                      { $ifNull: ['$transactions', []] },
+                      [{
+                        type: 'redeem', amount: serverVoucherAmount, balanceAfter: { $ifNull: ['$balance', 0] },
+                        orderId: order._id,
+                        remarks: `Order ${orderNumber}`,
+                        createdBy: `cashier:${req.hotelId}`,
+                        createdAt: vNow,
+                      }],
+                    ],
+                  },
+                },
+              },
+            ] as any,
+            { session: txSession, new: true },
+          );
+          if (!deducted) {
+            const e = new Error('Gift voucher is no longer valid or has insufficient balance — please re-validate');
+            (e as any).isVoucherError = true;
+            throw e;
+          }
+        }
+
         // Ingredient deduction runs first so we capture actual clamped deltas
         // and persist them on the order for use during cancellation restoration.
         const { actualDeltas, previousStocks } = await applyIngredientStockChange(order.items, req.hotelId!, -1, txSession);
@@ -826,6 +1016,36 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     }
 
     logger.info('Order saved', { orderId: String(order._id), orderNumber: order.orderNumber, hotelId: req.hotelId });
+
+    // ── Loyalty redemption — deduct points after order is committed ────────────
+    // Synchronous so the cashier sees an error if redemption fails (e.g. insufficient balance).
+    if (order.redeemedPoints > 0) {
+      try {
+        const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+        if (loyaltyCfg.enabled) {
+          const e164Phone = normalizePhone(order.customerPhone);
+          if (e164Phone) {
+            const redeemProfile = await CustomerProfile.findOne({
+              hotelId: new mongoose.Types.ObjectId(req.hotelId),
+              phone:   e164Phone,
+              status:  'active',
+              loyaltyOptOut: { $ne: true },
+            }).select('_id');
+            if (redeemProfile) {
+              await redeemPoints(
+                redeemProfile._id as mongoose.Types.ObjectId,
+                req.hotelId!,
+                order.redeemedPoints,
+                loyaltyCfg,
+                { orderId: String(order._id), createdBy: req.cashierName || 'cashier' },
+              );
+            }
+          }
+        }
+      } catch (e) {
+        logger.warn('[loyalty] redemption on order creation failed', { orderId: String(order._id), err: String(e) });
+      }
+    }
 
     // ── Phase 7: Fire-and-forget KOT print ───────────────────────────────────
     scheduleKOTPrint(req.hotelId!, {
@@ -884,6 +1104,12 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
         const existing = await Order.findOne({ offlineId: req.body.offlineId, hotelId: req.hotelId });
         if (existing) return res.status(200).json(existing);
       } catch { /* fall through to sendError */ }
+    }
+    if (error.isCouponError) {
+      return res.status(409).json({ message: error.message, code: (error as any).code ?? 'COUPON_USAGE_LIMIT' });
+    }
+    if ((error as any).isVoucherError) {
+      return res.status(400).json({ message: error.message });
     }
     logger.error('[POST /orders] Failed', { hotelId: req.hotelId, error: String(error), code: error.code });
     sendError(res, 400, 'Invalid data', error);
@@ -999,6 +1225,141 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
             { $set: { totalAmount: { $max: [0, { $subtract: ['$totalAmount', existing.grandTotal] }] } } },
           ]);
         }
+
+        // ── Loyalty reversal on cancellation (fire-and-forget) ──────────────────
+        ;(async () => {
+          try {
+            const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+            if (!loyaltyCfg.enabled) return;
+
+            const customerPhone = existing.customerPhone;
+            if (!customerPhone) return;
+
+            const cancelProfile = await CustomerProfile.findOne({
+              hotelId: new mongoose.Types.ObjectId(req.hotelId),
+              phone:   customerPhone,
+              status:  { $ne: 'merged' },
+            }).select('_id').lean();
+            if (!cancelProfile) return;
+
+            const profileId = (cancelProfile as any)._id;
+            const orderId   = String(existing._id);
+
+            // 1. Reverse earned points via Payment record (Razorpay earn path)
+            const earnedPay = await Payment.findOne({
+              orderId:          existing._id,
+              hotelId:          req.hotelId,
+              loyaltyEarnPoints: { $gt: 0 },
+              loyaltyReversedAt: null,
+            });
+            if (earnedPay) {
+              const claimedPay = await Payment.findOneAndUpdate(
+                { _id: earnedPay._id, loyaltyReversedAt: null },
+                { $set: { loyaltyReversedAt: new Date() } },
+              );
+              if (claimedPay) {
+                await reverseEarnedPoints(profileId, req.hotelId!, claimedPay.loyaltyEarnPoints, loyaltyCfg, {
+                  orderId,
+                  paymentId: String(claimedPay._id),
+                  createdBy: req.cashierName || 'system:cancel',
+                  remarks:   `Earn reversal: Order #${existing.orderNumber ?? ''} cancelled`,
+                });
+              }
+            } else {
+              // Reverse earned points via Order earn path (cash/UPI takeaway)
+              const earnTx = await LoyaltyTransaction.findOne({
+                hotelId:         new mongoose.Types.ObjectId(req.hotelId),
+                customerId:      profileId,
+                orderId:         existing._id,
+                transactionType: 'earn',
+              }).sort({ createdAt: -1 }).lean();
+              if (earnTx && earnTx.points > 0) {
+                // Atomic claim: clear loyaltyEarnedAt to prevent repeated reversal
+                const claimedOrder = await Order.findOneAndUpdate(
+                  { _id: existing._id, loyaltyEarnedAt: { $ne: null } },
+                  { $set: { loyaltyEarnedAt: null } },
+                );
+                if (claimedOrder) {
+                  await reverseEarnedPoints(profileId, req.hotelId!, earnTx.points, loyaltyCfg, {
+                    orderId,
+                    createdBy: req.cashierName || 'system:cancel',
+                    remarks:   `Earn reversal: Order #${existing.orderNumber ?? ''} cancelled`,
+                  });
+                }
+              }
+            }
+
+            // 2. Restore redeemed points
+            const redeemedPts = (existing as any).redeemedPoints ?? 0;
+            if (redeemedPts > 0) {
+              await earnPoints(profileId, req.hotelId!, redeemedPts, loyaltyCfg, {
+                orderId,
+                createdBy: req.cashierName || 'system:cancel',
+                remarks:   `Redemption restored: Order #${existing.orderNumber ?? ''} cancelled`,
+              });
+            }
+          } catch (e) {
+            logger.warn('[loyalty] cancellation reversal failed', { orderId: String(existing._id), err: String(e) });
+          }
+        })();
+
+        // ── Coupon reversal on cancellation (fire-and-forget, idempotent via status field) ──
+        if ((existing as any).couponId) {
+          ;(async () => {
+            try {
+              const claimedRed = await CouponRedemption.findOneAndUpdate(
+                { hotelId: req.hotelId, orderId: existing._id, status: 'redeemed' },
+                { $set: { status: 'reversed', reversedAt: new Date(), reversedReason: 'order_cancelled' } },
+              );
+              if (claimedRed) {
+                await Coupon.findOneAndUpdate(
+                  { _id: claimedRed.couponId, hotelId: req.hotelId, usageCount: { $gt: 0 } },
+                  { $inc: { usageCount: -1 } },
+                );
+              }
+            } catch (e) {
+              logger.warn('[coupon] reversal on cancellation failed', { orderId: String(existing._id), err: String(e) });
+            }
+          })();
+        }
+
+        // ── Gift voucher reversal on cancellation (fire-and-forget, idempotent via giftVoucherRestoredAt) ──
+        const cancelVoucherAmt = (existing as any).giftVoucherAmount as number | undefined;
+        if (cancelVoucherAmt && cancelVoucherAmt > 0 && (existing as any).giftVoucherId) {
+          ;(async () => {
+            try {
+              const claimed = await Order.findOneAndUpdate(
+                { _id: existing._id, hotelId: req.hotelId, giftVoucherRestoredAt: null },
+                { $set: { giftVoucherRestoredAt: new Date() } },
+              );
+              if (!claimed) return;
+              const cancelNow = new Date();
+              await GiftVoucher.findOneAndUpdate(
+                { _id: (existing as any).giftVoucherId, hotelId: req.hotelId },
+                [
+                  { $set: { balance: { $add: ['$balance', cancelVoucherAmt] }, isActive: true } },
+                  {
+                    $set: {
+                      transactions: {
+                        $concatArrays: [
+                          { $ifNull: ['$transactions', []] },
+                          [{
+                            type: 'refund', amount: cancelVoucherAmt, balanceAfter: { $ifNull: ['$balance', 0] },
+                            orderId: existing._id,
+                            remarks: `Cancellation: Order #${existing.orderNumber ?? ''}`,
+                            createdBy: 'system:cancel', createdAt: cancelNow,
+                          }],
+                        ],
+                      },
+                    },
+                  },
+                ] as any,
+              );
+            } catch (e) {
+              logger.warn('[gift-voucher] reversal on cancellation failed', { orderId: String(existing._id), err: String(e) });
+            }
+          })();
+        }
       }
     }
 
@@ -1062,6 +1423,61 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       scheduleOrderReceiptPrint(req.hotelId!, orderForResponse.toObject()).catch(err => {
         logger.warn('Receipt print dispatch failed', { orderId: String(existing._id), error: err?.message });
       });
+
+      // Loyalty earn for non-dine-in orders (idempotent, fire-and-forget)
+      if (!['dine-in'].includes(existing.orderSource)) {
+        ;(async () => {
+          try {
+            // Skip if a gateway Payment already handled the earn (Razorpay webhook/verify)
+            const paidViaGateway = await Payment.findOne({
+              orderId:         existing._id,
+              hotelId:         req.hotelId,
+              loyaltyEarnedAt: { $ne: null },
+            }).select('_id').lean();
+            if (paidViaGateway) return;
+
+            // Atomic claim on the Order — prevents duplicate earn from concurrent complete calls
+            const claimedOrder = await Order.findOneAndUpdate(
+              { _id: existing._id, hotelId: req.hotelId, loyaltyEarnedAt: null },
+              { $set: { loyaltyEarnedAt: new Date() } },
+            );
+            if (!claimedOrder) return;
+
+            const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+
+            const phone = existing.customerPhone;
+            if (!phone) return;
+
+            const earnProfile = await CustomerProfile.findOne({
+              hotelId: new mongoose.Types.ObjectId(req.hotelId),
+              phone,
+              status:  { $ne: 'merged' },
+            }).select('_id loyaltyOptOut').lean();
+            if (!earnProfile) return;
+
+            // lifetimeSpend is incremented once per completed order (gated by claimedOrder above)
+            await CustomerProfile.findByIdAndUpdate(
+              (earnProfile as any)._id,
+              { $inc: { lifetimeSpend: existing.grandTotal }, $set: { lastVisitAt: new Date() } },
+            ).catch(() => {});
+
+            if (!loyaltyCfg.enabled || (earnProfile as any).loyaltyOptOut) return;
+
+            const pts = calculateEarnedPoints(existing.grandTotal, loyaltyCfg);
+            if (pts <= 0) return;
+
+            await earnPoints(
+              (earnProfile as any)._id,
+              req.hotelId!,
+              pts,
+              loyaltyCfg,
+              { orderId: String(existing._id), createdBy: req.cashierName || 'system:order_complete' },
+            );
+          } catch (e) {
+            logger.warn('[loyalty] order completion earn failed', { orderId: String(existing._id), err: String(e) });
+          }
+        })();
+      }
 
       return res.json(orderForResponse);
     }

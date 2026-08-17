@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Shield, ChevronDown } from 'lucide-react';
+import { Search, Shield, ChevronDown, Download } from 'lucide-react';
 import { fetchAuditLogs, type AuditLog } from '../api/audit';
 
 const ACTOR_ROLES = ['', 'admin', 'cashier', 'waiter', 'kitchen', 'super_admin'];
 
 const TARGET_TYPES = [
-  '', 'vendor', 'purchase_order', 'grn', 'coupon', 'gift_voucher',
+  '', 'vendor', 'purchase_order', 'grn', 'vendor_return', 'coupon', 'gift_voucher',
   'wallet', 'loyalty', 'payment', 'order', 'guest', 'product',
   'ingredient', 'expense', 'aggregator', 'device', 'settings',
 ];
@@ -73,6 +73,37 @@ export function AuditLogsPage() {
 
   useEffect(() => { load(1); }, [load]);
 
+  const exportCSV = useCallback(async () => {
+    try {
+      const res = await fetchAuditLogs({
+        page: 1, limit: 5000,
+        action:     filters.action     || undefined,
+        actorRole:  filters.actorRole  || undefined,
+        targetType: filters.targetType || undefined,
+        from:       filters.from       || undefined,
+        to:         filters.to         || undefined,
+      });
+      const headers = ['Time', 'Role', 'Module', 'Action', 'Target ID', 'Details'];
+      const rows = res.logs.map(log => [
+        formatTime(log.createdAt),
+        log.actorRole,
+        log.targetType,
+        log.action,
+        String(log.targetId ?? ''),
+        metaSummary(log.metadata),
+      ]);
+      const all = [headers, ...rows];
+      const content = all.map(row =>
+        row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')
+      ).join('\n');
+      const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = `audit-logs-${new Date().toLocaleDateString('en-CA')}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } catch { /* silent */ }
+  }, [filters]);
+
   const pages = Math.ceil(total / LIMIT);
 
   return (
@@ -84,7 +115,16 @@ export function AuditLogsPage() {
           <h1 className="text-sm font-bold text-ink">Audit Logs</h1>
           <span className="rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold text-brand">{total}</span>
         </div>
-        <p className="text-xs text-ink/50">All admin actions are recorded automatically.</p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-ink/50">All admin actions are recorded automatically.</p>
+          <button
+            onClick={() => { void exportCSV(); }}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink/50 hover:bg-ink/5 hover:text-ink"
+          >
+            <Download size={12} />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

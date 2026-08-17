@@ -70,6 +70,7 @@ const VendorsPage           = lazy(() => import('./pages/VendorsPage').then(m =>
 const PurchaseOrdersPage    = lazy(() => import('./pages/PurchaseOrdersPage').then(m => ({ default: m.PurchaseOrdersPage })));
 const GRNPage               = lazy(() => import('./pages/GRNPage').then(m => ({ default: m.GRNPage })));
 const VendorLedgerPage      = lazy(() => import('./pages/VendorLedgerPage').then(m => ({ default: m.VendorLedgerPage })));
+const VendorReturnsPage     = lazy(() => import('./pages/VendorReturnsPage').then(m => ({ default: m.VendorReturnsPage })));
 const CouponsPage           = lazy(() => import('./pages/CouponsPage').then(m => ({ default: m.CouponsPage })));
 const GiftVouchersPage      = lazy(() => import('./pages/GiftVouchersPage').then(m => ({ default: m.GiftVouchersPage })));
 const AuditLogsPage         = lazy(() => import('./pages/AuditLogsPage').then(m => ({ default: m.AuditLogsPage })));
@@ -192,6 +193,7 @@ export function App() {
                     <Route path="/purchase-orders" element={<AdminOnly><Suspense fallback={<PageFallback />}><PurchaseOrdersPage /></Suspense></AdminOnly>} />
                     <Route path="/grn"             element={<AdminOnly><Suspense fallback={<PageFallback />}><GRNPage /></Suspense></AdminOnly>} />
                     <Route path="/vendor-ledger"   element={<AdminOnly><Suspense fallback={<PageFallback />}><VendorLedgerPage /></Suspense></AdminOnly>} />
+                    <Route path="/vendor-returns"  element={<AdminOnly><Suspense fallback={<PageFallback />}><VendorReturnsPage /></Suspense></AdminOnly>} />
                     <Route path="/coupons"         element={<AdminOnly><Suspense fallback={<PageFallback />}><CouponsPage /></Suspense></AdminOnly>} />
                     <Route path="/gift-vouchers"   element={<AdminOnly><Suspense fallback={<PageFallback />}><GiftVouchersPage /></Suspense></AdminOnly>} />
                     <Route path="/audit-logs"      element={<AdminOnly><Suspense fallback={<PageFallback />}><AuditLogsPage /></Suspense></AdminOnly>} />

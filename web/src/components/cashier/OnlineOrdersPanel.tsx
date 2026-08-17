@@ -884,7 +884,7 @@ export function OnlineOrdersPanel() {
     setError(null);
     try {
       const res = await fetchOnlineOrders({ date: todayStr() });
-      setOrders(res);
+      setOrders(res.orders);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load orders');
     } finally {

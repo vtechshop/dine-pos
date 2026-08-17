@@ -17,8 +17,6 @@ import {
   cancelOrderAdmin,
   completeOrderPayment,
   completeOrderWithDetails,
-  applyCoupon,
-  redeemGiftVoucher,
   deductWallet,
   PaymentDetails,
 } from '../services/api';
@@ -276,11 +274,9 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         // Order successfully created — UPI pending record is no longer needed
         clearPendingUpiPayment();
         // Fire promo deductions fire-and-forget — non-blocking, non-fatal
+        // NOTE: coupon usageCount is now incremented atomically inside order creation; no call needed here.
+        // NOTE: gift voucher is now deducted atomically inside order creation via giftVoucherCode; no call needed here.
         if (promos) {
-          if (promos.couponId) applyCoupon(promos.couponId).catch(() => {});
-          if (promos.giftVoucherCode && promos.giftVoucherAmount) {
-            redeemGiftVoucher(promos.giftVoucherCode, promos.giftVoucherAmount, created._id).catch(() => {});
-          }
           if (promos.walletCustomerId && promos.walletAmount) {
             deductWallet(promos.walletCustomerId, promos.walletAmount, created._id).catch(() => {});
           }

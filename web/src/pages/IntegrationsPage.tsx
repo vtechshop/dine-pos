@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Link, Link2Off, RefreshCw, Copy, Check,
-  AlertCircle, Zap, Clock,
+  AlertCircle, Zap, Clock, MessageSquare, FlaskConical, Eye, EyeOff,
 } from 'lucide-react';
 import {
   fetchIntegrations,
@@ -12,6 +12,13 @@ import {
   retryWebhook,
 } from '../api/aggregator';
 import type { AggregatorIntegration, WebhookLog, AggregatorPlatform } from '../api/aggregator';
+import {
+  fetchMessagingProvider,
+  saveMessagingProvider,
+  testMessagingProvider,
+  deleteMessagingProvider,
+} from '../api/messagingProviders';
+import type { MessagingProviderConfig, MessagingChannel } from '../api/messagingProviders';
 import { Spinner } from '../components/ui/Spinner';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -519,13 +526,377 @@ function WebhookLogsTable({
   );
 }
 
+// ── Messaging Provider Card ───────────────────────────────────────────────────
+
+function MaskedInput({
+  value, onChange, placeholder, id,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  id: string;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        id={id}
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete="new-password"
+        className="flex-1 rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink/30 focus:border-brand focus:outline-none"
+      />
+      <button
+        type="button"
+        onClick={() => setShow(s => !s)}
+        className="shrink-0 rounded p-1.5 text-ink/40 hover:text-ink"
+        title={show ? 'Hide' : 'Show'}
+      >
+        {show ? <EyeOff size={13} /> : <Eye size={13} />}
+      </button>
+    </div>
+  );
+}
+
+function MessagingWebhookUrlField({ hotelId }: { hotelId: string }) {
+  const [copied, setCopied] = useState(false);
+  const apiBase    = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:5000/api';
+  // Strip trailing /api, /api/, or / to derive the server base regardless of VITE_API_URL format
+  const serverBase = apiBase.replace(/\/api\/?$/, '').replace(/\/$/, '');
+  const url        = `${serverBase}/api/messaging-webhooks/msg91/${hotelId}`;
+
+  function handleCopy() {
+    void navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div>
+      <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink/50">
+        MSG91 Webhook URL (paste in MSG91 dashboard → Webhooks)
+      </label>
+      <div className="flex items-center gap-2 rounded-lg border border-border bg-mist px-3 py-2">
+        <span className="flex-1 truncate font-mono text-[11px] text-ink/60">{url}</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="shrink-0 text-ink/40 hover:text-brand transition"
+          title="Copy"
+        >
+          {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+        </button>
+      </div>
+      <p className="mt-1 text-[11px] text-ink/40">
+        Also set a custom header <code className="font-mono">x-dinepos-secret</code> with the Webhook Secret value below.
+      </p>
+    </div>
+  );
+}
+
+interface MessagingProviderCardProps {
+  config:   MessagingProviderConfig | null;
+  loading:  boolean;
+  onSaved:  (cfg: MessagingProviderConfig) => void;
+  onRemoved: () => void;
+  onToast:  (type: Toast['type'], msg: string) => void;
+}
+
+function MessagingProviderCard({ config, loading, onSaved, onRemoved, onToast }: MessagingProviderCardProps) {
+  const [form, setForm] = useState({
+    channel:          (config?.channel ?? 'both') as MessagingChannel,
+    apiKey:           '',
+    integratedNumber: config?.integratedNumber ?? '',
+    senderId:         config?.senderId         ?? '',
+    waNamespace:      config?.waNamespace      ?? '',
+    webhookSecret:    '',
+  });
+  const [saving,       setSaving]       = useState(false);
+  const [testing,      setTesting]      = useState(false);
+  const [disconnecting,setDisconnecting]= useState(false);
+
+  useEffect(() => {
+    if (!config) return;
+    setForm(f => ({
+      ...f,
+      channel:          config.channel,
+      integratedNumber: config.integratedNumber,
+      senderId:         config.senderId,
+      waNamespace:      config.waNamespace,
+    }));
+  }, [config]);
+
+  function set<K extends keyof typeof form>(field: K, value: (typeof form)[K]) {
+    setForm(f => ({ ...f, [field]: value }));
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const body: Parameters<typeof saveMessagingProvider>[0] = {
+        providerType:     'msg91',
+        channel:          form.channel,
+        integratedNumber: form.integratedNumber,
+        senderId:         form.senderId,
+        waNamespace:      form.waNamespace,
+      };
+      if (form.apiKey.trim())        body.apiKey        = form.apiKey.trim();
+      if (form.webhookSecret.trim()) body.webhookSecret = form.webhookSecret.trim();
+
+      const res = await saveMessagingProvider(body);
+      // Clear write-only fields after save
+      setForm(f => ({ ...f, apiKey: '', webhookSecret: '' }));
+      onSaved(res.config);
+      onToast('success', 'MSG91 credentials saved.');
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : 'Save failed.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTest() {
+    if (!config) return;
+    setTesting(true);
+    try {
+      const res = await testMessagingProvider(config._id);
+      onToast(res.success ? 'success' : 'error', res.message);
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : 'Test failed.');
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!config) return;
+    if (!window.confirm('Disconnect MSG91? Campaigns will not be sent until you reconnect.')) return;
+    setDisconnecting(true);
+    try {
+      await deleteMessagingProvider(config._id);
+      onRemoved();
+      onToast('info', 'MSG91 disconnected.');
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : 'Disconnect failed.');
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  const isConnected = !!config?.isActive;
+
+  return (
+    <div className="rounded-2xl border border-border bg-canvas shadow-sm">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm">
+            <MessageSquare size={18} />
+          </div>
+          <div>
+            <p className="font-semibold text-ink">MSG91 — WhatsApp & SMS</p>
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+              isConnected
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                : 'bg-ink/5 border-ink/10 text-ink/40'
+            }`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-ink/30'}`} />
+              {isConnected ? 'Connected' : 'Not configured'}
+            </span>
+          </div>
+        </div>
+        {loading && <Spinner size="sm" />}
+      </div>
+
+      {/* Test result banner */}
+      {config?.testResult && (
+        <div className={`flex items-center gap-2 border-b border-border px-5 py-2.5 text-xs ${
+          config.testResult.success ? 'text-emerald-700 bg-emerald-50' : 'text-red-700 bg-red-50'
+        }`}>
+          {config.testResult.success
+            ? <Check size={12} />
+            : <AlertCircle size={12} />
+          }
+          Last test: {config.testResult.message}
+          <span className="ml-auto text-ink/40">
+            {new Date(config.testResult.lastTestedAt).toLocaleString('en-IN', {
+              day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true,
+            })}
+          </span>
+        </div>
+      )}
+
+      {/* Form */}
+      <form onSubmit={e => void handleSave(e)} className="space-y-4 px-5 py-4">
+
+        {/* Channel */}
+        <div>
+          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink/50">
+            Channel
+          </label>
+          <select
+            value={form.channel}
+            onChange={e => set('channel', e.target.value as MessagingChannel)}
+            className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none"
+          >
+            <option value="both">WhatsApp + SMS</option>
+            <option value="whatsapp">WhatsApp only</option>
+            <option value="sms">SMS only</option>
+          </select>
+        </div>
+
+        {/* API Key (write-only) */}
+        <div>
+          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink/50">
+            MSG91 Auth Key {config?.hasApiKey && <span className="ml-1 normal-case text-emerald-600">(saved — enter to replace)</span>}
+          </label>
+          <MaskedInput
+            id="msg91-apikey"
+            value={form.apiKey}
+            onChange={v => set('apiKey', v)}
+            placeholder={config?.hasApiKey ? '••••••••••••••• (stored)' : 'Your MSG91 authkey'}
+          />
+        </div>
+
+        {/* WhatsApp fields */}
+        {(form.channel === 'whatsapp' || form.channel === 'both') && (
+          <>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink/50">
+                WhatsApp Business Phone (WABA integrated number)
+              </label>
+              <input
+                type="text"
+                value={form.integratedNumber}
+                onChange={e => set('integratedNumber', e.target.value)}
+                placeholder="e.g. 919876543210"
+                className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink/30 focus:border-brand focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink/50">
+                Template Namespace (optional — leave blank for Cloud API WABA)
+              </label>
+              <input
+                type="text"
+                value={form.waNamespace}
+                onChange={e => set('waNamespace', e.target.value)}
+                placeholder="Leave blank for Cloud API WABA accounts"
+                className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink/30 focus:border-brand focus:outline-none"
+              />
+            </div>
+          </>
+        )}
+
+        {/* SMS fields */}
+        {(form.channel === 'sms' || form.channel === 'both') && (
+          <div>
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink/50">
+              DLT Sender ID
+            </label>
+            <input
+              type="text"
+              value={form.senderId}
+              onChange={e => set('senderId', e.target.value)}
+              placeholder="e.g. DNPHOS"
+              className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink/30 focus:border-brand focus:outline-none"
+            />
+            <p className="mt-1 text-[11px] text-amber-600">
+              India DLT compliance: ensure your sender ID and message templates are registered with TRAI via MSG91.
+            </p>
+          </div>
+        )}
+
+        {/* Webhook Secret (write-only) */}
+        <div>
+          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink/50">
+            Webhook Secret {config?.hasWebhookSecret && <span className="ml-1 normal-case text-emerald-600">(saved — enter to replace)</span>}
+          </label>
+          <MaskedInput
+            id="msg91-webhook-secret"
+            value={form.webhookSecret}
+            onChange={v => set('webhookSecret', v)}
+            placeholder={config?.hasWebhookSecret ? '••••••••••••••• (stored)' : 'Choose any secret string'}
+          />
+        </div>
+
+        {/* Webhook secret missing warning */}
+        {config?.hasApiKey && !config?.hasWebhookSecret && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <AlertCircle size={12} className="mt-0.5 shrink-0 text-amber-600" />
+            <p className="text-[11px] text-amber-800">
+              <span className="font-semibold">Webhook secret not configured.</span>{' '}
+              Without it, delivery status updates (sent, delivered, read) from MSG91 will be rejected.
+              Add a webhook secret below, save, then paste the webhook URL into your MSG91 dashboard.
+            </p>
+          </div>
+        )}
+
+        {/* Webhook URL */}
+        {config?.hotelId && (
+          <MessagingWebhookUrlField hotelId={config.hotelId} />
+        )}
+        {!config && (
+          <p className="rounded-lg border border-border bg-mist px-3 py-2 text-[11px] text-ink/50">
+            Save credentials to generate your MSG91 webhook URL.
+          </p>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex flex-wrap gap-2 pt-1">
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60"
+          >
+            {saving ? <Spinner size="sm" /> : <Check size={14} />}
+            Save
+          </button>
+
+          {config && (
+            <button
+              type="button"
+              onClick={() => void handleTest()}
+              disabled={testing || !config.hasApiKey}
+              className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-ink hover:bg-mist disabled:opacity-40"
+              title={!config.hasApiKey ? 'Save an API key first' : ''}
+            >
+              {testing ? <Spinner size="sm" /> : <FlaskConical size={14} />}
+              Test Connection
+            </button>
+          )}
+
+          {config && (
+            <button
+              type="button"
+              onClick={() => void handleDisconnect()}
+              disabled={disconnecting}
+              className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
+            >
+              {disconnecting ? <Spinner size="sm" /> : <Link2Off size={14} />}
+              Disconnect
+            </button>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function IntegrationsPage() {
-  const [integrations, setIntegrations] = useState<AggregatorIntegration[]>([]);
-  const [logs,         setLogs]         = useState<WebhookLog[]>([]);
-  const [loadingMain,  setLoadingMain]  = useState(true);
-  const [loadingLogs,  setLoadingLogs]  = useState(true);
+  const [integrations,    setIntegrations]    = useState<AggregatorIntegration[]>([]);
+  const [logs,            setLogs]            = useState<WebhookLog[]>([]);
+  const [messagingConfig, setMessagingConfig] = useState<MessagingProviderConfig | null>(null);
+  const [loadingMain,     setLoadingMain]     = useState(true);
+  const [loadingLogs,     setLoadingLogs]     = useState(true);
+  const [loadingMsg,      setLoadingMsg]      = useState(true);
   const { toasts, add: toast } = useToasts();
 
   const PLATFORMS: AggregatorPlatform[] = ['swiggy', 'zomato'];
@@ -533,16 +904,20 @@ export function IntegrationsPage() {
   const loadAll = useCallback(async () => {
     setLoadingMain(true);
     setLoadingLogs(true);
+    setLoadingMsg(true);
     try {
-      const [intRes, logRes] = await Promise.allSettled([
+      const [intRes, logRes, msgRes] = await Promise.allSettled([
         fetchIntegrations(),
         fetchWebhookLogs(),
+        fetchMessagingProvider(),
       ]);
       if (intRes.status === 'fulfilled') setIntegrations(intRes.value);
       if (logRes.status === 'fulfilled') setLogs(logRes.value.slice(0, 20));
+      if (msgRes.status === 'fulfilled') setMessagingConfig(msgRes.value.config);
     } finally {
       setLoadingMain(false);
       setLoadingLogs(false);
+      setLoadingMsg(false);
     }
   }, []);
 
@@ -592,7 +967,7 @@ export function IntegrationsPage() {
         </button>
       </div>
 
-      {/* Integration cards */}
+      {/* Delivery integration cards */}
       <div className="grid gap-6 md:grid-cols-2">
         {PLATFORMS.map(platform => (
           <IntegrationCard
@@ -604,6 +979,21 @@ export function IntegrationsPage() {
             onToast={toast}
           />
         ))}
+      </div>
+
+      {/* Messaging Provider */}
+      <div>
+        <div className="mb-3 flex items-center gap-2">
+          <MessageSquare size={16} className="text-violet-600" />
+          <h2 className="text-base font-bold text-ink">Messaging Provider</h2>
+        </div>
+        <MessagingProviderCard
+          config={messagingConfig}
+          loading={loadingMsg}
+          onSaved={cfg => setMessagingConfig(cfg)}
+          onRemoved={() => setMessagingConfig(null)}
+          onToast={toast}
+        />
       </div>
 
       {/* Webhook logs */}

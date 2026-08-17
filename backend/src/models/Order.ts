@@ -65,6 +65,15 @@ export interface IOrder extends Document {
   // ── Loyalty (Architecture v1.1) ─────────────────────────────────────────
   redeemedPoints: number;    // loyalty points redeemed against this order
   loyaltyDiscount: number;   // INR value of the loyalty discount applied
+  loyaltyEarnedAt: Date | null; // stamp when earn was claimed (idempotency guard)
+  couponId:       mongoose.Types.ObjectId | null;
+  couponCode:     string;
+  couponDiscount: number;
+  // ── Gift Voucher (Phase A) ──────────────────────────────────────────────
+  giftVoucherId:         mongoose.Types.ObjectId | null;
+  giftVoucherCode:       string;
+  giftVoucherAmount:     number;
+  giftVoucherRestoredAt: Date | null;
   // ── Delivery / aggregator fields ─────────────────────────────────────────
   platformOrderId:     string;   // Swiggy/Zomato order ref
   deliveryAddress:     string;
@@ -217,6 +226,18 @@ const OrderSchema: Schema = new Schema(
     // ── Loyalty (Architecture v1.1) ───────────────────────────────────────
     redeemedPoints:  { type: Number, default: 0, min: 0 },
     loyaltyDiscount: { type: Number, default: 0, min: 0 },
+    loyaltyEarnedAt: { type: Date, default: null },
+
+    // ── Coupon (Architecture v1.2) ────────────────────────────────────────────
+    couponId:       { type: Schema.Types.ObjectId, ref: 'Coupon', default: null },
+    couponCode:     { type: String, default: '' },
+    couponDiscount: { type: Number, default: 0, min: 0 },
+
+    // ── Gift Voucher (Phase A) ─────────────────────────────────────────────────
+    giftVoucherId:         { type: Schema.Types.ObjectId, ref: 'GiftVoucher', default: null },
+    giftVoucherCode:       { type: String, default: '' },
+    giftVoucherAmount:     { type: Number, default: 0, min: 0 },
+    giftVoucherRestoredAt: { type: Date, default: null },
 
     // ── Delivery / aggregator fields ──────────────────────────────────────
     platformOrderId:     { type: String, default: '' },

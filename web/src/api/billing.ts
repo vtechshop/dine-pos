@@ -15,6 +15,7 @@ export interface BillGuestPayload {
   redeemPoints?: number;
   transactionId?: string;
   upiApp?: string;
+  giftVoucherCode?: string;
 }
 
 export async function fetchSessionBill(sessionId: string): Promise<SessionBill> {
@@ -38,10 +39,11 @@ export async function bulkBillAndClose(
   splitDetails?: SplitDetails,
   transactionId?: string,
   upiApp?: string,
+  giftVoucherCode?: string,
 ): Promise<void> {
   await apiFetch<void>(`/sessions/${sessionId}/close`, {
     method: 'PATCH',
-    body: JSON.stringify({ bulkBill: true, paymentMethod, splitDetails, transactionId, upiApp }),
+    body: JSON.stringify({ bulkBill: true, paymentMethod, splitDetails, transactionId, upiApp, giftVoucherCode }),
   });
 }
 
