@@ -24,16 +24,6 @@ jobs:
     timeout-minutes: 30
 
     services:
-      mongodb:
-        image: public.ecr.aws/docker/library/mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand({ping: 1})'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
       redis:
         image: public.ecr.aws/docker/library/redis:7-alpine
         ports:
@@ -45,6 +35,20 @@ jobs:
           --health-retries 5
 
     steps:
+      - name: Start MongoDB replica set
+        run: |
+          docker run --name mongodb -d -p 27017:27017 \
+            public.ecr.aws/docker/library/mongo:7.0 \
+            mongod --replSet rs0 --bind_ip_all --noauth
+          # Wait for mongod to accept connections
+          timeout 30 bash -c 'until docker exec mongodb mongosh --quiet --eval "db.adminCommand({ping:1})" 2>/dev/null; do sleep 2; done'
+          # Initialise the replica set with a single member
+          docker exec mongodb mongosh --quiet --eval \
+            "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"
+          # Wait until this node becomes primary
+          timeout 30 bash -c 'until docker exec mongodb mongosh --quiet --eval "rs.isMaster().ismaster" 2>/dev/null | grep -q true; do sleep 2; done'
+          echo "MongoDB replica set rs0 ready"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -69,7 +73,7 @@ jobs:
         working-directory: backend
         env:
           PORT: 5000
-          MONGODB_URI: mongodb://localhost:27017/dinepos_test
+          MONGODB_URI: mongodb://127.0.0.1:27017/dinepos_test?replicaSet=rs0&directConnection=true
           JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-test-jwt-secret-not-for-production' }}
           SUPER_ADMIN_JWT_SECRET: ${{ secrets.SUPER_ADMIN_JWT_SECRET || 'ci-test-sa-jwt-secret-not-for-production' }}
           REDIS_URL: redis://localhost:6379
@@ -95,7 +99,7 @@ jobs:
           SUPER_ADMIN_ID=${{ secrets.SUPER_ADMIN_ID || 'ci-superadmin' }}
           SUPER_ADMIN_PASS=${{ secrets.SUPER_ADMIN_PASS || 'ci-superpass-1234' }}
           JWT_SECRET=${{ secrets.JWT_SECRET || 'ci-test-jwt-secret-not-for-production' }}
-          MONGODB_TEST_URI=mongodb://localhost:27017/dinepos_test
+          MONGODB_TEST_URI=mongodb://127.0.0.1:27017/dinepos_test?replicaSet=rs0&directConnection=true
           SOCKET_URL=http://localhost:5000
           DEFAULT_TIMEOUT=30000
           SOCKET_TIMEOUT=8000
