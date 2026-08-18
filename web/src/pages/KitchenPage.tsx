@@ -396,7 +396,7 @@ export function KitchenPage() {
     setError(null);
     try {
       await acceptDeliveryOrder(orderId);
-      await updateOrderStatus(orderId, 'preparing');
+      // Backend /accept already sets status to 'preparing' — no separate updateOrderStatus needed
       void load();
     } catch (e) {
       void load();
@@ -427,7 +427,7 @@ export function KitchenPage() {
     setError(null);
     try {
       await dispatchDeliveryOrder(orderId);
-      await updateOrderStatus(orderId, 'served');
+      // Backend /dispatch already sets status to 'completed' — no separate updateOrderStatus needed
       void load();
     } catch (e) {
       void load();

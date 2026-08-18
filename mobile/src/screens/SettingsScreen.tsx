@@ -186,7 +186,7 @@ const SettingsScreen: React.FC = () => {
     setCurrencySymbol(settings.currencySymbol || '₹');
     setQrGuestTimeout(settings.qrGuestTimeoutMinutes != null ? String(settings.qrGuestTimeoutMinutes) : '');
     setFooterText(settings.footerText || '');
-    setHasKitchenPin(!!(settings as any).kitchenPin);
+    setHasKitchenPin(!!settings.kitchenPin);
     setKitchenPin(''); // never pre-fill with the stored hash — user types a new PIN to change it
   }, [settings]);
 
@@ -203,7 +203,7 @@ const SettingsScreen: React.FC = () => {
         if (storedUrl) setApiBaseUrl(storedUrl);
         const storedPrinter = await AsyncStorage.getItem(BT_PRINTER_KEY);
         if (storedPrinter) setConnectedPrinter(storedPrinter);
-      } catch {}
+      } catch (err) { console.warn('[SettingsScreen] loadStored error:', err); }
     };
     loadStored();
   }, []);

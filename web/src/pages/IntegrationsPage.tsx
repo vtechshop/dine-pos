@@ -200,6 +200,7 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
   const [syncing,       setSyncing]       = useState(false);
   const [testing,       setTesting]       = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<{ msg: string; onOk: () => void } | null>(null);
 
   // Sync non-secret fields when parent data changes
   useEffect(() => {
@@ -270,22 +271,37 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
     }
   }
 
-  async function handleDisconnect() {
-    if (!window.confirm(`Disconnect ${PLATFORM_LABEL[platform]} integration?`)) return;
-    setDisconnecting(true);
-    try {
-      const { integration: updated } = await disconnectIntegration(platform);
-      onSaved(updated);
-      onToast('info', `${PLATFORM_LABEL[platform]} disconnected.`);
-    } catch (err) {
-      onToast('error', err instanceof Error ? err.message : 'Disconnect failed.');
-    } finally {
-      setDisconnecting(false);
-    }
+  function handleDisconnect() {
+    setPendingConfirm({
+      msg: `Disconnect ${PLATFORM_LABEL[platform]} integration?`,
+      onOk: async () => {
+        setDisconnecting(true);
+        try {
+          const { integration: updated } = await disconnectIntegration(platform);
+          onSaved(updated);
+          onToast('info', `${PLATFORM_LABEL[platform]} disconnected.`);
+        } catch (err) {
+          onToast('error', err instanceof Error ? err.message : 'Disconnect failed.');
+        } finally {
+          setDisconnecting(false);
+        }
+      },
+    });
   }
 
   return (
     <div className="rounded-2xl border border-border bg-canvas shadow-sm">
+      {pendingConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg p-6 max-w-sm mx-4 shadow-xl">
+            <p className="mb-4 text-sm">{pendingConfirm.msg}</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPendingConfirm(null)} className="px-4 py-2 text-sm border border-border rounded">Cancel</button>
+              <button onClick={() => { pendingConfirm.onOk(); setPendingConfirm(null); }} className="px-4 py-2 text-sm bg-red-600 text-white rounded">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Card header */}
       <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <div className="flex items-center gap-3">
@@ -504,6 +520,7 @@ function WebhookStatusBadge({ status }: { status: WebhookLog['status'] }) {
 function WebhookLogsTable() {
   const [logs,       setLogs]       = useState<WebhookLog[]>([]);
   const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState<string | null>(null);
   const [total,      setTotal]      = useState(0);
   const [pages,      setPages]      = useState(1);
   const [page,       setPage]       = useState(1);
@@ -513,14 +530,16 @@ function WebhookLogsTable() {
 
   const load = useCallback(async (p = page, q = search, plat = platFilter, stat = statFilter) => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetchWebhookLogs({ platform: plat || undefined, status: stat || undefined, search: q || undefined, page: p, limit: 25 });
       setLogs(res.logs);
       setTotal(res.total);
       setPages(res.pages);
       setPage(res.page);
-    } catch { /* silent */ }
-    finally { setLoading(false); }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally { setLoading(false); }
   }, [page, search, platFilter, statFilter]);
 
   useEffect(() => { void load(1, search, platFilter, statFilter); }, [search, platFilter, statFilter]);
@@ -547,7 +566,9 @@ function WebhookLogsTable() {
     try {
       await retryWebhook(id);
       void load(page, search, platFilter, statFilter);
-    } catch { /* silent */ }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    }
   }
 
   const PLATS  = ['', 'swiggy', 'zomato'];
@@ -600,6 +621,10 @@ function WebhookLogsTable() {
           </button>
         )}
       </div>
+
+      {error && (
+        <div className="mx-5 mb-3 rounded-lg border border-red-100 bg-red-50 px-4 py-2.5 text-xs text-red-600">{error}</div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -779,6 +804,7 @@ function MessagingProviderCard({ config, loading, onSaved, onRemoved, onToast }:
   const [saving,       setSaving]       = useState(false);
   const [testing,      setTesting]      = useState(false);
   const [disconnecting,setDisconnecting]= useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<{ msg: string; onOk: () => void } | null>(null);
 
   useEffect(() => {
     if (!config) return;
@@ -834,25 +860,40 @@ function MessagingProviderCard({ config, loading, onSaved, onRemoved, onToast }:
     }
   }
 
-  async function handleDisconnect() {
+  function handleDisconnect() {
     if (!config) return;
-    if (!window.confirm('Disconnect MSG91? Campaigns will not be sent until you reconnect.')) return;
-    setDisconnecting(true);
-    try {
-      await deleteMessagingProvider(config._id);
-      onRemoved();
-      onToast('info', 'MSG91 disconnected.');
-    } catch (err) {
-      onToast('error', err instanceof Error ? err.message : 'Disconnect failed.');
-    } finally {
-      setDisconnecting(false);
-    }
+    setPendingConfirm({
+      msg: 'Disconnect MSG91? Campaigns will not be sent until you reconnect.',
+      onOk: async () => {
+        setDisconnecting(true);
+        try {
+          await deleteMessagingProvider(config._id);
+          onRemoved();
+          onToast('info', 'MSG91 disconnected.');
+        } catch (err) {
+          onToast('error', err instanceof Error ? err.message : 'Disconnect failed.');
+        } finally {
+          setDisconnecting(false);
+        }
+      },
+    });
   }
 
   const isConnected = !!config?.isActive;
 
   return (
     <div className="rounded-2xl border border-border bg-canvas shadow-sm">
+      {pendingConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg p-6 max-w-sm mx-4 shadow-xl">
+            <p className="mb-4 text-sm">{pendingConfirm.msg}</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPendingConfirm(null)} className="px-4 py-2 text-sm border border-border rounded">Cancel</button>
+              <button onClick={() => { pendingConfirm.onOk(); setPendingConfirm(null); }} className="px-4 py-2 text-sm bg-red-600 text-white rounded">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <div className="flex items-center gap-3">

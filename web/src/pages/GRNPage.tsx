@@ -377,6 +377,7 @@ function GRNDetail({ grn, onClose, onChange }: { grn: GRN; onClose: () => void; 
   const [cancelling, setCancelling] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
   const [reason, setReason]         = useState('');
+  const [notification, setNotification] = useState<string | null>(null);
 
   async function doCancel() {
     setCancelling(true);
@@ -385,7 +386,7 @@ function GRNDetail({ grn, onClose, onChange }: { grn: GRN; onClose: () => void; 
       onChange(updated);
       setShowCancel(false);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Cancel failed');
+      setNotification(e instanceof Error ? e.message : 'Cancel failed');
     } finally {
       setCancelling(false);
     }
@@ -426,6 +427,12 @@ function GRNDetail({ grn, onClose, onChange }: { grn: GRN; onClose: () => void; 
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        {notification && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800 flex justify-between items-start">
+            <span>{notification}</span>
+            <button onClick={() => setNotification(null)} className="ml-2 shrink-0 text-amber-500 hover:text-amber-700">✕</button>
+          </div>
+        )}
         {/* Summary */}
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-xl border border-border bg-mist p-3">

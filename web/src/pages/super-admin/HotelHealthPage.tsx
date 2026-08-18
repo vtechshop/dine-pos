@@ -10,6 +10,7 @@ import {
   type Hotel, type TopHotel, type DeviceLicensingData,
 } from '../../api/superAdmin';
 import { Spinner } from '../../components/ui/Spinner';
+import { useSettings } from '../../context/SettingsContext';
 
 // ── HEALTH SCORE ALGORITHM ─────────────────────────────────────────────────────
 // Total: 100 points across 6 dimensions.
@@ -69,8 +70,8 @@ function fmtDate(d: string | null | undefined): string {
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function fmtINR(n: number): string {
-  return `₹${n.toLocaleString('en-IN')}`;
+function fmtINR(n: number, sym = '₹'): string {
+  return `${sym}${n.toLocaleString('en-IN')}`;
 }
 
 // ── scoring ───────────────────────────────────────────────────────────────────
@@ -295,6 +296,8 @@ function ActionCard({ action }: { action: Action }) {
 
 export function HotelHealthPage() {
   const { id } = useParams<{ id: string }>();
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
 
   const [hotel,       setHotel]       = useState<Hotel | null>(null);
   const [actHotel,    setActHotel]    = useState<TopHotel | null>(null);
@@ -512,7 +515,7 @@ export function HotelHealthPage() {
               known={d5Known}
               detail={
                 revHotel
-                  ? `Revenue today (top-10): ${fmtINR(revHotel.value ?? 0)}`
+                  ? `Revenue today (top-10): ${fmtINR(revHotel.value ?? 0, sym)}`
                   : 'Not in today\'s top-10 revenue — may have lower volume'
               }
             />
@@ -575,7 +578,7 @@ export function HotelHealthPage() {
               <TrendingUp size={13} className="text-ink/30" />
             </div>
             <p className="text-lg font-bold text-ink">
-              {revHotel ? fmtINR(revHotel.value ?? 0) : '—'}
+              {revHotel ? fmtINR(revHotel.value ?? 0, sym) : '—'}
             </p>
             <p className="mt-0.5 text-[11px] text-ink/40">
               {revHotel ? 'In today\'s top-10' : 'Not in today\'s top-10'}

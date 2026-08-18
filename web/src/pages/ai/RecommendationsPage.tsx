@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Sparkles, ArrowUpRight, RefreshCw } from 'lucide-react';
+import { useSettings } from '../../context/SettingsContext';
 import {
   fetchRecommendations,
   fetchRecommendationsByDate,
@@ -18,8 +19,8 @@ function yesterday(): string {
   return new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 }
 
-function fmtRupee(n: number): string {
-  return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+function fmtRupee(n: number, sym = '₹'): string {
+  return sym + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 }
 
 function Skeleton({ h, w }: { h: string; w?: string }) {
@@ -45,6 +46,8 @@ const QUADRANTS: QuadrantCfg[] = [
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function QuadrantCard({ cfg, items }: { cfg: QuadrantCfg; items: MenuItemScore[] }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   return (
     <div className={`rounded-xl border p-4 ${cfg.cls}`}>
       <p className="text-sm font-semibold text-ink">{cfg.label}</p>
@@ -57,7 +60,7 @@ function QuadrantCard({ cfg, items }: { cfg: QuadrantCfg; items: MenuItemScore[]
             <li key={it.productId} className="flex items-center justify-between gap-2">
               <span className="truncate text-xs font-medium text-ink">{it.productName}</span>
               <span className="shrink-0 text-[11px] text-ink/60">
-                {fmtRupee(it.revenuePerUnit)}/order · {it.qty} sold
+                {fmtRupee(it.revenuePerUnit, sym)}/order · {it.qty} sold
               </span>
             </li>
           ))}
@@ -96,6 +99,8 @@ function LoadingSkeleton() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function RecommendationsPage() {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [date, setDate] = useState<string>(yesterday());
   const [data, setData] = useState<RecommendationSet | null>(null);
   const [loading, setLoading] = useState(true);
@@ -235,7 +240,7 @@ export function RecommendationsPage() {
                         <p className="mt-0.5 text-xs text-ink/55">{t.reason}</p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="text-sm font-semibold text-ink">{fmtRupee(t.revenuePerUnit)}</p>
+                        <p className="text-sm font-semibold text-ink">{fmtRupee(t.revenuePerUnit, sym)}</p>
                         <p className="text-[11px] text-ink/50">{t.currentOrders} orders</p>
                       </div>
                     </div>
@@ -299,7 +304,7 @@ export function RecommendationsPage() {
                         <tr key={i} className="bg-amber-50 border-b border-amber-100 last:border-0">
                           <td className="px-4 py-2 font-medium text-ink">{sm.productName}</td>
                           <td className="px-4 py-2 text-right text-ink/70">{sm.qty}</td>
-                          <td className="px-4 py-2 text-right text-ink/70">{fmtRupee(sm.revenue)}</td>
+                          <td className="px-4 py-2 text-right text-ink/70">{fmtRupee(sm.revenue, sym)}</td>
                           <td className="px-4 py-2 text-ink/60">{sm.suggestion}</td>
                         </tr>
                       ))}

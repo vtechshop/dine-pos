@@ -64,7 +64,7 @@ const AIHomeScreen: React.FC<Props> = ({ navigation }) => {
       try {
         const brief = await getLatestMorningBrief();
         setBriefSummary(brief.executiveSummary);
-      } catch {}
+      } catch (e) { console.warn('[AIHomeScreen] brief load error:', e); }
     } catch (e: any) {
       setError(e.message || 'Failed to load AI dashboard');
     } finally {

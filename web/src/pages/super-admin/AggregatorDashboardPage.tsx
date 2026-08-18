@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useSettings } from '../../context/SettingsContext';
 import {
   LayoutDashboard, Wifi, WifiOff, ShoppingBag, TrendingUp,
   AlertCircle, CheckCircle2, Clock, Truck,
@@ -14,6 +15,8 @@ import {
 const DASHBOARD_ENDPOINTS = SA_AGG_REQUIRED_ENDPOINTS.slice(0, 1);
 
 export function AggregatorDashboardPage() {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [hotels,    setHotels]    = useState<Hotel[]>([]);
   const [dashboard, setDashboard] = useState<AggDashboard | null>(null);
   const [loading,   setLoading]   = useState(true);
@@ -84,8 +87,8 @@ export function AggregatorDashboardPage() {
           {dashboard ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
               <SAStat label="Today Orders"    value={dashboard.todayOrders}    icon={<Clock size={18} />} />
-              <SAStat label="Today Revenue"   value={`₹${dashboard.todayRevenue.toLocaleString('en-IN')}`} accent icon={<TrendingUp size={18} />} />
-              <SAStat label="Commission"      value={`₹${dashboard.todayCommission.toLocaleString('en-IN')}`} />
+              <SAStat label="Today Revenue"   value={`${sym}${dashboard.todayRevenue.toLocaleString('en-IN')}`} accent icon={<TrendingUp size={18} />} />
+              <SAStat label="Commission"      value={`${sym}${dashboard.todayCommission.toLocaleString('en-IN')}`} />
               <SAStat label="Cancellations"   value={dashboard.todayCancelled} warn={dashboard.todayCancelled > 5} icon={<AlertCircle size={18} />} />
               <SAStat label="Swiggy Connected" value={dashboard.swiggyConnected} sub={`of ${totalHotels} hotels`} />
               <SAStat label="Zomato Connected" value={dashboard.zomatoConnected} sub={`of ${totalHotels} hotels`} />
@@ -93,7 +96,7 @@ export function AggregatorDashboardPage() {
               <SAStat label="Failed Integrations" value={dashboard.failedIntegrations} warn={dashboard.failedIntegrations > 0} />
               <SAStat label="Avg Acceptance" value={`${dashboard.avgAcceptancePct}%`} accent />
               <SAStat label="Avg Prep Time"  value={`${dashboard.avgPrepMins}m`} sub="minutes" icon={<Clock size={18} />} />
-              <SAStat label="Refunds Today"  value={`₹${dashboard.todayRefunds.toLocaleString('en-IN')}`} warn={dashboard.todayRefunds > 0} />
+              <SAStat label="Refunds Today"  value={`${sym}${dashboard.todayRefunds.toLocaleString('en-IN')}`} warn={dashboard.todayRefunds > 0} />
               <SAStat label="Pending Verify" value={dashboard.pendingVerification} warn={dashboard.pendingVerification > 0} />
             </div>
           ) : (

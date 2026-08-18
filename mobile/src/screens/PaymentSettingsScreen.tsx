@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors, FontSize, BorderRadius, Spacing } from '../utils/constants';
+import { useSettings } from '../context/SettingsContext';
 import {
   getGatewayConfigs, getPayments, getPaymentStats,
   type MobileGatewayConfig, type MobilePaymentRecord, type MobilePaymentReport,
@@ -38,8 +39,8 @@ const STATUS_COLORS: Record<string, string> = {
   partial_refunded: Colors.accent,
 };
 
-function fmtRs(n: number) {
-  return `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmtRs(n: number, sym = '₹') {
+  return `${sym}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 function fmtDt(s: string) {
   return new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -145,6 +146,8 @@ function GatewaysTab() {
 // ── Tab: Transactions ─────────────────────────────────────────────────────────
 
 function TransactionsTab() {
+  const { settings } = useSettings();
+  const sym = settings.currencySymbol || '₹';
   const [data,    setData]    = useState<MobilePaymentRecord[]>([]);
   const [total,   setTotal]   = useState(0);
   const [loading, setLoading] = useState(true);
@@ -211,7 +214,7 @@ function TransactionsTab() {
               <Text style={s.cardSub}>{GATEWAY_LABELS[p.gatewayType] ?? p.gatewayType} · {p.paymentMethod?.toUpperCase()}</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={s.txAmount}>{fmtRs(p.amount)}</Text>
+              <Text style={s.txAmount}>{fmtRs(p.amount, sym)}</Text>
               <View style={[s.statusBadge, { borderColor: STATUS_COLORS[p.status] + '40', backgroundColor: STATUS_COLORS[p.status] + '15' }]}>
                 <Text style={[s.statusText, { color: STATUS_COLORS[p.status] }]}>
                   {p.status.replace(/_/g, ' ').toUpperCase()}
@@ -221,7 +224,7 @@ function TransactionsTab() {
           </View>
           <Text style={s.cardMuted}>{fmtDt(p.createdAt)}</Text>
           {p.refundedAmount > 0 && (
-            <Text style={s.refundBadge}>Refunded: {fmtRs(p.refundedAmount)}</Text>
+            <Text style={s.refundBadge}>Refunded: {fmtRs(p.refundedAmount, sym)}</Text>
           )}
         </View>
       ))}
@@ -238,6 +241,8 @@ function TransactionsTab() {
 // ── Tab: Reports ──────────────────────────────────────────────────────────────
 
 function ReportsTab() {
+  const { settings } = useSettings();
+  const sym = settings.currencySymbol || '₹';
   const [report,  setReport]  = useState<MobilePaymentReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [err,     setErr]     = useState('');
@@ -268,11 +273,11 @@ function ReportsTab() {
         <>
           <KPIRow items={[
             { label: 'Total Txns',   value: String(report.summary.total) },
-            { label: 'Collection',   value: fmtRs(report.summary.totalAmount) },
+            { label: 'Collection',   value: fmtRs(report.summary.totalAmount, sym) },
           ]} />
           <KPIRow items={[
             { label: 'Success Rate', value: fmtPct(report.summary.successRate) },
-            { label: 'Refunded',     value: fmtRs(report.summary.refundedAmount) },
+            { label: 'Refunded',     value: fmtRs(report.summary.refundedAmount, sym) },
           ]} />
           <KPIRow items={[
             { label: 'Success',      value: String(report.summary.successCount) },
@@ -290,7 +295,7 @@ function ReportsTab() {
                     <View style={s.barTrack}>
                       <View style={[s.barFill, { width: `${pct}%` as `${number}%` }]} />
                     </View>
-                    <Text style={s.barValue}>{fmtRs(g.amount)}</Text>
+                    <Text style={s.barValue}>{fmtRs(g.amount, sym)}</Text>
                   </View>
                 );
               })}
@@ -304,7 +309,7 @@ function ReportsTab() {
                 <View key={m.method} style={s.methodRow}>
                   <Text style={s.methodLabel}>{m.method.toUpperCase()}</Text>
                   <Text style={s.methodCount}>{m.count} txns</Text>
-                  <Text style={s.methodAmount}>{fmtRs(m.amount)}</Text>
+                  <Text style={s.methodAmount}>{fmtRs(m.amount, sym)}</Text>
                 </View>
               ))}
             </>

@@ -48,7 +48,7 @@ function QRMenuScreenInner() {
       if (tc) { setTableCount(parseInt(tc, 10)); setTempTableCount(tc); }
       if (cu) setCustomBase(cu);
       if (hid) setHotelId(hid);
-    });
+    }).catch(err => console.warn('[QRMenuScreen] setup error:', err));
   }, []);
 
   const saveTableCount = async () => {
@@ -82,7 +82,7 @@ function QRMenuScreenInner() {
         message: `Table ${tableNum} Menu: ${tableURL(tableNum)}`,
         url: tableURL(tableNum),
       });
-    } catch (_) {}
+    } catch (err) { console.warn('[QRMenuScreen] share error:', err); }
   };
 
   const tables = Array.from({ length: tableCount }, (_, i) => i + 1);

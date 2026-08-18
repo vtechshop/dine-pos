@@ -9,6 +9,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
 import * as api from '../services/api';
 import { LoyaltyConfig, LoyaltyCustomer, LoyaltyTransaction } from '../types';
+import { useSettings } from '../context/SettingsContext';
 
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -37,6 +38,8 @@ const TX_COLORS: Record<string, string> = {
 const LoyaltyProgramScreen: React.FC = () => {
   const navigation = useNavigation();
   const { bottom, top } = useSafeAreaInsets();
+  const { settings } = useSettings();
+  const sym = settings.currencySymbol || '₹';
 
   const [config, setConfig]           = useState<LoyaltyConfig | null>(null);
   const [customers, setCustomers]     = useState<LoyaltyCustomer[]>([]);
@@ -211,7 +214,7 @@ const LoyaltyProgramScreen: React.FC = () => {
       <View style={{ flex: 1 }}>
         <Text style={styles.custName}>{item.name}</Text>
         <Text style={styles.custPhone}>{item.phone}</Text>
-        <Text style={styles.custMeta}>{item.visitCount} visits  ·  ₹{item.lifetimeSpend.toFixed(0)} spent</Text>
+        <Text style={styles.custMeta}>{item.visitCount} visits  ·  {sym}{item.lifetimeSpend.toFixed(0)} spent</Text>
       </View>
       <View style={styles.pointsBadge}>
         <Text style={styles.pointsNum}>{item.loyaltyBalance}</Text>
@@ -287,7 +290,7 @@ const LoyaltyProgramScreen: React.FC = () => {
         <View style={styles.configStrip}>
           <View style={styles.configItem}>
             <Text style={styles.configVal}>{config.pointsPerHundredRupees}</Text>
-            <Text style={styles.configKey}>pts / ₹100</Text>
+            <Text style={styles.configKey}>pts / {sym}100</Text>
           </View>
           <View style={styles.configDivider} />
           <View style={styles.configItem}>
@@ -297,7 +300,7 @@ const LoyaltyProgramScreen: React.FC = () => {
           <View style={styles.configDivider} />
           <View style={styles.configItem}>
             <Text style={styles.configVal}>{(config.pointValueInPaisa / 100).toFixed(2)}</Text>
-            <Text style={styles.configKey}>₹ / point</Text>
+            <Text style={styles.configKey}>{sym} / point</Text>
           </View>
           <View style={styles.configDivider} />
           <View style={styles.configItem}>
@@ -412,7 +415,7 @@ const LoyaltyProgramScreen: React.FC = () => {
                 placeholder="e.g. Points"
                 placeholderTextColor={Colors.textMuted}
               />
-              <Text style={styles.adjLabel}>Points per ₹100 Spend</Text>
+              <Text style={styles.adjLabel}>Points per {sym}100 Spend</Text>
               <TextInput
                 style={[styles.adjInput, { fontSize: FontSize.md }]}
                 value={editConfigForm.pointsPerHundredRupees}
@@ -439,7 +442,7 @@ const LoyaltyProgramScreen: React.FC = () => {
                 placeholder="e.g. 20"
                 placeholderTextColor={Colors.textMuted}
               />
-              <Text style={styles.adjLabel}>Point Value (₹ per point)</Text>
+              <Text style={styles.adjLabel}>Point Value ({sym} per point)</Text>
               <TextInput
                 style={[styles.adjInput, { fontSize: FontSize.md }]}
                 value={editConfigForm.pointValueInPaisa}

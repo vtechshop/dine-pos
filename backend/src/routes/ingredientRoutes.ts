@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import Ingredient from '../models/Ingredient';
 import WasteLog from '../models/WasteLog';
 import StockMovement from '../models/StockMovement';
+import GRN from '../models/GRN';
+import Product from '../models/Product';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
@@ -150,24 +152,37 @@ router.post('/:id/stock-in', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: 'costPerUnit must be a non-negative number' });
     }
 
-    // Read current state before update (needed for previousStock + WAC)
-    const before = await Ingredient.findOne({ _id: req.params.id, hotelId: req.hotelId });
+    // Single atomic update: increment stock AND recompute WAC in one operation (prevents TOCTOU race)
+    const before = await Ingredient.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId },
+      [
+        {
+          $set: {
+            // WAC uses pre-update values (all $-refs resolve from pre-update doc in the same $set stage)
+            costPerUnit: {
+              $cond: [
+                { $gt: [{ $add: ['$currentStock', quantity] }, 0] },
+                {
+                  $divide: [
+                    { $add: [{ $multiply: ['$currentStock', '$costPerUnit'] }, quantity * costPerUnit] },
+                    { $add: ['$currentStock', quantity] },
+                  ],
+                },
+                costPerUnit,
+              ],
+            },
+            currentStock: { $add: ['$currentStock', quantity] },
+          },
+        },
+      ],
+      { new: false }, // returns document BEFORE the update (prevStock, prevCost)
+    );
     if (!before) return res.status(404).json({ message: 'Ingredient not found' });
 
     const prevStock = (before as any).currentStock as number;
-    const prevCost  = (before as any).costPerUnit  as number;
     const newStock  = prevStock + quantity;
 
-    // Weighted-average cost calculation
-    const newCostPerUnit = newStock > 0
-      ? (prevStock * prevCost + quantity * costPerUnit) / newStock
-      : costPerUnit;
-
-    const ingredient = await Ingredient.findOneAndUpdate(
-      { _id: req.params.id, hotelId: req.hotelId },
-      { $inc: { currentStock: quantity }, $set: { costPerUnit: newCostPerUnit } },
-      { new: true },
-    );
+    const ingredient = await Ingredient.findOne({ _id: req.params.id, hotelId: req.hotelId });
     if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
 
     const totalCost = quantity * costPerUnit;
@@ -253,13 +268,12 @@ router.post('/:id/adjust', async (req: AuthRequest, res: Response) => {
 // ── PUT /:id — update ingredient metadata ─────────────────────────────────────
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, unit, lowStockThreshold, costPerUnit, currentStock } = req.body;
+    const { name, unit, lowStockThreshold, costPerUnit } = req.body;
     const update: Record<string, unknown> = {};
     if (name              !== undefined) update.name              = name;
     if (unit              !== undefined) update.unit              = unit;
     if (lowStockThreshold !== undefined) update.lowStockThreshold = lowStockThreshold;
     if (costPerUnit       !== undefined) update.costPerUnit       = costPerUnit;
-    if (currentStock      !== undefined) update.currentStock      = currentStock;
     const ingredient = await Ingredient.findOneAndUpdate(
       { _id: req.params.id, hotelId: req.hotelId },
       update,
@@ -316,8 +330,42 @@ router.patch('/:id/restock', async (req: AuthRequest, res: Response) => {
 // ── DELETE /:id ───────────────────────────────────────────────────────────────
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const ingredient = await Ingredient.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });
+    const ingredient = await Ingredient.findOne({ _id: req.params.id, hotelId: req.hotelId });
     if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+
+    // HIGH-4: Block deletion when the ingredient is still in use
+    if ((ingredient as any).currentStock > 0) {
+      return res.status(409).json({
+        message: `Cannot delete "${(ingredient as any).name}": current stock is ${(ingredient as any).currentStock} ${(ingredient as any).unit || 'units'}. Adjust stock to 0 first.`,
+      });
+    }
+
+    const [activeGrn, activeRecipe] = await Promise.all([
+      GRN.exists({
+        hotelId:           req.hotelId,
+        'items.ingredientId': req.params.id,
+        isDeleted:         false,
+        status:            { $ne: 'cancelled' },
+      }),
+      Product.exists({
+        hotelId:              req.hotelId,
+        isDeleted:            false,
+        'recipe.ingredient':  new mongoose.Types.ObjectId(req.params.id),
+      }),
+    ]);
+
+    if (activeGrn) {
+      return res.status(409).json({
+        message: `Cannot delete "${(ingredient as any).name}": it is referenced by one or more active GRNs. Cancel or complete those GRNs first.`,
+      });
+    }
+    if (activeRecipe) {
+      return res.status(409).json({
+        message: `Cannot delete "${(ingredient as any).name}": it is used in one or more product recipes. Remove it from those recipes first.`,
+      });
+    }
+
+    await Ingredient.deleteOne({ _id: req.params.id, hotelId: req.hotelId });
     logAudit(req, 'ingredient.deleted', 'ingredient', req.params.id, { name: (ingredient as any).name });
     res.json({ message: 'Deleted' });
   } catch (error) {

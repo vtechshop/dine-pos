@@ -203,7 +203,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       }], { session });
       const updatedVendor = await Vendor.findOneAndUpdate(
         { _id: vendor._id, hotelId },
-        { $inc: { currentOutstanding: -amt } },
+        [{ $set: { currentOutstanding: { $max: [0, { $subtract: ['$currentOutstanding', amt] }] } } }],
         { new: true, session },
       );
       await VendorLedgerEntry.create([{
@@ -225,7 +225,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     });
 
     return res.status(201).json(payment!);
-  } catch (err) {
+  } catch (err: any) {
+    // HIGH-3: concurrent request with same idempotency key lost the unique-index race
+    if (err?.code === 11000 && err?.keyPattern?.idempotencyKey) {
+      const k = req.headers['x-idempotency-key'] as string | undefined;
+      if (k) {
+        const saved = await VendorPayment.findOne({ hotelId: new mongoose.Types.ObjectId(req.hotelId!), idempotencyKey: k }).lean();
+        if (saved) return res.status(201).json(saved);
+      }
+    }
     return sendError(res, 500, 'Failed to create payment', err);
   }
 });

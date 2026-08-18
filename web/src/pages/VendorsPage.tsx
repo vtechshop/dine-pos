@@ -601,6 +601,7 @@ export function VendorsPage() {
   const [detailVendor, setDetailVendor] = useState<Vendor | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null);
   const [deleting, setDeleting]     = useState(false);
+  const [notification, setNotification] = useState<string | null>(null);
 
   const [report, setReport]         = useState<VendorReport | null>(null);
   const [reportLoading, setRptLoading] = useState(false);
@@ -714,7 +715,7 @@ export function VendorsPage() {
       if (detailVendor?._id === deleteTarget._id) setDetailVendor(null);
       setDeleteTarget(null);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Delete failed');
+      setNotification(e instanceof Error ? e.message : 'Delete failed');
     } finally {
       setDeleting(false);
     }
@@ -750,6 +751,12 @@ export function VendorsPage() {
 
   return (
     <div className="flex h-full flex-col">
+      {notification && (
+        <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800 flex justify-between items-start mx-5 mt-3">
+          <span>{notification}</span>
+          <button onClick={() => setNotification(null)} className="ml-2 shrink-0 text-amber-500 hover:text-amber-700">✕</button>
+        </div>
+      )}
       {/* ── Top bar ── */}
       <div className="shrink-0 border-b border-border bg-canvas">
         <div className="flex items-center border-b border-border px-5">

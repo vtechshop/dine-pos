@@ -827,6 +827,9 @@ export function PurchaseOrdersPage() {
   const [reportLoading, setRptLoad] = useState(false);
   const [reportError, setRptError]  = useState<string | null>(null);
 
+  const [pendingConfirm, setPendingConfirm] = useState<{ msg: string; onOk: () => void } | null>(null);
+  const [notification, setNotification]     = useState<string | null>(null);
+
   useEffect(() => {
     const t = setTimeout(() => setDebSearch(search), 350);
     return () => clearTimeout(t);
@@ -882,16 +885,20 @@ export function PurchaseOrdersPage() {
     setDetailPO(po);
   }
 
-  async function handleDelete(po: PurchaseOrder) {
-    if (!window.confirm(`Delete ${po.poNumber}? This cannot be undone.`)) return;
-    try {
-      await deletePurchaseOrder(po._id);
-      setPOs(prev => prev.filter(p => p._id !== po._id));
-      setTotal(t => t - 1);
-      if (detailPO?._id === po._id) setDetailPO(null);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Delete failed');
-    }
+  function handleDelete(po: PurchaseOrder) {
+    setPendingConfirm({
+      msg: `Delete ${po.poNumber}? This cannot be undone.`,
+      onOk: async () => {
+        try {
+          await deletePurchaseOrder(po._id);
+          setPOs(prev => prev.filter(p => p._id !== po._id));
+          setTotal(t => t - 1);
+          if (detailPO?._id === po._id) setDetailPO(null);
+        } catch (e) {
+          setNotification(e instanceof Error ? e.message : 'Delete failed');
+        }
+      },
+    });
   }
 
   function handleExportCSV() {
@@ -909,6 +916,23 @@ export function PurchaseOrdersPage() {
 
   return (
     <div className="flex h-full flex-col">
+      {notification && (
+        <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800 flex justify-between items-start mx-5 mt-3">
+          <span>{notification}</span>
+          <button onClick={() => setNotification(null)} className="ml-2 shrink-0 text-amber-500 hover:text-amber-700">✕</button>
+        </div>
+      )}
+      {pendingConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg p-6 max-w-sm mx-4 shadow-xl">
+            <p className="mb-4 text-sm">{pendingConfirm.msg}</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPendingConfirm(null)} className="px-4 py-2 text-sm border border-border rounded">Cancel</button>
+              <button onClick={() => { pendingConfirm.onOk(); setPendingConfirm(null); }} className="px-4 py-2 text-sm bg-red-600 text-white rounded">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Top bar */}
       <div className="shrink-0 border-b border-border bg-canvas">
         <div className="flex items-center border-b border-border px-5">

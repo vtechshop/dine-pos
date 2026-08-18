@@ -3,6 +3,7 @@ import {
   TrendingUp, Package, AlertTriangle, Clock, Sparkles,
   ArrowUp, ArrowDown, Minus, RefreshCw,
 } from 'lucide-react';
+import { useSettings } from '../../context/SettingsContext';
 import {
   fetchSalesForecast,
   fetchInventoryForecast,
@@ -75,6 +76,8 @@ function IngTable({ items, rowCls, title }: {
   rowCls: string;
   title: string;
 }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   if (items.length === 0) return null;
   return (
     <div className={`rounded-xl border p-4 ${rowCls}`}>
@@ -98,7 +101,7 @@ function IngTable({ items, rowCls, title }: {
                   {it.daysRemaining < 1 ? '<1' : Math.round(it.daysRemaining)}
                 </td>
                 <td className="py-2 pr-3 tabular-nums">{fmt0(it.reorderQty)}</td>
-                <td className="py-2 pr-3 tabular-nums">₹{fmt0(it.reorderCost)}</td>
+                <td className="py-2 pr-3 tabular-nums">{sym}{fmt0(it.reorderCost)}</td>
                 <td className="py-2"><SourceBadge source={it.usageSource} /></td>
               </tr>
             ))}
@@ -127,6 +130,8 @@ function AccuracyBadge({ grade }: { grade: 'good' | 'fair' | 'poor' }) {
 }
 
 function SalesTab({ data }: { data: SalesForecast }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const {
     forecastWeekRevenue, forecastWeekOrders, avgForecastAOV,
     revenueForecastMeta, dataPoints, revenueNext7d,
@@ -144,9 +149,9 @@ function SalesTab({ data }: { data: SalesForecast }) {
     <div className="space-y-5">
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <KPI label="Expected Revenue This Week" value={`₹${fmt0(forecastWeekRevenue)}`} />
+        <KPI label="Expected Revenue This Week" value={`${sym}${fmt0(forecastWeekRevenue)}`} />
         <KPI label="Expected Orders This Week" value={fmt0(forecastWeekOrders)} />
-        <KPI label="Avg Expected AOV" value={`₹${fmt2(avgForecastAOV)}`} />
+        <KPI label="Avg Expected AOV" value={`${sym}${fmt2(avgForecastAOV)}`} />
       </div>
 
       {/* Confidence strip */}
@@ -191,11 +196,11 @@ function SalesTab({ data }: { data: SalesForecast }) {
                   <tr key={pt.date} className="border-b border-border/40 last:border-0 hover:bg-mist/50">
                     <td className="px-3 py-2 text-ink/70 tabular-nums">{pt.date}</td>
                     <td className="px-3 py-2 text-ink/60">{dow(pt.date)}</td>
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-ink">₹{fmt0(pt.value)}</td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-ink">{sym}{fmt0(pt.value)}</td>
                     {hasCI && (
                       <td className="px-3 py-2 text-right tabular-nums text-ink/50 text-xs">
                         {pt.confidenceLow != null && pt.confidenceHigh != null
-                          ? `₹${fmt0(pt.confidenceLow)} – ₹${fmt0(pt.confidenceHigh)}`
+                          ? `${sym}${fmt0(pt.confidenceLow)} – ${sym}${fmt0(pt.confidenceHigh)}`
                           : '—'
                         }
                       </td>
@@ -278,6 +283,8 @@ function SalesTab({ data }: { data: SalesForecast }) {
 // ── Inventory tab ─────────────────────────────────────────────────────────────
 
 function InventoryTab({ data }: { data: InventoryForecast }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const { coverageSummary, totalReorderCost, criticalItems, warningItems, overstockItems } = data;
 
   if (data.totalIngredients === 0) {
@@ -309,7 +316,7 @@ function InventoryTab({ data }: { data: InventoryForecast }) {
         <span className="text-xs text-ink/50 font-medium uppercase tracking-wide block mb-1">
           Total Reorder Cost
         </span>
-        <span className="text-2xl font-bold text-brand tabular-nums">₹{fmt0(totalReorderCost)}</span>
+        <span className="text-2xl font-bold text-brand tabular-nums">{sym}{fmt0(totalReorderCost)}</span>
       </div>
 
       <IngTable items={criticalItems}  rowCls="bg-red-50 border-red-200"    title="Critical Items" />

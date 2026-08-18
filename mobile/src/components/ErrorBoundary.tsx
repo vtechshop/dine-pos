@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { CommonActions } from '@react-navigation/native';
 import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
-import { navigateGlobal } from '../utils/navigationRef';
+import { navigationRef } from '../utils/navigationRef';
 
 interface Props {
   children: React.ReactNode;
@@ -26,10 +27,13 @@ class ErrorBoundary extends React.Component<Props, State> {
 
   handleReset = () => {
     this.setState({ hasError: false, message: '' });
-    try {
-      navigateGlobal('RoleSelect');
-    } catch {
-      // navigation may not be ready — state reset alone re-renders the tree
+    // Reset navigation to the initial route of whichever stack is active.
+    // CommonActions.reset works in both authenticated and unauthenticated stacks;
+    // if RoleSelect is not registered (authenticated stack), the navigator falls back to MainTabs.
+    if (navigationRef.isReady()) {
+      navigationRef.dispatch(
+        CommonActions.reset({ index: 0, routes: [{ name: 'RoleSelect' }] }),
+      );
     }
   };
 

@@ -3,6 +3,7 @@ import { X, TrendingUp } from 'lucide-react';
 import type { Ingredient } from '../../types';
 import { stockInIngredient } from '../../api/inventory';
 import { useShortcut } from '../../hooks/useShortcut';
+import { useSettings } from '../../context/SettingsContext';
 
 interface Props {
   ingredient: Ingredient;
@@ -15,6 +16,8 @@ function todayStr(): string {
 }
 
 export function StockInDrawer({ ingredient, onSave, onClose }: Props) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [quantity,      setQuantity]      = useState('');
   const [costPerUnit,   setCostPerUnit]   = useState(String(ingredient.costPerUnit || ''));
   const [supplier,      setSupplier]      = useState('');
@@ -95,7 +98,7 @@ export function StockInDrawer({ ingredient, onSave, onClose }: Props) {
             </div>
             <div className="mt-1 flex justify-between">
               <span className="text-ink/50">Current Cost / {ingredient.unit}</span>
-              <span className="font-semibold">₹{ingredient.costPerUnit.toFixed(2)}</span>
+              <span className="font-semibold">{sym}{ingredient.costPerUnit.toFixed(2)}</span>
             </div>
           </div>
 
@@ -119,7 +122,7 @@ export function StockInDrawer({ ingredient, onSave, onClose }: Props) {
           {/* Cost per unit */}
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
-              Cost per {ingredient.unit} (₹) *
+              Cost per {ingredient.unit} ({sym}) *
             </label>
             <input
               type="number"
@@ -139,8 +142,8 @@ export function StockInDrawer({ ingredient, onSave, onClose }: Props) {
           {qty > 0 && cost > 0 && (
             <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
               <div className="flex justify-between text-sm">
-                <span className="text-ink/60">{qty} {ingredient.unit} × ₹{cost.toFixed(2)}</span>
-                <span className="font-bold text-green-700">= ₹{totalCost.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                <span className="text-ink/60">{qty} {ingredient.unit} × {sym}{cost.toFixed(2)}</span>
+                <span className="font-bold text-green-700">= {sym}{totalCost.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
               </div>
               <div className="mt-1.5 flex justify-between text-xs text-ink/40">
                 <span>New total stock</span>

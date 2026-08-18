@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useSettings } from '../../context/SettingsContext';
 import { Link } from 'react-router-dom';
 import { RefreshCw, AlertTriangle, TrendingUp, CreditCard, Smartphone, Trophy } from 'lucide-react';
 import {
@@ -48,8 +49,8 @@ function growthLabel(pt: HotelGrowthPoint, period: '7d' | '30d' | '12m'): string
   return `${m} ${pt._id.day ?? ''}`;
 }
 
-function fmtINR(n: number): string {
-  return `₹${n.toLocaleString('en-IN')}`;
+function fmtINR(n: number, sym = '₹'): string {
+  return `${sym}${n.toLocaleString('en-IN')}`;
 }
 
 function fmtAgo(iso: string | undefined): string {
@@ -237,6 +238,8 @@ const PERIOD_TABS: { label: string; value: 'today' | 'week' | 'month' }[] = [
 ];
 
 function TopHotelsLeaderboard() {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [by,      setBy]      = useState<'revenue' | 'orders' | 'activity'>('revenue');
   const [period,  setPeriod]  = useState<'today' | 'week' | 'month'>('today');
   const [hotels,  setHotels]  = useState<{ hotelId: string; hotelName: string; city: string; plan: string; value?: number; lastSeen?: string; deviceCount?: number }[]>([]);
@@ -255,7 +258,7 @@ function TopHotelsLeaderboard() {
   }, [by, period]);
 
   function formatVal(h: { value?: number; lastSeen?: string }): string {
-    if (by === 'revenue')  return fmtINR(h.value ?? 0);
+    if (by === 'revenue')  return fmtINR(h.value ?? 0, sym);
     if (by === 'orders')   return `${h.value ?? 0} orders`;
     return fmtAgo(h.lastSeen);
   }
@@ -341,6 +344,8 @@ function TopHotelsLeaderboard() {
 // ── SADashboardPage ────────────────────────────────────────────────────────────
 
 export function SADashboardPage() {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [data,    setData]    = useState<DashboardData | null>(null);
   const [subRev,  setSubRev]  = useState<SubscriptionRevenueData | null>(null);
   const [fp,      setFp]      = useState<FailedPaymentsData | null>(null);
@@ -407,28 +412,28 @@ export function SADashboardPage() {
   const revenueCards = [
     {
       label: "Today's Revenue",
-      value: fmtINR(data!.todayRevenue),
+      value: fmtINR(data!.todayRevenue, sym),
       sub:   'across all active hotels',
       Icon:  TrendingUp,
       color: 'text-green-600',
     },
     {
       label: 'Monthly Revenue',
-      value: fmtINR(data!.monthlyRevenue),
+      value: fmtINR(data!.monthlyRevenue, sym),
       sub:   'orders placed this month',
       Icon:  TrendingUp,
       color: 'text-green-700',
     },
     {
       label: 'MRR',
-      value: subRev ? fmtINR(subRev.mrr) : '—',
+      value: subRev ? fmtINR(subRev.mrr, sym) : '—',
       sub:   subCount !== null ? `${subCount} active hotels` : 'loading…',
       Icon:  CreditCard,
       color: 'text-brand',
     },
     {
       label: 'ARR',
-      value: subRev ? fmtINR(subRev.arr) : '—',
+      value: subRev ? fmtINR(subRev.arr, sym) : '—',
       sub:   subRev ? `${subRev.renewingCount} renewing in 30 days` : 'loading…',
       Icon:  CreditCard,
       color: 'text-brand',

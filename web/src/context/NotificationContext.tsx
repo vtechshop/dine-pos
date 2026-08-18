@@ -4,6 +4,7 @@ import {
 } from 'react';
 import { useAuth } from './AuthContext';
 import { useCashier } from './CashierContext';
+import { useSettings } from './SettingsContext';
 import { fetchPrinterDevices } from '../api/dashboard';
 import { fetchCashierOrders, fetchKitchenOrders } from '../api/orders';
 
@@ -43,6 +44,8 @@ const NotifCtx = createContext<NotifCtxValue | null>(null);
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
   const { shift, drawerBalance } = useCashier();
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [notifMap, setNotifMap] = useState<Map<string, CashierNotif>>(new Map());
 
   const upsert = useCallback((n: Omit<CashierNotif, 'read'> & { read?: boolean }) => {
@@ -196,14 +199,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         id: 'drawer_alert:negative',
         category: 'drawer_alert',
         title: 'Drawer Alert',
-        message: `Drawer balance is ₹${drawerBalance.toLocaleString('en-IN')} — below zero`,
+        message: `Drawer balance is ${sym}${drawerBalance.toLocaleString('en-IN')} — below zero`,
         severity: 'critical',
         ts: Date.now(),
       });
     } else {
       remove('drawer_alert:negative');
     }
-  }, [drawerBalance, upsert, remove]);
+  }, [drawerBalance, sym, upsert, remove]);
 
   // ── Polling intervals — only when authenticated ───────────────────────────
   // Guard prevents polling on /login: unauthenticated API calls return 401,

@@ -57,6 +57,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const { settings } = useSettings();
   const { clearCart } = useCart();
   const { top } = useSafeAreaInsets();
+  const sym = settings.currencySymbol || '₹';
 
   const [method, setMethod]       = useState<PayMethod>('cash');
   const [placing, setPlacing]     = useState(false);
@@ -211,7 +212,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     // Validate
     if (method === 'split') {
       if (Math.abs(splitRemaining) > 1) {
-        Alert.alert('Split Mismatch', `Remaining ₹${splitRemaining.toFixed(2)} must be ₹0.`);
+        Alert.alert('Split Mismatch', `Remaining ${sym}${splitRemaining.toFixed(2)} must be ${sym}0.`);
         return;
       }
     }
@@ -320,7 +321,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           <MaterialIcons name="arrow-back" size={22} color={Colors.text} />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerAmount}>₹{grandTotal.toFixed(2)}</Text>
+          <Text style={styles.headerAmount}>{sym}{grandTotal.toFixed(2)}</Text>
           {orderNumber ? <Text style={styles.headerOrder}>{orderNumber}</Text> : null}
         </View>
       </View>
@@ -356,7 +357,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={styles.card}>
             <MaterialIcons name="payments" size={48} color="#2E7D32" style={styles.bigIcon} />
             <Text style={styles.cardTitle}>Cash Payment</Text>
-            <Text style={styles.cardAmt}>₹{grandTotal.toFixed(2)}</Text>
+            <Text style={styles.cardAmt}>{sym}{grandTotal.toFixed(2)}</Text>
             <Text style={styles.cardHint}>Collect cash from customer and mark as paid.</Text>
           </View>
         )}
@@ -365,7 +366,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         {method === 'upi_intent' && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>UPI Intent</Text>
-            <Text style={styles.cardAmt}>₹{grandTotal.toFixed(2)}</Text>
+            <Text style={styles.cardAmt}>{sym}{grandTotal.toFixed(2)}</Text>
 
             {upiStatus === 'idle' && (
               <>
@@ -374,7 +375,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
                 </Text>
                 <TouchableOpacity style={styles.upiLaunchBtn} onPress={launchUpiPayment} activeOpacity={0.85}>
                   <MaterialIcons name="smartphone" size={22} color="#FFF" />
-                  <Text style={styles.upiLaunchBtnText}>Pay ₹{grandTotal.toFixed(2)} via UPI</Text>
+                  <Text style={styles.upiLaunchBtnText}>Pay {sym}{grandTotal.toFixed(2)} via UPI</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -414,7 +415,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         {method === 'upi_qr' && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>UPI QR Code</Text>
-            <Text style={styles.cardAmt}>₹{grandTotal.toFixed(2)}</Text>
+            <Text style={styles.cardAmt}>{sym}{grandTotal.toFixed(2)}</Text>
             {settings.upiId ? (
               <>
                 <View style={styles.qrBox}>
@@ -450,7 +451,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         {method === 'upi_collect' && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>UPI Collect Request</Text>
-            <Text style={styles.cardAmt}>₹{grandTotal.toFixed(2)}</Text>
+            <Text style={styles.cardAmt}>{sym}{grandTotal.toFixed(2)}</Text>
             <Text style={styles.cardHint}>Enter the customer's UPI ID to send a collect request:</Text>
             <TextInput
               style={styles.txnInput}
@@ -499,7 +500,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={styles.card}>
             <MaterialIcons name="credit-card" size={48} color="#00695C" style={styles.bigIcon} />
             <Text style={styles.cardTitle}>Card Payment</Text>
-            <Text style={styles.cardAmt}>₹{grandTotal.toFixed(2)}</Text>
+            <Text style={styles.cardAmt}>{sym}{grandTotal.toFixed(2)}</Text>
             <Text style={styles.cardHint}>Swipe / tap card on your POS terminal.</Text>
             <TextInput
               style={styles.txnInput}
@@ -516,7 +517,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         {method === 'split' && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Split Payment</Text>
-            <Text style={styles.cardAmt}>Total: ₹{grandTotal.toFixed(2)}</Text>
+            <Text style={styles.cardAmt}>Total: {sym}{grandTotal.toFixed(2)}</Text>
             <Text style={styles.cardHint}>Enter amount for each payment method used:</Text>
 
             {splits.map((entry, idx) => (
@@ -525,7 +526,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
                   <Text style={styles.splitLabel}>{splitLabel(entry.mode)}</Text>
                 </View>
                 <View style={styles.splitInputWrap}>
-                  <Text style={styles.splitRupee}>₹</Text>
+                  <Text style={styles.splitRupee}>{sym}</Text>
                   <TextInput
                     style={styles.splitInput}
                     placeholder="0.00"
@@ -541,7 +542,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
             <View style={[styles.remainingRow, Math.abs(splitRemaining) < 0.01 ? styles.remainingOk : styles.remainingErr]}>
               <Text style={styles.remainingLabel}>Remaining</Text>
               <Text style={styles.remainingAmt}>
-                {Math.abs(splitRemaining) < 0.01 ? '₹0.00 ✓' : `₹${Math.abs(splitRemaining).toFixed(2)}`}
+                {Math.abs(splitRemaining) < 0.01 ? `${sym}0.00 ✓` : `${sym}${Math.abs(splitRemaining).toFixed(2)}`}
               </Text>
             </View>
           </View>

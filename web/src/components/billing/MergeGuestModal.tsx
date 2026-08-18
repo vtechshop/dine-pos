@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { GitMerge, X } from 'lucide-react';
+import { useSettings } from '../../context/SettingsContext';
 import type { Guest } from '../../types';
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
 }
 
 export function MergeGuestModal({ sourceGuest, activeGuests, onConfirm, onClose }: Props) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [targetId, setTargetId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +70,7 @@ export function MergeGuestModal({ sourceGuest, activeGuests, onConfirm, onClose 
                     }`}
                   >
                     <span className="font-medium">{g.displayLabel}</span>
-                    <span className="text-xs text-gray-500">₹{g.totalAmount.toFixed(2)}</span>
+                    <span className="text-xs text-gray-500">{sym}{g.totalAmount.toFixed(2)}</span>
                   </button>
                 ))
               )}

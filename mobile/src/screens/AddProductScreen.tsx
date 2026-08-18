@@ -35,6 +35,7 @@ const AddProductScreen: React.FC = () => {
   const { bottom } = useSafeAreaInsets();
   const route = useRoute<AddProductRouteProp>();
   const { settings } = useSettings();
+  const sym = settings.currencySymbol || '₹';
 
   const editProduct = route.params?.product;
   const isEditMode = !!editProduct;
@@ -331,7 +332,7 @@ const AddProductScreen: React.FC = () => {
 
         {/* Price */}
         <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Price (₹) *</Text>
+          <Text style={styles.label}>Price ({sym}) *</Text>
           <TextInput
             style={styles.input}
             value={price}

@@ -999,7 +999,7 @@ Thank you for dining with us! 🍽️`;
               <TouchableOpacity style={styles.clearBtn} onPress={() => { if (cart.items.length) showAlert('Clear?', 'Remove all items?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: clearCart }]); }}>
                 <MaterialIcons name="delete-outline" size={20} color={Colors.danger} />
               </TouchableOpacity>
-              {!!(settings as any).razorpayKeyId && (
+              {!!settings?.razorpayKeyId && (
                 <TouchableOpacity
                   style={[styles.razorpayBtn, (cart.items.length === 0 || placing || !cart.customerName.trim() || !customerPhone.trim()) && styles.placeBtnDisabled]}
                   onPress={handleRazorpayFlow}

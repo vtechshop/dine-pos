@@ -4,6 +4,7 @@ import {
   CheckCircle, Clock, Info, Zap, List, History,
   Calendar, ToggleLeft, ToggleRight, Minus, X, Download,
 } from 'lucide-react';
+import { useSettings } from '../context/SettingsContext';
 import {
   fetchIntegrations,
   syncMenu,
@@ -468,6 +469,8 @@ function AvailabilityChip({
 // ── Item availability tab ─────────────────────────────────────────────────────
 
 function ItemAvailabilityTab({ onToast }: { onToast: (type: 'success' | 'error', msg: string) => void }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [products,  setProducts]  = useState<ProductChannelAvailability[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState<Set<string>>(new Set());
@@ -615,8 +618,8 @@ function ItemAvailabilityTab({ onToast }: { onToast: (type: 'success' | 'error',
               <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-ink/40">POS</th>
               <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-ink/40">Swiggy</th>
               <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-ink/40">Zomato</th>
-              <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-ink/40">Swiggy ₹</th>
-              <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-ink/40">Zomato ₹</th>
+              <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-ink/40">Swiggy {sym}</th>
+              <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-ink/40">Zomato {sym}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -673,12 +676,12 @@ function ItemAvailabilityTab({ onToast }: { onToast: (type: 'success' | 'error',
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-ink/70">
                       {p.channelPrices.swiggy != null
-                        ? `₹${p.channelPrices.swiggy}`
+                        ? `${sym}${p.channelPrices.swiggy}`
                         : <span className="text-ink/30">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-ink/70">
                       {p.channelPrices.zomato != null
-                        ? `₹${p.channelPrices.zomato}`
+                        ? `${sym}${p.channelPrices.zomato}`
                         : <span className="text-ink/30">—</span>}
                     </td>
                   </tr>

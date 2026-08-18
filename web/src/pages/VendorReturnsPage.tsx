@@ -164,7 +164,9 @@ function CreateDrawer({
         const r = await fetchVendors({ search: vendorSearch, active: 'true', limit: 8 });
         setVendorResults(r.vendors);
         setShowVendorDrop(true);
-      } catch { /* ignore */ }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      }
     }, 250);
   }, [vendorSearch, selectedVendor]);
 

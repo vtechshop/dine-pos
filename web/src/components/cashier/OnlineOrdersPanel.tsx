@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSettings } from '../../context/SettingsContext';
 import {
   ShoppingBag, Clock, MapPin, Phone, User,
   ChevronDown, ChevronUp, Printer, Check, X,
@@ -22,8 +23,8 @@ function todayStr() {
   return new Date().toLocaleDateString('en-CA');
 }
 
-function fmtINR(n: number) {
-  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+function fmtINR(n: number, sym = '₹') {
+  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
 }
 
 function fmtTime(iso: string) {
@@ -332,6 +333,8 @@ function RejectForm({
 // ── Payment breakdown ─────────────────────────────────────────────────────────
 
 function PaymentBreakdown({ order }: { order: OnlineOrder }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const tax        = order.taxTotal        ?? 0;
   const discount   = order.discountAmount  ?? 0;
   const commission = order.platformCommission ?? 0;
@@ -344,35 +347,35 @@ function PaymentBreakdown({ order }: { order: OnlineOrder }) {
       <div className="rounded-lg border border-border bg-mist/40 p-2 space-y-0.5">
         {subtotal > 0 && (
           <div className="flex justify-between text-[11px] text-ink/60">
-            <span>Subtotal</span><span>{fmtINR(subtotal)}</span>
+            <span>Subtotal</span><span>{fmtINR(subtotal, sym)}</span>
           </div>
         )}
         {tax > 0 && (
           <div className="flex justify-between text-[11px] text-ink/60">
-            <span>Tax</span><span>{fmtINR(tax)}</span>
+            <span>Tax</span><span>{fmtINR(tax, sym)}</span>
           </div>
         )}
         {order.deliveryFee > 0 && (
           <div className="flex justify-between text-[11px] text-ink/60">
-            <span>Delivery fee</span><span>{fmtINR(order.deliveryFee)}</span>
+            <span>Delivery fee</span><span>{fmtINR(order.deliveryFee, sym)}</span>
           </div>
         )}
         {discount > 0 && (
           <div className="flex justify-between text-[11px] text-emerald-700">
-            <span>Discount</span><span>-{fmtINR(discount)}</span>
+            <span>Discount</span><span>-{fmtINR(discount, sym)}</span>
           </div>
         )}
         <div className="flex justify-between text-xs font-bold text-ink border-t border-border pt-0.5 mt-1">
-          <span>Grand Total</span><span>{fmtINR(order.grandTotal)}</span>
+          <span>Grand Total</span><span>{fmtINR(order.grandTotal, sym)}</span>
         </div>
         {commission > 0 && (
           <>
             <div className="flex justify-between text-[11px] text-red-600">
               <span>{order.orderSource === 'swiggy' ? 'Swiggy' : 'Zomato'} commission</span>
-              <span>-{fmtINR(commission)}</span>
+              <span>-{fmtINR(commission, sym)}</span>
             </div>
             <div className="flex justify-between text-[11px] font-bold text-emerald-700 border-t border-border pt-0.5 mt-1">
-              <span>Net to restaurant</span><span>{fmtINR(netSettle)}</span>
+              <span>Net to restaurant</span><span>{fmtINR(netSettle, sym)}</span>
             </div>
           </>
         )}
@@ -517,6 +520,8 @@ interface AlertProps {
 }
 
 function NewOrderAlert({ order, onDismiss, onAccepted, onRejected, onToast }: AlertProps) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [countdown, setCountdown] = useState(15);
   const [busy,      setBusy]      = useState<string | null>(null);
   const [showReject, setShowReject] = useState(false);
@@ -568,7 +573,7 @@ function NewOrderAlert({ order, onDismiss, onAccepted, onRejected, onToast }: Al
         </div>
       </div>
       <p className="mb-2 text-[11px] text-ink/70">
-        {order.customerName} &bull; {fmtINR(order.grandTotal)} &bull; {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+        {order.customerName} &bull; {fmtINR(order.grandTotal, sym)} &bull; {order.items.length} item{order.items.length !== 1 ? 's' : ''}
       </p>
       {!showReject ? (
         <div className="flex flex-wrap gap-1.5">
@@ -602,6 +607,8 @@ function NewOrderAlert({ order, onDismiss, onAccepted, onRejected, onToast }: Al
 // ── Stats bar ─────────────────────────────────────────────────────────────────
 
 function StatsBar({ orders }: { orders: OnlineOrder[] }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const pending = orders.filter(o => o.status === 'pending').length;
   const kitchen = orders.filter(o => o.status === 'preparing').length;
   const ready   = orders.filter(o => o.status === 'ready').length;
@@ -613,7 +620,7 @@ function StatsBar({ orders }: { orders: OnlineOrder[] }) {
     { label: 'Pending', value: String(pending), cls: pending > 0 ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-canvas border-border text-ink/40' },
     { label: 'Kitchen', value: String(kitchen), cls: kitchen > 0 ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-canvas border-border text-ink/40' },
     { label: 'Ready',   value: String(ready),   cls: ready   > 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-canvas border-border text-ink/40' },
-    { label: 'Revenue', value: fmtINR(revenue), cls: 'bg-canvas border-border text-ink/60' },
+    { label: 'Revenue', value: fmtINR(revenue, sym), cls: 'bg-canvas border-border text-ink/60' },
   ];
   return (
     <div className="flex gap-1.5 overflow-x-auto border-b border-border px-3 py-2 shrink-0">
@@ -638,6 +645,8 @@ function OrderCard({
   onStatusChange: (id: string, status: OnlineOrder['status']) => void;
   onToast: (type: Toast['type'], msg: string) => void;
 }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [expanded,   setExpanded]   = useState(false);
   const [showAccept, setShowAccept] = useState(false);
   const [showReject, setShowReject] = useState(false);
@@ -731,7 +740,7 @@ function OrderCard({
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-sm font-bold text-ink">{fmtINR(order.grandTotal)}</p>
+          <p className="text-sm font-bold text-ink">{fmtINR(order.grandTotal, sym)}</p>
           <p className="text-[10px] text-ink/40">{fmtElapsed(order.createdAt)}</p>
           {order.estimatedPickupTime && (
             <p className="text-[10px] text-blue-600">
@@ -825,7 +834,7 @@ function OrderCard({
             {order.items.map((item, i) => (
               <div key={i} className="flex justify-between text-xs">
                 <span className="text-ink/80">{item.productName} <span className="text-ink/40">×{item.quantity}</span></span>
-                <span className="font-medium text-ink">{fmtINR(item.total)}</span>
+                <span className="font-medium text-ink">{fmtINR(item.total, sym)}</span>
               </div>
             ))}
           </div>

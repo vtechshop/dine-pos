@@ -22,11 +22,12 @@ import {
   type CompletedTrendsPoint,
 } from '../../api/superAdmin';
 import { Spinner } from '../../components/ui/Spinner';
+import { useSettings } from '../../context/SettingsContext';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
-function fmtINR(n: number): string {
-  return `₹${n.toLocaleString('en-IN')}`;
+function fmtINR(n: number, sym = '₹'): string {
+  return `${sym}${n.toLocaleString('en-IN')}`;
 }
 
 function fmtAgo(iso: string | undefined): string {
@@ -178,6 +179,8 @@ function OrderVolumeChart({ points }: { points: CompletedTrendsPoint[] }) {
 // ── HotelAnalyticsPage ─────────────────────────────────────────────────────────
 
 export function HotelAnalyticsPage() {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   // ── main data (5 parallel endpoints) ────────────────────────────────────────
   const [mainLoading, setMainLoading] = useState(true);
   const [dashErr,     setDashErr]     = useState(false);
@@ -324,7 +327,7 @@ export function HotelAnalyticsPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <KpiCard
             label="Revenue Today"
-            value={dash ? fmtINR(dash.todayRevenue) : '—'}
+            value={dash ? fmtINR(dash.todayRevenue, sym) : '—'}
             sub="across all active hotels"
             icon={TrendingUp}
             color="text-green-600"
@@ -332,7 +335,7 @@ export function HotelAnalyticsPage() {
           />
           <KpiCard
             label="Monthly Revenue"
-            value={dash ? fmtINR(dash.monthlyRevenue) : '—'}
+            value={dash ? fmtINR(dash.monthlyRevenue, sym) : '—'}
             sub="orders placed this month"
             icon={TrendingUp}
             color="text-green-700"
@@ -368,7 +371,7 @@ export function HotelAnalyticsPage() {
           <div className="grid grid-cols-2 gap-3 content-start sm:grid-cols-3">
             <KpiCard
               label="MRR"
-              value={subRev ? fmtINR(subRev.mrr) : '—'}
+              value={subRev ? fmtINR(subRev.mrr, sym) : '—'}
               sub={subCount !== null ? `${subCount} subscribers` : undefined}
               icon={CreditCard}
               color="text-brand"
@@ -376,7 +379,7 @@ export function HotelAnalyticsPage() {
             />
             <KpiCard
               label="ARR"
-              value={subRev ? fmtINR(subRev.arr) : '—'}
+              value={subRev ? fmtINR(subRev.arr, sym) : '—'}
               sub={subRev ? `${subRev.renewingCount} renewing soon` : undefined}
               icon={CreditCard}
               color="text-brand"
@@ -384,7 +387,7 @@ export function HotelAnalyticsPage() {
             />
             <KpiCard
               label="Avg Order Bill"
-              value={revData ? fmtINR(revData.avgOrderBill) : '—'}
+              value={revData ? fmtINR(revData.avgOrderBill, sym) : '—'}
               sub={revData ? `last ${revPeriod}` : undefined}
               icon={TrendingUp}
               color="text-green-600"
@@ -428,10 +431,10 @@ export function HotelAnalyticsPage() {
                           {row.count}
                         </td>
                         <td className="py-1.5 text-right tabular-nums text-ink/70">
-                          {fmtINR(row.monthlyPrice)}
+                          {fmtINR(row.monthlyPrice, sym)}
                         </td>
                         <td className="py-1.5 text-right font-semibold tabular-nums text-ink">
-                          {fmtINR(row.contribution)}
+                          {fmtINR(row.contribution, sym)}
                         </td>
                       </tr>
                     ))}
@@ -473,7 +476,7 @@ export function HotelAnalyticsPage() {
           )}
           {revData && (
             <div className="mt-2 flex gap-4 text-xs text-ink/40">
-              <span>Total: <strong className="text-ink">{fmtINR(revData.totalRevenue)}</strong></span>
+              <span>Total: <strong className="text-ink">{fmtINR(revData.totalRevenue, sym)}</strong></span>
               <span>Orders: <strong className="text-ink">{revData.totalOrders}</strong></span>
               <span>Avg/Hotel: <strong className="text-ink">{revData.avgOrdersPerHotel}</strong></span>
             </div>
@@ -705,7 +708,7 @@ export function HotelAnalyticsPage() {
                       )}
                       {actBy === 'revenue' && (
                         <td className="px-4 py-2.5 text-right font-bold tabular-nums text-ink">
-                          {fmtINR(h.value ?? 0)}
+                          {fmtINR(h.value ?? 0, sym)}
                         </td>
                       )}
                       {actBy === 'orders' && (
@@ -873,7 +876,7 @@ export function HotelAnalyticsPage() {
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-semibold text-ink/60">Revenue Trend (30 days)</p>
               <p className="text-xs font-bold tabular-nums text-ink">
-                {trendsLoading ? '—' : fmtINR(trendsData?.totalRevenue ?? 0)}
+                {trendsLoading ? '—' : fmtINR(trendsData?.totalRevenue ?? 0, sym)}
               </p>
             </div>
             {trendsLoading ? (

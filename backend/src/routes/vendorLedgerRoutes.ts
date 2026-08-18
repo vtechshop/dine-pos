@@ -60,7 +60,14 @@ router.get('/report', async (req: AuthRequest, res: Response) => {
                     '$$value',
                     {
                       $multiply: [
-                        { $max: [0, { $subtract: ['$$this.receivedQty', '$$this.rejectedQty'] }] },
+                        {
+                          $max: [0, {
+                            $subtract: [
+                              '$$this.receivedQty',
+                              { $add: [{ $ifNull: ['$$this.damagedQty', 0] }, { $ifNull: ['$$this.rejectedQty', 0] }] },
+                            ],
+                          }],
+                        },
                         '$$this.purchasePrice',
                       ],
                     },

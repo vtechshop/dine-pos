@@ -96,7 +96,7 @@ const SplashScreen: React.FC<Props> = ({ navigation }) => {
           navigation.replace('AdminLogin', { sessionExpired: true });
           return;
         }
-      } catch {}
+      } catch (err) { console.warn('[SplashScreen] AsyncStorage read error:', err); }
       navigation.replace('RoleSelect');
     };
 

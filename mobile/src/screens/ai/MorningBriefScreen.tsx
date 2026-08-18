@@ -88,7 +88,7 @@ const MorningBriefScreen: React.FC<Props> = () => {
       try {
         const res = await getMorningBriefHistory(30);
         setHistory(res.briefs);
-      } catch {} finally {
+      } catch (e) { console.warn('[MorningBriefScreen] history load error:', e); } finally {
         setHistLoading(false);
       }
     }

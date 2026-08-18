@@ -3,6 +3,7 @@ import {
   Plus, Search, Pencil, Trash2, Loader2, X, Check,
   ChevronDown, ChevronUp, AlertCircle, Copy,
 } from 'lucide-react';
+import { useSettings } from '../context/SettingsContext';
 import type { ModifierGroup, ModifierOption } from '../types';
 import {
   fetchModifierGroups,
@@ -60,6 +61,8 @@ function OptionRow({
   onUpdated: (updated: ModifierGroup) => void;
   onDeleted: (updated: ModifierGroup) => void;
 }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [editing, setEditing]   = useState(false);
   const [draft, setDraft]       = useState<ModifierOptionInput>({ name: option.name, price: option.price, isActive: option.isActive });
   const [saving, setSaving]     = useState(false);
@@ -139,7 +142,7 @@ function OptionRow({
       <div className="flex-1 min-w-0">
         <span className="text-xs font-medium text-ink">{option.name}</span>
         {(option.price ?? 0) > 0 && (
-          <span className="ml-1.5 text-[10px] text-brand font-semibold">+₹{option.price}</span>
+          <span className="ml-1.5 text-[10px] text-brand font-semibold">+{sym}{option.price}</span>
         )}
       </div>
       {!option.isActive && <Badge text="Inactive" color="red" />}
@@ -167,6 +170,8 @@ function GroupDrawer({
   onSaved: (g: ModifierGroup) => void;
   onClose: () => void;
 }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [form, setForm]     = useState<ModifierGroupInput>(BLANK_GROUP);
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState<string | null>(null);
@@ -480,7 +485,7 @@ function GroupDrawer({
                       className="w-20 rounded border border-border px-2 py-1 text-xs text-ink outline-none focus:border-brand/40"
                       value={newPendingOpt.price ?? 0}
                       onChange={e => setNewPendingOpt(d => ({ ...d, price: parseFloat(e.target.value) || 0 }))}
-                      placeholder="₹"
+                      placeholder={sym}
                     />
                   </div>
                   {pendingOptErr && <p className="text-[10px] text-red-500">{pendingOptErr}</p>}
@@ -506,7 +511,7 @@ function GroupDrawer({
                       <div className="flex-1 min-w-0">
                         <span className="text-xs font-medium text-ink">{opt.name}</span>
                         {(opt.price ?? 0) > 0 && (
-                          <span className="ml-1.5 text-[10px] text-brand font-semibold">+₹{opt.price}</span>
+                          <span className="ml-1.5 text-[10px] text-brand font-semibold">+{sym}{opt.price}</span>
                         )}
                       </div>
                       <button
@@ -555,6 +560,8 @@ function GroupCard({
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   return (
     <div className={`rounded-xl border bg-canvas transition ${group.isActive ? 'border-border' : 'border-border/50 opacity-60'}`}>
       <div className="flex items-center gap-3 px-4 py-3">
@@ -601,7 +608,7 @@ function GroupCard({
               >
                 {opt.name}
                 {(opt.price ?? 0) > 0 && (
-                  <span className="text-brand font-semibold">+₹{opt.price}</span>
+                  <span className="text-brand font-semibold">+{sym}{opt.price}</span>
                 )}
               </span>
             ))}

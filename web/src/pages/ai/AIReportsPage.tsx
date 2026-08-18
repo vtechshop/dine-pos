@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BarChart2, TrendingUp, TrendingDown, RefreshCw, Calendar, AlertTriangle, Info, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useSettings } from '../../context/SettingsContext';
 import { fetchAIReport } from '../../api/aiReport';
 import type { DailyReportPayload } from '../../api/aiReport';
 import { ApiError } from '../../api/client';
@@ -9,7 +10,7 @@ import { ApiError } from '../../api/client';
 function toYMD(d: Date): string { return d.toISOString().slice(0, 10); }
 function yesterday(): string { const d = new Date(); d.setDate(d.getDate() - 1); return toYMD(d); }
 function fmtNum(n: number): string { return n.toLocaleString('en-IN'); }
-function fmtRev(n: number): string { return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 }); }
+function fmtRev(n: number, sym = '₹'): string { return sym + n.toLocaleString('en-IN', { maximumFractionDigits: 0 }); }
 
 const GRADE_BG: Record<string, string> = { A: 'bg-green-500', B: 'bg-blue-500', C: 'bg-yellow-400', D: 'bg-orange-500', F: 'bg-red-500' };
 const GRADE_FG: Record<string, string> = { A: 'text-green-600', B: 'text-blue-600', C: 'text-yellow-600', D: 'text-orange-600', F: 'text-red-600' };
@@ -61,6 +62,8 @@ function TrendPill({ value, label }: { value: number | null; label: string }) {
 // ── Report body ───────────────────────────────────────────────────────────────
 
 function ReportBody({ report }: { report: DailyReportPayload }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const s = report.snapshot;
   const grade = report.health.grade;
 
@@ -107,9 +110,9 @@ function ReportBody({ report }: { report: DailyReportPayload }) {
 
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="Revenue"        value={fmtRev(s.totalRevenue)}   sub={`Net ${fmtRev(netRevenue)}`} accent />
+        <KpiCard label="Revenue"        value={fmtRev(s.totalRevenue, sym)}   sub={`Net ${fmtRev(netRevenue, sym)}`} accent />
         <KpiCard label="Orders"         value={fmtNum(s.totalOrders)}    sub={`${s.uniqueTables} tables`} />
-        <KpiCard label="Avg Order Value" value={fmtRev(s.avgOrderValue)} />
+        <KpiCard label="Avg Order Value" value={fmtRev(s.avgOrderValue, sym)} />
         <KpiCard label="Cancellations"  value={`${cancelRate}%`}         sub={`${s.cancelledOrders} orders`} />
       </div>
 
@@ -144,7 +147,7 @@ function ReportBody({ report }: { report: DailyReportPayload }) {
                   <td className="px-4 py-2 tabular-nums text-ink/30">{i + 1}</td>
                   <td className="px-4 py-2 text-ink">{item.productName}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-ink/60">{item.qty}</td>
-                  <td className="px-4 py-2 text-right tabular-nums font-medium text-ink">{fmtRev(item.revenue)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-medium text-ink">{fmtRev(item.revenue, sym)}</td>
                 </tr>
               ))}
             </tbody>
@@ -161,7 +164,7 @@ function ReportBody({ report }: { report: DailyReportPayload }) {
           </div>
           <div className="flex justify-between border-t border-border pt-2 text-xs">
             <span className="text-ink/40">Total collected</span>
-            <span className="tabular-nums font-semibold text-ink">{fmtRev(payTotal)}</span>
+            <span className="tabular-nums font-semibold text-ink">{fmtRev(payTotal, sym)}</span>
           </div>
         </div>
       </div>
@@ -188,7 +191,7 @@ function ReportBody({ report }: { report: DailyReportPayload }) {
             <p className="text-lg font-bold tabular-nums text-ink">
               {String(s.peakHour).padStart(2, '0')}:00 – {String(s.peakHour + 1).padStart(2, '0')}:00
             </p>
-            <p className="text-xs tabular-nums text-ink/50">{fmtRev(s.peakHourRevenue)}</p>
+            <p className="text-xs tabular-nums text-ink/50">{fmtRev(s.peakHourRevenue, sym)}</p>
           </div>
 
           <div>
@@ -197,7 +200,7 @@ function ReportBody({ report }: { report: DailyReportPayload }) {
               {displayHours.map(({ h, v }) => (
                 <div
                   key={h}
-                  title={`${String(h).padStart(2,'0')}:00 — ${fmtRev(v)}`}
+                  title={`${String(h).padStart(2,'0')}:00 — ${fmtRev(v, sym)}`}
                   className="group relative flex flex-1 flex-col items-center"
                 >
                   <div

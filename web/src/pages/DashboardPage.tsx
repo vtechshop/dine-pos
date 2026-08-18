@@ -824,7 +824,7 @@ export function DashboardPage() {
         {role === 'admin' && (briefLoading || morningBrief) && (
           morningBrief
             ? <MorningBriefCard brief={morningBrief} />
-            : <MorningBriefCard brief={null as any} loading />
+            : <MorningBriefCard loading />
         )}
       </div>
 

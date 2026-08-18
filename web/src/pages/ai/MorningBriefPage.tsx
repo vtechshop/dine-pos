@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Sunrise, RefreshCw, ChevronDown, AlertTriangle, CalendarDays } from 'lucide-react';
+import { useSettings } from '../../context/SettingsContext';
 import { MorningBriefCard } from '../../components/ai/MorningBriefCard';
 import {
   fetchLatestBrief,
@@ -34,6 +35,8 @@ function gradeClasses(g: string): string {
 function HistoryItem({
   item, selected, onClick,
 }: { item: BriefHistoryItem; selected: boolean; onClick: () => void }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   return (
     <button
       onClick={onClick}
@@ -49,7 +52,7 @@ function HistoryItem({
       </div>
       <div className="flex items-center gap-1.5">
         <span className="text-[11px] text-ink/60">
-          ₹{Math.round(item.business.revenue).toLocaleString('en-IN')}
+          {sym}{Math.round(item.business.revenue).toLocaleString('en-IN')}
         </span>
         {item.warning && <AlertTriangle size={9} className="shrink-0 text-amber-500" />}
       </div>

@@ -64,6 +64,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const { count: cashierBadge, increment: incCashierBadge, reset: resetCashierBadge } = useBadgeCount(BADGE_KEYS.cashierPending);
 
   const { showToast } = useGlobalToast();
+  const sym = settings?.currencySymbol || '₹';
 
   usePrinterSocket('cashier', undefined, (msg) => showToast(NotificationSvc.printerError(msg), 8000));
 
@@ -373,7 +374,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
           </View>
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
             <Text style={[styles.timeText, { color: timerColor(item.createdAt) }]}>{elapsed(item.createdAt)}</Text>
-            <Text style={styles.totalText}>₹{item.grandTotal.toFixed(0)}</Text>
+            <Text style={styles.totalText}>{sym}{item.grandTotal.toFixed(0)}</Text>
           </View>
         </View>
 
@@ -382,7 +383,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
             <View key={i} style={styles.itemRow}>
               <Text style={styles.itemQty}>{it.quantity}×</Text>
               <Text style={styles.itemName} numberOfLines={1}>{it.productName}</Text>
-              <Text style={styles.itemPrice}>₹{it.total.toFixed(0)}</Text>
+              <Text style={styles.itemPrice}>{sym}{it.total.toFixed(0)}</Text>
             </View>
           ))}
         </View>
@@ -400,7 +401,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
           activeOpacity={0.85}
         >
           <MaterialIcons name="point-of-sale" size={18} color={Colors.white} />
-          <Text style={styles.payBtnText}>Collect Payment · ₹{item.grandTotal.toFixed(0)}</Text>
+          <Text style={styles.payBtnText}>Collect Payment · {sym}{item.grandTotal.toFixed(0)}</Text>
         </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -426,7 +427,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
             <View style={[styles.methodBadge, { backgroundColor: pmColor + '22' }]}>
               <Text style={[styles.methodBadgeText, { color: pmColor }]}>{item.paymentMethod.toUpperCase()}</Text>
             </View>
-            <Text style={styles.totalText}>₹{item.grandTotal.toFixed(0)}</Text>
+            <Text style={styles.totalText}>{sym}{item.grandTotal.toFixed(0)}</Text>
           </View>
         </View>
 
@@ -516,7 +517,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.statLabel}>Active</Text>
         </View>
         <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: Colors.border }]}>
-          <Text style={[styles.statValue, { color: Colors.success }]}>₹{todayRevenue.toFixed(0)}</Text>
+          <Text style={[styles.statValue, { color: Colors.success }]}>{sym}{todayRevenue.toFixed(0)}</Text>
           <Text style={styles.statLabel}>Collected Today</Text>
         </View>
         <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: Colors.border }]}>
@@ -574,12 +575,12 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.readyTime}>{elapsed(order.createdAt)}</Text>
-                    <Text style={styles.readyAmount}>₹{order.grandTotal.toFixed(0)}</Text>
+                    <Text style={styles.readyAmount}>{sym}{order.grandTotal.toFixed(0)}</Text>
                   </View>
                 </View>
                 <View style={styles.readyPayBtn}>
                   <MaterialIcons name="point-of-sale" size={14} color={Colors.white} />
-                  <Text style={styles.readyPayBtnText}>Collect Payment · ₹{order.grandTotal.toFixed(0)}</Text>
+                  <Text style={styles.readyPayBtnText}>Collect Payment · {sym}{order.grandTotal.toFixed(0)}</Text>
                 </View>
               </TouchableOpacity>
             );

@@ -4,6 +4,7 @@ import {
   Package, Zap, AlertTriangle, Star, Clock,
 } from 'lucide-react';
 import type { MorningBrief } from '../../api/morningBrief';
+import { useSettings } from '../../context/SettingsContext';
 
 // ── Grade color helpers ────────────────────────────────────────────────────────
 
@@ -82,12 +83,14 @@ function utcHourToLocal(h: number): string {
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface MorningBriefCardProps {
-  brief:   MorningBrief;
+  brief?:  MorningBrief | null;
   loading?: boolean;
 }
 
 export function MorningBriefCard({ brief, loading = false }: MorningBriefCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const { settings } = useSettings();
+  const currency = settings?.currencySymbol ?? '₹';
 
   if (loading) {
     return (
@@ -105,7 +108,6 @@ export function MorningBriefCard({ brief, loading = false }: MorningBriefCardPro
   if (!brief || !brief.business) return null;
 
   const { business: b, inventory: inv, forecast: fc, menu: m } = brief;
-  const currency = '₹';
 
   return (
     <div className="border-b border-border bg-canvas">

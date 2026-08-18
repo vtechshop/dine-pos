@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, ToggleLeft, ToggleRight, X, Gift, RefreshCw, Minus, History, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
+import { useSettings } from '../context/SettingsContext';
 import {
   fetchGiftVouchers, issueGiftVoucher, topupGiftVoucher, redeemGiftVoucher,
   deactivateGiftVoucher, reactivateGiftVoucher,
@@ -32,6 +33,9 @@ const TX_TYPE_COLOR: Record<string, string> = {
 };
 
 export function GiftVouchersPage() {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
+  const [alertMsg, setAlertMsg] = useState<string | null>(null);
   const [items, setItems]     = useState<GiftVoucher[]>([]);
   const [total, setTotal]     = useState(0);
   const [page, setPage]       = useState(1);
@@ -42,6 +46,7 @@ export function GiftVouchersPage() {
 
   const [stats, setStats]           = useState<GiftVoucherStats | null>(null);
   const [statsLoading, setStatsLod] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   const [issueOpen, setIssueOpen]     = useState(false);
   const [issueForm, setIssueForm]     = useState<IssueVoucherInput>(BLANK_ISSUE);
@@ -71,10 +76,13 @@ export function GiftVouchersPage() {
 
   const loadStats = useCallback(async () => {
     setStatsLod(true);
+    setStatsError(null);
     try {
       const s = await fetchGiftVoucherStats();
       setStats(s);
-    } catch { /* non-fatal */ } finally {
+    } catch (err) {
+      setStatsError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally {
       setStatsLod(false);
     }
   }, []);
@@ -166,7 +174,7 @@ export function GiftVouchersPage() {
     if (!redeemTarget) return;
     const amt = Number(redeemAmount);
     if (!amt || amt <= 0) { setRedeemError('Enter a valid amount.'); return; }
-    if (amt > redeemTarget.balance) { setRedeemError(`Amount exceeds balance of ₹${redeemTarget.balance}.`); return; }
+    if (amt > redeemTarget.balance) { setRedeemError(`Amount exceeds balance of ${sym}${redeemTarget.balance}.`); return; }
     setRedeemSaving(true);
     setRedeemError(null);
     try {
@@ -189,7 +197,7 @@ export function GiftVouchersPage() {
         load(page);
         loadStats();
       } catch (e) {
-        alert((e as Error).message);
+        setAlertMsg((e as Error).message);
       }
     } else {
       try {
@@ -197,7 +205,7 @@ export function GiftVouchersPage() {
         load(page);
         loadStats();
       } catch (e) {
-        alert((e as Error).message);
+        setAlertMsg((e as Error).message);
       }
     }
   };
@@ -212,7 +220,7 @@ export function GiftVouchersPage() {
 
   const pages = Math.ceil(total / LIMIT);
   const txPages = Math.ceil(txTotal / TX_LIMIT);
-  const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  const fmt = (n: number) => `${sym}${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
   return (
     <div className="flex h-full flex-col">
@@ -244,6 +252,10 @@ export function GiftVouchersPage() {
         </div>
       </div>
 
+      {statsError && (
+        <div className="shrink-0 border-b border-red-100 bg-red-50 px-5 py-2 text-xs text-red-600">{statsError}</div>
+      )}
+
       {/* Stats tiles */}
       {(stats || statsLoading) && (
         <div className="shrink-0 border-b border-border bg-canvas px-5 py-3">
@@ -271,6 +283,7 @@ export function GiftVouchersPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto bg-mist px-5 py-4">
+        {alertMsg && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex justify-between"><span>{alertMsg}</span><button onClick={() => setAlertMsg(null)} className="ml-2 text-red-400 hover:text-red-600">✕</button></div>}
         {error && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
@@ -304,8 +317,8 @@ export function GiftVouchersPage() {
                       <p className="font-medium text-ink">{v.issuedToName || '—'}</p>
                       {v.issuedToPhone && <p className="text-xs text-ink/50">{v.issuedToPhone}</p>}
                     </td>
-                    <td className="px-4 py-3 font-bold text-brand">₹{v.balance}</td>
-                    <td className="px-4 py-3 text-ink/60">₹{v.originalAmount}</td>
+                    <td className="px-4 py-3 font-bold text-brand">{sym}{v.balance}</td>
+                    <td className="px-4 py-3 text-ink/60">{sym}{v.originalAmount}</td>
                     <td className="px-4 py-3 text-ink/60">
                       {v.expiresAt ? new Date(v.expiresAt).toLocaleDateString('en-IN') : '—'}
                     </td>
@@ -399,7 +412,7 @@ export function GiftVouchersPage() {
                   <History size={15} className="text-brand" />
                   <h3 className="text-sm font-bold text-ink">Transaction History</h3>
                 </div>
-                <p className="mt-0.5 font-mono text-xs text-ink/50">{txVoucher.voucherCode} · Balance: ₹{txVoucher.balance}</p>
+                <p className="mt-0.5 font-mono text-xs text-ink/50">{txVoucher.voucherCode} · Balance: {sym}{txVoucher.balance}</p>
               </div>
               <button onClick={() => setTxVoucher(null)} className="rounded-lg p-1.5 text-ink/40 hover:bg-ink/5">
                 <X size={16} />
@@ -434,9 +447,9 @@ export function GiftVouchersPage() {
                       </div>
                       <div className="shrink-0 text-right">
                         <p className={`text-sm font-bold tabular-nums ${['issue', 'topup', 'refund'].includes(tx.type) ? 'text-green-700' : 'text-orange-700'}`}>
-                          {['issue', 'topup', 'refund'].includes(tx.type) ? '+' : '-'}₹{tx.amount}
+                          {['issue', 'topup', 'refund'].includes(tx.type) ? '+' : '-'}{sym}{tx.amount}
                         </p>
-                        <p className="text-[10px] text-ink/40 tabular-nums">Bal: ₹{tx.balanceAfter}</p>
+                        <p className="text-[10px] text-ink/40 tabular-nums">Bal: {sym}{tx.balanceAfter}</p>
                       </div>
                     </div>
                   ))}
@@ -482,7 +495,7 @@ export function GiftVouchersPage() {
               {issueError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{issueError}</div>
               )}
-              <Field label="Amount ₹ *">
+              <Field label={`Amount ${sym} *`}>
                 <input
                   type="number" min={1}
                   value={issueForm.amount || ''}
@@ -544,7 +557,7 @@ export function GiftVouchersPage() {
               <h3 className="text-base font-bold text-ink">Top-up Voucher</h3>
             </div>
             <p className="mb-4 text-xs text-ink/60">
-              {topupTarget.voucherCode} · Current balance: <strong>₹{topupTarget.balance}</strong>
+              {topupTarget.voucherCode} · Current balance: <strong>{sym}{topupTarget.balance}</strong>
             </p>
             {topupError && (
               <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{topupError}</div>
@@ -553,7 +566,7 @@ export function GiftVouchersPage() {
               type="number" min={1}
               value={topupAmount}
               onChange={e => setTopupAmount(e.target.value)}
-              placeholder="Amount to add ₹"
+              placeholder={`Amount to add ${sym}`}
               className={`${inputCls} mb-4`}
             />
             <div className="flex gap-3">
@@ -585,7 +598,7 @@ export function GiftVouchersPage() {
               <h3 className="text-base font-bold text-ink">Manual Redemption</h3>
             </div>
             <p className="mb-4 text-xs text-ink/60">
-              {redeemTarget.voucherCode} · Available balance: <strong>₹{redeemTarget.balance}</strong>
+              {redeemTarget.voucherCode} · Available balance: <strong>{sym}{redeemTarget.balance}</strong>
             </p>
             {redeemError && (
               <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{redeemError}</div>
@@ -594,7 +607,7 @@ export function GiftVouchersPage() {
               type="number" min={1} max={redeemTarget.balance}
               value={redeemAmount}
               onChange={e => setRedeemAmount(e.target.value)}
-              placeholder="Amount to redeem ₹"
+              placeholder={`Amount to redeem ${sym}`}
               className={`${inputCls} mb-4`}
             />
             <div className="flex gap-3">

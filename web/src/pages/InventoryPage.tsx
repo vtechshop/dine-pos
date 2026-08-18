@@ -101,6 +101,8 @@ export function InventoryPage() {
   const searchRef             = useRef<HTMLInputElement>(null);
   const [visibleCount, setVisibleCount] = useState(50);
 
+  const [alertMsg, setAlertMsg]               = useState<string | null>(null);
+
   // ── Waste state ──────────────────────────────────────────────────────────────
   const [wasteDate,       setWasteDate]       = useState(todayStr);
   const [wasteLogs,       setWasteLogs]       = useState<WasteLog[]>([]);
@@ -148,7 +150,9 @@ export function InventoryPage() {
     try {
       const { ingredients: low } = await fetchLowStockIngredients();
       setLowStock(low);
-    } catch { /* silent */ }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    }
   }
 
   // ── Load waste ───────────────────────────────────────────────────────────────
@@ -220,7 +224,7 @@ export function InventoryPage() {
       setIngredients(prev => prev.filter(x => x._id !== i._id));
       setLowStock(prev => prev.filter(x => x._id !== i._id));
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Delete failed');
+      setAlertMsg(e instanceof Error ? e.message : 'Delete failed');
     }
   }
 
@@ -280,7 +284,9 @@ export function InventoryPage() {
       await loadWaste(wasteDate);
       // Refresh ingredient stock if we deducted from it
       if (wasteForm.ingredientId) void load();
-    } catch { /* silent */ } finally {
+    } catch (err) {
+      setWasteError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally {
       setWasteSaving(false);
     }
   }
@@ -291,7 +297,9 @@ export function InventoryPage() {
     try {
       await deleteWasteLog(id);
       await loadWaste(wasteDate);
-    } catch { /* silent */ } finally {
+    } catch (err) {
+      setWasteError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally {
       setWasteDeleting(null);
     }
   }
@@ -439,6 +447,7 @@ export function InventoryPage() {
 
           {/* Table */}
           <div className="flex-1 overflow-y-auto">
+            {alertMsg && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex justify-between"><span>{alertMsg}</span><button onClick={() => setAlertMsg(null)} className="ml-2 text-red-400 hover:text-red-600">✕</button></div>}
             {error && (
               <div className="m-5 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
             )}
@@ -863,9 +872,13 @@ export function InventoryPage() {
               </div>
             </div>
 
+            {wasteError && (
+              <div className="mt-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">{wasteError}</div>
+            )}
+
             <div className="mt-6 flex gap-2">
               <button
-                onClick={() => { setShowWasteModal(false); setWasteForm(emptyWasteForm); }}
+                onClick={() => { setShowWasteModal(false); setWasteForm(emptyWasteForm); setWasteError(null); }}
                 className="flex-1 rounded-lg border border-border py-2 text-sm text-ink/50 hover:bg-mist"
               >
                 Cancel

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSettings } from '../context/SettingsContext';
 import {
   RefreshCw, AlertCircle, Check, X, Printer,
   Clock, MapPin, Phone, User, ShoppingBag,
@@ -40,8 +41,8 @@ function elapsedMins(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
 }
 
-function fmtINR(n: number) {
-  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+function fmtINR(n: number, sym = '₹') {
+  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
 }
 
 function copyToClipboard(text: string) {
@@ -242,6 +243,8 @@ function RejectForm({ onConfirm, onCancel, busy }: {
 // ── Payment breakdown ─────────────────────────────────────────────────────────
 
 function PaymentBreakdown({ order }: { order: OnlineOrder }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const tax        = order.taxTotal          ?? 0;
   const discount   = order.discountAmount    ?? 0;
   const commission = order.platformCommission ?? 0;
@@ -251,28 +254,28 @@ function PaymentBreakdown({ order }: { order: OnlineOrder }) {
     <div className="rounded-xl border border-border bg-mist/30 p-3 space-y-1">
       <p className="text-xs font-semibold uppercase tracking-wide text-ink/40">Payment breakdown</p>
       {subtotal > 0 && (
-        <div className="flex justify-between text-sm text-ink/60"><span>Subtotal</span><span>{fmtINR(subtotal)}</span></div>
+        <div className="flex justify-between text-sm text-ink/60"><span>Subtotal</span><span>{fmtINR(subtotal, sym)}</span></div>
       )}
       {tax > 0 && (
-        <div className="flex justify-between text-sm text-ink/60"><span>Tax</span><span>{fmtINR(tax)}</span></div>
+        <div className="flex justify-between text-sm text-ink/60"><span>Tax</span><span>{fmtINR(tax, sym)}</span></div>
       )}
       {order.deliveryFee > 0 && (
-        <div className="flex justify-between text-sm text-ink/60"><span>Delivery fee</span><span>{fmtINR(order.deliveryFee)}</span></div>
+        <div className="flex justify-between text-sm text-ink/60"><span>Delivery fee</span><span>{fmtINR(order.deliveryFee, sym)}</span></div>
       )}
       {discount > 0 && (
-        <div className="flex justify-between text-sm text-emerald-700"><span>Discount</span><span>-{fmtINR(discount)}</span></div>
+        <div className="flex justify-between text-sm text-emerald-700"><span>Discount</span><span>-{fmtINR(discount, sym)}</span></div>
       )}
       <div className="flex justify-between text-sm font-bold text-ink border-t border-border pt-1 mt-1">
-        <span>Grand Total</span><span>{fmtINR(order.grandTotal)}</span>
+        <span>Grand Total</span><span>{fmtINR(order.grandTotal, sym)}</span>
       </div>
       {commission > 0 && (
         <>
           <div className="flex justify-between text-sm text-red-600">
             <span>{order.orderSource === 'swiggy' ? 'Swiggy' : 'Zomato'} commission</span>
-            <span>-{fmtINR(commission)}</span>
+            <span>-{fmtINR(commission, sym)}</span>
           </div>
           <div className="flex justify-between text-sm font-bold text-emerald-700 border-t border-border pt-1 mt-1">
-            <span>Net to restaurant</span><span>{fmtINR(netSettle)}</span>
+            <span>Net to restaurant</span><span>{fmtINR(netSettle, sym)}</span>
           </div>
         </>
       )}
@@ -391,6 +394,8 @@ function printOrder(order: OnlineOrder) {
 // ── Stats row ─────────────────────────────────────────────────────────────────
 
 function StatsRow({ orders }: { orders: OnlineOrder[] }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const today       = todayStr();
   const todayOrders = orders.filter(o => new Date(o.createdAt).toLocaleDateString('en-CA') === today);
   const active      = todayOrders.filter(o => o.status !== 'cancelled');
@@ -401,10 +406,10 @@ function StatsRow({ orders }: { orders: OnlineOrder[] }) {
 
   const chips = [
     { label: "Today's Orders", value: String(todayOrders.length), cls: 'border-brand/20 bg-brand/5 text-brand' },
-    { label: 'Revenue',        value: fmtINR(revenue),            cls: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+    { label: 'Revenue',        value: fmtINR(revenue, sym),       cls: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
     { label: 'Pending',        value: String(pending),            cls: pending > 0 ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-border bg-canvas text-ink/50' },
     { label: 'In Kitchen',     value: String(kitchen),            cls: kitchen > 0 ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-border bg-canvas text-ink/50' },
-    { label: 'Avg Order',      value: fmtINR(avg),                cls: 'border-border bg-canvas text-ink/60' },
+    { label: 'Avg Order',      value: fmtINR(avg, sym),           cls: 'border-border bg-canvas text-ink/60' },
   ];
 
   return (
@@ -436,6 +441,8 @@ function OrderCard({
   onDispatched: (id: string) => void;
   onToast: (type: Toast['type'], msg: string) => void;
 }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [busy,       setBusy]       = useState<string | null>(null);
   const [showReject, setShowReject] = useState(false);
   const [showAccept, setShowAccept] = useState(false);
@@ -544,7 +551,7 @@ function OrderCard({
         {order.items.map((item, i) => (
           <div key={i} className="flex items-center justify-between text-sm">
             <span className="text-ink/80">{item.productName} <span className="text-ink/40">×{item.quantity}</span></span>
-            <span className="font-medium text-ink">{fmtINR(item.total)}</span>
+            <span className="font-medium text-ink">{fmtINR(item.total, sym)}</span>
           </div>
         ))}
         {order.notes && (
@@ -556,9 +563,9 @@ function OrderCard({
       <div className="px-4 py-3 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xl font-bold text-ink">{fmtINR(order.grandTotal)}</p>
+            <p className="text-xl font-bold text-ink">{fmtINR(order.grandTotal, sym)}</p>
             {order.deliveryFee > 0 && (
-              <p className="text-xs text-ink/40">incl. {fmtINR(order.deliveryFee)} delivery</p>
+              <p className="text-xs text-ink/40">incl. {fmtINR(order.deliveryFee, sym)} delivery</p>
             )}
           </div>
           <span className="font-mono text-[10px] text-ink/30">{order.platformOrderId}</span>

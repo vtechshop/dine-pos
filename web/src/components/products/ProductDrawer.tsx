@@ -12,6 +12,7 @@ import {
 import { fetchKitchenStations } from '../../api/kitchenStations';
 import type { KitchenStation } from '../../api/kitchenStations';
 import { useShortcut } from '../../hooks/useShortcut';
+import { useSettings } from '../../context/SettingsContext';
 
 // Ingredient type from the backend
 interface Ingredient {
@@ -53,6 +54,8 @@ type VariantDraft = { _id?: string; name: string; price: number };
 type RecipeDraft  = { ingredient: Ingredient; quantity: number };
 
 export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [form, setForm]         = useState<ProductInput>(BLANK);
   const [variants, setVariants] = useState<VariantDraft[]>([]);
   const [saving, setSaving]     = useState(false);
@@ -561,7 +564,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
           {/* ── Price + Tax ─────────────────────────────────────────────────── */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={sectionLabel}>Price (₹) *</label>
+              <label className={sectionLabel}>Price ({sym}) *</label>
               <input className={field} type="number" min={0} step={0.01} value={form.price} onChange={e => set('price', parseFloat(e.target.value) || 0)} />
             </div>
             <div>
@@ -726,7 +729,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                               <td className="px-3 py-2 text-ink/50">{row.ingredient.unit}</td>
                               <td className="px-3 py-2 text-right font-mono text-ink/60">
                                 {row.ingredient.costPerUnit > 0
-                                  ? `₹${(row.ingredient.costPerUnit * row.quantity).toFixed(2)}`
+                                  ? `${sym}${(row.ingredient.costPerUnit * row.quantity).toFixed(2)}`
                                   : '—'}
                               </td>
                               <td className="px-2 py-2">
@@ -746,7 +749,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                   {recipe.length > 0 && recipeCost > 0 && (
                     <div className="mb-3 flex items-center justify-between rounded-lg bg-mist px-3 py-2">
                       <span className="text-xs text-ink/50">Recipe cost</span>
-                      <span className="text-xs font-bold tabular-nums text-ink">₹{recipeCost.toFixed(2)}</span>
+                      <span className="text-xs font-bold tabular-nums text-ink">{sym}{recipeCost.toFixed(2)}</span>
                     </div>
                   )}
 
@@ -777,7 +780,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                           <Plus size={11} className="shrink-0 text-brand" />
                           <span className="font-medium text-ink">{ing.name}</span>
                           <span className="text-ink/40">· {ing.unit}</span>
-                          {ing.costPerUnit > 0 && <span className="ml-auto text-ink/40">₹{ing.costPerUnit}/{ing.unit}</span>}
+                          {ing.costPerUnit > 0 && <span className="ml-auto text-ink/40">{sym}{ing.costPerUnit}/{ing.unit}</span>}
                         </button>
                       ))}
                     </div>

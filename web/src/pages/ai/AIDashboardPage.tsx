@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useSettings } from '../../context/SettingsContext';
 import {
   RefreshCw, TrendingUp, ShoppingCart, AlertTriangle,
   FileText, MessageSquare, BarChart2, Bell, Star, ShoppingBag,
@@ -11,8 +12,8 @@ import { ApiError } from '../../api/client';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmtRev(n: number) {
-  return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+function fmtRev(n: number, sym = '₹') {
+  return sym + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 }
 
 function fmtPct(n: number | null) {
@@ -45,6 +46,8 @@ function Skeleton({ h, w }: { h: string; w?: string }) {
 // ── 7-Day Bar Chart ───────────────────────────────────────────────────────────
 
 function TrendBars({ data }: { data: ExecutiveDashboard['trend'] }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const maxRev = Math.max(...data.map(d => d.totalRevenue), 1);
   return (
     <div className="flex h-28 items-end gap-1.5">
@@ -60,7 +63,7 @@ function TrendBars({ data }: { data: ExecutiveDashboard['trend'] }) {
             <span className="text-[9px] text-ink/40 tabular-nums">{label}</span>
             {/* Tooltip */}
             <div className="pointer-events-none absolute bottom-full mb-1 hidden rounded bg-ink px-2 py-1 text-[10px] text-white group-hover:block whitespace-nowrap z-10">
-              {fmtRev(d.totalRevenue)} · {d.totalOrders} orders
+              {fmtRev(d.totalRevenue, sym)} · {d.totalOrders} orders
             </div>
           </div>
         );
@@ -94,6 +97,8 @@ function QuickNavCard({ item }: { item: NavItem }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function AIDashboardPage() {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [dash, setDash] = useState<ExecutiveDashboard | null>(null);
   const [anomalies, setAnomalies] = useState<AnomalyReport | null>(null);
   const [dashLoading, setDashLoading] = useState(true);
@@ -221,10 +226,10 @@ export function AIDashboardPage() {
                 </div>
               ))
             : dash && [
-                { label: 'Today Revenue', value: fmtRev(dash.today.revenue), sub: `${dash.today.orders} orders`, accent: true },
+                { label: 'Today Revenue', value: fmtRev(dash.today.revenue, sym), sub: `${dash.today.orders} orders`, accent: true },
                 { label: 'Today Orders',  value: String(dash.today.orders),  sub: dash.today.source === 'cache' ? 'from cache' : 'live data' },
-                { label: 'This Week',     value: wc ? fmtRev(wc.thisWeekRevenue) : '—', sub: '7-day total' },
-                { label: 'vs Last Week',  value: fmtPct(changePct), sub: wc ? `${fmtRev(wc.lastWeekRevenue)} prior wk` : undefined,
+                { label: 'This Week',     value: wc ? fmtRev(wc.thisWeekRevenue, sym) : '—', sub: '7-day total' },
+                { label: 'vs Last Week',  value: fmtPct(changePct), sub: wc ? `${fmtRev(wc.lastWeekRevenue, sym)} prior wk` : undefined,
                   valColor: changePct === null ? 'text-ink/40' : changePct >= 0 ? 'text-green-600' : 'text-red-500' },
               ].map(({ label, value, sub, accent, valColor }) => (
                 <div key={label} className={`rounded-xl border p-4 ${accent ? 'border-brand/20 bg-brand/5' : 'border-border bg-canvas'}`}>
@@ -294,7 +299,7 @@ export function AIDashboardPage() {
                           style={{ width: `${(item.revenue / maxRev) * 100}%` }}
                         />
                       </div>
-                      <span className="text-xs font-semibold text-ink tabular-nums w-20 text-right">{fmtRev(item.revenue)}</span>
+                      <span className="text-xs font-semibold text-ink tabular-nums w-20 text-right">{fmtRev(item.revenue, sym)}</span>
                     </div>
                   );
                 })}

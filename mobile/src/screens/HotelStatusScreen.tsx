@@ -12,6 +12,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HotelStatus'>;
 
@@ -33,6 +34,7 @@ type StatusConfig = {
 const HotelStatusScreen: React.FC<Props> = ({ navigation, route }) => {
   const { status, hotelName, trialDaysRemaining } = route.params;
   const { top, bottom } = useSafeAreaInsets();
+  const { logout } = useAuth();
 
   const configs: Record<string, StatusConfig> = {
     pending: {
@@ -145,7 +147,7 @@ const HotelStatusScreen: React.FC<Props> = ({ navigation, route }) => {
           <Text style={styles.supportBtnText}>Contact Support</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.logoutBtn} onPress={() => navigation.replace('RoleSelect')} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.logoutBtn} onPress={() => void logout()} activeOpacity={0.8}>
           <MaterialIcons name="logout" size={18} color={Colors.textSecondary} />
           <Text style={styles.logoutBtnText}>Back to Login</Text>
         </TouchableOpacity>

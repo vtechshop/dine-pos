@@ -131,6 +131,9 @@ export function CustomersPage() {
 
   const [exporting, setExporting]           = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [segmentError, setSegmentError]     = useState<string | null>(null);
+  const [loyaltyError, setLoyaltyError]     = useState<string | null>(null);
+  const [exportError, setExportError]       = useState<string | null>(null);
 
   const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -183,13 +186,14 @@ export function CustomersPage() {
 
   const loadSegment = useCallback(async (seg: CustomerSegment, pg: number) => {
     setSegmentLoading(true);
+    setSegmentError(null);
     try {
       const res = await searchCustomersBySegment({ segment: seg === 'all' ? undefined : seg, page: pg, limit: 50 });
       setSegmentCustomers(res.customers);
       setSegmentTotal(res.total);
       setSegmentPage(pg);
-    } catch {
-      // silent
+    } catch (err) {
+      setSegmentError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setSegmentLoading(false);
     }
@@ -206,6 +210,7 @@ export function CustomersPage() {
 
   const loadLoyalty = useCallback(async () => {
     setLoyaltyLoading(true);
+    setLoyaltyError(null);
     try {
       const [stats, act] = await Promise.all([
         fetchLoyaltyStats(),
@@ -215,8 +220,8 @@ export function CustomersPage() {
       setLoyaltyActivity(act.transactions);
       setActivityTotal(act.total);
       setActivityPage(1);
-    } catch {
-      // silent
+    } catch (err) {
+      setLoyaltyError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoyaltyLoading(false);
     }
@@ -305,6 +310,7 @@ export function CustomersPage() {
   const handleExport = useCallback(async (mode: 'filter' | 'all') => {
     setExporting(true);
     setShowExportMenu(false);
+    setExportError(null);
     try {
       const params: Parameters<typeof downloadCustomerExport>[0] = {};
       if (mode === 'filter') {
@@ -317,8 +323,8 @@ export function CustomersPage() {
       }
       // mode === 'all': no params — server returns all hotel customers
       await downloadCustomerExport(params);
-    } catch {
-      // silent — export failure shouldn't break the page
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setExporting(false);
     }
@@ -363,6 +369,9 @@ export function CustomersPage() {
           ))}
           {/* Export + total count */}
           <div className="ml-auto flex items-center gap-2 pr-1">
+            {exportError && (
+              <span className="text-xs text-red-600" title={exportError}>Export failed</span>
+            )}
             <div className="relative" ref={exportMenuRef}>
               <button
                 onClick={() => setShowExportMenu(v => !v)}
@@ -546,6 +555,9 @@ export function CustomersPage() {
               <span className="text-[10px] text-ink/40">{segmentTotal} customers</span>
             </div>
             <div className="flex-1 overflow-y-auto">
+              {segmentError && (
+                <div className="border-b border-red-100 bg-red-50 px-4 py-2.5 text-xs text-red-600">{segmentError}</div>
+              )}
               {segmentLoading ? (
                 <div className="flex h-48 items-center justify-center"><Spinner size="md" /></div>
               ) : segmentCustomers.length === 0 ? (
@@ -611,6 +623,10 @@ export function CustomersPage() {
       {/* ── LOYALTY TAB ── */}
       {activeTab === 'loyalty' && (
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
+
+          {loyaltyError && (
+            <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{loyaltyError}</div>
+          )}
 
           {/* Points Program config */}
           {config && (

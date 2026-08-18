@@ -79,11 +79,11 @@ const formatUptime = (s: number) => {
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
   if (d > 0) return `${d}d ${h}h`; if (h > 0) return `${h}h ${m}m`; return `${m}m`;
 };
-const formatINR = (n: number) => {
-  if (n >= 10000000) return `₹${(n / 10000000).toFixed(1)}Cr`;
-  if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
-  if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
-  return `₹${n.toFixed(0)}`;
+const formatINR = (n: number, sym = '₹') => {
+  if (n >= 10000000) return `${sym}${(n / 10000000).toFixed(1)}Cr`;
+  if (n >= 100000) return `${sym}${(n / 100000).toFixed(1)}L`;
+  if (n >= 1000) return `${sym}${(n / 1000).toFixed(1)}K`;
+  return `${sym}${n.toFixed(0)}`;
 };
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SuperAdminDashboard'>;

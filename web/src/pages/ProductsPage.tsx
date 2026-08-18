@@ -71,13 +71,15 @@ export function ProductsPage() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [catLoading, setCatLoading] = useState(false);
+  const [catError, setCatError]     = useState<string | null>(null);
 
   const loadCategories = useCallback(async () => {
     setCatLoading(true);
+    setCatError(null);
     try {
       setCategories(await fetchCategories());
-    } catch {
-      // silent
+    } catch (err) {
+      setCatError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setCatLoading(false);
     }
@@ -114,6 +116,10 @@ export function ProductsPage() {
         </div>
       </div>
 
+      {catError && (
+        <div className="shrink-0 border-b border-red-100 bg-red-50 px-5 py-2 text-xs text-red-600">{catError}</div>
+      )}
+
       {/* Tab panels — conditional mount means shortcuts don't conflict */}
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
         {tab === 'products' && (
@@ -131,9 +137,11 @@ export function ProductsPage() {
 
 function ProductsPanel({ categories }: { categories: Category[] }) {
   const { settings }                  = useSettings();
+  const sym                           = settings?.currencySymbol ?? '₹';
   const [products, setProducts]       = useState<Product[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
+  const [alertMsg, setAlertMsg]       = useState<string | null>(null);
   const [search, setSearch]           = useState('');
   const [catFilter, setCatFilter]     = useState('');
   const [vegFilter, setVegFilter]     = useState<VegFilter>('all');
@@ -189,8 +197,8 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
     try {
       const updated = await updateProduct(p._id, { isAvailable: !p.isAvailable });
       setProducts(prev => prev.map(x => (x._id === updated._id ? updated : x)));
-    } catch {
-      // revert on next load
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setToggling(prev => {
         const n = new Set(prev);
@@ -206,7 +214,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
       await deleteProduct(p._id);
       setProducts(prev => prev.filter(x => x._id !== p._id));
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Delete failed');
+      setAlertMsg(e instanceof Error ? e.message : 'Delete failed');
     }
   }
 
@@ -247,7 +255,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
 
     autoTable(doc, {
       startY: y,
-      head: [['Name', 'Category', 'Type', 'Price (₹)', 'Tax %', 'HSN', 'Stock', 'Available']],
+      head: [['Name', 'Category', 'Type', `Price (${sym})`, 'Tax %', 'HSN', 'Stock', 'Available']],
       body: rows.map(p => [
         p.name,
         p.category?.name ?? '—',
@@ -462,6 +470,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
 
       {/* Table */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto bg-canvas scrollbar-hide">
+        {alertMsg && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex justify-between"><span>{alertMsg}</span><button onClick={() => setAlertMsg(null)} className="ml-2 text-red-400 hover:text-red-600">✕</button></div>}
         {error && (
           <div className="m-5 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
             {error}
@@ -551,7 +560,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                     </td>
                     {/* Price */}
                     <td className="px-3 py-2.5 text-right font-mono font-semibold text-ink">
-                      ₹{p.price.toFixed(2)}
+                      {sym}{p.price.toFixed(2)}
                     </td>
                     {/* Tax */}
                     <td className="px-3 py-2.5 text-center text-xs text-ink/50">
@@ -653,6 +662,7 @@ function CategoriesPanel({
 }) {
   const [editing, setEditing]   = useState<Category | 'new' | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [alertMsg, setAlertMsg] = useState<string | null>(null);
 
   useShortcut('F2', () => setEditing('new'), editing === null);
 
@@ -668,7 +678,7 @@ function CategoriesPanel({
       await deleteCategory(c._id);
       onRefresh();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Delete failed');
+      setAlertMsg(e instanceof Error ? e.message : 'Delete failed');
     } finally {
       setDeleting(null);
     }
@@ -689,6 +699,7 @@ function CategoriesPanel({
 
       {/* Grid */}
       <div className="flex-1 min-h-0 overflow-y-auto bg-canvas scrollbar-hide p-5">
+        {alertMsg && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex justify-between"><span>{alertMsg}</span><button onClick={() => setAlertMsg(null)} className="ml-2 text-red-400 hover:text-red-600">✕</button></div>}
         {categories.length === 0 ? (
           <div className="flex h-48 flex-col items-center justify-center text-ink/40">
             <p className="text-sm">No categories yet</p>

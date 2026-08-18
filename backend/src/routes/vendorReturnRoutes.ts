@@ -191,7 +191,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     });
 
     return res.status(201).json(vr);
-  } catch (err) {
+  } catch (err: any) {
+    // HIGH-3: concurrent request with same idempotency key lost the unique-index race
+    if (err?.code === 11000 && err?.keyPattern?.idempotencyKey) {
+      const k = req.headers['x-idempotency-key'] as string | undefined;
+      if (k) {
+        const saved = await VendorReturn.findOne({ hotelId: new mongoose.Types.ObjectId(req.hotelId!), idempotencyKey: k }).lean();
+        if (saved) return res.status(201).json(saved);
+      }
+    }
     return sendError(res, 500, 'Failed to create vendor return', err);
   }
 });
@@ -283,6 +291,39 @@ router.post('/:id/complete', async (req: AuthRequest, res: Response) => {
         );
         if (!updated) throw new Error('ALREADY_COMPLETED_OR_CANCELLED');
 
+        // CRIT-4 FIX: Re-read GRN inside transaction to get committed returnedQty.
+        // Two concurrent /complete calls both passed the pre-flight validation above using the
+        // stale grn.items[n].returnedQty=0. Inside the transaction we see the latest committed
+        // state, so the second request will detect the over-return and abort correctly.
+        const freshGrn = await GRN.findOne({ _id: vendorReturn.grnId, hotelId }, null, { session }).lean();
+        if (!freshGrn) throw new Error('GRN_NOT_FOUND');
+        for (const item of vendorReturn.items) {
+          const grnItem = (freshGrn.items as any[])[item.grnItemIndex];
+          if (!grnItem) throw Object.assign(new Error('GRN_ITEM_MISSING'), { idx: item.grnItemIndex });
+          const acceptedQty    = Math.max(0, grnItem.receivedQty - (grnItem.damagedQty || 0) - (grnItem.rejectedQty || 0));
+          const alreadyRtnd    = grnItem.returnedQty || 0;
+          const available      = Math.max(0, acceptedQty - alreadyRtnd);
+          if (item.returnQty > available) {
+            throw Object.assign(new Error('OVER_RETURN_CONCURRENT'), {
+              productName: grnItem.productName,
+              available,
+              requested: item.returnQty,
+            });
+          }
+          // Also verify stock will not go negative under the current committed state
+          if (item.ingredientId) {
+            const ing = await Ingredient.findOne({ _id: item.ingredientId, hotelId }, 'currentStock name', { session });
+            if (!ing) throw Object.assign(new Error('INGREDIENT_GONE'), { productName: item.productName });
+            if (ing.currentStock < item.returnQty) {
+              throw Object.assign(new Error('INSUFFICIENT_STOCK_RETURN'), {
+                productName: ing.name,
+                available: ing.currentStock,
+                required: item.returnQty,
+              });
+            }
+          }
+        }
+
         // 2. Decrement ingredient stock + create StockMovement per item
         for (const item of vendorReturn.items) {
           if (!item.ingredientId) continue;
@@ -345,6 +386,20 @@ router.post('/:id/complete', async (req: AuthRequest, res: Response) => {
       if (txErr?.message === 'ALREADY_COMPLETED_OR_CANCELLED') {
         const current = await VendorReturn.findOne({ _id: req.params.id, hotelId }).lean();
         return res.json(current);
+      }
+      if (txErr?.message === 'OVER_RETURN_CONCURRENT') {
+        return res.status(409).json({
+          message: `Concurrent over-return detected: "${txErr.productName}" only ${txErr.available} available to return (another return completed concurrently), ` +
+                   `cannot return ${txErr.requested}.`,
+        });
+      }
+      if (txErr?.message === 'INSUFFICIENT_STOCK_RETURN') {
+        return res.status(409).json({
+          message: `Cannot complete return: "${txErr.productName}" has only ${txErr.available} in stock, cannot return ${txErr.required}.`,
+        });
+      }
+      if (txErr?.message === 'GRN_NOT_FOUND') {
+        return sendError(res, 400, 'Associated GRN not found during completion');
       }
       return sendError(res, 500, 'Failed to complete vendor return', txErr);
     }

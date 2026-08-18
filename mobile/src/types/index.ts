@@ -205,6 +205,7 @@ export interface Settings {
   roleImageAdmin?: string;
   roleImageCustomer?: string;
   roleImageStaff?: string;
+  razorpayKeyId?: string;
 }
 
 // Daily Report

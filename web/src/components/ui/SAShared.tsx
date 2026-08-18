@@ -179,8 +179,8 @@ export function SAError({ message, onRetry }: { message: string; onRetry?: () =>
 
 // ── fmtINR ─────────────────────────────────────────────────────────────────────
 
-export function fmtINR(n: number): string {
-  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+export function fmtINR(n: number, sym = '₹'): string {
+  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
 }
 
 export function fmtAgo(iso: string | null | undefined): string {

@@ -4,6 +4,7 @@ import type { Ingredient } from '../../types';
 import type { IngredientInput } from '../../api/products';
 import { createIngredient, updateIngredient, restockIngredient } from '../../api/products';
 import { useShortcut } from '../../hooks/useShortcut';
+import { useSettings } from '../../context/SettingsContext';
 
 interface Props {
   ingredient: Ingredient | null;
@@ -23,6 +24,8 @@ const BLANK: IngredientInput = {
 };
 
 export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [form, setForm]     = useState<IngredientInput>(BLANK);
   const [qty, setQty]       = useState<number>(0);
   const [saving, setSaving] = useState(false);
@@ -244,7 +247,7 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
 
               <div>
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
-                  Cost Per Unit (₹)
+                  Cost Per Unit ({sym})
                 </label>
                 <input
                   className={field}

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type ChangeEvent } from 'react';
+import { useSettings } from '../../context/SettingsContext';
 import {
   ScanLine, Upload, CheckCircle, AlertTriangle, Loader2,
   FileText, ShoppingCart, Info, RefreshCw,
@@ -21,8 +22,8 @@ const toFileType = (m: string): OcrFileType =>
   m === 'application/pdf' ? 'pdf' : m === 'image/png' ? 'png' : 'jpg';
 const confCls = (c: number) =>
   c >= 0.9 ? 'bg-green-500' : c >= 0.6 ? 'bg-amber-400' : 'bg-red-400';
-const fmt = (n?: number) =>
-  n != null ? `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+const fmt = (n?: number, sym = '₹') =>
+  n != null ? `${sym}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -52,11 +53,14 @@ function Badge({ status }: { status: OcrJobStatus }) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function PurchaseAssistantPage() {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [activeTab, setActiveTab] = useState<ActiveTab>('scanner');
 
   // ── Scanner state ──────────────────────────────────────────────────────────
   const [jobs, setJobs]                         = useState<OcrJob[]>([]);
   const [loadingJobs, setLoadingJobs]           = useState(true);
+  const [jobsError, setJobsError]               = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId]       = useState<string | null>(null);
   const [review, setReview]                     = useState<OcrReviewScreen | null>(null);
   const [loadingReview, setLoadingReview]       = useState(false);
@@ -75,7 +79,10 @@ export function PurchaseAssistantPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadJobs = useCallback(async () => {
-    try { const r = await fetchOcrJobs({ limit: 20 }); setJobs(r.jobs); } catch { /* silent */ }
+    setJobsError(null);
+    try { const r = await fetchOcrJobs({ limit: 20 }); setJobs(r.jobs); } catch (err) {
+      setJobsError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    }
   }, []);
 
   useEffect(() => {
@@ -263,6 +270,8 @@ export function PurchaseAssistantPage() {
                     </div>
                   ))}
                 </div>
+              ) : jobsError ? (
+                <div className="m-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">{jobsError}</div>
               ) : jobs.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
                   <FileText size={28} className="text-ink/20" />
@@ -372,8 +381,8 @@ export function PurchaseAssistantPage() {
                       ['Date',      review.extractedData.invoiceDate    ?? '—'],
                       ['Vendor',    review.extractedData.vendorName     ?? '—'],
                       ['GST',       review.extractedData.vendorGST      ?? '—'],
-                      ['Total',     fmt(review.extractedData.totalAmount)],
-                      ['Tax',       fmt(review.extractedData.taxAmount)],
+                      ['Total',     fmt(review.extractedData.totalAmount, sym)],
+                      ['Tax',       fmt(review.extractedData.taxAmount, sym)],
                     ] as [string, string][]).map(([label, val]) => (
                       <div key={label}>
                         <p className="text-[10px] uppercase tracking-wide text-ink/40">{label}</p>
@@ -447,8 +456,8 @@ export function PurchaseAssistantPage() {
                               <td className="py-2 pr-2 text-ink">{li.description}</td>
                               <td className="py-2 text-right text-ink/70">{li.qty}</td>
                               <td className="py-2 px-2 text-ink/50">{li.unit ?? '—'}</td>
-                              <td className="py-2 text-right text-ink/70">{fmt(li.unitPrice)}</td>
-                              <td className="py-2 text-right font-semibold text-ink">{fmt(li.total)}</td>
+                              <td className="py-2 text-right text-ink/70">{fmt(li.unitPrice, sym)}</td>
+                              <td className="py-2 text-right font-semibold text-ink">{fmt(li.total, sym)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -523,7 +532,7 @@ export function PurchaseAssistantPage() {
                     <span className="text-xs font-semibold text-ink/70">Total Estimated Procurement Cost</span>
                   </div>
                   <span className="text-base font-bold tabular-nums text-ink">
-                    {fmt(intel.totalEstimatedCost)}
+                    {fmt(intel.totalEstimatedCost, sym)}
                   </span>
                 </div>
               )}
@@ -563,7 +572,7 @@ export function PurchaseAssistantPage() {
                               </span>
                             </td>
                             <td className="px-3 py-3 text-right tabular-nums text-ink/70">{s.suggestedQty}</td>
-                            <td className="px-3 py-3 text-right tabular-nums text-ink/70">{fmt(s.estimatedCost)}</td>
+                            <td className="px-3 py-3 text-right tabular-nums text-ink/70">{fmt(s.estimatedCost, sym)}</td>
                             <td className="px-3 py-3">
                               <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                                 s.hasPendingPO ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'

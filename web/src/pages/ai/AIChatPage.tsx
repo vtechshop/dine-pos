@@ -136,8 +136,8 @@ export function AIChatPage() {
         if (cancelled) return;
         setSessionId(latest);
         setMessages(history.messages);
-      } catch {
-        // Non-fatal — start fresh
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
       }
     })();
     return () => { cancelled = true; };

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSettings } from '../../context/SettingsContext';
 import { X, History, TrendingUp, RotateCcw, SlidersHorizontal, Package, ShoppingCart, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Ingredient, StockMovement, StockMovementType } from '../../types';
@@ -36,11 +37,13 @@ function fmtDateTime(iso: string): string {
   });
 }
 
-function fmtCur(n: number): string {
-  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+function fmtCur(n: number, sym = '₹'): string {
+  return `${sym}${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 }
 
 export function StockHistoryDrawer({ ingredient, onClose }: Props) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [total,     setTotal]     = useState(0);
   const [loading,   setLoading]   = useState(true);
@@ -139,8 +142,8 @@ export function StockHistoryDrawer({ ingredient, onClose }: Props) {
                       {/* Cost / total */}
                       {(m.costPerUnit != null || m.totalCost != null) && (
                         <div className="mt-1 flex gap-3 text-[11px] text-ink/50">
-                          {m.costPerUnit != null && <span>₹{m.costPerUnit.toFixed(2)}/{ingredient.unit}</span>}
-                          {m.totalCost != null && <span className="font-semibold">{fmtCur(m.totalCost)}</span>}
+                          {m.costPerUnit != null && <span>{sym}{m.costPerUnit.toFixed(2)}/{ingredient.unit}</span>}
+                          {m.totalCost != null && <span className="font-semibold">{fmtCur(m.totalCost, sym)}</span>}
                         </div>
                       )}
 

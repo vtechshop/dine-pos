@@ -24,6 +24,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { getProducts, getCategories, deleteProduct, updateProduct, uploadImage, uploadPlaceholderImage } from '../services/api';
 import { applyCloudinaryTransform } from '../utils/cloudinary';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
+import { useSettings } from '../context/SettingsContext';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -36,6 +37,8 @@ const ProductsScreen: React.FC = () => {
   const { bottom } = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const numColumns = screenWidth > 600 ? 3 : 2;
+  const { settings } = useSettings();
+  const sym = settings.currencySymbol || '₹';
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -389,7 +392,7 @@ const ProductsScreen: React.FC = () => {
       <Text style={styles.categoryLabel}>{getCategoryName(item.category)}</Text>
 
       <View style={styles.productCardFooter}>
-        <Text style={styles.productPrice}>₹{item.price.toFixed(2)}</Text>
+        <Text style={styles.productPrice}>{sym}{item.price.toFixed(2)}</Text>
         {item.taxPercent > 0 && (
           <Text style={styles.taxBadge}>{item.taxPercent}% tax</Text>
         )}

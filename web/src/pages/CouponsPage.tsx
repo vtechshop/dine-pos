@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Trash2, ToggleLeft, ToggleRight, Edit2, X, Tag, List } from 'lucide-react';
+import { useSettings } from '../context/SettingsContext';
 import {
   fetchCoupons, createCoupon, updateCoupon, deleteCoupon,
   deactivateCoupon, activateCoupon, fetchCouponRedemptions,
@@ -25,6 +26,9 @@ function toDateInput(iso?: string): string {
 }
 
 export function CouponsPage() {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
+  const [alertMsg, setAlertMsg] = useState<string | null>(null);
   const [items, setItems]           = useState<Coupon[]>([]);
   const [total, setTotal]           = useState(0);
   const [page, setPage]             = useState(1);
@@ -127,7 +131,7 @@ export function CouponsPage() {
       }
       load(page);
     } catch (e) {
-      alert((e as Error).message);
+      setAlertMsg((e as Error).message);
     }
   };
 
@@ -139,7 +143,7 @@ export function CouponsPage() {
       setDeleteTarget(null);
       load(1);
     } catch (e) {
-      alert((e as Error).message);
+      setAlertMsg((e as Error).message);
     } finally {
       setDeleting(false);
     }
@@ -213,6 +217,7 @@ export function CouponsPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto bg-mist px-5 py-4">
+        {alertMsg && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex justify-between"><span>{alertMsg}</span><button onClick={() => setAlertMsg(null)} className="ml-2 text-red-400 hover:text-red-600">✕</button></div>}
         {error && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
@@ -248,11 +253,11 @@ export function CouponsPage() {
                     </td>
                     <td className="px-4 py-3 text-ink/70 capitalize">{c.type}</td>
                     <td className="px-4 py-3 font-semibold text-ink">
-                      {c.type === 'percent' ? `${c.value}%` : `₹${c.value}`}
-                      {c.maxDiscount ? <span className="ml-1 text-xs text-ink/40">(max ₹{c.maxDiscount})</span> : null}
+                      {c.type === 'percent' ? `${c.value}%` : `${sym}${c.value}`}
+                      {c.maxDiscount ? <span className="ml-1 text-xs text-ink/40">(max {sym}{c.maxDiscount})</span> : null}
                     </td>
                     <td className="px-4 py-3 text-ink/70">
-                      {c.minOrderValue > 0 ? `₹${c.minOrderValue}` : '—'}
+                      {c.minOrderValue > 0 ? `${sym}${c.minOrderValue}` : '—'}
                     </td>
                     <td className="px-4 py-3 text-ink/70">
                       {c.usageCount}
@@ -372,10 +377,10 @@ export function CouponsPage() {
                     className={inputCls}
                   >
                     <option value="percent">Percent (%)</option>
-                    <option value="flat">Flat (₹)</option>
+                    <option value="flat">Flat ({sym})</option>
                   </select>
                 </Field>
-                <Field label={form.type === 'percent' ? 'Discount % *' : 'Discount Amount ₹ *'}>
+                <Field label={form.type === 'percent' ? 'Discount % *' : `Discount Amount ${sym} *`}>
                   <input
                     type="number" min={0}
                     value={form.value || ''}
@@ -386,7 +391,7 @@ export function CouponsPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Min Order Value ₹">
+                <Field label={`Min Order Value ${sym}`}>
                   <input
                     type="number" min={0}
                     value={form.minOrderValue || ''}
@@ -395,7 +400,7 @@ export function CouponsPage() {
                   />
                 </Field>
                 {form.type === 'percent' && (
-                  <Field label="Max Discount ₹">
+                  <Field label={`Max Discount ${sym}`}>
                     <input
                       type="number" min={0}
                       value={form.maxDiscount ?? ''}
@@ -532,7 +537,7 @@ export function CouponsPage() {
                           {new Date(r.redeemedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
                         </td>
                         <td className="px-4 py-2 font-mono text-ink/70">{r.phone || '—'}</td>
-                        <td className="px-4 py-2 text-ink">₹{r.discountAmount.toFixed(2)}</td>
+                        <td className="px-4 py-2 text-ink">{sym}{r.discountAmount.toFixed(2)}</td>
                         <td className="px-4 py-2">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
                             r.status === 'redeemed' ? 'bg-green-100 text-green-700' : 'bg-ink/5 text-ink/40'

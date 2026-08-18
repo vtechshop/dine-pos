@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useId } from 'react';
+import { useSettings } from '../context/SettingsContext';
 import {
   Upload, FileText, Image, X, CheckCircle2, AlertCircle,
   ChevronDown, ChevronRight, Plus, Trash2, Edit3, Check,
@@ -276,6 +277,8 @@ function VariantsEditor({
   variants: EditableVariant[];
   onChange: (v: EditableVariant[]) => void;
 }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   function add() {
     onChange([...variants, { _id: uid(), name: '', price: 0 }]);
   }
@@ -312,7 +315,7 @@ function VariantsEditor({
                 className="flex-1 rounded-md border border-border bg-white px-2 py-1 text-xs outline-none focus:border-brand"
               />
               <div className="flex items-center gap-1 rounded-md border border-border bg-white px-2 py-1">
-                <span className="text-[10px] text-ink/40">₹</span>
+                <span className="text-[10px] text-ink/40">{sym}</span>
                 <input
                   type="number"
                   min={0}
@@ -344,6 +347,8 @@ function ModifierGroupsEditor({
   groups: EditableModifierGroup[];
   onChange: (g: EditableModifierGroup[]) => void;
 }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   function addGroup() {
     onChange([...groups, {
       _id: uid(), name: '', required: false,
@@ -443,7 +448,7 @@ function ModifierGroupsEditor({
                       className="flex-1 rounded border border-border bg-white px-2 py-0.5 text-[11px] outline-none focus:border-brand"
                     />
                     <div className="flex items-center gap-0.5 rounded border border-border bg-white px-1.5 py-0.5">
-                      <span className="text-[9px] text-ink/40">₹</span>
+                      <span className="text-[9px] text-ink/40">{sym}</span>
                       <input
                         type="number"
                         min={0}
@@ -790,6 +795,8 @@ interface ProductRowProps {
 }
 
 function ProductRow({ prod, allCategories, currentCatId, onUpdate, onDelete, onMove }: ProductRowProps) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [editing, setEditing]   = useState(prod.isEditing);
   const [name, setName]         = useState(prod.name);
   const [price, setPrice]       = useState(String(prod.price ?? ''));
@@ -896,7 +903,7 @@ function ProductRow({ prod, allCategories, currentCatId, onUpdate, onDelete, onM
         {/* Price */}
         <td className="px-3 py-2.5 text-right tabular-nums">
           {displayPrice !== null
-            ? <span className="font-semibold text-ink">₹{displayPrice}{hasVariants && <span className="text-[10px] text-ink/30">+</span>}</span>
+            ? <span className="font-semibold text-ink">{sym}{displayPrice}{hasVariants && <span className="text-[10px] text-ink/30">+</span>}</span>
             : <span className="text-xs text-ink/30">—</span>
           }
         </td>

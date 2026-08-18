@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSettings } from '../context/SettingsContext';
 import {
   CreditCard, Settings, RefreshCw, CheckCircle, XCircle, AlertCircle,
   Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Wifi, Download,
@@ -28,7 +29,7 @@ const STATUS_COLORS: Record<string, string> = {
   refunded:         'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
   partial_refunded: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
 };
-const fmtRs  = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtRs  = (n: number, sym = '₹') => `${sym}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtPct = (n: number) => `${n.toFixed(1)}%`;
 const fmtDt  = (s: string) => new Date(s).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const today  = () => new Date().toISOString().slice(0, 10);
@@ -344,6 +345,8 @@ function RefundModal({ payment, onDone, onClose }: {
   onDone:  () => void;
   onClose: () => void;
 }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const maxRefund = payment.amount - payment.refundedAmount;
   const [amount, setAmount] = useState(String(maxRefund));
   const [reason, setReason] = useState('');
@@ -354,7 +357,7 @@ function RefundModal({ payment, onDone, onClose }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const amt = parseFloat(amount);
-    if (isNaN(amt) || amt <= 0 || amt > maxRefund) { setErr(`Amount must be between ₹0.01 and ₹${maxRefund}`); return; }
+    if (isNaN(amt) || amt <= 0 || amt > maxRefund) { setErr(`Amount must be between ${sym}0.01 and ${sym}${maxRefund}`); return; }
     setBusy(true); setErr('');
     try {
       await initiateRefund(payment._id, amt, reason || undefined);
@@ -383,11 +386,11 @@ function RefundModal({ payment, onDone, onClose }: {
           <form onSubmit={submit} className="space-y-4 p-6">
             <div className="rounded-lg bg-mist px-4 py-3 text-sm text-ink/70">
               <span className="font-semibold text-ink">{payment.internalTransactionId}</span>
-              <span className="mx-2">·</span>Paid: {fmtRs(payment.amount)}
-              {payment.refundedAmount > 0 && <> · Already refunded: {fmtRs(payment.refundedAmount)}</>}
+              <span className="mx-2">·</span>Paid: {fmtRs(payment.amount, sym)}
+              {payment.refundedAmount > 0 && <> · Already refunded: {fmtRs(payment.refundedAmount, sym)}</>}
             </div>
             <div>
-              <label className={lbl}>Refund Amount (₹) — max {fmtRs(maxRefund)}</label>
+              <label className={lbl}>Refund Amount ({sym}) — max {fmtRs(maxRefund, sym)}</label>
               <input type="number" step="0.01" min="0.01" max={maxRefund} value={amount} onChange={e => setAmount(e.target.value)} className={inp} />
             </div>
             <div>

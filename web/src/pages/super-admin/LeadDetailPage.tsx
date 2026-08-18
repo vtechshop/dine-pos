@@ -37,6 +37,8 @@ export function LeadDetailPage() {
   const [notes,      setNotes]      = useState('');
   const [dirty,      setDirty]      = useState(false);
 
+  const [pendingConfirm, setPendingConfirm] = useState<{ msg: string; onOk: () => void } | null>(null);
+
   // Add timeline entry
   const [tlEvent,  setTlEvent]  = useState('');
   const [tlNote,   setTlNote]   = useState('');
@@ -91,15 +93,19 @@ export function LeadDetailPage() {
     }
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = () => {
     if (!id) return;
-    if (!window.confirm(`Delete lead "${lead?.companyName}"? This cannot be undone.`)) return;
-    try {
-      await deleteLead(id);
-      navigate('/super-admin/leads');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete');
-    }
+    setPendingConfirm({
+      msg: `Delete lead "${lead?.companyName}"? This cannot be undone.`,
+      onOk: async () => {
+        try {
+          await deleteLead(id);
+          navigate('/super-admin/leads');
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'Failed to delete');
+        }
+      },
+    });
   };
 
   if (loading) return <div className="flex h-full items-center justify-center"><SASpin /></div>;
@@ -112,6 +118,17 @@ export function LeadDetailPage() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
+      {pendingConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg p-6 max-w-sm mx-4 shadow-xl">
+            <p className="mb-4 text-sm">{pendingConfirm.msg}</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPendingConfirm(null)} className="px-4 py-2 text-sm border border-border rounded">Cancel</button>
+              <button onClick={() => { pendingConfirm.onOk(); setPendingConfirm(null); }} className="px-4 py-2 text-sm bg-red-600 text-white rounded">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
       <SAPageHeader
         title={lead.companyName}
         sub={`${lead.ownerName} · ${lead.phone} · ${SOURCE_LABELS[lead.source]}`}

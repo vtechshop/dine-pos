@@ -11,6 +11,7 @@ import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/const
 import * as api from '../services/api';
 import { Ingredient } from '../types';
 import { PremiumGate } from '../components/PremiumGate';
+import { useSettings } from '../context/SettingsContext';
 
 const UNITS = ['kg', 'g', 'L', 'ml', 'pcs'];
 
@@ -19,6 +20,8 @@ const emptyForm = { name: '', unit: 'kg', currentStock: '', lowStockThreshold: '
 const IngredientsScreen: React.FC = () => {
   const navigation = useNavigation();
   const { bottom } = useSafeAreaInsets();
+  const { settings } = useSettings();
+  const sym = settings.currencySymbol || '₹';
 
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [loading, setLoading]         = useState(true);
@@ -122,7 +125,7 @@ const IngredientsScreen: React.FC = () => {
             {item.currentStock} {item.unit} in stock
           </Text>
           {item.costPerUnit > 0 && (
-            <Text style={styles.ingCost}>₹{item.costPerUnit}/{item.unit}</Text>
+            <Text style={styles.ingCost}>{sym}{item.costPerUnit}/{item.unit}</Text>
           )}
         </TouchableOpacity>
         <View style={styles.cardActions}>

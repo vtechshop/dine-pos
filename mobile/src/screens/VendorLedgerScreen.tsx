@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors, FontSize, BorderRadius, Shadows } from '../utils/constants';
 import { getVendors, getVendorStatement, createVendorPayment, getVendorPayments } from '../services/api';
+import { useSettings } from '../context/SettingsContext';
 import type { Vendor, VendorLedgerStatement, VendorPayment, VendorPaymentMethod, LedgerEntryType } from '../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -40,7 +41,7 @@ const ENTRY_LABEL: Record<LedgerEntryType, string> = {
   purchase:        'Purchase',
 };
 
-function fmt(n: number) { return `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
+function fmt(n: number, sym = '₹') { return `${sym}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -58,6 +59,8 @@ type PaymentModalProps = {
 };
 
 function PaymentModal({ visible, vendor, onClose, onCreated }: PaymentModalProps) {
+  const { settings } = useSettings();
+  const sym = settings.currencySymbol || '₹';
   const [paymentDate, setDate]   = useState(todayISO());
   const [method, setMethod]      = useState<VendorPaymentMethod>('cash');
   const [amount, setAmount]      = useState('');
@@ -111,7 +114,7 @@ function PaymentModal({ visible, vendor, onClose, onCreated }: PaymentModalProps
             {vendor && (
               <View style={styles.vendorChip}>
                 <Text style={styles.vendorChipName}>{vendor.businessName}</Text>
-                <Text style={styles.vendorChipOwing}>Outstanding: {fmt(vendor.currentOutstanding)}</Text>
+                <Text style={styles.vendorChipOwing}>Outstanding: {fmt(vendor.currentOutstanding, sym)}</Text>
               </View>
             )}
 
@@ -204,6 +207,8 @@ type StatementModalProps = {
 };
 
 function StatementModal({ vendor, onClose, onPayNow }: StatementModalProps) {
+  const { settings } = useSettings();
+  const sym = settings.currencySymbol || '₹';
   const [data, setData]       = useState<VendorLedgerStatement | null>(null);
   const [loading, setLoading] = useState(false);
   const [payments, setPayments] = useState<VendorPayment[]>([]);
@@ -238,11 +243,11 @@ function StatementModal({ vendor, onClose, onPayNow }: StatementModalProps) {
     if (!data || !vendor) return;
     const lines = [
       `Vendor Statement — ${vendor.businessName}`,
-      `Outstanding: ${fmt(data.currentOutstanding)}`,
+      `Outstanding: ${fmt(data.currentOutstanding, sym)}`,
       '',
       'Date         | Type            | Debit      | Credit     | Balance',
       ...data.entries.map(e =>
-        `${fmtDate(e.createdAt).padEnd(12)} | ${(ENTRY_LABEL[e.entryType] ?? e.entryType).padEnd(15)} | ${(e.debit > 0 ? fmt(e.debit) : '').padEnd(10)} | ${(e.credit > 0 ? fmt(e.credit) : '').padEnd(10)} | ${fmt(e.runningBalance)}`
+        `${fmtDate(e.createdAt).padEnd(12)} | ${(ENTRY_LABEL[e.entryType] ?? e.entryType).padEnd(15)} | ${(e.debit > 0 ? fmt(e.debit, sym) : '').padEnd(10)} | ${(e.credit > 0 ? fmt(e.credit, sym) : '').padEnd(10)} | ${fmt(e.runningBalance, sym)}`
       ),
     ];
     await Share.share({ message: lines.join('\n'), title: `Statement - ${vendor.businessName}` });
@@ -260,7 +265,7 @@ function StatementModal({ vendor, onClose, onPayNow }: StatementModalProps) {
           </TouchableOpacity>
           <View style={{ flex: 1, alignItems: 'center' }}>
             <Text style={styles.modalTitle} numberOfLines={1}>{vendor?.businessName ?? ''}</Text>
-            <Text style={styles.outstandingBadge}>{fmt(vendor?.currentOutstanding ?? 0)} outstanding</Text>
+            <Text style={styles.outstandingBadge}>{fmt(vendor?.currentOutstanding ?? 0, sym)} outstanding</Text>
           </View>
           <TouchableOpacity onPress={() => void shareStatement()} style={styles.modalClose}>
             <MaterialIcons name="share" size={22} color={Colors.primary} />
@@ -310,15 +315,15 @@ function StatementModal({ vendor, onClose, onPayNow }: StatementModalProps) {
               <View style={styles.summaryRow}>
                 <View style={styles.summaryCell}>
                   <Text style={styles.summaryCellLabel}>Total Debit</Text>
-                  <Text style={[styles.summaryCellVal, { color: Colors.danger }]}>{fmt(data.totalDebit)}</Text>
+                  <Text style={[styles.summaryCellVal, { color: Colors.danger }]}>{fmt(data.totalDebit, sym)}</Text>
                 </View>
                 <View style={styles.summaryCell}>
                   <Text style={styles.summaryCellLabel}>Total Credit</Text>
-                  <Text style={[styles.summaryCellVal, { color: Colors.success }]}>{fmt(data.totalCredit)}</Text>
+                  <Text style={[styles.summaryCellVal, { color: Colors.success }]}>{fmt(data.totalCredit, sym)}</Text>
                 </View>
                 <View style={styles.summaryCell}>
                   <Text style={styles.summaryCellLabel}>Outstanding</Text>
-                  <Text style={[styles.summaryCellVal, { color: Colors.danger }]}>{fmt(data.currentOutstanding)}</Text>
+                  <Text style={[styles.summaryCellVal, { color: Colors.danger }]}>{fmt(data.currentOutstanding, sym)}</Text>
                 </View>
               </View>
 
@@ -340,9 +345,9 @@ function StatementModal({ vendor, onClose, onPayNow }: StatementModalProps) {
                     ) : null}
                   </View>
                   <View style={styles.entryAmts}>
-                    {e.debit > 0 && <Text style={styles.entryDebit}>{fmt(e.debit)}</Text>}
-                    {e.credit > 0 && <Text style={styles.entryCredit}>{fmt(e.credit)}</Text>}
-                    <Text style={styles.entryBalance}>{fmt(e.runningBalance)}</Text>
+                    {e.debit > 0 && <Text style={styles.entryDebit}>{fmt(e.debit, sym)}</Text>}
+                    {e.credit > 0 && <Text style={styles.entryCredit}>{fmt(e.credit, sym)}</Text>}
+                    <Text style={styles.entryBalance}>{fmt(e.runningBalance, sym)}</Text>
                   </View>
                 </View>
               ))}
@@ -364,7 +369,7 @@ function StatementModal({ vendor, onClose, onPayNow }: StatementModalProps) {
                     {p.referenceNumber ? <Text style={styles.payRef}>Ref: {p.referenceNumber}</Text> : null}
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.payAmount}>{fmt(p.amount)}</Text>
+                    <Text style={styles.payAmount}>{fmt(p.amount, sym)}</Text>
                     {p.isReversed ? (
                       <Text style={styles.payReversed}>Reversed</Text>
                     ) : (
@@ -384,6 +389,8 @@ function StatementModal({ vendor, onClose, onPayNow }: StatementModalProps) {
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function VendorLedgerScreen() {
+  const { settings } = useSettings();
+  const sym = settings.currencySymbol || '₹';
   const [vendors, setVendors]           = useState<Vendor[]>([]);
   const [loading, setLoading]           = useState(false);
   const [refreshing, setRefreshing]     = useState(false);
@@ -451,7 +458,7 @@ export default function VendorLedgerScreen() {
           styles.vendorOutstanding,
           item.currentOutstanding > 0 ? { color: Colors.danger } : { color: Colors.success },
         ]}>
-          {fmt(item.currentOutstanding)}
+          {fmt(item.currentOutstanding, sym)}
         </Text>
         {item.currentOutstanding > 0 && (
           <Text style={styles.vendorOwing}>Owing</Text>
@@ -467,7 +474,7 @@ export default function VendorLedgerScreen() {
       <View style={styles.summaryCard}>
         <View>
           <Text style={styles.summaryCardLabel}>Total Outstanding</Text>
-          <Text style={styles.summaryCardVal}>{fmt(totalOutstanding)}</Text>
+          <Text style={styles.summaryCardVal}>{fmt(totalOutstanding, sym)}</Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <Text style={styles.summaryCardLabel}>Vendors</Text>

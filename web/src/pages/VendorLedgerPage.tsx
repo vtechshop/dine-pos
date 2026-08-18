@@ -450,6 +450,9 @@ export function VendorLedgerPage() {
   // Payment reversal / delete
   const [actionLoading, setActionLoading]     = useState<string | null>(null);
 
+  const [promptState, setPromptState] = useState<{ msg: string; value: string; onOk: (v: string) => void } | null>(null);
+  const [notification, setNotification] = useState<string | null>(null);
+
   const loadReport = useCallback(() => {
     setReportLoading(true);
     fetchLedgerReport().then(setReport).catch(() => {}).finally(() => setReportLoading(false));
@@ -484,15 +487,19 @@ export function VendorLedgerPage() {
     fetchVendors({ active: 'true', limit: 200 }).then(r => setVendors(r.vendors)).catch(() => {});
   }, []);
 
-  async function handleReverse(p: VendorPayment) {
-    const reason = window.prompt(`Reason for reversing ${p.paymentNumber}?`);
-    if (reason === null) return;
-    setActionLoading(p._id);
-    try {
-      await reversePayment(p._id, reason);
-      loadPayments(); loadReport();
-    } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
-    finally { setActionLoading(null); }
+  function handleReverse(p: VendorPayment) {
+    setPromptState({
+      msg: `Reason for reversing ${p.paymentNumber}?`,
+      value: '',
+      onOk: async (reason: string) => {
+        setActionLoading(p._id);
+        try {
+          await reversePayment(p._id, reason);
+          loadPayments(); loadReport();
+        } catch (e) { setNotification(e instanceof Error ? e.message : 'Failed'); }
+        finally { setActionLoading(null); }
+      },
+    });
   }
 
   function openPayNow(vendorId: string) {
@@ -522,6 +529,29 @@ export function VendorLedgerPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-mist">
+      {notification && (
+        <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800 flex justify-between items-start mx-5 mt-3">
+          <span>{notification}</span>
+          <button onClick={() => setNotification(null)} className="ml-2 shrink-0 text-amber-500 hover:text-amber-700">✕</button>
+        </div>
+      )}
+      {promptState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg p-6 max-w-sm mx-4 shadow-xl">
+            <p className="mb-4 text-sm">{promptState.msg}</p>
+            <input
+              autoFocus
+              value={promptState.value}
+              onChange={e => setPromptState(s => s ? { ...s, value: e.target.value } : s)}
+              className="w-full mb-4 rounded border border-border px-3 py-2 text-sm outline-none focus:border-brand/50"
+            />
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPromptState(null)} className="px-4 py-2 text-sm border border-border rounded">Cancel</button>
+              <button onClick={() => { const s = promptState; setPromptState(null); s.onOk(s.value); }} className="px-4 py-2 text-sm bg-brand text-white rounded">OK</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Tab bar */}
       <div className="shrink-0 flex items-center gap-1 border-b border-border bg-canvas px-6 pt-4">
         {TABS.map(t => (

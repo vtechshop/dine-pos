@@ -930,6 +930,8 @@ export function CampaignsPage() {
   const [reportCampaign, setReportCampaign] = useState<Campaign | null>(null);
   const [duplicating,    setDuplicating]    = useState<string | null>(null);
   const [testSendTarget, setTestSendTarget] = useState<Campaign | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{ msg: string; onOk: () => void } | null>(null);
+  const [notification,   setNotification]   = useState<string | null>(null);
   const [currentPage,    setCurrentPage]    = useState(1);
   const [hasMore,        setHasMore]        = useState(false);
   const [loadingMore,    setLoadingMore]    = useState(false);
@@ -1002,35 +1004,43 @@ export function CampaignsPage() {
     }
   }, [currentPage, statusFilter]);
 
-  const handleSend = useCallback(async (id: string, campaign: Campaign) => {
+  const handleSend = useCallback((id: string, campaign: Campaign) => {
     const eligible = campaign.eligibleCount ?? 0;
     const confirmMsg = eligible > 0
       ? `Send "${campaign.name}" to ${eligible.toLocaleString()} eligible customer${eligible !== 1 ? 's' : ''}?\n\nOnly opted-in customers with a phone number will receive the message.`
       : `"${campaign.name}" currently has no eligible opted-in recipients. Send anyway?`;
-    if (!confirm(confirmMsg)) return;
-    setSending(id);
-    try {
-      const res = await sendCampaign(id);
-      setSendResult(res);
-      void load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to send');
-    } finally {
-      setSending(null);
-    }
+    setPendingConfirm({
+      msg: confirmMsg,
+      onOk: async () => {
+        setSending(id);
+        try {
+          const res = await sendCampaign(id);
+          setSendResult(res);
+          void load();
+        } catch (e) {
+          setNotification(e instanceof Error ? e.message : 'Failed to send');
+        } finally {
+          setSending(null);
+        }
+      },
+    });
   }, [load]);
 
-  const handleCancel = useCallback(async (id: string) => {
-    if (!confirm('Cancel this campaign? This cannot be undone.')) return;
-    setCancelling(id);
-    try {
-      await cancelCampaign(id);
-      void load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to cancel');
-    } finally {
-      setCancelling(null);
-    }
+  const handleCancel = useCallback((id: string) => {
+    setPendingConfirm({
+      msg: 'Cancel this campaign? This cannot be undone.',
+      onOk: async () => {
+        setCancelling(id);
+        try {
+          await cancelCampaign(id);
+          void load();
+        } catch (e) {
+          setNotification(e instanceof Error ? e.message : 'Failed to cancel');
+        } finally {
+          setCancelling(null);
+        }
+      },
+    });
   }, [load]);
 
   const handleDuplicate = useCallback(async (id: string) => {
@@ -1040,7 +1050,7 @@ export function CampaignsPage() {
       void load();
       setEditCampaign(res.campaign); // open the clone for editing immediately
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to duplicate');
+      setNotification(e instanceof Error ? e.message : 'Failed to duplicate');
     } finally {
       setDuplicating(null);
     }
@@ -1060,6 +1070,23 @@ export function CampaignsPage() {
 
   return (
     <div className="flex h-full flex-col">
+      {notification && (
+        <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800 flex justify-between items-start mx-5 mt-3">
+          <span>{notification}</span>
+          <button onClick={() => setNotification(null)} className="ml-2 shrink-0 text-amber-500 hover:text-amber-700">✕</button>
+        </div>
+      )}
+      {pendingConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg p-6 max-w-sm mx-4 shadow-xl">
+            <p className="mb-4 text-sm whitespace-pre-line">{pendingConfirm.msg}</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPendingConfirm(null)} className="px-4 py-2 text-sm border border-border rounded">Cancel</button>
+              <button onClick={() => { pendingConfirm.onOk(); setPendingConfirm(null); }} className="px-4 py-2 text-sm bg-red-600 text-white rounded">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="shrink-0 border-b border-border bg-canvas px-5">
         <div className="flex items-center justify-between py-3">

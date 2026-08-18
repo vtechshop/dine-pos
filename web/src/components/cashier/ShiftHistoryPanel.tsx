@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSettings } from '../../context/SettingsContext';
 import {
   History,
   ChevronLeft,
@@ -15,8 +16,8 @@ import { Spinner } from '../ui/Spinner';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmtINR(n: number): string {
-  return `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
+function fmtINR(n: number, sym = '₹'): string {
+  return `${sym}${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
 }
 
 function fmtDate(iso: string): string {
@@ -42,6 +43,8 @@ interface ShiftCardProps {
 }
 
 function ShiftCard({ shift, onViewReport }: ShiftCardProps) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const isOpen = shift.status === 'open';
   const diff = shift.difference ?? 0;
 
@@ -90,14 +93,14 @@ function ShiftCard({ shift, onViewReport }: ShiftCardProps) {
         </div>
       ) : (
         <div className="rounded-lg border border-border bg-mist px-3 py-2.5 space-y-1.5">
-          <CashRow label="Opening Cash" value={fmtINR(shift.openingCash)} />
+          <CashRow label="Opening Cash" value={fmtINR(shift.openingCash, sym)} />
           <CashRow
             label="Expected Cash"
-            value={fmtINR(shift.expectedCash ?? 0)}
+            value={fmtINR(shift.expectedCash ?? 0, sym)}
           />
           <CashRow
             label="Actual Cash"
-            value={fmtINR(shift.actualCash ?? 0)}
+            value={fmtINR(shift.actualCash ?? 0, sym)}
           />
           <div className="flex items-center justify-between">
             <span className="text-xs text-ink/55">Difference</span>
@@ -111,10 +114,10 @@ function ShiftCard({ shift, onViewReport }: ShiftCardProps) {
               }`}
             >
               {diff > 0
-                ? `+${fmtINR(diff)}`
+                ? `+${fmtINR(diff, sym)}`
                 : diff < 0
-                ? `−${fmtINR(Math.abs(diff))}`
-                : fmtINR(0)}
+                ? `−${fmtINR(Math.abs(diff), sym)}`
+                : fmtINR(0, sym)}
             </span>
           </div>
         </div>

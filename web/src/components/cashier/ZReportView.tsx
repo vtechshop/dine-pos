@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSettings } from '../../context/SettingsContext';
 import { Printer } from 'lucide-react';
 import { apiGetShift } from '../../api/shifts';
 import type { ShiftData } from '../../api/shifts';
@@ -12,13 +13,13 @@ interface ZReportViewProps {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmtINR(n: number): string {
-  return `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
+function fmtINR(n: number, sym = '₹'): string {
+  return `${sym}${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
 }
 
-function fmtINRSigned(n: number): string {
-  if (n < 0) return `−₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
-  return `₹${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
+function fmtINRSigned(n: number, sym = '₹'): string {
+  if (n < 0) return `−${sym}${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
+  return `${sym}${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
 }
 
 function fmtDate(iso: string): string {
@@ -79,6 +80,8 @@ function Row({
 // ── Z-Report body (closed shift only) ────────────────────────────────────────
 
 function ZReportBody({ shift }: { shift: ShiftData }) {
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const diff = shift.difference ?? 0;
 
   return (
@@ -101,13 +104,13 @@ function ZReportBody({ shift }: { shift: ShiftData }) {
       {/* Sales Summary */}
       <SectionHeader>Sales Summary</SectionHeader>
       <div className="mb-4 rounded-xl border border-border bg-canvas p-4 space-y-2">
-        <Row label="Cash Sales" value={fmtINR(shift.cashSales)} />
-        <Row label="UPI Sales" value={fmtINR(shift.upiSales)} />
-        <Row label="Card Sales" value={fmtINR(shift.cardSales)} />
-        <Row label="Other Sales" value={fmtINR(shift.otherSales)} />
+        <Row label="Cash Sales" value={fmtINR(shift.cashSales, sym)} />
+        <Row label="UPI Sales" value={fmtINR(shift.upiSales, sym)} />
+        <Row label="Card Sales" value={fmtINR(shift.cardSales, sym)} />
+        <Row label="Other Sales" value={fmtINR(shift.otherSales, sym)} />
         <div className="my-1 border-t border-border" />
         <Row label="Total Orders" value={String(shift.totalOrders)} />
-        <Row label="Total Sales" value={fmtINR(shift.totalSales)} bold />
+        <Row label="Total Sales" value={fmtINR(shift.totalSales, sym)} bold />
       </div>
 
       {/* Drawer Reconciliation */}
@@ -116,26 +119,26 @@ function ZReportBody({ shift }: { shift: ShiftData }) {
         <div className="rounded-lg bg-mist px-3 py-2.5 font-mono text-xs text-ink space-y-1">
           <div className="flex justify-between">
             <span>Opening Cash:</span>
-            <span>{fmtINR(shift.openingCash)}</span>
+            <span>{fmtINR(shift.openingCash, sym)}</span>
           </div>
           <div className="flex justify-between">
             <span>+ Cash Sales:</span>
-            <span>{fmtINR(shift.cashSales)}</span>
+            <span>{fmtINR(shift.cashSales, sym)}</span>
           </div>
           <div className="flex justify-between">
             <span>+ Cash In:&nbsp;&nbsp;&nbsp;&nbsp;</span>
-            <span>{fmtINR(shift.cashIn)}</span>
+            <span>{fmtINR(shift.cashIn, sym)}</span>
           </div>
           <div className="flex justify-between">
             <span>− Cash Out:&nbsp;&nbsp;&nbsp;</span>
-            <span>{fmtINR(shift.cashOut)}</span>
+            <span>{fmtINR(shift.cashOut, sym)}</span>
           </div>
           <div className="mt-1 border-t border-border pt-1 flex justify-between font-semibold">
             <span>= Expected:&nbsp;&nbsp;&nbsp;</span>
-            <span>{fmtINR(shift.expectedCash ?? 0)}</span>
+            <span>{fmtINR(shift.expectedCash ?? 0, sym)}</span>
           </div>
         </div>
-        <Row label="Actual Cash" value={fmtINR(shift.actualCash ?? 0)} />
+        <Row label="Actual Cash" value={fmtINR(shift.actualCash ?? 0, sym)} />
         <div className="flex items-center justify-between">
           <span className="text-xs text-ink/55">Difference</span>
           <span
@@ -148,10 +151,10 @@ function ZReportBody({ shift }: { shift: ShiftData }) {
             }`}
           >
             {diff > 0
-              ? `${fmtINRSigned(diff)} Excess`
+              ? `${fmtINRSigned(diff, sym)} Excess`
               : diff < 0
-              ? `${fmtINRSigned(diff)} Shortage`
-              : `${fmtINR(0)} Balanced`}
+              ? `${fmtINRSigned(diff, sym)} Shortage`
+              : `${fmtINR(0, sym)} Balanced`}
           </span>
         </div>
       </div>
@@ -189,7 +192,7 @@ function ZReportBody({ shift }: { shift: ShiftData }) {
                       )}
                     </td>
                     <td className="py-2 text-right font-medium text-ink">
-                      {fmtINR(m.amount)}
+                      {fmtINR(m.amount, sym)}
                     </td>
                     <td className="py-2 text-ink/70">{m.reason}</td>
                     <td className="py-2 text-ink/60">{m.cashierName}</td>

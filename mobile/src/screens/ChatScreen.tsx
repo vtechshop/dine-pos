@@ -114,7 +114,7 @@ function ChatScreenInner() {
       const res = await fetch(`${API_BASE_URL}/chat`, { headers });
       const data = await res.json();
       setTables(data);
-    } catch (_) {}
+    } catch (err) { console.error('[ChatScreen] fetchTables error:', err); }
     setLoading(false);
   };
 
@@ -129,7 +129,7 @@ function ChatScreenInner() {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
       await fetch(`${API_BASE_URL}/chat/${tableNumber}/read`, { method: 'PATCH', headers });
       setTables(prev => prev.map(t => t._id === tableNumber ? { ...t, unread: 0 } : t));
-    } catch (_) {}
+    } catch (err) { console.error('[ChatScreen] openTable error:', err); }
   };
 
   const sendMessage = async () => {

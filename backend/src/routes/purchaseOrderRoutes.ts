@@ -177,7 +177,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     }
 
     if (req.query.status) filter.status = String(req.query.status);
-    if (req.query.vendorId) filter.vendorId = req.query.vendorId;
+    if (req.query.vendorId && mongoose.Types.ObjectId.isValid(String(req.query.vendorId))) {
+      filter.vendorId = new mongoose.Types.ObjectId(String(req.query.vendorId));
+    }
 
     const from = req.query.from ? new Date(String(req.query.from)) : null;
     const to   = req.query.to   ? new Date(String(req.query.to))   : null;
