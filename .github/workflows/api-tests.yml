@@ -25,7 +25,7 @@ jobs:
 
     services:
       redis:
-        image: public.ecr.aws/docker/library/redis:7-alpine
+        image: redis:7-alpine
         ports:
           - 6379:6379
         options: >-
@@ -35,10 +35,18 @@ jobs:
           --health-retries 5
 
     steps:
+      - name: Pull MongoDB image
+        run: |
+          for i in 1 2 3; do
+            docker pull mongo:7.0 && break
+            echo "Pull attempt $i failed, retrying in 15s..."
+            sleep 15
+          done
+
       - name: Start MongoDB replica set
         run: |
           docker run --name mongodb -d -p 27017:27017 \
-            public.ecr.aws/docker/library/mongo:7.0 \
+            mongo:7.0 \
             mongod --replSet rs0 --bind_ip_all --noauth
           # Wait for mongod to accept connections
           timeout 30 bash -c 'until docker exec mongodb mongosh --quiet --eval "db.adminCommand({ping:1})" 2>/dev/null; do sleep 2; done'
