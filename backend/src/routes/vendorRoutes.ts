@@ -129,8 +129,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     );
     const vendorCode = `VND-${String(counter.seq).padStart(4, '0')}`;
 
+    const {
+      vendorCode: _vc, hotelId: _h, isDeleted: _d, createdBy: _c,
+      currentOutstanding: _co, openingBalance: _ob,
+      businessName: _bn, mobile: _mo, gstNumber: _gst,
+      ...safeBody
+    } = req.body;
+
     const vendor = await Vendor.create({
-      ...req.body,
+      ...safeBody,
       hotelId:      req.hotelId,
       vendorCode,
       businessName: String(businessName).trim(),

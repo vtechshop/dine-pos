@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import Order from '../models/Order';
 import Payment from '../models/Payment';
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
@@ -7,6 +8,15 @@ import GatewayFactory from '../services/payment/GatewayFactory';
 import { ensureValidOAuthConfig } from '../services/payment/razorpayTokenRefresh';
 
 const router = Router();
+
+const publicPaymentLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyGenerator: (req: any) => `pub:pay:${ipKeyGenerator(req.ip ?? '')}`,
+  skip: () => process.env.NODE_ENV === 'test',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // No auth middleware — these routes are public (QR customer flow).
 // Security: hotelId is validated via DB lookup, orderId must belong to that hotel.
@@ -51,7 +61,7 @@ router.get('/gateway/:hotelId', async (req: Request, res: Response) => {
 // Creates a Razorpay order so the customer's phone can open the checkout modal.
 // The public order must already exist (created by POST /api/public/orders).
 
-router.post('/razorpay-order', async (req: Request, res: Response) => {
+router.post('/razorpay-order', publicPaymentLimiter, async (req: Request, res: Response) => {
   const {
     hotelId, orderId, amount,
     currency = 'INR', customerName,

@@ -99,6 +99,7 @@ export async function buildBusinessContext(hotelId: string): Promise<string> {
     getCachedForecast(hotelId),
     getCachedInventory(hotelId),
     VendorLedgerEntry.aggregate([
+      { $match: { hotelId: hotelOId } },
       { $sort: { createdAt: -1 } },
       { $group: { _id: '$vendorId', runningBalance: { $first: '$runningBalance' } } },
       { $match: { runningBalance: { $gt: 0 } } },

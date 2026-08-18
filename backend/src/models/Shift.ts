@@ -52,7 +52,7 @@ const DrawerMovementSchema = new Schema<IDrawerMovement>(
 
 const ShiftSchema = new Schema<IShift>(
   {
-    hotelId:     { type: Schema.Types.ObjectId, ref: 'Hotel', required: true, index: true },
+    hotelId:     { type: Schema.Types.ObjectId, ref: 'Hotel', required: true },
     cashierId:   { type: String, required: true },
     cashierName: { type: String, required: true },
     openedAt:    { type: Date, required: true },

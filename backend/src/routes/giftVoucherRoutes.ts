@@ -14,7 +14,7 @@
 
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import {
   authMiddleware, requireAdmin, requireCashierOrAdmin, AuthRequest,
 } from '../middleware/auth';
@@ -31,7 +31,7 @@ router.use(authMiddleware);
 const checkLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
-  keyGenerator: (req: any) => `gv:check:${req.hotelId ?? req.ip}`,
+  keyGenerator: (req: any) => `gv:check:${req.hotelId ?? ipKeyGenerator(req.ip ?? '')}`,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { message: 'Too many voucher check requests, please slow down' },
@@ -41,7 +41,7 @@ const checkLimiter = rateLimit({
 const redeemLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
-  keyGenerator: (req: any) => `gv:redeem:${req.hotelId ?? req.ip}`,
+  keyGenerator: (req: any) => `gv:redeem:${req.hotelId ?? ipKeyGenerator(req.ip ?? '')}`,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { message: 'Too many redemption requests, please slow down' },
@@ -51,7 +51,7 @@ const redeemLimiter = rateLimit({
 const adminActionLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
-  keyGenerator: (req: any) => `gv:admin:${req.hotelId ?? req.ip}`,
+  keyGenerator: (req: any) => `gv:admin:${req.hotelId ?? ipKeyGenerator(req.ip ?? '')}`,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { message: 'Too many requests, please slow down' },

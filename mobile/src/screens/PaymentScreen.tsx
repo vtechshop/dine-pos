@@ -297,7 +297,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
 
       // Navigate
       if (mode === 'billing') {
-        navigation.replace('RoleSelect');
+        navigation.replace('MainTabs');
       } else {
         navigation.goBack(); // cashier returns to dashboard, useFocusEffect refreshes orders
       }

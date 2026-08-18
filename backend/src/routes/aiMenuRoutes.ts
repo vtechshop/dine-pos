@@ -4,6 +4,7 @@ import mongoose                from 'mongoose';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature }      from '../middleware/requireFeature';
 import { makeRateLimiter }     from '../utils/rateLimiter';
+import { ipKeyGenerator }      from 'express-rate-limit';
 import { logAudit }            from '../utils/audit';
 import { getAIProvider, ExtractedCategory } from '../services/ai';
 import Category                from '../models/Category';
@@ -24,7 +25,7 @@ router.use(requireFeature('ai'));
 const extractRateLimit = makeRateLimiter({
   windowMs:     60_000,
   max:          5,
-  keyGenerator: (req) => `ai-extract:${(req as AuthRequest).hotelId ?? req.ip ?? 'unknown'}`,
+  keyGenerator: (req) => `ai-extract:${(req as AuthRequest).hotelId ?? ipKeyGenerator(req.ip ?? '')}`,
   handler:      (_req, res) =>
     res.status(429).json({
       message: 'AI extraction rate limit exceeded. Maximum 5 menu scans per minute per hotel.',

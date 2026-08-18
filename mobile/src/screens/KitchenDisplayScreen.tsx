@@ -185,7 +185,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
         console.log(`[KitchenNotifSocket] EVENT reconnect — after ${n} attempt(s)`);
       });
 
-      socket.on('reconnect_failed', () => {
+      socket.io.on('reconnect_failed', () => {
         console.log('[KitchenNotifSocket] EVENT reconnect_failed — gave up after 20 attempts');
         if (mountedRef.current) setSocketLost(true);
       });

@@ -1125,7 +1125,11 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
   }
 
   // Role-based status enforcement — staff can only transition to their allowed statuses
-  const role = req.role; // undefined = admin (no restriction)
+  const role = req.role;
+  const KNOWN_ROLES = ['admin', 'kitchen', 'waiter', 'cashier'];
+  if (!KNOWN_ROLES.includes(role ?? '')) {
+    return res.status(403).json({ message: 'Access denied.' });
+  }
   if (role === 'kitchen' && !['preparing', 'ready'].includes(status)) {
     return res.status(403).json({ message: 'Access denied.' });
   }

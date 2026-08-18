@@ -55,6 +55,22 @@ router.get('/alerts', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ─── GET /api/ai/alerts/history ──────────────────────────────────────────────
+// Moved here (before /alerts/:date) so Express matches the literal 'history'
+// segment before the :date wildcard catches it.
+router.get('/alerts/history', async (req: AuthRequest, res: Response) => {
+  try {
+    const hotelId  = new mongoose.Types.ObjectId(req.hotelId!);
+    const since    = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+    const alerts   = await Alert.find(
+      { hotelId, dedupDate: { $gte: since } },
+    ).sort({ dedupDate: -1, severity: 1 }).limit(100).lean();
+    return res.json({ alerts });
+  } catch (err) {
+    sendError(res, 500, 'Failed to fetch alert history', err);
+  }
+});
+
 // ─── GET /api/ai/alerts/:date ─────────────────────────────────────────────────
 // Past-day smart alerts — reads from DailySnapshot.
 // Cached 24h in Redis.
@@ -166,21 +182,6 @@ router.patch('/:id/read', async (req: AuthRequest, res: Response) => {
     return res.json({ success: true, alert: updated });
   } catch (err) {
     sendError(res, 500, 'Failed to mark alert as read', err);
-  }
-});
-
-// ─── GET /api/ai/alerts/history ──────────────────────────────────────────────
-// Returns last 7 days of persisted alerts from MongoDB (not Redis cache)
-router.get('/history', async (req: AuthRequest, res: Response) => {
-  try {
-    const hotelId  = new mongoose.Types.ObjectId(req.hotelId!);
-    const since    = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
-    const alerts   = await Alert.find(
-      { hotelId, dedupDate: { $gte: since } },
-    ).sort({ dedupDate: -1, severity: 1 }).limit(100).lean();
-    return res.json({ alerts });
-  } catch (err) {
-    sendError(res, 500, 'Failed to fetch alert history', err);
   }
 });
 

@@ -238,7 +238,7 @@ export async function processChat(
     /system prompt/i,
     /reveal (your|the) (system|instructions|prompt)/i,
     /jailbreak/i,
-    /\\n\\n(Human|User|Assistant):/i,
+    /\n\n(Human|User|Assistant):/i,
   ];
   const hasInjection = INJECTION_PATTERNS.some((p) => p.test(cleanMessage));
   if (hasInjection) {
