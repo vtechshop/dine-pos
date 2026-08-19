@@ -18,18 +18,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
-    services:
-      mongodb:
-        image: public.ecr.aws/docker/library/mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand({ping: 1})'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
+      - name: Pull MongoDB image
+        run: |
+          for i in 1 2 3; do
+            docker pull mongo:7.0 && break
+            echo "Pull attempt $i failed, retrying in 15s..."
+            sleep 15
+          done
+
+      - name: Start MongoDB replica set
+        run: |
+          docker run --name mongodb -d -p 27017:27017 \
+            mongo:7.0 \
+            mongod --replSet rs0 --bind_ip_all --noauth
+          timeout 30 bash -c 'until docker exec mongodb mongosh --quiet --eval "db.adminCommand({ping:1})" 2>/dev/null; do sleep 2; done'
+          docker exec mongodb mongosh --quiet --eval \
+            "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"
+          timeout 30 bash -c 'until docker exec mongodb mongosh --quiet --eval "rs.isMaster().ismaster" 2>/dev/null | grep -q true; do sleep 2; done'
+          echo "MongoDB replica set rs0 ready"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -46,7 +54,7 @@ jobs:
         working-directory: backend
         env:
           PORT: 5000
-          MONGODB_URI: mongodb://localhost:27017/dinepos_test
+          MONGODB_URI: mongodb://127.0.0.1:27017/dinepos_test?replicaSet=rs0&directConnection=true
           JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-test-jwt-secret-not-for-production' }}
           SUPER_ADMIN_ID: ${{ secrets.SUPER_ADMIN_ID || 'ci-superadmin' }}
           SUPER_ADMIN_PASS: ${{ secrets.SUPER_ADMIN_PASS || 'ci-superpass-1234' }}

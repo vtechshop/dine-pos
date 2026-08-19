@@ -1169,13 +1169,20 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
   if (role === 'waiter' && status !== 'served') {
     return res.status(403).json({ message: 'Access denied.' });
   }
-  if (role === 'cashier' && status !== 'completed') {
-    return res.status(403).json({ message: 'Access denied.' });
-  }
-
   try {
     const existing = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId });
     if (!existing) return res.status(404).json({ message: 'Order not found' });
+
+    // H3: Block cancellation of completed (paid) orders — checked before role gates
+    // so all callers (including cashiers) receive the informative 400 rather than a
+    // generic 403 when the real problem is that the order is already paid.
+    if (status === 'cancelled' && existing.status === 'completed') {
+      return res.status(400).json({ message: 'Cannot cancel a completed order. Process a refund instead.' });
+    }
+    // Cashier: may only complete orders (all other transitions are role-restricted)
+    if (role === 'cashier' && status !== 'completed') {
+      return res.status(403).json({ message: 'Access denied.' });
+    }
 
     // State machine: enforce valid source-state for each role's allowed transition
     // Kitchen:  can only act on pending/preparing orders
@@ -1193,11 +1200,6 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       if (!(isQuickService && existing.status === 'pending')) {
         return res.status(400).json({ message: `Order must be ready or served before it can be completed (current: ${existing.status}).` });
       }
-    }
-
-    // H3: Block cancellation of completed (paid) orders — require a refund instead
-    if (status === 'cancelled' && existing.status === 'completed') {
-      return res.status(400).json({ message: 'Cannot cancel a completed order. Process a refund instead.' });
     }
 
     // H-04: atomic cancellation guard — only the first concurrent request runs side-effects
