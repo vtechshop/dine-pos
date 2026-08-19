@@ -372,7 +372,7 @@ describe('Cashier Regression', () => {
         const payloadB = cashierPayload({
           // UUID-based suffix ensures uniqueness even across parallel runs
           employeeCode: `CTEST${uuidv4().slice(-6).toUpperCase()}`,
-          pin: '9876',
+          pin: '7391',
         });
         const createCashierRes = await api
           .post('/api/cashiers')
