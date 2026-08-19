@@ -222,6 +222,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
   try {
     const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
     const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return res.status(400).json({ success: false, message: 'Invalid date format' });
     const startOfDay = new Date(date); startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date); endOfDay.setHours(23, 59, 59, 999);
 
