@@ -104,7 +104,7 @@ const MorningBriefScreen: React.FC<Props> = () => {
   const b = brief?.business;
 
   return (
-    <View style={[styles.root, { paddingTop: top }]}>
+    <View style={styles.root}>
       <OfflineIndicator />
 
       {/* Header */}

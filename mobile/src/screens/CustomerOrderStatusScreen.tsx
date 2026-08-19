@@ -50,7 +50,7 @@ const STATUS_ORDER: Record<StoredCustomerOrder['status'], number> = {
 const CustomerOrderStatusScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const { settings } = useSettings();
-  const { top, bottom } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
 
   const [order, setOrder] = useState<StoredCustomerOrder | null>(null);
   const [loading, setLoading] = useState(true);
@@ -160,7 +160,7 @@ const CustomerOrderStatusScreen: React.FC = () => {
   // ── Empty state ───────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={[styles.root, { paddingTop: top }]}>
+      <View style={[styles.root, { paddingTop: 0 }]}>
         <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
         <View style={styles.header}>
           <Text style={styles.headerTitle}>My Order</Text>
@@ -174,7 +174,7 @@ const CustomerOrderStatusScreen: React.FC = () => {
 
   if (!order) {
     return (
-      <View style={[styles.root, { paddingTop: top }]}>
+      <View style={[styles.root, { paddingTop: 0 }]}>
         <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
         <View style={styles.header}>
           <Text style={styles.headerTitle}>My Order</Text>
@@ -207,7 +207,7 @@ const CustomerOrderStatusScreen: React.FC = () => {
   const { icon: sIcon, headline, sub, color: sColor } = statusMeta[order.status];
 
   return (
-    <View style={[styles.root, { paddingTop: top }]}>
+    <View style={[styles.root, { paddingTop: 0 }]}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
 
       {/* Header */}

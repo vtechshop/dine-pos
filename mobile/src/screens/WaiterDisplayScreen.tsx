@@ -241,7 +241,7 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
 
   if (loading) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingTop: top }]}>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={Colors.accent} />
         <Text style={{ marginTop: 16, color: Colors.textSecondary, fontSize: FontSize.md }}>Loading orders…</Text>
       </View>
@@ -249,7 +249,7 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: top }]}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
       {/* Header */}
@@ -305,7 +305,7 @@ const WaiterDisplayScreen: React.FC<Props> = ({ navigation }) => {
         onRequestClose={() => setReadyPopup(null)}
       >
         <TouchableOpacity
-          style={{ marginTop: (StatusBar.currentHeight || 0) + 8, marginHorizontal: 16 }}
+          style={{ marginTop: top + 8, marginHorizontal: 16 }}
           onPress={() => setReadyPopup(null)}
           activeOpacity={1}
         >

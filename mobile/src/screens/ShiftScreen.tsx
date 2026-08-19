@@ -16,7 +16,7 @@ import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/const
 type Props = NativeStackScreenProps<RootStackParamList, 'ShiftScreen'>;
 
 const ShiftScreen: React.FC<Props> = ({ navigation }) => {
-  const { top, bottom } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
 
   // ── open-shift form ────────────────────────────────────────────────────
   const [openingCash, setOpeningCash] = useState('');
@@ -201,7 +201,7 @@ const ShiftScreen: React.FC<Props> = ({ navigation }) => {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered, { paddingTop: top }]}>
+      <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color={Colors.info} />
         <Text style={styles.loadingText}>Loading shift…</Text>
       </View>
@@ -209,7 +209,7 @@ const ShiftScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: top }]}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>

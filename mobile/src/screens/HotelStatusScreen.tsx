@@ -33,7 +33,7 @@ type StatusConfig = {
 
 const HotelStatusScreen: React.FC<Props> = ({ navigation, route }) => {
   const { status, hotelName, trialDaysRemaining } = route.params;
-  const { top, bottom } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
   const { logout } = useAuth();
 
   const configs: Record<string, StatusConfig> = {
@@ -112,7 +112,7 @@ const HotelStatusScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: top + Spacing.xxl, paddingBottom: Spacing.xxl + bottom }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: Spacing.xxl, paddingBottom: Spacing.xxl + bottom }]} showsVerticalScrollIndicator={false}>
         <View style={[styles.iconCircle, cfg.iconStyle]}>
           <MaterialIcons name={cfg.icon} size={64} color={Colors.white} />
         </View>

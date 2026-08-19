@@ -33,7 +33,7 @@ const fmtAge = (s: string) => {
 
 const NotificationsScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { bottom, top } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount]     = useState(0);
@@ -93,7 +93,7 @@ const NotificationsScreen: React.FC = () => {
 
   return (
     <View style={[styles.container, { paddingBottom: bottom }]}>
-      <View style={[styles.header, { paddingTop: top + Spacing.sm }]}>
+      <View style={[styles.header, { paddingTop: Spacing.sm }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => (navigation as any).goBack()}>
           <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
         </TouchableOpacity>

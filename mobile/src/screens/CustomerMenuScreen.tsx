@@ -25,7 +25,7 @@ const CustomerMenuScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const rootNav = useNavigation<NavProp>();
   const { width: screenWidth } = useWindowDimensions();
-  const { top, bottom } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
 
   const isTablet = screenWidth >= 600;
   const COLS = 2; // Always 2 columns — better card size on both phone and tablet
@@ -422,7 +422,7 @@ const CustomerMenuScreen: React.FC = () => {
       )}
 
       {/* ── Header ── */}
-      <View style={[styles.header, { paddingTop: top + Spacing.md }]}>
+      <View style={[styles.header, { paddingTop: Spacing.md }]}>
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={handleSecretTap} activeOpacity={1} style={{ flex: 1 }}>
             <Text style={styles.hotelName}>{settings.hotelName || 'Menu'}</Text>

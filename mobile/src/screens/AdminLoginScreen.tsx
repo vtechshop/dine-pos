@@ -33,7 +33,6 @@ async function getOrCreateDeviceId(): Promise<string> {
 const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
   const { login } = useAuth();
   const { setFlags } = useFeatureFlags();
-  const { top } = useSafeAreaInsets();
   const [userId, setUserId]       = useState('');
   const [password, setPassword]   = useState('');
   const [showPass, setShowPass]   = useState(false);
@@ -209,7 +208,7 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
         {/* Top banner */}
-        <View style={[styles.topBanner, { paddingTop: top + Spacing.xl }]}>
+        <View style={[styles.topBanner, { paddingTop: Spacing.xl }]}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.replace('RoleSelect')}>
             <MaterialIcons name="arrow-back" size={22} color={Colors.white} />
           </TouchableOpacity>

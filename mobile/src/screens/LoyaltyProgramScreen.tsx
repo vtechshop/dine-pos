@@ -37,7 +37,7 @@ const TX_COLORS: Record<string, string> = {
 
 const LoyaltyProgramScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { bottom, top } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
   const { settings } = useSettings();
   const sym = settings.currencySymbol || '₹';
 
@@ -250,7 +250,7 @@ const LoyaltyProgramScreen: React.FC = () => {
   return (
     <View style={[styles.container, { paddingBottom: bottom }]}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: top + Spacing.sm }]}>
+      <View style={[styles.header, { paddingTop: Spacing.sm }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => (navigation as any).goBack()}>
           <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
         </TouchableOpacity>

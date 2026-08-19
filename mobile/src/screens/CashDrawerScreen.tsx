@@ -16,7 +16,7 @@ import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/const
 type Props = NativeStackScreenProps<RootStackParamList, 'CashDrawerScreen'>;
 
 const CashDrawerScreen: React.FC<Props> = ({ navigation }) => {
-  const { top, bottom } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
 
   const [shift, setShift] = useState<Shift | null>(null);
   const [stats, setStats] = useState<ShiftStats | null>(null); // M-02
@@ -158,7 +158,7 @@ const CashDrawerScreen: React.FC<Props> = ({ navigation }) => {
   // ── loading / error states ─────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered, { paddingTop: top }]}>
+      <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color={Colors.info} />
         <Text style={styles.loadingText}>Loading drawer…</Text>
       </View>
@@ -166,7 +166,7 @@ const CashDrawerScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: top }]}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>

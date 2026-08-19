@@ -18,7 +18,6 @@ type Props = NativeStackScreenProps<RootStackParamList, 'CashierManagement'>;
 type ModalMode = 'add' | 'edit' | 'pin' | null;
 
 const CashierManagementScreen: React.FC<Props> = ({ navigation }) => {
-  const { top } = useSafeAreaInsets();
   const [cashiers, setCashiers] = useState<CashierProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -168,7 +167,7 @@ const CashierManagementScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: top }]}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
       <View style={styles.header}>

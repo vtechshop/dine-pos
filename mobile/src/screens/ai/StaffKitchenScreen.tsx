@@ -34,7 +34,6 @@ type Tab = typeof TABS[number];
 
 const StaffKitchenScreen: React.FC<Props> = () => {
   const { settings } = useSettings();
-  const { top } = useSafeAreaInsets();
   const cur = settings.currencySymbol || '₹';
 
   const [activeTab, setActiveTab] = useState<Tab>('Staff');
@@ -65,7 +64,7 @@ const StaffKitchenScreen: React.FC<Props> = () => {
   const onRefresh = useCallback(() => { setRefreshing(true); load(); }, [load]);
 
   return (
-    <View style={[styles.root, { paddingTop: top }]}>
+    <View style={styles.root}>
       <OfflineIndicator />
 
       <View style={styles.header}>

@@ -75,7 +75,7 @@ function copyText(text: string) {
 
 const OnlineOrdersScreen: React.FC = () => {
   const { settings } = useSettings();
-  const { top, bottom } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
   const cur = settings.currencySymbol || '₹';
 
   const [orders,         setOrders]         = useState<OnlineDeliveryOrder[]>([]);
@@ -342,7 +342,7 @@ const OnlineOrdersScreen: React.FC = () => {
   // ── Main render ───────────────────────────────────────────────────────────────
 
   return (
-    <View style={[styles.container, { paddingTop: top }]}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
       {/* Header */}

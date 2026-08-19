@@ -271,7 +271,7 @@ const AppNavigator = () => {
   }
 
   const safeTop        = { paddingTop: top, backgroundColor: Colors.background };
-  const safeTopDark    = { paddingTop: top, backgroundColor: '#130A04' };
+  const noTopPad      = { paddingTop: 0,   backgroundColor: Colors.background };
 
   return (
     <RemoteConfigProvider>
@@ -331,14 +331,14 @@ const AppNavigator = () => {
             <Stack.Screen name="LoyaltyProgram"      component={LoyaltyProgramScreen}      options={{ contentStyle: safeTop }} />
             <Stack.Screen name="Notifications"      component={NotificationsScreen}       options={{ contentStyle: safeTop }} />
             <Stack.Screen name="AggregatorConfig"   component={AggregatorConfigScreen}    options={{ contentStyle: safeTop }} />
-            <Stack.Screen name="Vendors"            component={VendorScreen}              options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Vendors',         headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
-            <Stack.Screen name="PurchaseOrders"     component={PurchaseOrderScreen}       options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Purchase Orders',  headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
-            <Stack.Screen name="GoodsReceive"       component={GoodsReceiveScreen}        options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Receive Goods',     headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
-            <Stack.Screen name="VendorLedger"             component={VendorLedgerScreen}             options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Vendor Ledger',          headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
-            <Stack.Screen name="InventoryIntelligence"    component={InventoryIntelligenceScreen}    options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Inventory Intelligence',   headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
-            <Stack.Screen name="PaymentSettings"          component={PaymentSettingsScreen}          options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Payment Settings',          headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="Vendors"            component={VendorScreen}              options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'Vendors',         headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="PurchaseOrders"     component={PurchaseOrderScreen}       options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'Purchase Orders',  headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="GoodsReceive"       component={GoodsReceiveScreen}        options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'Receive Goods',     headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="VendorLedger"             component={VendorLedgerScreen}             options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'Vendor Ledger',          headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="InventoryIntelligence"    component={InventoryIntelligenceScreen}    options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'Inventory Intelligence',   headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="PaymentSettings"          component={PaymentSettingsScreen}          options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'Payment Settings',          headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="PaymentScreen"            component={PaymentScreen}                  options={{ contentStyle: safeTop, gestureEnabled: false }} />
-            <Stack.Screen name="AIHome"            component={AIHomeScreen}            options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'AI Intelligence',        headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="AIHome"            component={AIHomeScreen}            options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'AI Intelligence',        headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="MorningBrief"      component={MorningBriefScreen}      options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="AIReports"         component={AIReportsScreen}         options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="AIChat"            component={AIChatScreen}            options={{ contentStyle: safeTop, headerShown: false }} />
@@ -350,9 +350,9 @@ const AppNavigator = () => {
             <Stack.Screen name="AIMenuImport"      component={AIMenuImportScreen}      options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="BulkImageAssign"  component={BulkImageAssignScreen}  options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="RazorpayOAuth"    component={RazorpayOAuthScreen}    options={{ contentStyle: safeTop, headerShown: false }} />
-            <Stack.Screen name="Coupons"        component={CouponScreen}       options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Coupons',       headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
-            <Stack.Screen name="GiftVouchers"      component={GiftVoucherScreen}      options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Gift Vouchers',      headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
-            <Stack.Screen name="PurchaseInvoices"  component={PurchaseInvoiceScreen}  options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Purchase Invoices', headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="Coupons"        component={CouponScreen}       options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'Coupons',       headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="GiftVouchers"      component={GiftVoucherScreen}      options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'Gift Vouchers',      headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
+            <Stack.Screen name="PurchaseInvoices"  component={PurchaseInvoiceScreen}  options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'Purchase Invoices', headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen
               name="AddProduct"
               component={AddProductScreen}

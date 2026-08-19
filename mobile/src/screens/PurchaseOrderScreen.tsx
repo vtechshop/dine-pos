@@ -791,7 +791,7 @@ export default function PurchaseOrderScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       {/* Search */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>

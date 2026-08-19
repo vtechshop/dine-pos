@@ -88,7 +88,7 @@ const RecommendationsScreen: React.FC<Props> = () => {
   });
 
   return (
-    <View style={[styles.root, { paddingTop: top }]}>
+    <View style={styles.root}>
       <OfflineIndicator />
 
       <View style={styles.header}>

@@ -451,7 +451,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   if (loading) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingTop: top }]}>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={Colors.info} />
         <Text style={{ marginTop: 16, color: Colors.textSecondary, fontSize: FontSize.md }}>Loading orders…</Text>
       </View>
@@ -485,7 +485,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
     : afterPayFilter;
 
   return (
-    <View style={[styles.container, { paddingTop: top }]}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
       {offlineQueueCount > 0 && (

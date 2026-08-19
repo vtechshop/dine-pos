@@ -666,7 +666,7 @@ export default function GoodsReceiveScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       {/* Header row */}
       <View style={styles.headerRow}>
         <Text style={styles.headerCount}>{total} GRN{total !== 1 ? 's' : ''}</Text>

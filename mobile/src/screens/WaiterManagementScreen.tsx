@@ -19,7 +19,6 @@ type Props = NativeStackScreenProps<RootStackParamList, 'WaiterManagement'>;
 type ModalMode = 'add' | 'edit' | 'pin' | null;
 
 const WaiterManagementScreen: React.FC<Props> = ({ navigation }) => {
-  const { top } = useSafeAreaInsets();
   const [waiters, setWaiters] = useState<WaiterProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -170,7 +169,7 @@ const WaiterManagementScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: top }]}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
       {/* Header */}

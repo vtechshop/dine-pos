@@ -40,8 +40,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { settings, refreshSettings } = useSettings();
   const { logout } = useAuth();
   const { clearCart } = useCart();
+  const { top }   = useSafeAreaInsets();
   const { flags } = useFeatureFlags();
-  const { top } = useSafeAreaInsets();
   const { increment: incAdminBadge } = useBadgeCount(BADGE_KEYS.adminOrders);
   const { showToast } = useGlobalToast();
   const [stats, setStats]           = useState<Stats>({ todayOrders: 0, todaySales: 0, totalProducts: 0, totalCategories: 0, parcelOrders: 0 });
@@ -277,7 +277,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
 
       {/* ── Branded fixed header ── */}
-      <View style={[styles.header, { paddingTop: top + Spacing.md }]}>
+      <View style={[styles.header, { paddingTop: Spacing.md }]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity style={styles.avatarBtn} onPress={() => { clearCart(); logout(); }} activeOpacity={0.7}>
             <MaterialIcons name="logout" size={18} color="rgba(255,255,255,0.85)" />
@@ -491,7 +491,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         statusBarTranslucent
         onRequestClose={() => { setNewOrderAlert(null); setOrderBadge(0); }}
       >
-        <View style={{ marginTop: (StatusBar.currentHeight || 0) + 8, marginHorizontal: Spacing.lg }}>
+        <View style={{ marginTop: top + 8, marginHorizontal: Spacing.lg }}>
           <View style={styles.alertBanner}>
             <View style={styles.alertBannerPulse} />
             <TouchableOpacity

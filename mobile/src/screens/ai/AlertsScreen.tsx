@@ -84,7 +84,7 @@ const AlertsScreen: React.FC<Props> = () => {
   });
 
   return (
-    <View style={[styles.root, { paddingTop: top }]}>
+    <View style={styles.root}>
       <OfflineIndicator />
 
       {/* Header */}

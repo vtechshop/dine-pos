@@ -24,7 +24,7 @@ const SUGGESTIONS = [
 ];
 
 const AIChatScreen: React.FC<Props> = () => {
-  const { top, bottom } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
 
   const [messages, setMessages] = useState<AIChatMessage[]>([]);
   const [input, setInput]       = useState('');
@@ -113,7 +113,7 @@ const AIChatScreen: React.FC<Props> = () => {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, { paddingTop: top }]}
+      style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <OfflineIndicator />

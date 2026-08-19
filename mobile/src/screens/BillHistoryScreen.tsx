@@ -92,7 +92,7 @@ function orderTypeIcon(order: Order): keyof typeof MaterialIcons.glyphMap {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 const BillHistoryScreen: React.FC<Props> = ({ navigation }) => {
-  const { top, bottom } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
 
   // ── Filter state ──────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -467,7 +467,7 @@ const BillHistoryScreen: React.FC<Props> = ({ navigation }) => {
   // ── Screen ────────────────────────────────────────────────────────────────
 
   return (
-    <View style={[styles.container, { paddingTop: top }]}>
+    <View style={styles.container}>
 
       {/* Header */}
       <View style={styles.header}>

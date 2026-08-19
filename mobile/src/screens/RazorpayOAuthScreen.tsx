@@ -26,7 +26,6 @@ function daysUntil(s?: string): number | null {
 }
 
 export default function RazorpayOAuthScreen({ navigation, route }: Props) {
-  const { top } = useSafeAreaInsets();
   const [status,       setStatus]       = useState<MobileRazorpayOAuthStatus | null>(null);
   const [loading,      setLoading]      = useState(true);
   const [connecting,   setConnecting]   = useState(false);
@@ -106,7 +105,7 @@ export default function RazorpayOAuthScreen({ navigation, route }: Props) {
   const accessExpiry  = status?.connected ? daysUntil(status.expiresAt) : null;
 
   return (
-    <View style={[s.root, { paddingTop: top }]}>
+    <View style={s.root}>
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.back} hitSlop={12}>

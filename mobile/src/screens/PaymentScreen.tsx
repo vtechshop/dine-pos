@@ -56,7 +56,6 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const { mode, orderId, orderNumber, grandTotal, promos } = route.params;
   const { settings } = useSettings();
   const { clearCart } = useCart();
-  const { top } = useSafeAreaInsets();
   const sym = settings.currencySymbol || '₹';
 
   const [method, setMethod]       = useState<PayMethod>('cash');
@@ -344,7 +343,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const active = METHODS.find(m => m.key === method)!;
 
   return (
-    <View style={[styles.root, { paddingTop: top }]}>
+    <View style={styles.root}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => { if (!placing) navigation.goBack(); }} style={styles.backBtn}>

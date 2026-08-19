@@ -34,7 +34,6 @@ type Tab = typeof TABS[number];
 
 const ForecastScreen: React.FC<Props> = () => {
   const { settings } = useSettings();
-  const { top } = useSafeAreaInsets();
   const cur = settings.currencySymbol || '₹';
 
   const [activeTab, setActiveTab] = useState<Tab>('Sales Forecast');
@@ -68,7 +67,7 @@ const ForecastScreen: React.FC<Props> = () => {
     s === 'critical' ? Colors.danger : s === 'warning' ? Colors.warning : s === 'overstock' ? Colors.info : Colors.success;
 
   return (
-    <View style={[styles.root, { paddingTop: top }]}>
+    <View style={styles.root}>
       <OfflineIndicator />
 
       <View style={styles.header}>

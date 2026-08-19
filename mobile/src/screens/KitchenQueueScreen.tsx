@@ -16,7 +16,7 @@ import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/const
 type Props = NativeStackScreenProps<RootStackParamList, 'KitchenQueue'>;
 
 const KitchenQueueScreen: React.FC<Props> = ({ navigation }) => {
-  const { top, bottom } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
 
   const [orders,      setOrders]      = useState<CashierOrder[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -200,7 +200,7 @@ const KitchenQueueScreen: React.FC<Props> = ({ navigation }) => {
 
   if (loading) {
     return (
-      <View style={[styles.container, { paddingTop: top, justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={Colors.warning} />
         <Text style={styles.loadingText}>Loading kitchen queue…</Text>
       </View>
@@ -210,7 +210,7 @@ const KitchenQueueScreen: React.FC<Props> = ({ navigation }) => {
   // ── Main render ───────────────────────────────────────────────────────────────
 
   return (
-    <View style={[styles.container, { paddingTop: top }]}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
       {/* Header */}

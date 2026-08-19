@@ -39,7 +39,6 @@ const QUICK_NAV: Array<{ label: string; screen: keyof RootStackParamList; icon: 
 
 const AIHomeScreen: React.FC<Props> = ({ navigation }) => {
   const { settings } = useSettings();
-  const { top } = useSafeAreaInsets();
   const cur = settings.currencySymbol || '₹';
 
   const [dashboard, setDashboard] = useState<ExecutiveDashboard | null>(null);
@@ -88,7 +87,7 @@ const AIHomeScreen: React.FC<Props> = ({ navigation }) => {
     : Colors.danger;
 
   return (
-    <View style={[styles.root, { paddingTop: top }]}>
+    <View style={styles.root}>
       <OfflineIndicator />
 
       {/* Header */}

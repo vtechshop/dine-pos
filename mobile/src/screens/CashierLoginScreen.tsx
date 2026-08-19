@@ -22,7 +22,7 @@ const ACCENT20 = Colors.info + '20';
 const ACCENT55 = Colors.info + '55';
 
 const CashierLoginScreen: React.FC<Props> = ({ navigation }) => {
-  const { top, bottom } = useSafeAreaInsets();
+  const { bottom } = useSafeAreaInsets();
   const [employeeCode, setEmployeeCode] = useState('');
   const [pin, setPin]                   = useState('');
   const [loading, setLoading]           = useState(false);
@@ -66,7 +66,7 @@ const CashierLoginScreen: React.FC<Props> = ({ navigation }) => {
         <StatusBar barStyle="light-content" backgroundColor={DARK_BG} />
 
         {/* ── Dark header ───────────────────────────────────────────────── */}
-        <View style={[styles.header, { paddingTop: top + Spacing.md }]}>
+        <View style={[styles.header, { paddingTop: Spacing.md }]}>
           <View style={styles.orb} />
 
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
