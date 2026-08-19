@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
-import mongoose from 'mongoose';
-import Payment from '../models/Payment';
+import mongoose, { HydratedDocument } from 'mongoose';
+import Payment, { IPayment } from '../models/Payment';
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
 import Order from '../models/Order';
 import CustomerProfile from '../models/CustomerProfile';
@@ -224,17 +224,35 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
     const internalTransactionId = generateTxnId();
     const amountPaise = Math.round(amount * 100); // convert rupees to paise
 
-    // Create payment record first (status: pending)
-    const payment = await Payment.create({
-      hotelId:               new mongoose.Types.ObjectId(req.hotelId),
-      orderId:               new mongoose.Types.ObjectId(orderId),
-      internalTransactionId,
-      gatewayType:           gatewayConfig.gatewayType,
-      status:                'pending',
-      amount:                amountPaise,
-      currency:              currency.toUpperCase(),
-      initiatedBy:           req.hotelId ?? 'system',
-    });
+    // Create payment record first (status: pending).
+    // The partial unique index { orderId } / status:'success' on the Payment collection
+    // makes this atomic against a concurrent success record.  If a race-winning request
+    // already completed a success for this order, MongoDB raises E11000 here and we
+    // return the existing record instead of creating a duplicate.
+    let payment: HydratedDocument<IPayment>;
+    try {
+      payment = await Payment.create({
+        hotelId:               new mongoose.Types.ObjectId(req.hotelId),
+        orderId:               new mongoose.Types.ObjectId(orderId),
+        internalTransactionId,
+        gatewayType:           gatewayConfig.gatewayType,
+        status:                'pending',
+        amount:                amountPaise,
+        currency:              currency.toUpperCase(),
+        initiatedBy:           req.hotelId ?? 'system',
+      });
+    } catch (err: any) {
+      if (err.code === 11000) {
+        // Duplicate key — a concurrent request already recorded a successful payment.
+        const existing = await Payment.findOne({
+          orderId: new mongoose.Types.ObjectId(orderId),
+          hotelId: req.hotelId,
+          status:  'success',
+        });
+        return res.status(200).json({ success: true, payment: existing, idempotent: true });
+      }
+      throw err;
+    }
 
     // Attempt to call gateway SDK (will fail gracefully if SDK not yet integrated)
     let gatewayData: Record<string, unknown> = {};

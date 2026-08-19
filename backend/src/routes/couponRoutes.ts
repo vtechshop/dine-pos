@@ -17,6 +17,7 @@ import mongoose from 'mongoose';
 import {
   authMiddleware, requireAdmin, requireCashierOrAdmin, AuthRequest,
 } from '../middleware/auth';
+import { requireActiveStaff } from '../middleware/staffAuth';
 import { sendError } from '../utils/sendError';
 import Coupon from '../models/Coupon';
 import CouponRedemption from '../models/CouponRedemption';
@@ -171,7 +172,7 @@ router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response): Pro
 
 // ── Validate (cashier-facing: call before applying to an order) ───────────────
 
-router.post('/validate', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/validate', requireCashierOrAdmin, requireActiveStaff, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { code, orderTotal, customerId } = req.body as {
       code?: string; orderTotal?: number; customerId?: string;
@@ -246,7 +247,7 @@ router.post('/validate', requireCashierOrAdmin, async (req: AuthRequest, res: Re
 // Called client-side after a payment is confirmed. Fire-and-forget is acceptable;
 // the worst case is a usage count that is 1 low — not a financial risk.
 
-router.post('/:id/apply', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/:id/apply', requireCashierOrAdmin, requireActiveStaff, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const coupon = await Coupon.findOneAndUpdate(
       {

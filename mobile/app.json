@@ -2,6 +2,7 @@
   "expo": {
     "name": "Dine POS",
     "slug": "hotelbillingpos",
+    "scheme": "dinepos",
     "version": "1.4.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

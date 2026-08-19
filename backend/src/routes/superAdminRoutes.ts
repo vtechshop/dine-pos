@@ -28,7 +28,13 @@ import { io } from '../server';
 import { Expo } from 'expo-server-sdk';
 
 
+if (!process.env.SUPER_ADMIN_JWT_SECRET || process.env.SUPER_ADMIN_JWT_SECRET.length < 32) {
+  throw new Error('[FATAL] SUPER_ADMIN_JWT_SECRET must be set and at least 32 characters long');
+}
+
 const router = Router();
+
+const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
 
 const adminLoginLimiter = makeRateLimiter({
   windowMs: 15 * 60 * 1000,
@@ -56,15 +62,20 @@ const superAdminAuth = (req: Request, res: Response, next: Function) => {
       if (payload?.role === 'superadmin') return next();
     } catch { /* invalid or expired token */ }
   }
-  // Direct credential headers (CI / automation test flow)
-  const saId   = req.headers['x-super-admin-id']   as string | undefined;
-  const saPass = req.headers['x-super-admin-pass'] as string | undefined;
-  if (
-    saId && saPass &&
-    safeEqual(saId,   process.env.SUPER_ADMIN_ID!)   &&
-    safeEqual(saPass, process.env.SUPER_ADMIN_PASS!)
-  ) {
-    return next();
+  // Direct credential headers — OFF by default in production; enabled via env flag
+  const credHeaderEnabled =
+    process.env.NODE_ENV !== 'production' ||
+    process.env.ENABLE_SUPERADMIN_CREDENTIAL_HEADER_AUTH === 'true';
+  if (credHeaderEnabled) {
+    const saId   = req.headers['x-super-admin-id']   as string | undefined;
+    const saPass = req.headers['x-super-admin-pass'] as string | undefined;
+    if (
+      saId && saPass &&
+      safeEqual(saId,   process.env.SUPER_ADMIN_ID!)   &&
+      safeEqual(saPass, process.env.SUPER_ADMIN_PASS!)
+    ) {
+      return next();
+    }
   }
   return res.status(401).json({ message: 'Unauthorized' });
 };
@@ -78,8 +89,10 @@ router.post('/login', adminLoginLimiter, (req: Request, res: Response) => {
   if (!userId || !password) return res.status(400).json({ message: 'Credentials required' });
   if (safeEqual(String(userId), adminId) && safeEqual(String(password), adminPass)) {
     const token = jwt.sign({ role: 'superadmin' }, SUPER_ADMIN_JWT_SECRET, { expiresIn: '4h' });
+    logAuditRaw({ hotelId: 'superadmin', actorRole: 'superadmin', action: 'superadmin.login.success', targetType: 'auth', targetId: 'superadmin', ip: req.ip });
     return res.json({ success: true, role: 'superadmin', token });
   }
+  logAuditRaw({ hotelId: 'superadmin', actorRole: 'superadmin', action: 'superadmin.login.failure', targetType: 'auth', targetId: 'superadmin', metadata: { userId: String(userId || '') }, ip: req.ip });
   return res.status(401).json({ message: 'Invalid super admin credentials' });
 });
 
@@ -112,6 +125,7 @@ router.get('/hotels', superAdminAuth, async (req: Request, res: Response) => {
 
 router.get('/hotels/:id', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
     const hotel = await Hotel.findById(req.params.id).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     return res.json(hotel);
@@ -120,13 +134,12 @@ router.get('/hotels/:id', superAdminAuth, async (req: Request, res: Response) =>
 
 router.put('/hotels/:id/approve', superAdminAuth, async (req: Request, res: Response) => {
   try {
-    const existing = await Hotel.findById(req.params.id);
-    if (!existing) return res.status(404).json({ message: 'Hotel not found' });
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
 
     const { trialDays = 14, features } = req.body;
     const days = Math.max(1, Math.min(365, parseInt(trialDays) || 14));
 
-    // Auto-generate unique adminId (retry on collision)
+    // Generate credentials FIRST (before DB write) to avoid partial-write on retry
     let adminId = '';
     for (let attempt = 0; attempt < 10; attempt++) {
       const candidate = generateAdminId();
@@ -160,13 +173,15 @@ router.put('/hotels/:id/approve', superAdminAuth, async (req: Request, res: Resp
       }
     }
 
-    const hotel = await Hotel.findByIdAndUpdate(
-      req.params.id,
+    // Atomic status check: only approve if currently pending or rejected
+    const hotel = await Hotel.findOneAndUpdate(
+      { _id: req.params.id, status: { $in: ['pending', 'rejected'] } },
       {
         $set: {
           adminId,
           adminPasswordHash,
           status: 'trial',
+          bootstrapStatus: 'pending',
           approvedAt: trialStartDate,
           trialStartDate,
           trialEndDate,
@@ -181,14 +196,39 @@ router.put('/hotels/:id/approve', superAdminAuth, async (req: Request, res: Resp
       },
       { new: true }
     ).select('-adminPasswordHash');
-    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+
+    if (!hotel) {
+      // Determine why: 404 vs 409
+      const existingHotel = await Hotel.findById(req.params.id).select('status').lean();
+      if (!existingHotel) return res.status(404).json({ message: 'Hotel not found' });
+      if (existingHotel.status === 'trial' || existingHotel.status === 'active') {
+        return res.status(409).json({ message: 'Hotel already approved. Use credential reset if credentials are lost.' });
+      }
+      return res.status(409).json({ message: `Cannot approve hotel in status: ${existingHotel.status}` });
+    }
+
     await invalidateStatusCache(req.params.id);
 
-    const { kitchenPin } = await bootstrapNewHotel(hotel._id as any, {
-      hotelName: hotel.hotelName,
-      phone: hotel.phone,
+    // Bootstrap with retry (up to 3 attempts)
+    let bootstrapResult: { kitchenPin: string } = { kitchenPin: '' };
+    let bootstrapFailed = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        bootstrapResult = await bootstrapNewHotel(hotel._id as any, { hotelName: hotel.hotelName, phone: hotel.phone });
+        break;
+      } catch (err) {
+        if (attempt === 3) {
+          bootstrapFailed = true;
+          console.error(`[SA][CRITICAL] bootstrapNewHotel failed after 3 attempts for hotel ${hotel._id}:`, err);
+        }
+      }
+    }
+    // Persist bootstrap outcome — allows safe retry without re-approving
+    await Hotel.findByIdAndUpdate(hotel._id, {
+      $set: { bootstrapStatus: bootstrapFailed ? 'failed' : 'completed' },
     });
 
+    const kitchenPin = bootstrapResult.kitchenPin;
     const credentials = { adminId, password: plainPassword, kitchenPin };
 
     const emailPayload = {
@@ -215,21 +255,74 @@ router.put('/hotels/:id/approve', superAdminAuth, async (req: Request, res: Resp
         `Download the app and login to get started.`,
     };
 
-    logAuditRaw({ hotelId: req.params.id, action: 'hotel.approved', targetType: 'hotel', targetId: req.params.id, metadata: { trialDays: days, adminId }, ip: req.ip });
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.approved', targetType: 'hotel', targetId: req.params.id, metadata: { trialDays: days, adminId }, ip: req.ip });
     return res.json({
       message: `${hotel.hotelName} approved — ${days}-day trial started`,
       hotel,
       credentials,
       adminId,
       whatsappPayload,
+      ...(bootstrapFailed ? { bootstrapWarning: 'Default setup could not complete. Please retry via admin tools.' } : {}),
     });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// Bootstrap retry — safe to call without re-approving; credentials are NOT regenerated.
+// bootstrapNewHotel uses $setOnInsert, so it is idempotent for Settings.
+// The returned kitchenPin is only valid if Settings did not previously exist —
+// if Settings already existed, $setOnInsert is a no-op and the old pin hash is unchanged.
+router.post('/hotels/:id/bootstrap', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
+
+    const hotel = await Hotel.findById(req.params.id).select('-adminPasswordHash').lean() as any;
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    if (!hotel.adminId) return res.status(400).json({ message: 'Hotel has not been approved yet (no adminId)' });
+
+    // Check whether Settings already exist (bootstrapNewHotel uses $setOnInsert — if yes,
+    // no data is written and the returned kitchenPin is a fresh random that was never stored)
+    const Settings = (await import('../models/Settings')).default;
+    const settingsExist = await Settings.exists({ hotelId: hotel._id });
+
+    if (settingsExist) {
+      // Settings are present — bootstrap is functionally complete.
+      // Mark it so and return guidance: the kitchenPin from initial approval must be used;
+      // if lost, use the normal credential reset flow.
+      await Hotel.findByIdAndUpdate(req.params.id, { $set: { bootstrapStatus: 'completed' } });
+      logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.bootstrap_retry', targetType: 'hotel', targetId: req.params.id, metadata: { alreadyBootstrapped: true }, ip: req.ip });
+      return res.status(409).json({
+        message: 'Settings already exist for this hotel — bootstrap is already complete.',
+        note: 'The kitchenPin was delivered during initial approval. If it was lost, use the credential reset flow.',
+      });
+    }
+
+    // Settings do not exist — run bootstrap. The returned kitchenPin IS the one stored.
+    await Hotel.findByIdAndUpdate(req.params.id, { $set: { bootstrapStatus: 'pending' } });
+
+    let kitchenPin = '';
+    try {
+      const result = await bootstrapNewHotel(hotel._id, { hotelName: hotel.hotelName, phone: hotel.phone });
+      kitchenPin = result.kitchenPin;
+    } catch (err) {
+      await Hotel.findByIdAndUpdate(req.params.id, { $set: { bootstrapStatus: 'failed' } });
+      console.error(`[SA][CRITICAL] Bootstrap retry failed for hotel ${hotel._id}:`, err);
+      return res.status(500).json({ message: 'Bootstrap failed. Please try again.' });
+    }
+
+    await Hotel.findByIdAndUpdate(req.params.id, { $set: { bootstrapStatus: 'completed' } });
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.bootstrap_retry', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
+    return res.json({ message: 'Bootstrap completed', kitchenPin });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/hotels/:id/reject', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
     const { reason } = req.body;
     if (!reason) return res.status(400).json({ message: 'Rejection reason required' });
+    const preCheck = await Hotel.findById(req.params.id).select('status').lean();
+    if (!preCheck) return res.status(404).json({ message: 'Hotel not found' });
+    if (preCheck.status === 'rejected') return res.status(409).json({ message: 'Hotel is already rejected' });
     const hotel = await Hotel.findByIdAndUpdate(
       req.params.id,
       { status: 'rejected', rejectionReason: reason },
@@ -237,13 +330,17 @@ router.put('/hotels/:id/reject', superAdminAuth, async (req: Request, res: Respo
     ).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
-    logAuditRaw({ hotelId: req.params.id, action: 'hotel.rejected', targetType: 'hotel', targetId: req.params.id, metadata: { reason }, ip: req.ip });
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.rejected', targetType: 'hotel', targetId: req.params.id, metadata: { reason }, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} rejected`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/hotels/:id/suspend', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
+    const preCheck = await Hotel.findById(req.params.id).select('status').lean();
+    if (!preCheck) return res.status(404).json({ message: 'Hotel not found' });
+    if (preCheck.status === 'suspended') return res.status(409).json({ message: 'Hotel is already suspended' });
     const hotel = await Hotel.findByIdAndUpdate(
       req.params.id, { status: 'suspended' }, { new: true }
     ).select('-adminPasswordHash');
@@ -256,62 +353,77 @@ router.put('/hotels/:id/suspend', superAdminAuth, async (req: Request, res: Resp
     ]).catch(err =>
       logger.error('suspend: failed to revoke tokens/devices', { hotelId: req.params.id, err: String(err) }),
     );
-    logAuditRaw({ hotelId: req.params.id, action: 'hotel.suspended', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.suspended', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} suspended`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/hotels/:id/activate', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
+    const preCheck = await Hotel.findById(req.params.id).select('status adminId').lean();
+    if (!preCheck) return res.status(404).json({ message: 'Hotel not found' });
+    if (!preCheck.adminId) return res.status(409).json({ message: 'Hotel has no credentials. Approve it first.' });
+    if (preCheck.status === 'active') return res.status(409).json({ message: 'Hotel is already active' });
     const hotel = await Hotel.findByIdAndUpdate(
       req.params.id, { status: 'active' }, { new: true }
     ).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
-    logAuditRaw({ hotelId: req.params.id, action: 'hotel.activated', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.activated', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} activated`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/hotels/:id/expire', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
+    const preCheck = await Hotel.findById(req.params.id).select('status').lean();
+    if (!preCheck) return res.status(404).json({ message: 'Hotel not found' });
+    if (preCheck.status === 'expired') return res.status(409).json({ message: 'Hotel is already expired' });
     const hotel = await Hotel.findByIdAndUpdate(
       req.params.id, { status: 'expired' }, { new: true }
     ).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
-    logAuditRaw({ hotelId: req.params.id, action: 'hotel.expired', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.expired', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} marked as expired`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
 router.put('/hotels/:id/credentials', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
     const { adminId, password } = req.body;
     if (!adminId || !password) return res.status(400).json({ message: 'adminId and password are required' });
     if (adminId.length < 4)    return res.status(400).json({ message: 'adminId must be at least 4 characters' });
     if (password.length < 6)   return res.status(400).json({ message: 'Password must be at least 6 characters' });
 
-    const existing = await Hotel.findOne({ adminId: adminId.trim(), _id: { $ne: req.params.id } });
-    if (existing) return res.status(409).json({ message: 'This Admin ID is already taken by another hotel' });
+    const conflicting = await Hotel.findOne({ adminId: adminId.trim(), _id: { $ne: req.params.id } });
+    if (conflicting) return res.status(409).json({ message: 'This Admin ID is already taken by another hotel' });
+
+    const currentHotel = await Hotel.findById(req.params.id).select('status adminId').lean();
+    if (!currentHotel) return res.status(404).json({ message: 'Hotel not found' });
+    const statusUpdate: Record<string, any> = currentHotel.status === 'pending' ? { status: 'active', approvedAt: new Date() } : {};
 
     const adminPasswordHash = await bcrypt.hash(password, 10);
     const hotel = await Hotel.findByIdAndUpdate(
       req.params.id,
       {
-        adminId: adminId.trim(),
-        adminPasswordHash,
-        status: 'active',
-        approvedAt: new Date(),
-        rejectionReason: '',
-        resetRequested: false,
-        resetFulfilledAt: new Date(),
+        $set: {
+          adminId: adminId.trim(),
+          adminPasswordHash,
+          ...statusUpdate,
+          rejectionReason: '',
+          resetRequested: false,
+          resetFulfilledAt: new Date(),
+        },
       },
       { new: true }
     ).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
-    logAuditRaw({ hotelId: req.params.id, action: 'hotel.credentials_updated', targetType: 'hotel', targetId: req.params.id, metadata: { adminId: hotel.adminId }, ip: req.ip });
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.credentials_updated', targetType: 'hotel', targetId: req.params.id, metadata: { adminId: hotel.adminId }, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} approved and credentials set`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -320,6 +432,7 @@ const ALLOWED_PREMIUM_PLANS = ['free', 'pro', 'enterprise', 'trial'];
 
 router.put('/hotels/:id/premium', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
     const { isPremium, premiumPlan, premiumExpiry, trialDays } = req.body;
     if (isPremium && premiumPlan && !ALLOWED_PREMIUM_PLANS.includes(String(premiumPlan))) {
       return res.status(400).json({ message: `Invalid premiumPlan. Allowed: ${ALLOWED_PREMIUM_PLANS.join(', ')}` });
@@ -339,7 +452,7 @@ router.put('/hotels/:id/premium', superAdminAuth, async (req: Request, res: Resp
     const hotel = await Hotel.findByIdAndUpdate(req.params.id, update, { new: true }).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
-    logAuditRaw({ hotelId: req.params.id, action: 'hotel.premium_updated', targetType: 'hotel', targetId: req.params.id, metadata: { isPremium: !!isPremium, premiumPlan: update.premiumPlan }, ip: req.ip });
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.premium_updated', targetType: 'hotel', targetId: req.params.id, metadata: { isPremium: !!isPremium, premiumPlan: update.premiumPlan }, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} plan updated`, hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -347,11 +460,16 @@ router.put('/hotels/:id/premium', superAdminAuth, async (req: Request, res: Resp
 // PUT /api/superadmin/hotels/:id/trial — start or reset trial
 router.put('/hotels/:id/trial', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
     const days = Math.max(1, Math.min(365, parseInt(req.body.trialDays || req.body.days) || 14));
 
     const trialStartDate = new Date();
     const trialEndDate   = new Date();
     trialEndDate.setDate(trialEndDate.getDate() + days);
+
+    const preCheck = await Hotel.findById(req.params.id).select('adminId').lean();
+    if (!preCheck) return res.status(404).json({ message: 'Hotel not found' });
+    if (!preCheck.adminId) return res.status(400).json({ message: 'Hotel has no credentials. Use Approve to onboard this hotel.' });
 
     const hotel = await Hotel.findByIdAndUpdate(
       req.params.id,
@@ -369,7 +487,7 @@ router.put('/hotels/:id/trial', superAdminAuth, async (req: Request, res: Respon
     ).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
-    logAuditRaw({ hotelId: req.params.id, action: 'hotel.trial_started', targetType: 'hotel', targetId: req.params.id, metadata: { days, trialEndDate: trialEndDate.toISOString() }, ip: req.ip });
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.trial_started', targetType: 'hotel', targetId: req.params.id, metadata: { days, trialEndDate: trialEndDate.toISOString() }, ip: req.ip });
     return res.json({
       message: `${hotel.hotelName} trial started for ${days} days (until ${trialEndDate.toLocaleDateString('en-IN')})`,
       hotel,
@@ -380,6 +498,7 @@ router.put('/hotels/:id/trial', superAdminAuth, async (req: Request, res: Respon
 // PUT /api/superadmin/hotels/:id/extend-trial — add days to current trial end
 router.put('/hotels/:id/extend-trial', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
     const addDays = Math.max(1, Math.min(365, parseInt(req.body.days) || 7));
 
     const hotel = await Hotel.findById(req.params.id);
@@ -404,7 +523,7 @@ router.put('/hotels/:id/extend-trial', superAdminAuth, async (req: Request, res:
     ).select('-adminPasswordHash');
     if (!updated) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
-    logAuditRaw({ hotelId: req.params.id, action: 'hotel.trial_extended', targetType: 'hotel', targetId: req.params.id, metadata: { addDays, newEnd: newEnd.toISOString() }, ip: req.ip });
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.trial_extended', targetType: 'hotel', targetId: req.params.id, metadata: { addDays, newEnd: newEnd.toISOString() }, ip: req.ip });
     return res.json({
       message: `Trial extended by ${addDays} days (until ${newEnd.toLocaleDateString('en-IN')})`,
       hotel: updated,
@@ -415,6 +534,7 @@ router.put('/hotels/:id/extend-trial', superAdminAuth, async (req: Request, res:
 // PUT /api/superadmin/hotels/:id/plan — convert to paid subscription
 router.put('/hotels/:id/plan', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
     const { plan, durationDays } = req.body;
     const validPlans = ['starter', 'professional', 'enterprise'];
     if (!validPlans.includes(plan)) return res.status(400).json({ message: 'plan must be starter, professional, or enterprise' });
@@ -440,7 +560,7 @@ router.put('/hotels/:id/plan', superAdminAuth, async (req: Request, res: Respons
     ).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
-    logAuditRaw({ hotelId: req.params.id, action: 'hotel.plan_updated', targetType: 'hotel', targetId: req.params.id, metadata: { plan, days, subscriptionEndDate: subscriptionEndDate.toISOString() }, ip: req.ip });
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.plan_updated', targetType: 'hotel', targetId: req.params.id, metadata: { plan, days, subscriptionEndDate: subscriptionEndDate.toISOString() }, ip: req.ip });
     return res.json({
       message: `${hotel.hotelName} converted to ${plan} plan (${days} days, until ${subscriptionEndDate.toLocaleDateString('en-IN')})`,
       hotel,
@@ -451,6 +571,7 @@ router.put('/hotels/:id/plan', superAdminAuth, async (req: Request, res: Respons
 // PUT /api/superadmin/hotels/:id/features — update feature flags
 router.put('/hotels/:id/features', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
     // Boolean flags — set directly
     const boolFlags = [
       'payment', 'reservations', 'customerChat', 'qrOrdering', 'expenses', 'reports',
@@ -487,7 +608,7 @@ router.put('/hotels/:id/features', superAdminAuth, async (req: Request, res: Res
     const hotel = await Hotel.findByIdAndUpdate(req.params.id, { $set: update }, { new: true }).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
-    logAuditRaw({ action: 'superadmin.hotel.features_updated', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: update });
+    logAuditRaw({ action: 'superadmin.hotel.features_updated', actorRole: 'superadmin', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: update });
     return res.json({ message: 'Feature flags updated', features: hotel.features });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -591,7 +712,10 @@ router.get('/devices', superAdminAuth, async (req: Request, res: Response) => {
   try {
     const { hotelId } = req.query;
     const filter: any = {};
-    if (hotelId) filter.hotelId = hotelId;
+    if (hotelId) {
+      if (!isValidId(String(hotelId))) return res.status(400).json({ message: 'Invalid hotelId' });
+      filter.hotelId = new mongoose.Types.ObjectId(String(hotelId));
+    }
     const devices = await Device.find(filter)
       .populate('hotelId', 'hotelName')
       .sort({ lastSeen: -1 })
@@ -638,7 +762,7 @@ router.post('/notifications', superAdminAuth, async (req: Request, res: Response
       expiresAt,
       createdBy:    'superadmin',
     });
-    logAuditRaw({ hotelId: 'superadmin', action: 'notification.created', targetType: 'notification', targetId: String((notification as any)._id), metadata: { title: title.trim(), type: type || 'info' } });
+    logAuditRaw({ hotelId: 'superadmin', actorRole: 'superadmin', action: 'notification.created', targetType: 'notification', targetId: String((notification as any)._id), metadata: { title: title.trim(), type: type || 'info' } });
 
     // Real-time delivery via Socket.IO
     const notifPayload = {
@@ -666,8 +790,9 @@ router.post('/notifications', superAdminAuth, async (req: Request, res: Response
 
 router.delete('/notifications/:id', superAdminAuth, async (req: Request, res: Response) => {
   try {
-    await Notification.findByIdAndUpdate(req.params.id, { isActive: false });
-    logAuditRaw({ hotelId: 'superadmin', action: 'notification.deactivated', targetType: 'notification', targetId: req.params.id });
+    const notif = await Notification.findByIdAndUpdate(req.params.id, { isActive: false }, { new: false });
+    if (!notif) return res.status(404).json({ message: 'Notification not found' });
+    logAuditRaw({ hotelId: 'superadmin', actorRole: 'superadmin', action: 'notification.deactivated', targetType: 'notification', targetId: req.params.id });
     return res.json({ message: 'Notification deactivated' });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -693,8 +818,35 @@ router.put('/remote-config', superAdminAuth, async (req: Request, res: Response)
     for (const key of allowed) {
       if (req.body[key] !== undefined) update[key] = req.body[key];
     }
+    // Validate minimumAppVersion (semver-like: digits.digits.digits)
+    const semverRe = /^\d+\.\d+\.\d+$/;
+    for (const vKey of ['minimumAppVersion', 'minimumAppVersionIos'] as const) {
+      if (update[vKey] !== undefined && update[vKey] !== '' && !semverRe.test(String(update[vKey]))) {
+        return res.status(400).json({ message: `${vKey} must be in semver format (e.g. 1.0.0)` });
+      }
+    }
+    // Strict boolean validation — reject string representations ("true", "false", "0", etc.)
+    for (const bKey of ['maintenanceMode', 'forceUpdate', 'paymentEnabled'] as const) {
+      if (update[bKey] !== undefined) {
+        if (typeof update[bKey] !== 'boolean') {
+          return res.status(400).json({
+            message: `${bKey} must be a boolean (true or false), received: ${JSON.stringify(update[bKey])}`,
+          });
+        }
+      }
+    }
+    // Validate trialDays — must be an integer (reject strings, floats, NaN)
+    if (update.trialDays !== undefined) {
+      if (typeof update.trialDays !== 'number' || !Number.isInteger(update.trialDays)) {
+        return res.status(400).json({ message: 'trialDays must be an integer' });
+      }
+      if (update.trialDays < 1 || update.trialDays > 365) {
+        return res.status(400).json({ message: 'trialDays must be a number between 1 and 365' });
+      }
+      // update.trialDays is already a validated integer — no coercion needed
+    }
     let config = await RemoteConfig.findOneAndUpdate({}, { $set: update }, { new: true, upsert: true });
-    logAuditRaw({ hotelId: 'superadmin', action: 'remote_config.updated', targetType: 'remote_config', targetId: String((config as any)?._id ?? 'singleton'), metadata: update });
+    logAuditRaw({ hotelId: 'superadmin', actorRole: 'superadmin', action: 'remote_config.updated', targetType: 'remote_config', targetId: String((config as any)?._id ?? 'singleton'), metadata: update });
 
     if (update.maintenanceMode !== undefined) {
       invalidateMaintenanceCache();
@@ -1344,7 +1496,7 @@ router.patch('/leads/:id', superAdminAuth, async (req: Request, res: Response) =
       { new: true },
     ).lean();
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
-    logAuditRaw({ hotelId: 'superadmin', action: 'lead.updated', targetType: 'lead', targetId: req.params.id, metadata: update });
+    logAuditRaw({ hotelId: 'superadmin', actorRole: 'superadmin', action: 'lead.updated', targetType: 'lead', targetId: req.params.id, metadata: update });
     return res.json({ lead });
   } catch (err) { return sendError(res, 500, 'Server error', err); }
 });
@@ -1372,7 +1524,7 @@ router.delete('/leads/:id', superAdminAuth, async (req: Request, res: Response) 
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid lead ID' });
     const lead = await Lead.findByIdAndDelete(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
-    logAuditRaw({ hotelId: 'superadmin', action: 'lead.deleted', targetType: 'lead', targetId: req.params.id });
+    logAuditRaw({ hotelId: 'superadmin', actorRole: 'superadmin', action: 'lead.deleted', targetType: 'lead', targetId: req.params.id });
     return res.json({ message: 'Lead deleted' });
   } catch (err) { return sendError(res, 500, 'Server error', err); }
 });
@@ -1399,6 +1551,7 @@ router.post('/push-token', superAdminAuth, async (req: Request, res: Response) =
 
 router.put('/hotels/:id/settings', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
     const allowed = ['hotelName', 'ownerName', 'phone', 'email', 'address', 'city', 'state', 'pincode', 'businessType'];
     const update: any = {};
     for (const key of allowed) {
@@ -1418,7 +1571,7 @@ router.put('/hotels/:id/settings', superAdminAuth, async (req: Request, res: Res
       { new: true, runValidators: true },
     ).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
-    await logAuditRaw({ action: 'superadmin.hotel.settings_updated', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: update });
+    await logAuditRaw({ action: 'superadmin.hotel.settings_updated', actorRole: 'superadmin', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: update });
     return res.json({ message: 'Hotel settings updated', hotel });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -1428,6 +1581,7 @@ router.put('/hotels/:id/settings', superAdminAuth, async (req: Request, res: Res
 
 router.patch('/hotels/:id/note', superAdminAuth, async (req: Request, res: Response) => {
   try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
     const note = typeof req.body.note === 'string' ? req.body.note.slice(0, 2000) : '';
     const hotel = await Hotel.findByIdAndUpdate(
       req.params.id,
@@ -1435,6 +1589,7 @@ router.patch('/hotels/:id/note', superAdminAuth, async (req: Request, res: Respo
       { new: true },
     ).select('saNote saNotedAt');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.note_updated', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
     return res.json({ saNote: hotel.saNote, saNotedAt: hotel.saNotedAt });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });

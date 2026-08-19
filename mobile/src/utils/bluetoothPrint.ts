@@ -26,6 +26,21 @@ let BluetoothManager: any = null;
 let _btConnectedAddress: string | null = null;
 let _btConnecting     : Promise<void> | null = null;
 
+// ── Print-job deduplication ──────────────────────────────────────────────────
+// Prevents double-prints when the same job is triggered more than once within
+// a minute (e.g. rapid button taps, socket reconnect replaying the same event).
+const RECENT_PRINT_JOBS = new Set<string>();
+
+async function printWithDedup(jobId: string, printFn: () => Promise<void>): Promise<void> {
+  if (RECENT_PRINT_JOBS.has(jobId)) {
+    console.log('[BTPrinter] Duplicate job skipped:', jobId);
+    return;
+  }
+  RECENT_PRINT_JOBS.add(jobId);
+  setTimeout(() => RECENT_PRINT_JOBS.delete(jobId), 60_000);
+  await printFn();
+}
+
 try {
   const { NativeModules } = require('react-native');
   if (NativeModules.BluetoothManager) BluetoothManager = NativeModules.BluetoothManager;
@@ -99,6 +114,14 @@ export const connectPrinter = async (address: string): Promise<void> => {
 
 // Print the receipt via Bluetooth ESC/POS
 export const printReceiptBluetooth = async (
+  order: Order,
+  settings: Settings
+): Promise<void> => {
+  const jobId = `${order.orderNumber}_receipt_${Math.floor(Date.now() / 60_000)}`;
+  return printWithDedup(jobId, () => _printReceiptBluetooth(order, settings));
+};
+
+const _printReceiptBluetooth = async (
   order: Order,
   settings: Settings
 ): Promise<void> => {
@@ -291,6 +314,14 @@ export const printKOTBluetooth = async (
   order: KOTOrderInput,
   settings: Settings
 ): Promise<void> => {
+  const jobId = `${order.orderNumber}_kot_${Math.floor(Date.now() / 60_000)}`;
+  return printWithDedup(jobId, () => _printKOTBluetooth(order, settings));
+};
+
+const _printKOTBluetooth = async (
+  order: KOTOrderInput,
+  settings: Settings
+): Promise<void> => {
   console.log(`[BTPrinter] Printing KOT for order=${order.orderNumber} items=${order.items.length}`);
   if (!BluetoothEscposPrinter) throw new Error('Bluetooth printing not available');
   const P = BluetoothEscposPrinter;
@@ -350,6 +381,12 @@ export const printKOTBluetooth = async (
   for (const item of order.items) {
     await P.printText(clean(item.productName) + '\n', {});
     await P.printText('     x' + item.quantity + '\n', {});
+    // Print modifiers indented below the item name
+    if (item.modifiers && item.modifiers.length > 0) {
+      for (const mod of item.modifiers) {
+        await P.printText('  + ' + clean(mod) + '\n', {});
+      }
+    }
   }
   await P.printText(divider + '\n', {});
 

@@ -10,6 +10,11 @@ import {
 } from '../database/localCacheDao';
 import * as api from '../services/api';
 import { flushCustomerOrderQueue } from '../services/api';
+import {
+  getPendingOrders as getCashierPendingOrders,
+  markSynced       as markCashierSynced,
+  markFailed       as markCashierFailed,
+} from '../database/cashierOrderQueueDao';
 
 export type SyncStatus = 'offline' | 'online' | 'syncing' | 'synced' | 'error';
 export type SyncListener = (status: SyncStatus, pendingCount: number, lastSyncAt: Date | null, error?: string) => void;
@@ -138,6 +143,33 @@ const _refreshCache = async (): Promise<void> => {
 
 export const refreshCache = _refreshCache;
 
+// ── Cashier offline-queue flush ────────────────────────────────────────────────
+// Orders queued via BillingScreen while the device had no connectivity are
+// stored in cashier_order_queue. This function pushes them to the server
+// sequentially; the server's offlineId unique index prevents duplicates on retry.
+
+// M-09: guard against concurrent calls from the reconnect handler and the
+// NetInfo.fetch probe firing nearly simultaneously.
+let _cashierFlushing = false;
+
+export const flushCashierOrderQueue = async (): Promise<void> => {
+  if (_cashierFlushing) return;
+  _cashierFlushing = true;
+  try {
+    const pending = getCashierPendingOrders();
+    for (const queued of pending) {
+      try {
+        await api.createOrder({ ...(queued.payload as object), offlineId: queued.offlineId } as any);
+        markCashierSynced(queued.offlineId);
+      } catch (e: any) {
+        markCashierFailed(queued.offlineId, e?.message || 'unknown');
+      }
+    }
+  } finally {
+    _cashierFlushing = false;
+  }
+};
+
 // ── Daily maintenance ─────────────────────────────────────────────────────────
 
 // Prune synced rows older than 7 days once per 24 h. Prevents unbounded table
@@ -185,9 +217,10 @@ export const startSyncEngine = (): void => {
       // Orders remain safely queued in SQLite — max 30 s delay is acceptable.
       const jitterMs = Math.floor(Math.random() * 30_000);
       setTimeout(() => syncNow(), jitterMs);
-      // Customer orders queued during offline — flush immediately (no jitter needed,
-      // these are per-device and small in number)
+      // Customer + cashier orders queued during offline — flush immediately
+      // (no jitter needed; these are per-device and small in number)
       flushCustomerOrderQueue().catch(() => {});
+      flushCashierOrderQueue().catch(() => {});
     } else if (!_isConnected) {
       _lastError = null;
       notifyListeners('offline');
@@ -202,6 +235,7 @@ export const startSyncEngine = (): void => {
     notifyListeners(deriveStatus());
     if (_isConnected && getPendingCount() > 0) syncNow();
     if (_isConnected) flushCustomerOrderQueue().catch(() => {});
+    if (_isConnected) flushCashierOrderQueue().catch(() => {});
   });
 };
 

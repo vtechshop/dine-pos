@@ -41,6 +41,7 @@ import SupportScreen from '../screens/SupportScreen';
 import HotelStatusScreen from '../screens/HotelStatusScreen';
 import KitchenLoginScreen from '../screens/KitchenLoginScreen';
 import KitchenDisplayScreen from '../screens/KitchenDisplayScreen';
+import KitchenQueueScreen from '../screens/KitchenQueueScreen';
 import WaiterLoginScreen from '../screens/WaiterLoginScreen';
 import WaiterDisplayScreen from '../screens/WaiterDisplayScreen';
 import WaiterManagementScreen from '../screens/WaiterManagementScreen';
@@ -83,6 +84,10 @@ import BulkImageAssignScreen from '../screens/ai/BulkImageAssignScreen';
 import CouponScreen from '../screens/CouponScreen';
 import GiftVoucherScreen from '../screens/GiftVoucherScreen';
 import PurchaseInvoiceScreen from '../screens/PurchaseInvoiceScreen';
+import ShiftScreen from '../screens/ShiftScreen';
+import CashDrawerScreen from '../screens/CashDrawerScreen';
+import BillHistoryScreen from '../screens/BillHistoryScreen';
+import RazorpayOAuthScreen from '../screens/RazorpayOAuthScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<TabParamList>();
@@ -235,6 +240,22 @@ const CustomerTabNavigator = () => {
   );
 };
 
+// ── Deep-link config — handles dinepos://razorpay/oauth callbacks ────────────
+const LINKING = {
+  prefixes: ['dinepos://'],
+  config: {
+    screens: {
+      RazorpayOAuth: {
+        path: 'razorpay/oauth',
+        parse: {
+          status: (s: string) => s,
+          error:  (e: string) => decodeURIComponent(e),
+        },
+      },
+    },
+  },
+};
+
 // ── Root Navigator ────────────────────────────────────────────────────────────
 const AppNavigator = () => {
   const { isLoggedIn, isAuthLoading } = useAuth();
@@ -256,7 +277,7 @@ const AppNavigator = () => {
     <RemoteConfigProvider>
     <FeatureFlagsProvider>
     <SyncProvider>
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer ref={navigationRef} linking={LINKING}>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', gestureEnabled: true, gestureDirection: 'horizontal', contentStyle: { backgroundColor: Colors.background } }}>
         {!isLoggedIn ? (
           <>
@@ -278,6 +299,11 @@ const AppNavigator = () => {
             <Stack.Screen name="WaiterDisplay"        component={(p: any) => <ErrorBoundary><WaiterDisplayScreen {...p} /></ErrorBoundary>}        options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="CashierLogin"         component={CashierLoginScreen}         options={{ contentStyle: safeTop }} />
             <Stack.Screen name="CashierDashboard"     component={(p: any) => <ErrorBoundary><CashierDashboardScreen {...p} /></ErrorBoundary>}     options={{ contentStyle: safeTop, gestureEnabled: false }} />
+            <Stack.Screen name="KitchenQueue"         component={(p: any) => <ErrorBoundary><KitchenQueueScreen {...p} /></ErrorBoundary>}         options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="OnlineOrders"         component={(p: any) => <ErrorBoundary><OnlineOrdersScreen {...p} /></ErrorBoundary>}         options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="ShiftScreen"          component={ShiftScreen}                options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="CashDrawerScreen"     component={CashDrawerScreen}           options={{ contentStyle: safeTop }} />
+            <Stack.Screen name="BillHistory"          component={BillHistoryScreen}          options={{ contentStyle: safeTop }} />
             <Stack.Screen name="PaymentScreen"        component={PaymentScreen}              options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="HotelRegister"        component={HotelRegisterScreen}        options={{ contentStyle: safeTop }} />
             <Stack.Screen name="HotelRegisterSuccess" component={HotelRegisterSuccessScreen} options={{ contentStyle: safeTop, gestureEnabled: false }} />
@@ -323,6 +349,7 @@ const AppNavigator = () => {
             <Stack.Screen name="PurchaseAssistant" component={PurchaseAssistantScreen} options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="AIMenuImport"      component={AIMenuImportScreen}      options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="BulkImageAssign"  component={BulkImageAssignScreen}  options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="RazorpayOAuth"    component={RazorpayOAuthScreen}    options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="Coupons"        component={CouponScreen}       options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Coupons',       headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="GiftVouchers"      component={GiftVoucherScreen}      options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Gift Vouchers',      headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="PurchaseInvoices"  component={PurchaseInvoiceScreen}  options={{ contentStyle: safeTop, headerShown: true, headerTitle: 'Purchase Invoices', headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />

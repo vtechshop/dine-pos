@@ -88,5 +88,11 @@ schema.index({ hotelId: 1, orderId: 1 });
 schema.index({ hotelId: 1, status: 1, createdAt: -1 });
 schema.index({ hotelId: 1, gatewayType: 1, createdAt: -1 });
 schema.index({ gatewayTransactionId: 1 }, { sparse: true });
+// Atomic duplicate guard: at most one successful payment per order.
+// Enforced at the DB layer to close the TOCTOU window between findOne and create/save.
+schema.index(
+  { orderId: 1 },
+  { unique: true, partialFilterExpression: { status: 'success' } },
+);
 
 export default mongoose.model<IPayment>('Payment', schema);

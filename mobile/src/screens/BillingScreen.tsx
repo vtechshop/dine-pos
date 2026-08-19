@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, TextInput, ActivityIndicator, useWindowDimensions,
@@ -20,7 +20,9 @@ import { Colors, Spacing, FontSize, BorderRadius, Shadows, UPI_ID, UPI_NAME } fr
 import { applyCloudinaryTransform } from '../utils/cloudinary';
 import { SelectedModifier, ModifierGroup } from '../types';
 import RazorpayCheckout from 'react-native-razorpay';
-import { getLocalCategories, getLocalProducts, saveCategories, saveProducts } from '../database/localCacheDao';
+import { getLocalCategories, getLocalProducts, saveCategories, saveProducts, saveTables, getLocalTables } from '../database/localCacheDao';
+import { enqueueOrder as enqueueCashierOrder } from '../database/cashierOrderQueueDao';
+import { isConnected } from '../sync/syncEngine';
 import { printKOT } from '../utils/receipt';
 import { KOTOrderInput } from '../types';
 
@@ -79,6 +81,7 @@ const BillingScreen: React.FC = () => {
   const [customerPhone,     setCustomerPhone]    = useState('');
   const [orderSource,       setOrderSource]      = useState<OrderSource>('dine-in');
   const [printingKot,       setPrintingKot]      = useState(false);
+  const isPrintingKOT = useRef(false); // Ref guard prevents double-print on rapid taps
   const [tables,            setTables]           = useState<Table[]>([]);
   const [showTablePicker,     setShowTablePicker]    = useState(false);
   const [tableSearch,         setTableSearch]        = useState('');
@@ -173,10 +176,12 @@ const BillingScreen: React.FC = () => {
       setTables(tbls.filter(t => t.status !== 'inactive'));
       saveCategories(cats);
       saveProducts(prods);
+      saveTables(tbls.filter(t => t.status !== 'inactive')); // H12: persist tables for offline use
     } catch {
       // Offline: load from SQLite cache
       const cachedCats  = getLocalCategories();
       const cachedProds = getLocalProducts();
+      const cachedTbls  = getLocalTables(); // H12: restore tables from SQLite when offline
       if (cachedProds.length > 0) {
         setCategories(cachedCats);
         setProducts(cachedProds);
@@ -185,6 +190,7 @@ const BillingScreen: React.FC = () => {
       } else {
         showAlert('Offline', 'No cached menu data. Connect to the internet to load products.');
       }
+      setTables(cachedTbls.filter(t => t.status !== 'inactive')); // H12: always restore tables
     } finally { setLoading(false); }
   }, []);
 
@@ -304,12 +310,15 @@ Thank you for dining with us! 🍽️`;
   };
 
   const handlePrintKOT = async (order: OrderSuccess) => {
+    if (isPrintingKOT.current) return; // Ref guard — prevents double-print on rapid taps
+    isPrintingKOT.current = true;
     setPrintingKot(true);
     try {
       await printKOT(order.kot, settings);
     } catch (e: any) {
       showAlert('Print Error', e.message || 'Failed to print KOT');
     } finally {
+      isPrintingKOT.current = false;
       setPrintingKot(false);
     }
   };
@@ -318,6 +327,106 @@ Thank you for dining with us! 🍽️`;
     if (cart.items.length === 0) { showAlert('Empty Cart', 'Add items first.'); return; }
     if (!cart.customerName.trim()) { showAlert('Name Required', 'Enter customer name before placing the order.'); return; }
     if (!customerPhone.trim()) { showAlert('Phone Required', 'Enter customer phone number before placing the order.'); return; }
+
+    // ── Offline cash / card queue path ────────────────────────────────────────
+    // When the device has no connectivity we cannot reach the server, so we
+    // offer Cash or Card (UPI / Razorpay require an internet round-trip).
+    // The order is stored in cashier_order_queue and flushed by syncEngine on
+    // reconnect; the server's offlineId unique index prevents duplicates.
+    if (!isConnected()) {
+      const dvOff         = parseFloat(discountInput) || 0;
+      const preTaxOff     = cart.subtotal + cart.taxTotal;
+      const manDiscOff    = dvOff > 0
+        ? (discountType === 'percent' ? (preTaxOff * dvOff) / 100 : Math.min(dvOff, preTaxOff))
+        : 0;
+      const voucherOff    = appliedVoucher?.redeemAmount ?? 0;
+      const walletOff     = useWallet && walletInfo
+        ? Math.min(walletInfo.walletBalance, Math.max(0, preTaxOff - manDiscOff - voucherOff))
+        : 0;
+      const grandTotalOff = Math.max(0, preTaxOff - manDiscOff - voucherOff - walletOff - (appliedCoupon?.discountAmount ?? 0));
+      applyDiscount();
+      const isParcelOff   = ['swiggy', 'zomato', 'takeaway'].includes(orderSource);
+      const tableOff      = orderSource === 'swiggy' ? 'Swiggy'
+                          : orderSource === 'zomato'  ? 'Zomato'
+                          : orderSource === 'takeaway' ? 'Takeaway'
+                          : cart.tableNumber;
+      const offlineId     = `cashier_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const offlinePayload = {
+        items: cart.items.map(item => ({
+          product:           item.product._id,
+          productName:       item.product.name,
+          variantId:         item.variantId   || '',
+          variantName:       item.variantName || '',
+          selectedModifiers: (item.selectedModifiers || []).map(m => ({ ...m, modifierTotal: m.modifierPrice * item.quantity })),
+          quantity:          item.quantity,
+          price:             item.effectivePrice + item.modifierTotal,
+          taxPercent:        item.product.taxPercent,
+          taxAmount:         item.taxAmount,
+          total:             item.total,
+        })),
+        subtotal:        cart.subtotal,
+        taxTotal:        cart.taxTotal,
+        grandTotal:      grandTotalOff,
+        discountAmount:  manDiscOff + walletOff,
+        couponCode:      appliedCoupon?.code || undefined,
+        giftVoucherCode: appliedVoucher?.voucherCode || undefined,
+        status:          'pending',
+        tableNumber:     tableOff,
+        customerName:    cart.customerName,
+        customerPhone:   customerPhone.replace(/\D/g, '').replace(/^0+/, '').slice(0, 12) || undefined,
+        notes:           cart.notes,
+        isParcel:        isParcelOff,
+        orderSource,
+        offlineId,
+        localTimestamp:  new Date().toISOString(),
+      };
+
+      const resetCart = () => {
+        clearCart();
+        setDiscountInput('');
+        setDiscount({ type: 'percent', value: 0 });
+        setCouponCode(''); setAppliedCoupon(null);
+        setVoucherCode(''); setAppliedVoucher(null);
+        setWalletInfo(null); setUseWallet(false);
+        setCustomerPhone(''); setOrderSource('dine-in'); setParcel(false);
+      };
+
+      // M-07: Set placing=true before the Alert so a rapid second tap is
+      // blocked by the button's disabled prop while the dialog is open.
+      setPlacing(true);
+      showAlert(
+        'You Are Offline',
+        'UPI and Razorpay require internet. Choose a payment method to save this order — it will sync automatically when you reconnect.',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => setPlacing(false),
+          },
+          {
+            text: 'Cash',
+            onPress: () => {
+              enqueueCashierOrder(offlineId, { ...offlinePayload, paymentMethod: 'cash' });
+              showAlert('Saved Offline', 'Cash order queued. Will sync when you reconnect.');
+              resetCart();
+              setPlacing(false);
+            },
+          },
+          {
+            text: 'Card',
+            onPress: () => {
+              enqueueCashierOrder(offlineId, { ...offlinePayload, paymentMethod: 'card' });
+              showAlert('Saved Offline', 'Card order queued. Will sync when you reconnect.');
+              resetCart();
+              setPlacing(false);
+            },
+          },
+        ],
+      );
+      return;
+    }
+    // ── End offline path ──────────────────────────────────────────────────────
+
     // Compute all deductions inline so we don't rely on async state updates
     const discountVal       = parseFloat(discountInput) || 0;
     const preTax            = cart.subtotal + cart.taxTotal;
@@ -388,6 +497,19 @@ Thank you for dining with us! 🍽️`;
   };
 
   const handleRazorpayCheckout = async () => {
+    // C4: Compute discounted total synchronously — cart.grandTotal is stale after applyDiscount()
+    const discountVal        = parseFloat(discountInput) || 0;
+    const preTax             = cart.subtotal + cart.taxTotal;
+    const manualDiscount     = discountVal > 0
+      ? (discountType === 'percent' ? (preTax * discountVal) / 100 : Math.min(discountVal, preTax))
+      : 0;
+    const voucherRedeem      = appliedVoucher?.redeemAmount ?? 0;
+    const walletDeduct       = useWallet && walletInfo
+      ? Math.min(walletInfo.walletBalance, Math.max(0, preTax - manualDiscount - voucherRedeem))
+      : 0;
+    const payloadDiscountAmount = manualDiscount + walletDeduct;
+    const finalGrandTotal    = Math.max(0, preTax - manualDiscount - voucherRedeem - walletDeduct - (appliedCoupon?.discountAmount ?? 0));
+
     const isOrderParcel = ['swiggy', 'zomato', 'takeaway'].includes(orderSource);
     const getTableNumber = () => {
       if (orderSource === 'swiggy')   return 'Swiggy';
@@ -408,11 +530,14 @@ Thank you for dining with us! 🍽️`;
         taxAmount:         item.taxAmount,
         total:             item.total,
       })),
-      subtotal:      cart.subtotal,
-      taxTotal:      cart.taxTotal,
-      grandTotal:    cart.grandTotal,
-      discountAmount:cart.discountAmount,
-      couponCode:    appliedCoupon?.code || undefined,
+      subtotal:         cart.subtotal,
+      taxTotal:         cart.taxTotal,
+      grandTotal:       finalGrandTotal,        // C4: synchronously computed; was stale cart.grandTotal
+      discountAmount:   payloadDiscountAmount,  // C4: synchronously computed; was stale cart.discountAmount
+      couponCode:       appliedCoupon?.code || undefined,
+      giftVoucherCode:  appliedVoucher?.voucherCode || undefined,          // C5: was silently dropped
+      walletCustomerId: walletDeduct > 0 && walletInfo ? walletInfo.customerId : undefined, // C5: was silently dropped
+      walletAmount:     walletDeduct > 0 ? walletDeduct : undefined,       // C5: was silently dropped
       paymentMethod: 'razorpay' as const,
       status:        'pending' as const,
       tableNumber:   getTableNumber(),
@@ -431,7 +556,11 @@ Thank you for dining with us! 🍽️`;
       grandTotal:     cart.grandTotal,
     };
     const kotSnapshot: Omit<KOTOrderInput, 'orderNumber'> = {
-      items:       cart.items.map(i => ({ productName: i.variantName ? `${i.product.name} (${i.variantName})` : i.product.name, quantity: i.quantity })),
+      items:       cart.items.map(i => ({
+        productName: i.variantName ? `${i.product.name} (${i.variantName})` : i.product.name,
+        quantity:    i.quantity,
+        modifiers:   (i.selectedModifiers || []).map(m => m.modifierOptionName),
+      })),
       tableNumber: getTableNumber(),
       notes:       cart.notes,
       createdAt:   new Date().toISOString(),
@@ -490,6 +619,8 @@ Thank you for dining with us! 🍽️`;
       const tokenNum = order.orderNumber.split('-').pop() || '1';
       setShowSuccess({ orderNumber: order.orderNumber, token: tokenNum, ...cartSnapshot, discountAmount: (order.discountAmount || 0) + (order.couponDiscount || 0), grandTotal: order.grandTotal, kot: { orderNumber: order.orderNumber, ...kotSnapshot } });
       Vibration.vibrate([0, 100, 80, 200]);
+      // H11: Auto-print KOT after Razorpay payment (cash/card/UPI paths do this in PaymentScreen)
+      printKOT({ orderNumber: order.orderNumber, ...kotSnapshot }, settings).catch(() => {});
       clearCart();
       setDiscountInput('');
       setDiscount({ type: 'percent', value: 0 });

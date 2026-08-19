@@ -9,7 +9,7 @@ export interface KOTPayload {
   tableNumber:  string;
   guestLabel?:  string;
   orderSource:  string;
-  items:        { productName: string; quantity: number }[];
+  items:        { productName: string; quantity: number; modifiers?: string[] }[];
   notes?:       string;
   createdAt:    string;
 }
@@ -63,7 +63,11 @@ class BluetoothPrintDriver implements PrintDriver {
     const kotInput: KOTOrderInput = {
       orderNumber: payload.orderNumber,
       tableNumber: payload.tableNumber,
-      items:       payload.items,
+      items:       payload.items.map(i => ({
+        productName: i.productName,
+        quantity:    i.quantity,
+        modifiers:   i.modifiers,
+      })),
       notes:       payload.notes || '',
       createdAt:   payload.createdAt,
       orderSource: payload.orderSource,

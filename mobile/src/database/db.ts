@@ -88,12 +88,25 @@ db.execSync(`
   )
 `);
 
+db.execSync(`
+  CREATE TABLE IF NOT EXISTS cashier_order_queue (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    offline_id  TEXT UNIQUE NOT NULL,
+    payload     TEXT NOT NULL,
+    status      TEXT DEFAULT 'pending',
+    created_at  TEXT DEFAULT (datetime('now')),
+    retry_count INTEGER DEFAULT 0,
+    last_error  TEXT
+  )
+`);
+
 // ── Performance indexes (idempotent — safe to run on every startup) ──────────
 // These cover the hot query path: getPendingOrders + count queries.
 
 db.execSync('CREATE INDEX IF NOT EXISTS idx_oq_status_attempt ON order_queue(status, next_attempt)');
 db.execSync('CREATE INDEX IF NOT EXISTS idx_oq_status         ON order_queue(status)');
 db.execSync('CREATE INDEX IF NOT EXISTS idx_oq_created        ON order_queue(created_at)');
+db.execSync('CREATE INDEX IF NOT EXISTS idx_coq_status        ON cashier_order_queue(status, retry_count)');
 
 // ── Schema migrations (PRAGMA user_version tracks applied version) ───────────
 // Each migration block is a one-time structural change to existing installs.

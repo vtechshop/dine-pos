@@ -34,6 +34,7 @@ function RunningShift({ nowMs }: { nowMs: number }) {
   const [actualCash, setActualCash] = useState('');
   const [closingNote, setClosingNote] = useState('');
   const [closing, setClosing] = useState(false);
+  const [isClosingShift, setIsClosingShift] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -64,12 +65,16 @@ function RunningShift({ nowMs }: { nowMs: number }) {
 
   function handleClose(e: FormEvent) {
     e.preventDefault();
+    // Bug H8: guard against double-click / double-submit
+    if (isClosingShift) return;
     if (!actualCash) { setCloseError('Enter actual cash in drawer'); return; }
+    setIsClosingShift(true);
     setClosing(true);
     setCloseError(null);
     try {
       closeShift(actual, closingNote);
     } finally {
+      setIsClosingShift(false);
       setClosing(false);
     }
   }
@@ -176,7 +181,7 @@ function RunningShift({ nowMs }: { nowMs: number }) {
 
             <button
               type="submit"
-              disabled={closing}
+              disabled={closing || isClosingShift}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-60"
             >
               {closing && <Spinner size="sm" />}

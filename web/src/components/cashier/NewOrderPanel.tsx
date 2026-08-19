@@ -10,7 +10,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
 import { fetchProducts, fetchCategories } from '../../api/products';
 import { fetchTables } from '../../api/tables';
-import { createOrder, completeOrder } from '../../api/orders';
+import { createOrder, completeOrder, updateOrderStatus } from '../../api/orders';
 import { validateCoupon, type CouponValidateResult } from '../../api/coupons';
 import { checkGiftVoucher } from '../../api/giftVouchers';
 import { lookupCustomer } from '../../api/loyalty';
@@ -383,6 +383,7 @@ export function NewOrderPanel() {
   const [submitting, setSubmitting]   = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successOrder, setSuccessOrder] = useState<string | null>(null);
+  const [prodError, setProdError]     = useState<string | null>(null);
 
   // ── Coupon state ───────────────────────────────────────────────────────────
   const [couponInput, setCouponInput]       = useState('');
@@ -418,20 +419,40 @@ export function NewOrderPanel() {
     },
   });
 
-  // ── Apply orderPrefill on mount / change (table → new-order flow) ──────────
+  // ── Apply orderPrefill on mount / change (hold-resume + table → new-order flow) ──
   useEffect(() => {
     if (!orderPrefill) return;
     setOrderType(orderPrefill.orderType);
-    if (
-      orderPrefill.orderType === 'dine-in' &&
-      (orderPrefill.tableId ?? orderPrefill.tableNumber)
-    ) {
+    if (orderPrefill.orderType === 'dine-in') {
       setDineIn(d => ({
         ...d,
-        tableId: orderPrefill.tableId ?? d.tableId,
-        tableNumber: orderPrefill.tableNumber ?? d.tableNumber,
+        tableId:      orderPrefill.tableId      ?? d.tableId,
+        tableNumber:  orderPrefill.tableNumber  ?? d.tableNumber,
+        customerName: orderPrefill.customerName ?? d.customerName,
+        phone:        orderPrefill.customerPhone ?? d.phone,
+      }));
+    } else if (orderPrefill.orderType === 'takeaway') {
+      setTakeAway(d => ({
+        ...d,
+        customerName: orderPrefill.customerName ?? d.customerName,
+        phone:        orderPrefill.customerPhone ?? d.phone,
+      }));
+    } else if (orderPrefill.orderType === 'delivery') {
+      setDelivery(d => ({
+        ...d,
+        customerName:    orderPrefill.customerName   ?? d.customerName,
+        phone:           orderPrefill.customerPhone  ?? d.phone,
+        address:         orderPrefill.deliveryAddress ?? d.address,
+        deliveryCharge:  orderPrefill.deliveryCharge != null
+          ? String(orderPrefill.deliveryCharge)
+          : d.deliveryCharge,
       }));
     }
+    // Restore discount, coupon, voucher, loyalty from held bill
+    if (orderPrefill.discountAmount) setDiscount(String(orderPrefill.discountAmount));
+    if (orderPrefill.couponCode)     setCouponInput(orderPrefill.couponCode);
+    if (orderPrefill.voucherCode)    setVoucherInput(orderPrefill.voucherCode);
+    if (orderPrefill.loyaltyPoints)  setLoyaltyRedemption(orderPrefill.loyaltyPoints);
     setOrderPrefill(null);
   }, [orderPrefill, setOrderPrefill]);
 
@@ -448,7 +469,12 @@ export function NewOrderPanel() {
     ]);
     if (!cancelled) {
       if (catRes.status === 'fulfilled') setCategories(catRes.value);
-      if (prodRes.status === 'fulfilled') setProducts(prodRes.value);
+      if (prodRes.status === 'fulfilled') {
+        setProducts(prodRes.value);
+        setProdError(null);
+      } else {
+        setProdError('Failed to load products. Tap the search bar or refresh to retry.');
+      }
       if (tableRes.status === 'fulfilled') setTables(tableRes.value.filter((t: Table) => t.status === 'available'));
       if (topRes.status === 'fulfilled') {
         setTopToday(
@@ -507,6 +533,7 @@ export function NewOrderPanel() {
 
   // ── Cart totals ────────────────────────────────────────────────────────────
   const discountAmt = parseFloat(discount) || 0;
+  const deliveryChargeAmt = orderType === 'delivery' ? (parseFloat(delivery.deliveryCharge) || 0) : 0;
   const couponDiscountPreview = appliedCoupon?.discountAmount ?? 0;
   const { subtotal, taxTotal, grandTotal: baseGrandTotal } = calcCartTotals(cart, discountAmt);
   // voucherDiscountPreview: client-side display only; server computes authoritatively from giftVoucherCode
@@ -515,7 +542,7 @@ export function NewOrderPanel() {
     ? Math.round(Math.min(appliedVoucher.balance, postCouponTotal) * 100) / 100
     : 0;
   // grandTotal is client-side preview only; server recalculates authoritatively from couponCode/giftVoucherCode
-  const grandTotal = Math.max(0, postCouponTotal - voucherDiscountPreview);
+  const grandTotal = Math.max(0, postCouponTotal - voucherDiscountPreview) + deliveryChargeAmt;
 
   // ── Loyalty lookup — runs when phone / grand total changes ─────────────────
   useEffect(() => {
@@ -757,6 +784,7 @@ export function NewOrderPanel() {
           notes: deliveryNote || undefined,
           isParcel: true,
           discountAmount: discountAmt || undefined,
+          deliveryCharge: parseFloat(delivery.deliveryCharge) || 0,
           ...(loyaltyRedemption > 0 ? { redeemedPoints: loyaltyRedemption, loyaltyDiscount: loyaltyDiscDel } : {}),
         };
       }
@@ -765,6 +793,10 @@ export function NewOrderPanel() {
       const created = await createOrder(payload);
 
       if (orderType !== 'dine-in') {
+        // Skip kitchen queue for takeaway/delivery — mark served immediately so completeOrder doesn't 400
+        if (orderType === 'takeaway' || orderType === 'delivery') {
+          await updateOrderStatus(created._id, 'served');
+        }
         await completeOrder(created._id);
       }
 
@@ -1124,6 +1156,12 @@ export function NewOrderPanel() {
         )}
 
         {/* Product grid */}
+        {prodError && !prodLoading && (
+          <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
+            <AlertCircle size={13} className="text-red-500" />
+            <p className="text-xs text-red-600">{prodError}</p>
+          </div>
+        )}
         {prodLoading ? (
           <div className="flex flex-1 items-center justify-center py-12">
             <Loader2 size={20} className="animate-spin text-ink/30" />
@@ -1318,6 +1356,13 @@ export function NewOrderPanel() {
                   </button>
                 </div>
                 {voucherError && <p className="text-[10px] text-red-500 text-right">{voucherError}</p>}
+              </div>
+            )}
+
+            {deliveryChargeAmt > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-ink/55">Delivery Charge</span>
+                <span className="text-xs font-medium text-ink">{fmtINR(sym, deliveryChargeAmt)}</span>
               </div>
             )}
 

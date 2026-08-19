@@ -43,12 +43,15 @@ const DEVICE_HOTEL_KEY      = 'pos_device_hotel_id';
 const DEVICE_HOTEL_NAME_KEY = 'pos_device_hotel_name';
 
 function readStorage(): AuthState {
-  const token = localStorage.getItem(KEYS.token);
+  const role = localStorage.getItem(KEYS.role);
+  const token = role === 'superadmin'
+    ? localStorage.getItem('sa_token')
+    : localStorage.getItem(KEYS.token);
   return {
     token,
     hotelId:         localStorage.getItem(KEYS.hotelId),
     hotelName:       localStorage.getItem(KEYS.hotelName),
-    role:            localStorage.getItem(KEYS.role),
+    role,
     isAuthenticated: !!token,
   };
 }
@@ -136,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginSuperAdmin = useCallback(async (userId: string, password: string) => {
     const res = await saLogin(userId, password);
-    localStorage.setItem(KEYS.token, res.token);
+    localStorage.setItem('sa_token', res.token);
     localStorage.setItem(KEYS.role,  'superadmin');
     setState({
       token:           res.token,
@@ -154,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (rt) {
       logoutApi(rt).catch(() => {});
     }
+    localStorage.removeItem('sa_token');
     Object.values(KEYS).forEach(k => localStorage.removeItem(k));
     setState({ token: null, hotelId: null, hotelName: null, role: null, isAuthenticated: false });
   }, []);

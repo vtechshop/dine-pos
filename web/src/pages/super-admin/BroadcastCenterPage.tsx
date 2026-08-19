@@ -208,6 +208,7 @@ export function BroadcastCenterPage() {
   // ── history filter ───────────────────────────────────────────────────────────
   const [histFilter,    setHistFilter]    = useState<SANotification['type'] | ''>('');
   const [deleting,      setDeleting]      = useState<Set<string>>(new Set());
+  const [deleteError,   setDeleteError]   = useState<string | null>(null);
   const [expiringSoon,  setExpiringSoon]  = useState(0);
 
   // ── load remote-config ───────────────────────────────────────────────────────
@@ -332,10 +333,11 @@ export function BroadcastCenterPage() {
 
   async function handleDelete(id: string) {
     setDeleting(prev => new Set([...prev, id]));
+    setDeleteError(null);
     try {
       await remove(id);
-    } catch {
-      // Item stays in list; context refreshes on next poll
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete broadcast');
     } finally {
       setDeleting(prev => {
         const next = new Set(prev);
@@ -757,6 +759,13 @@ export function BroadcastCenterPage() {
           </div>
         )}
       </section>
+
+      {deleteError && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+          <AlertCircle size={14} />
+          {deleteError}
+        </div>
+      )}
 
       <p className="text-center text-[11px] text-ink/30">
         History shows up to 20 active broadcasts · Config changes apply immediately

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Modal, ActivityIndicator, StatusBar, TextInput, Alert,
-  ScrollView, Linking, Share,
+  ScrollView, Linking, Share, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -90,6 +90,7 @@ const OnlineOrdersScreen: React.FC = () => {
   const [customReason,   setCustomReason]   = useState('');
   const [showReject,     setShowReject]     = useState(false);
   const [newCount,       setNewCount]       = useState(0);
+  const [refreshing,     setRefreshing]     = useState(false);
 
   const socketRef  = useRef<Socket | null>(null);
   const mountedRef = useRef(true);
@@ -103,7 +104,10 @@ const OnlineOrdersScreen: React.FC = () => {
     } catch (e: any) {
       Alert.alert('Error', (e as Error).message || 'Failed to load delivery orders');
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [platform]);
 
@@ -193,7 +197,6 @@ const OnlineOrdersScreen: React.FC = () => {
   const handleMarkReady = async (order: OnlineDeliveryOrder) => {
     setActionLoading(true);
     try {
-      await dispatchOnlineOrder(order._id);
       await updateOrderStatus(order._id, 'ready');
       setOrders(prev => prev.map(o => o._id === order._id ? { ...o, status: 'ready' } : o));
       setSelected(null);
@@ -220,9 +223,14 @@ const OnlineOrdersScreen: React.FC = () => {
 
   // ── Utils ─────────────────────────────────────────────────────────────────────
 
-  const platformColor = (src: string) => src === 'swiggy' ? '#FC8019' : '#E23744';
-  const platformEmoji = (src: string) => src === 'swiggy' ? '🛵' : '🍕';
-  const platformName  = (src: string) => src === 'swiggy' ? 'SWIGGY' : 'ZOMATO';
+  const platformColor = (src: string | undefined | null): string => {
+    if (!src) return '#888888';
+    if (src === 'swiggy') return '#FC8019';
+    if (src === 'zomato') return '#E23744';
+    return '#888888';
+  };
+  const platformEmoji = (src: string | undefined | null) => src === 'swiggy' ? '🛵' : src === 'zomato' ? '🍕' : '📦';
+  const platformName  = (src: string | undefined | null) => src === 'swiggy' ? 'SWIGGY' : src === 'zomato' ? 'ZOMATO' : 'ONLINE';
 
   // ── Order list card ───────────────────────────────────────────────────────────
 
@@ -295,8 +303,9 @@ const OnlineOrdersScreen: React.FC = () => {
             )}
             {inKitchen && (
               <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#3B82F6' }]}
+                style={[styles.actionBtn, { backgroundColor: '#3B82F6', opacity: actionLoading ? 0.5 : 1 }]}
                 onPress={() => handleMarkReady(item)}
+                disabled={actionLoading}
                 activeOpacity={0.8}
               >
                 <MaterialIcons name="done-all" size={15} color={Colors.white} />
@@ -305,8 +314,9 @@ const OnlineOrdersScreen: React.FC = () => {
             )}
             {isReady && (
               <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: color }]}
+                style={[styles.actionBtn, { backgroundColor: color, opacity: actionLoading ? 0.5 : 1 }]}
                 onPress={() => handleDispatch(item)}
+                disabled={actionLoading}
                 activeOpacity={0.8}
               >
                 <MaterialIcons name="local-shipping" size={15} color={Colors.white} />
@@ -425,6 +435,14 @@ const OnlineOrdersScreen: React.FC = () => {
           renderItem={renderCard}
           contentContainerStyle={{ padding: Spacing.md, paddingBottom: bottom + 20 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); fetchOrders(); setNewCount(0); }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
 
@@ -539,7 +557,7 @@ const OnlineOrdersScreen: React.FC = () => {
                       {selected.platformCommission > 0 && (
                         <>
                           <View style={styles.totalRow}>
-                            <Text style={[styles.totalLabel, { color: Colors.danger }]}>{selected.orderSource === 'swiggy' ? 'Swiggy' : 'Zomato'} commission</Text>
+                            <Text style={[styles.totalLabel, { color: Colors.danger }]}>{selected.orderSource === 'swiggy' ? 'Swiggy' : selected.orderSource === 'zomato' ? 'Zomato' : 'Platform'} commission</Text>
                             <Text style={[styles.totalValue, { color: Colors.danger }]}>-{fmt(selected.platformCommission, cur)}</Text>
                           </View>
                           <View style={[styles.totalRow, { borderTopWidth: 1, borderTopColor: Colors.border, marginTop: 4, paddingTop: 8 }]}>

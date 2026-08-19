@@ -498,9 +498,12 @@ router.get('/', requireAdmin, async (req: AuthRequest, res: Response) => {
       const endOfDay = new Date(date); endOfDay.setHours(23, 59, 59, 999);
       filter.createdAt = { $gte: startOfDay, $lte: endOfDay };
     }
-    if (req.query.from && req.query.to) {
-      const from = new Date(req.query.from as string);
-      const to = new Date(req.query.to as string);
+    // Accept both from/to (legacy) and dateFrom/dateTo (new) query params
+    const fromStr = (req.query.from || req.query.dateFrom) as string | undefined;
+    const toStr   = (req.query.to   || req.query.dateTo)   as string | undefined;
+    if (fromStr && toStr) {
+      const from = new Date(fromStr);
+      const to = new Date(toStr);
       to.setHours(23, 59, 59, 999);
       filter.createdAt = { $gte: from, $lte: to };
     }
@@ -508,14 +511,29 @@ router.get('/', requireAdmin, async (req: AuthRequest, res: Response) => {
     if (req.query.source) filter.orderSource = req.query.source;
 
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 50), 200);
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 20), 200);
     const skip = (page - 1) * limit;
+
+    if (req.query.q) {
+      const raw = (req.query.q as string).trim();
+      if (raw) {
+        // Escape regex special characters to prevent injection
+        const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const qRx = new RegExp(escaped, 'i');
+        (filter as any).$or = [
+          { orderNumber: qRx },
+          { customerName:  qRx },
+          { customerPhone: qRx },
+        ];
+      }
+    }
 
     const [orders, total] = await Promise.all([
       Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       Order.countDocuments(filter),
     ]);
-    res.json({ orders, total, page, pages: Math.ceil(total / limit) });
+    const totalPages = Math.ceil(total / limit);
+    res.json({ orders, total, page, pages: totalPages, totalPages });
   } catch (error) {
     sendError(res, 500, 'Server error', error);
   }
@@ -805,21 +823,55 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     }
 
     const orderNumber = await generateOrderNumber(req.hotelId!);
+
+    // ── H1: Verify loyaltyDiscount against server-side redemption rate ─────────
+    // Prevent a client from inflating loyaltyDiscount beyond what the redeemed
+    // points are worth. Config is fetched once and reused in H2 below.
+    const rawRedeemedPts = Math.max(0, Number(req.body.redeemedPoints) || 0);
+    let verifiedLoyaltyDiscount = Math.max(0, Number(req.body.loyaltyDiscount) || 0);
+    let h2LoyaltyCfg: Awaited<ReturnType<typeof getLoyaltyConfig>> | null = null;
+    let h2RedeemProfile: { _id: mongoose.Types.ObjectId } | null = null;
+    if (rawRedeemedPts > 0) {
+      h2LoyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+      // maxAllowedDiscount = points × (pointValueInPaisa / 100) in rupees
+      const maxAllowedDiscount = rawRedeemedPts * (h2LoyaltyCfg.pointValueInPaisa / 100);
+      verifiedLoyaltyDiscount = Math.min(verifiedLoyaltyDiscount, maxAllowedDiscount);
+      // Pre-fetch profile for H2 (redeemPoints moved inside transaction)
+      if (h2LoyaltyCfg.enabled) {
+        const e164Phone = normalizePhone(String(req.body.customerPhone || ''));
+        if (e164Phone) {
+          h2RedeemProfile = await CustomerProfile.findOne({
+            hotelId:       new mongoose.Types.ObjectId(req.hotelId),
+            phone:         e164Phone,
+            status:        'active',
+            loyaltyOptOut: { $ne: true },
+          }).select('_id') as { _id: mongoose.Types.ObjectId } | null;
+        }
+      }
+    } else {
+      verifiedLoyaltyDiscount = 0; // no points redeemed → zero loyalty discount allowed
+    }
+
+    // RBAC: only admins may apply a manual discount (Gap 1 — discount gate)
+    if (Number(req.body.discountAmount) > 0 && req.role !== 'admin') {
+      return res.status(403).json({ message: 'Only admins can apply discounts.' });
+    }
+
     const recalc = recalcOrderTotals(
       validatedItems,
       req.body.discountAmount,
-      req.body.loyaltyDiscount,
+      verifiedLoyaltyDiscount,
       couponResult?.couponDiscount ?? 0,
     );
+    // Explicit field allowlist — never spread req.body to prevent mass-assignment of
+    // server-controlled fields (status, completedBy, completedAt, cashierId, hotelId).
+    const b = req.body;
     // Server-authoritative voucher amount: min(voucher balance, post-coupon grand total)
     const serverVoucherAmount = voucherDoc && voucherDoc.balance > 0
       ? Math.round(Math.min(voucherDoc.balance, recalc.grandTotal) * 100) / 100
       : 0;
-    const finalGrandTotal = Math.round(Math.max(0, recalc.grandTotal - serverVoucherAmount) * 100) / 100;
-
-    // Explicit field allowlist — never spread req.body to prevent mass-assignment of
-    // server-controlled fields (status, completedBy, completedAt, cashierId, hotelId).
-    const b = req.body;
+    const cappedDeliveryFee = Math.max(0, Math.min(Number(b.deliveryFee ?? b.deliveryCharge) || 0, 9999));
+    const finalGrandTotal = Math.round(Math.max(0, recalc.grandTotal - serverVoucherAmount + cappedDeliveryFee) * 100) / 100;
     const order = new Order({
       tableNumber:         b.tableNumber,
       customerName:        b.customerName,
@@ -835,7 +887,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       offlineId:           b.offlineId ?? null,
       deliveryAddress:     b.deliveryAddress,
       platformOrderId:     b.platformOrderId,
-      deliveryFee:         b.deliveryFee,
+        deliveryFee:         cappedDeliveryFee,
       platformCommission:  b.platformCommission,
       estimatedPickupTime: b.estimatedPickupTime,
       deliveryPartnerName: b.deliveryPartnerName,
@@ -980,6 +1032,17 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
         if (stockItems.length > 0) {
           await Product.bulkWrite(stockBulkOps as any, { session: txSession });
         }
+        // H2: loyalty redemption inside transaction — if it fails the whole order is rolled back
+        // so the loyalty ledger and order discount are always consistent.
+        if (order.redeemedPoints > 0 && h2LoyaltyCfg?.enabled && h2RedeemProfile) {
+          await redeemPoints(
+            h2RedeemProfile._id as mongoose.Types.ObjectId,
+            req.hotelId!,
+            order.redeemedPoints,
+            h2LoyaltyCfg,
+            { orderId: String(order._id), createdBy: req.cashierName || 'cashier' },
+          );
+        }
       });
     } finally {
       await txSession.endSession();
@@ -1016,36 +1079,6 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     }
 
     logger.info('Order saved', { orderId: String(order._id), orderNumber: order.orderNumber, hotelId: req.hotelId });
-
-    // ── Loyalty redemption — deduct points after order is committed ────────────
-    // Synchronous so the cashier sees an error if redemption fails (e.g. insufficient balance).
-    if (order.redeemedPoints > 0) {
-      try {
-        const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
-        if (loyaltyCfg.enabled) {
-          const e164Phone = normalizePhone(order.customerPhone);
-          if (e164Phone) {
-            const redeemProfile = await CustomerProfile.findOne({
-              hotelId: new mongoose.Types.ObjectId(req.hotelId),
-              phone:   e164Phone,
-              status:  'active',
-              loyaltyOptOut: { $ne: true },
-            }).select('_id');
-            if (redeemProfile) {
-              await redeemPoints(
-                redeemProfile._id as mongoose.Types.ObjectId,
-                req.hotelId!,
-                order.redeemedPoints,
-                loyaltyCfg,
-                { orderId: String(order._id), createdBy: req.cashierName || 'cashier' },
-              );
-            }
-          }
-        }
-      } catch (e) {
-        logger.warn('[loyalty] redemption on order creation failed', { orderId: String(order._id), err: String(e) });
-      }
-    }
 
     // ── Phase 7: Fire-and-forget KOT print ───────────────────────────────────
     scheduleKOTPrint(req.hotelId!, {
@@ -1154,8 +1187,17 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     if (role === 'waiter' && existing.status !== 'ready') {
       return res.status(400).json({ message: `Order must be ready before it can be served (current: ${existing.status}).` });
     }
+    // C2: Takeaway/delivery orders can be completed directly from 'pending' (immediate counter payment)
+    const isQuickService = (existing as any).orderSource === 'takeaway';
     if (role === 'cashier' && !['served', 'ready'].includes(existing.status)) {
-      return res.status(400).json({ message: `Order must be ready or served before it can be completed (current: ${existing.status}).` });
+      if (!(isQuickService && existing.status === 'pending')) {
+        return res.status(400).json({ message: `Order must be ready or served before it can be completed (current: ${existing.status}).` });
+      }
+    }
+
+    // H3: Block cancellation of completed (paid) orders — require a refund instead
+    if (status === 'cancelled' && existing.status === 'completed') {
+      return res.status(400).json({ message: 'Cannot cancel a completed order. Process a refund instead.' });
     }
 
     // H-04: atomic cancellation guard — only the first concurrent request runs side-effects
@@ -1372,6 +1414,19 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     // (receipt print + socket emit), preventing duplicate receipts from two
     // concurrent cashier taps on the same order.
     if (status === 'completed') {
+      // M13: Razorpay orders must have a verified Payment record before completion
+      if (paymentMethod === 'razorpay') {
+        const razorpayPmt = await Payment.findOne({
+          orderId: existing._id,
+          hotelId: req.hotelId,
+          status: 'success',
+          method: { $in: ['razorpay', 'razorpay_link'] },
+        }).select('_id').lean();
+        if (!razorpayPmt) {
+          return res.status(400).json({ message: 'Payment verification required before completing a Razorpay order.' });
+        }
+      }
+
       const VALID_PM = ['cash', 'upi', 'upi_intent', 'upi_qr', 'upi_collect', 'card', 'split', 'razorpay'];
       const completionFields: Record<string, unknown> = {
         status:      'completed',
@@ -1388,8 +1443,11 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       if (req.body.payments)      completionFields.payments      = req.body.payments;
       if (req.body.splitDetails)  completionFields.splitDetails  = req.body.splitDetails;
 
+      const completableStatuses = isQuickService
+        ? ['served', 'ready', 'pending']
+        : ['served', 'ready'];
       const prevDoc = await Order.findOneAndUpdate(
-        { _id: req.params.id, hotelId: req.hotelId, status: { $in: ['served', 'ready'] } },
+        { _id: req.params.id, hotelId: req.hotelId, status: { $in: completableStatuses } },
         { $set: completionFields },
         { new: false },
       );
@@ -1555,6 +1613,75 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     res.json(order);
   } catch (error) {
     sendError(res, 400, 'Invalid data', error);
+  }
+});
+
+// PATCH /:id/payment — cashier-safe endpoint to save payment method / split details / tip
+// C3: replaces the admin-only PUT /:id for the specific fields cashiers need to update.
+// M5: validates that split payment amounts sum to grandTotal.
+router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res: Response) => {
+  const { paymentMethod, splitDetails, tipAmount, additionalDiscount } = req.body;
+  const VALID_PM = ['cash', 'upi', 'upi_intent', 'upi_qr', 'upi_collect', 'card', 'split', 'razorpay'];
+
+  try {
+    const order = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId });
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order.status === 'completed') {
+      return res.status(400).json({ message: 'Order is already completed' });
+    }
+
+    const update: Record<string, unknown> = {};
+
+    if (paymentMethod && VALID_PM.includes(paymentMethod)) {
+      update.paymentMethod = paymentMethod;
+    }
+    if (splitDetails && Array.isArray(splitDetails) && splitDetails.length > 0) {
+      // M5: reject if split amounts don't add up (within ±1 rupee for floating point)
+      const splitTotal = splitDetails.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
+      if (Math.abs(splitTotal - order.grandTotal) > 1) {
+        return res.status(400).json({
+          message: `Split payment total (${splitTotal.toFixed(2)}) must equal order total (${order.grandTotal.toFixed(2)})`,
+        });
+      }
+      update.splitDetails = splitDetails;
+    }
+    if (tipAmount != null) {
+      const rawTip = Number(tipAmount);
+      if (!isFinite(rawTip) || rawTip < 0) {
+        return res.status(400).json({ message: 'tipAmount must be a non-negative number' });
+      }
+      // C-fix: cap tip to ₹500 or 50% of grandTotal, whichever is higher
+      const tipCap = Math.max(500, order.grandTotal * 0.5);
+      if (rawTip > tipCap) {
+        return res.status(400).json({
+          message: `tipAmount (${rawTip.toFixed(2)}) exceeds the maximum allowed (${tipCap.toFixed(2)})`,
+        });
+      }
+      update.tipAmount = rawTip;
+    }
+    if (additionalDiscount != null && Number(additionalDiscount) > 0) {
+      // RBAC: only admins may apply an additional discount (Gap 1 — discount gate)
+      if (req.role !== 'admin') {
+        return res.status(403).json({ message: 'Only admins can apply discounts.' });
+      }
+      const addDisc = Math.min(Number(additionalDiscount), order.grandTotal);
+      update.additionalDiscount = addDisc;
+      update.grandTotal = Math.max(0, Math.round((order.grandTotal - addDisc) * 100) / 100);
+    }
+
+    const updated = await Order.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId },
+      { $set: update },
+      { new: true },
+    );
+    if (!updated) return res.status(404).json({ message: 'Order not found' });
+
+    logAudit(req, 'order.payment_updated', 'order', String(updated._id), {
+      paymentMethod, splitDetails: splitDetails?.length, tipAmount, additionalDiscount,
+    });
+    res.json(updated);
+  } catch (error) {
+    sendError(res, 500, 'Server error', error);
   }
 });
 

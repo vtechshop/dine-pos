@@ -231,6 +231,7 @@ export interface OrdersResponse {
   total: number;
   page: number;
   pages: number;
+  totalPages?: number;
 }
 
 // ── KDS Order ────────────────────────────────────────────────────────────────

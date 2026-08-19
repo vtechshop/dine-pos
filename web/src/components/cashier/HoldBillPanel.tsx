@@ -49,6 +49,9 @@ export function HoldBillPanel({ onResume }: { onResume?: () => void }) {
   function handleResume(id: string) {
     const bill = resumeBill(id);
     if (!bill) return;
+    // resumeBill() also restores all order metadata (orderType, table, customer,
+    // delivery, discounts, loyalty) into context via setOrderPrefill so the
+    // order form can pre-populate every field — not just the cart items.
     clearCart();
     for (const item of bill.items) addToCart(item);
     setActiveTab('new-order');

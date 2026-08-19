@@ -23,6 +23,7 @@ import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/const
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import UnreadBadge from '../components/UnreadBadge';
 import { printReceipt } from '../utils/receipt';
+import { getPendingCount as getCashierQueueCount } from '../database/cashierOrderQueueDao';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CashierDashboard'>;
 
@@ -62,6 +63,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [payMethodFilter, setPayMethodFilter] = useState<'all' | 'cash' | 'upi' | 'card' | 'split'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'ready' | 'served'>('all');
   const { count: cashierBadge, increment: incCashierBadge, reset: resetCashierBadge } = useBadgeCount(BADGE_KEYS.cashierPending);
+  const [offlineQueueCount, setOfflineQueueCount] = useState(0);
 
   const { showToast } = useGlobalToast();
   const sym = settings?.currencySymbol || '₹';
@@ -133,6 +135,8 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
       const ok = await loadOrders();
       if (ok && active) resetCashierBadge();
     })();
+    // Refresh offline-queue banner count synchronously on every focus.
+    setOfflineQueueCount(getCashierQueueCount());
     return () => { active = false; };
   }, [loadOrders, resetCashierBadge]));
 
@@ -379,7 +383,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         <View style={styles.items}>
-          {item.items.map((it, i) => (
+          {(item.items || []).map((it, i) => (
             <View key={i} style={styles.itemRow}>
               <Text style={styles.itemQty}>{it.quantity}×</Text>
               <Text style={styles.itemName} numberOfLines={1}>{it.productName}</Text>
@@ -484,6 +488,15 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
     <View style={[styles.container, { paddingTop: top }]}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
+      {offlineQueueCount > 0 && (
+        <View style={styles.offlineBanner}>
+          <MaterialIcons name="cloud-off" size={16} color="#795548" />
+          <Text style={styles.offlineBannerText}>
+            {offlineQueueCount} order{offlineQueueCount === 1 ? '' : 's'} pending sync — connect to internet to sync
+          </Text>
+        </View>
+      )}
+
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={{ position: 'relative' }}>
@@ -502,6 +515,12 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
         <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('ShiftScreen')}>
+            <MaterialIcons name="schedule" size={20} color={Colors.success} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('CashDrawerScreen')}>
+            <MaterialIcons name="point-of-sale" size={20} color={Colors.warning} />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={loadOrders}>
             <MaterialIcons name="refresh" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
@@ -524,6 +543,36 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={[styles.statValue, { color: Colors.textSecondary }]}>{completedOrders.length}</Text>
           <Text style={styles.statLabel}>Completed</Text>
         </View>
+      </View>
+
+      {/* ── Quick Navigation ──────────────────────────────────────────────────── */}
+      <View style={styles.quickNav}>
+        <TouchableOpacity
+          style={styles.quickNavBtn}
+          onPress={() => navigation.navigate('KitchenQueue')}
+          activeOpacity={0.85}
+        >
+          <MaterialIcons name="restaurant" size={18} color={Colors.warning} />
+          <Text style={[styles.quickNavText, { color: Colors.warning }]}>Kitchen Queue</Text>
+        </TouchableOpacity>
+        <View style={styles.quickNavDivider} />
+        <TouchableOpacity
+          style={styles.quickNavBtn}
+          onPress={() => navigation.navigate('OnlineOrders')}
+          activeOpacity={0.85}
+        >
+          <MaterialIcons name="delivery-dining" size={18} color={Colors.info} />
+          <Text style={[styles.quickNavText, { color: Colors.info }]}>Online Orders</Text>
+        </TouchableOpacity>
+        <View style={styles.quickNavDivider} />
+        <TouchableOpacity
+          style={styles.quickNavBtn}
+          onPress={() => navigation.navigate('BillHistory')}
+          activeOpacity={0.85}
+        >
+          <MaterialIcons name="receipt-long" size={18} color={Colors.primary} />
+          <Text style={[styles.quickNavText, { color: Colors.primary }]}>Bill History</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.tabs}>
@@ -723,6 +772,13 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container:  { flex: 1, backgroundColor: Colors.background },
+  offlineBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    backgroundColor: '#FFC107', paddingHorizontal: Spacing.lg, paddingVertical: 8,
+  },
+  offlineBannerText: {
+    flex: 1, fontSize: FontSize.sm, fontWeight: '700', color: '#795548',
+  },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
@@ -744,6 +800,17 @@ const styles = StyleSheet.create({
   statCard:  { flex: 1, alignItems: 'center', paddingVertical: Spacing.md },
   statValue: { fontSize: FontSize.xxl, fontWeight: '900' },
   statLabel: { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: 2 },
+  // ── Quick nav bar ─────────────────────────────────────────────────────────────
+  quickNav: {
+    flexDirection: 'row', backgroundColor: Colors.surface,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  quickNavBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: Spacing.sm, paddingVertical: Spacing.md,
+  },
+  quickNavDivider: { width: 1, backgroundColor: Colors.border, marginVertical: 8 },
+  quickNavText: { fontSize: FontSize.sm, fontWeight: '800' },
   tabs: {
     flexDirection: 'row', backgroundColor: Colors.surface,
     borderBottomWidth: 1, borderBottomColor: Colors.border,

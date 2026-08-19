@@ -238,6 +238,7 @@ export function HotelDetailPage() {
 
   // Manage
   const [showSuspend,  setShowSuspend]  = useState(false);
+  const [showActivate, setShowActivate] = useState(false);
   const [suspending,   setSuspending]   = useState(false);
   const [activating,   setActivating]   = useState(false);
   const [showExtend,   setShowExtend]   = useState(false);
@@ -548,12 +549,11 @@ export function HotelDetailPage() {
             )}
             {canActivate && (
               <button
-                onClick={handleActivate}
-                disabled={activating}
-                className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700 disabled:opacity-60"
+                onClick={() => { setManageError(null); setShowActivate(true); }}
+                className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700"
               >
-                {activating ? <Spinner size="sm" /> : <PlayCircle size={15} />}
-                {activating ? 'Activating…' : 'Activate'}
+                <PlayCircle size={15} />
+                Activate
               </button>
             )}
             {canExtend && (
@@ -1046,6 +1046,35 @@ export function HotelDetailPage() {
               </button>
               <button
                 onClick={() => setShowSuspend(false)}
+                className="rounded-lg border border-border px-4 py-2.5 text-sm text-ink/60 transition hover:bg-mist"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Activate Modal ── */}
+      {showActivate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-canvas p-6 shadow-xl">
+            <h2 className="mb-2 text-base font-bold text-ink">Activate Hotel?</h2>
+            <p className="mb-5 text-sm text-ink/60">
+              Are you sure you want to activate{' '}
+              <strong className="text-ink">{hotel.hotelName}</strong>? This will restore their access.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={async () => { await handleActivate(); setShowActivate(false); }}
+                disabled={activating}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-green-600 py-2.5 text-sm font-semibold text-white transition hover:bg-green-700 disabled:opacity-60"
+              >
+                {activating && <Spinner size="sm" />}
+                {activating ? 'Activating…' : 'Yes, Activate'}
+              </button>
+              <button
+                onClick={() => setShowActivate(false)}
                 className="rounded-lg border border-border px-4 py-2.5 text-sm text-ink/60 transition hover:bg-mist"
               >
                 Cancel

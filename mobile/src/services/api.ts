@@ -144,6 +144,12 @@ export const getEffectiveHotelId = async (): Promise<string | null> => {
 const SEC_SUPER_ADMIN_KEY = 'hotel_pos_super_admin_token';
 let _cachedSuperAdminToken: string | null = null;
 
+type SATokenExpiredCallback = () => void;
+let _saTokenExpiredCb: SATokenExpiredCallback | null = null;
+export const onSATokenExpired = (cb: SATokenExpiredCallback): void => {
+  _saTokenExpiredCb = cb;
+};
+
 export const saveSuperAdminToken = async (token: string): Promise<void> => {
   _cachedSuperAdminToken = token;
   try { await SecureStore.setItemAsync(SEC_SUPER_ADMIN_KEY, token); } catch { /* in-memory only on failure */ }
@@ -746,6 +752,11 @@ const superAdminFetch = async <T>(endpoint: string, options?: RequestInit): Prom
   const timeout = setTimeout(() => controller.abort(), 12000);
   try {
     const response = await fetch(`${baseUrl}${endpoint}`, { headers, ...options, signal: controller.signal });
+    if (response.status === 401) {
+      await clearSuperAdminToken();
+      _saTokenExpiredCb?.();
+      throw new Error('Session expired. Please login again.');
+    }
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message || 'Request failed');
@@ -1687,7 +1698,7 @@ export const completeOrderPayment = async (
   orderId: string,
   paymentMethod: string,
   details?: PaymentDetails,
-): Promise<void> => {
+): Promise<Order> => {
   const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
   const res = await staffFetch(`${base}/orders/${orderId}/status`, {
     method: 'PATCH',
@@ -1697,6 +1708,21 @@ export const completeOrderPayment = async (
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error((data as any).message || 'Failed to complete order');
+  }
+  return res.json() as Promise<Order>;
+};
+
+// Cashier path — mark a ready order as complete using cashier token
+export const markOrderCompleteCashier = async (orderId: string): Promise<void> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
+  const res = await staffFetch(`${base}/orders/${orderId}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ status: 'completed' }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).message || 'Failed to mark order complete');
   }
 };
 
@@ -1716,6 +1742,34 @@ export const cancelOrderAdmin = (orderId: string): Promise<Order> =>
   fetchAPI<Order>(`/orders/${orderId}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status: 'cancelled' }),
+  });
+
+// ==================== BILL HISTORY ====================
+
+// Search/filter orders — uses admin JWT; supports q, status, from, to, page, limit.
+export const searchOrders = (params: {
+  q?: string;
+  status?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ orders: Order[]; total: number; page: number; pages: number }> => {
+  const p: Record<string, string> = {};
+  if (params.q)      p.q      = params.q;
+  if (params.status) p.status = params.status;
+  if (params.from)   p.from   = params.from;
+  if (params.to)     p.to     = params.to;
+  if (params.page)   p.page   = String(params.page);
+  if (params.limit)  p.limit  = String(params.limit);
+  return getOrders(p);
+};
+
+// Cancel an order with a reason (admin only — backend enforces role).
+export const cancelOrder = (orderId: string, reason: string): Promise<Order> =>
+  fetchAPI<Order>(`/orders/${orderId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'cancelled', reason }),
   });
 
 // ==================== AGGREGATOR / ONLINE DELIVERY ====================
@@ -2186,6 +2240,23 @@ export interface MobileGatewayConfig {
   isIntegrated: boolean;
   testResult?: { lastTestedAt?: string; success?: boolean; message?: string };
   updatedAt: string;
+  // Razorpay OAuth fields — safe metadata only, never token values
+  isOAuthConnected?:        boolean;
+  oauthConnectedAccountId?: string;
+  oauthConnectedAt?:        string;
+  oauthExpiresAt?:          string;
+  oauthRefreshExpiresAt?:   string;
+  refreshTokenWarning?:     boolean;
+}
+
+export interface MobileRazorpayOAuthStatus {
+  connected:            boolean;
+  accountId?:           string;
+  connectedAt?:         string;
+  expiresAt?:           string;
+  refreshExpiresAt?:    string;
+  environment?:         string;
+  refreshTokenWarning?: boolean;
 }
 
 export interface MobilePaymentRecord {
@@ -2224,6 +2295,21 @@ export const getPayments = (params?: {
 
 export const getPaymentStats = (params?: { from?: string; to?: string }): Promise<MobilePaymentReport> =>
   fetchAPI(`/payments/reports/summary${poQS(params as Record<string, string | undefined>)}`);
+
+// ── Razorpay Technology Partner OAuth ────────────────────────────────────────
+// Mobile only receives safe connection metadata — never token values.
+// Token storage, refresh, and revocation are handled entirely server-side.
+
+export const getRazorpayOAuthStatus = (): Promise<MobileRazorpayOAuthStatus> =>
+  fetchAPI('/razorpay/oauth/status');
+
+// Returns { authorizeUrl } — the backend generates a CSRF-safe state and
+// encodes platform=mobile so the callback redirects to the deep link.
+export const getRazorpayOAuthConnectUrl = (): Promise<{ authorizeUrl: string }> =>
+  fetchAPI('/razorpay/oauth/connect?platform=mobile');
+
+export const disconnectRazorpayOAuth = (): Promise<{ message: string }> =>
+  fetchAPI('/razorpay/oauth/disconnect', { method: 'DELETE' });
 
 // ── Razorpay checkout — cashier billing (authenticated) ───────────────────────
 
@@ -2499,4 +2585,127 @@ export const importExtractedMenu = async (
     if (error.name === 'AbortError') throw new Error('Import timed out after 2 minutes. Please try again.');
     throw error;
   }
+};
+
+// ==================== SHIFTS ====================
+
+export interface ShiftMovement {
+  _id: string;
+  type: 'cash_in' | 'cash_out';
+  amount: number;
+  reason: string;
+  cashierName: string;
+  timestamp: string;
+}
+
+export interface Shift {
+  _id: string;
+  hotelId: string;
+  cashierId: string;
+  cashierName: string;
+  openedAt: string;
+  closedAt?: string;
+  status: 'open' | 'closed';
+  openingCash: number;
+  openingNote?: string;
+  closingNote?: string;
+  actualCash?: number;
+  expectedCash?: number;
+  difference?: number;
+  cashIn: number;
+  cashOut: number;
+  totalOrders: number;
+  totalSales: number;
+  cashSales: number;
+  upiSales: number;
+  cardSales: number;
+  otherSales: number;
+  movements: ShiftMovement[];
+}
+
+export interface ShiftStats {
+  totalOrders: number;
+  totalSales: number;
+  cashSales: number;
+  upiSales: number;
+  cardSales: number;
+  splitCashSales?: number;
+}
+
+export const openShift = async (openingCash: number, openingNote?: string): Promise<Shift> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
+  const res = await staffFetch(`${base}/shifts/open`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ openingCash, openingNote: openingNote ?? '' }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Failed to open shift');
+  return data.shift;
+};
+
+export const getActiveShift = async (): Promise<Shift | null> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
+  const res = await staffFetch(`${base}/shifts/active`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).message || 'Failed to fetch shift');
+  }
+  const data = await res.json();
+  return data.shift ?? null;
+};
+
+export const getActiveShiftStats = async (): Promise<ShiftStats> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
+  const res = await staffFetch(`${base}/shifts/active/stats`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).message || 'Failed to fetch shift stats');
+  }
+  return res.json();
+};
+
+export const closeShift = async (shiftId: string, actualCash: number, closingNote?: string): Promise<Shift> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
+  const res = await staffFetch(`${base}/shifts/${shiftId}/close`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ actualCash, closingNote: closingNote ?? '' }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Failed to close shift');
+  return data.shift;
+};
+
+export const getShiftHistory = async (page = 1): Promise<{ shifts: Shift[]; total: number; pages: number }> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
+  const res = await staffFetch(`${base}/shifts?page=${page}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).message || 'Failed to fetch shift history');
+  }
+  return res.json();
+};
+
+export const addCashMovement = async (
+  shiftId: string,
+  type: 'cash_in' | 'cash_out',
+  amount: number,
+  reason: string,
+): Promise<ShiftMovement> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getCashierToken()]);
+  const res = await staffFetch(`${base}/shifts/${shiftId}/movements`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ type, amount, reason }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Failed to record movement');
+  return data.movement;
 };

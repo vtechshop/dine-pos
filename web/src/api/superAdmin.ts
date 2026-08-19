@@ -10,7 +10,7 @@ interface SAFetchInit extends RequestInit {
 
 async function saFetch<T>(path: string, init: SAFetchInit = {}): Promise<T> {
   const { noRedirect = false, ...fetchInit } = init;
-  const token = localStorage.getItem('pos_token');
+  const token = localStorage.getItem('sa_token');
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 65_000);
@@ -29,7 +29,7 @@ async function saFetch<T>(path: string, init: SAFetchInit = {}): Promise<T> {
     if (!res.ok) {
       if (res.status === 401 && token) {
         if (!noRedirect) {
-          localStorage.removeItem('pos_token');
+          localStorage.removeItem('sa_token');
           localStorage.removeItem('pos_role');
           window.location.replace('/super-admin/login');
         }

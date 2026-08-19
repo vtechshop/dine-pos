@@ -154,7 +154,15 @@ export function PrinterPanel() {
 
   async function handleReprint(jobId: string) {
     setReprinting(jobId);
-    try { await reprintJob(jobId); await load(); } catch { /* non-fatal */ } finally { setReprinting(null); }
+    try {
+      await reprintJob(jobId);
+      await load();
+    } catch (e) {
+      console.error('Print failed:', e);
+      setError('Reprint failed. Check printer connection and try again.');
+    } finally {
+      setReprinting(null);
+    }
   }
 
   const filteredJobs = jobs.filter(j => {

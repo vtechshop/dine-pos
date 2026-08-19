@@ -3,7 +3,7 @@ import {
   RefreshCw, CreditCard, Printer, Trash2, AlertCircle,
   ShoppingBag, UtensilsCrossed, Truck, Clock, GitBranch,
 } from 'lucide-react';
-import { fetchCashierOrders, cancelOrder, updateOrderPayment, completeOrder } from '../../api/orders';
+import { fetchCashierOrders, cancelOrder, patchOrderPayment, completeOrder } from '../../api/orders';
 import { reprintJob, fetchReceiptJobs } from '../../api/billing';
 import { PaymentModal } from './PaymentModal';
 import { OrderTimelineModal } from './OrderTimelineModal';
@@ -44,6 +44,7 @@ function OrderRow({
   jobs,
   cashierName,
   cashierId,
+  role,
   onRefresh,
 }: {
   order: CashierOrderItem;
@@ -52,6 +53,7 @@ function OrderRow({
   jobs: PrintJob[];
   cashierName: string;
   cashierId: string;
+  role: string | null;
   onRefresh: () => void;
 }) {
   const perms = useCashierPermissions();
@@ -60,6 +62,7 @@ function OrderRow({
   const [showCancel, setShowCancel] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
   const [reprinting, setReprinting] = useState(false);
+  const [reprintErr, setReprintErr] = useState<string | null>(null);
   const paymentCompletedRef = useRef(false);
 
   const ageMs = nowMs - new Date(order.createdAt).getTime();
@@ -69,7 +72,15 @@ function OrderRow({
   async function handleReprint() {
     if (!receiptJob) return;
     setReprinting(true);
-    try { await reprintJob(receiptJob._id); } catch { /* show err inline */ } finally { setReprinting(false); }
+    setReprintErr(null);
+    try {
+      await reprintJob(receiptJob._id);
+    } catch (e) {
+      console.error('Reprint failed:', e);
+      setReprintErr('Reprint failed. Check printer connection.');
+    } finally {
+      setReprinting(false);
+    }
   }
 
   async function handleCancel(_payload: { reason: string; cashierName: string; cashierId: string }) {
@@ -80,6 +91,12 @@ function OrderRow({
   return (
     <>
       <div className={`rounded-xl border bg-canvas transition-shadow hover:shadow-sm ${isOld ? 'border-amber-200' : 'border-border'}`}>
+        {reprintErr && (
+          <div className="flex items-center gap-1.5 rounded-t-xl border-b border-red-100 bg-red-50 px-3 py-1.5">
+            <AlertCircle size={11} className="text-red-500 shrink-0" />
+            <p className="text-[10px] text-red-600">{reprintErr}</p>
+          </div>
+        )}
         <div className="flex items-start gap-3 p-3">
           {/* Source icon */}
           <span className="mt-0.5 rounded-lg border border-border p-1.5 text-ink/40">
@@ -134,15 +151,26 @@ function OrderRow({
                   {reprinting ? <Spinner size="sm" /> : <Printer size={13} />}
                 </button>
               )}
-              <button
-                type="button"
-                title={perms.canCancelOrder ? 'Cancel order' : 'Cancel — permission required'}
-                onClick={() => { if (perms.canCancelOrder) setShowCancel(true); }}
-                disabled={!perms.canCancelOrder}
-                className="rounded-lg border border-border p-1.5 text-ink/40 hover:border-red-200 hover:bg-red-50 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:bg-transparent disabled:hover:text-ink/40"
-              >
-                <Trash2 size={13} />
-              </button>
+              {role === 'cashier' ? (
+                <button
+                  type="button"
+                  title="Contact admin to cancel"
+                  disabled
+                  className="rounded-lg border border-border p-1.5 text-ink/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Trash2 size={13} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  title={perms.canCancelOrder ? 'Cancel order' : 'Cancel — permission required'}
+                  onClick={() => { if (perms.canCancelOrder) setShowCancel(true); }}
+                  disabled={!perms.canCancelOrder}
+                  className="rounded-lg border border-border p-1.5 text-ink/40 hover:border-red-200 hover:bg-red-50 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:bg-transparent disabled:hover:text-ink/40"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowPay(true)}
@@ -167,7 +195,15 @@ function OrderRow({
           taxTotal={order.taxTotal}
           appliedDiscount={order.discountAmount ?? 0}
           onConfirm={async (result: PaymentResult) => {
-            await updateOrderPayment(order._id, result.method, result.splitDetails, result.paymentRef || undefined, result.upiApp);
+            // Bug C3 + H7: PATCH /orders/:id/payment (cashier-permitted endpoint)
+            // now includes tipAmount and additionalDiscount so they are persisted.
+            await patchOrderPayment(
+              order._id,
+              result.method,
+              result.splitDetails,
+              result.tipAmount || undefined,
+              result.additionalDiscount || undefined,
+            );
             await completeOrder(order._id);
             paymentCompletedRef.current = true;
           }}
@@ -208,7 +244,7 @@ function OrderRow({
 
 export function PendingBillsPanel() {
   const { settings } = useSettings();
-  useAuth(); // auth JWT used by API calls internally
+  const { role } = useAuth();
   const sym = settings?.currencySymbol ?? '₹';
 
   const [orders, setOrders] = useState<CashierOrderItem[]>([]);
@@ -311,6 +347,7 @@ export function PendingBillsPanel() {
             jobs={jobs}
             cashierName={cashierName}
             cashierId={cashierId}
+            role={role}
             onRefresh={() => void load()}
           />
         ))}

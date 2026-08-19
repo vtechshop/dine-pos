@@ -46,25 +46,31 @@ export function BillSearchPanel() {
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
 
-  const [query, setQuery]   = useState('');
-  const [date, setDate]     = useState('');
-  const [status, setStatus] = useState('');
-  const [results, setResults] = useState<OrderListItem[]>([]);
-  const [jobs, setJobs]     = useState<PrintJob[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [query, setQuery]       = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo]     = useState('');
+  const [status, setStatus]     = useState('');
+  const [results, setResults]   = useState<OrderListItem[]>([]);
+  const [jobs, setJobs]         = useState<PrintJob[]>([]);
+  const [loading, setLoading]   = useState(false);
   const [searched, setSearched] = useState(false);
-  const [error, setError]   = useState<string | null>(null);
+  const [error, setError]       = useState<string | null>(null);
   const [reprinting, setReprinting] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [page, setPage]         = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
-  const handleSearch = useCallback(async () => {
+  const handleSearch = useCallback(async (pageNum = 1) => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setPage(pageNum);
 
-    const params: Parameters<typeof fetchOrders>[0] = { limit: 50, page: 1 };
-    if (date) params.date = date;
-    if (status) params.status = status;
+    const params: Parameters<typeof fetchOrders>[0] = { limit: 20, page: pageNum };
+    if (dateFrom) params.from = dateFrom;
+    if (dateTo)   params.to   = dateTo;
+    if (status)   params.status = status;
+    if (query.trim()) params.q = query.trim();
 
     try {
       const [ordersRes, jobsRes] = await Promise.allSettled([
@@ -73,17 +79,9 @@ export function BillSearchPanel() {
       ]);
       if (!cancelled) {
         if (ordersRes.status === 'fulfilled') {
-          let orders = ordersRes.value.orders;
-          // Client-side filter by query (order #, table, customer, phone)
-          if (query.trim()) {
-            const q = query.trim().toLowerCase();
-            orders = orders.filter(o =>
-              o.orderNumber.toLowerCase().includes(q) ||
-              (o.tableNumber ?? '').includes(q) ||
-              (o.customerName ?? '').toLowerCase().includes(q),
-            );
-          }
+          const orders = ordersRes.value.orders;
           setResults(orders);
+          setTotalPages(ordersRes.value.totalPages ?? ordersRes.value.pages ?? 1);
         } else {
           setError('Search failed. Please try again.');
         }
@@ -96,7 +94,7 @@ export function BillSearchPanel() {
     }
 
     return () => { cancelled = true; };
-  }, [query, date, status]);
+  }, [query, dateFrom, dateTo, status]);
 
   async function handleReprint(order: OrderListItem) {
     const job = jobs.find(j => j.orderId === order._id && j.jobType === 'receipt');
@@ -106,8 +104,9 @@ export function BillSearchPanel() {
   }
 
   function handleClear() {
-    setQuery(''); setDate(''); setStatus('');
+    setQuery(''); setDateFrom(''); setDateTo(''); setStatus('');
     setResults([]); setSearched(false); setError(null);
+    setPage(1); setTotalPages(1);
   }
 
   return (
@@ -124,7 +123,7 @@ export function BillSearchPanel() {
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') void handleSearch(); }}
+            onKeyDown={e => { if (e.key === 'Enter') void handleSearch(1); }}
             placeholder="Order #, table, customer name…"
             className="w-full rounded-lg border border-border py-2 pl-8 pr-8 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
           />
@@ -135,31 +134,40 @@ export function BillSearchPanel() {
           )}
         </div>
 
-        {/* Filters */}
+        {/* Date range + status filters */}
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-[11px] font-medium text-ink/60">Date</label>
+            <label className="block text-[11px] font-medium text-ink/60">From</label>
             <input
               type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
               className="mt-0.5 block w-full rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
             />
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-ink/60">Status</label>
-            <select
-              value={status}
-              onChange={e => setStatus(e.target.value)}
+            <label className="block text-[11px] font-medium text-ink/60">To</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
               className="mt-0.5 block w-full rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-            >
-              <option value="">All statuses</option>
-              <option value="completed">Completed</option>
-              <option value="served">Served</option>
-              <option value="pending">Pending</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+            />
           </div>
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-ink/60">Status</label>
+          <select
+            value={status}
+            onChange={e => setStatus(e.target.value)}
+            className="mt-0.5 block w-full rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+          >
+            <option value="">All statuses</option>
+            <option value="completed">Completed</option>
+            <option value="served">Served</option>
+            <option value="pending">Pending</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
         </div>
 
         {/* Actions */}
@@ -172,7 +180,7 @@ export function BillSearchPanel() {
           )}
           <button
             type="button"
-            onClick={() => void handleSearch()}
+            onClick={() => void handleSearch(1)}
             disabled={loading}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand/90 disabled:opacity-60"
           >
@@ -193,9 +201,32 @@ export function BillSearchPanel() {
       {/* Results */}
       {searched && !loading && (
         <div>
-          <p className="mb-2 text-xs text-ink/50">
-            {results.length} result{results.length !== 1 ? 's' : ''}
-          </p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs text-ink/50">
+              {results.length} result{results.length !== 1 ? 's' : ''}
+              {totalPages > 1 && ` (page ${page} of ${totalPages})`}
+            </p>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleSearch(page - 1)}
+                  disabled={page <= 1}
+                  className="rounded-lg border border-border px-3 py-1 text-xs font-medium text-ink/60 hover:bg-mist disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSearch(page + 1)}
+                  disabled={page >= totalPages}
+                  className="rounded-lg border border-border px-3 py-1 text-xs font-medium text-ink/60 hover:bg-mist disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
           {results.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border py-8 text-center">
               <FileText size={20} className="mx-auto mb-2 text-ink/20" />

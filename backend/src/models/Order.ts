@@ -58,6 +58,7 @@ export interface IOrder extends Document {
   completedBy: string;
   completedAt: Date | null;
   cashierId: string;
+  tipAmount: number;          // gratuity recorded at payment time (never affects grandTotal)
   // ── Table Session / Guest Billing (Architecture v1.1) ───────────────────
   // null for takeaway, aggregator, and hotels with tableSessions=false
   sessionId: mongoose.Types.ObjectId | null;
@@ -218,6 +219,9 @@ const OrderSchema: Schema = new Schema(
     completedBy: { type: String, default: '' },
     completedAt: { type: Date, default: null },
     cashierId:   { type: String, default: '' },
+
+    // ── Tip (C-fix: field was handled in PATCH /payment but never persisted) ─
+    tipAmount: { type: Number, default: 0, min: 0 },
 
     // ── Table Session / Guest Billing (Architecture v1.1) ─────────────────
     sessionId: { type: Schema.Types.ObjectId, ref: 'TableSession', default: null },

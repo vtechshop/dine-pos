@@ -4,6 +4,8 @@ import {
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Colors, FontSize, BorderRadius, Spacing } from '../utils/constants';
 import { useSettings } from '../context/SettingsContext';
@@ -11,6 +13,7 @@ import {
   getGatewayConfigs, getPayments, getPaymentStats,
   type MobileGatewayConfig, type MobilePaymentRecord, type MobilePaymentReport,
 } from '../services/api';
+import type { RootStackParamList } from '../types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -77,6 +80,7 @@ function SectionHead({ title }: { title: string }) {
 // ── Tab: Gateways ─────────────────────────────────────────────────────────────
 
 function GatewaysTab() {
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [data,    setData]    = useState<MobileGatewayConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [err,     setErr]     = useState('');
@@ -94,12 +98,39 @@ function GatewaysTab() {
 
   if (loading) return <ActivityIndicator style={s.center} color={Colors.primary} />;
 
+  // Find the Razorpay gateway config if one is returned by the list endpoint
+  const razorpayConfig = data.find(c => c.gatewayType === 'razorpay');
+
   return (
     <ScrollView
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />}
       showsVerticalScrollIndicator={false}
     >
       {err ? <Text style={s.errText}>{err}</Text> : null}
+
+      {/* Razorpay OAuth banner — always visible so the admin can manage the connection */}
+      <TouchableOpacity
+        style={[s.oauthBanner, razorpayConfig?.isOAuthConnected ? s.oauthBannerConnected : s.oauthBannerDisconnected]}
+        onPress={() => nav.navigate('RazorpayOAuth')}
+        activeOpacity={0.8}
+      >
+        <View style={s.oauthBannerLeft}>
+          <MaterialIcons
+            name={razorpayConfig?.isOAuthConnected ? 'verified' : 'link'}
+            size={20}
+            color={razorpayConfig?.isOAuthConnected ? Colors.success ?? '#2E7D32' : Colors.primary}
+          />
+          <View>
+            <Text style={s.oauthBannerTitle}>Razorpay OAuth</Text>
+            <Text style={s.oauthBannerSub}>
+              {razorpayConfig?.isOAuthConnected
+                ? `Connected · ${razorpayConfig.oauthConnectedAccountId ?? 'account linked'}`
+                : 'Connect via Technology Partner OAuth'}
+            </Text>
+          </View>
+        </View>
+        <MaterialIcons name="chevron-right" size={20} color={Colors.textSecondary} />
+      </TouchableOpacity>
 
       {data.length === 0 && !err && (
         <Text style={s.empty}>No gateways configured.{'\n'}Add one from the web admin panel.</Text>
@@ -134,6 +165,11 @@ function GatewaysTab() {
                 <Text style={[s.pillText, { color: c.testResult.success ? Colors.success ?? '#2E7D32' : Colors.danger }]}>
                   {c.testResult.success ? '✓ Test OK' : '✗ Test Failed'}
                 </Text>
+              </View>
+            )}
+            {c.gatewayType === 'razorpay' && c.isOAuthConnected && (
+              <View style={[s.pill, s.pillGreen]}>
+                <Text style={[s.pillText, { color: Colors.success ?? '#2E7D32' }]}>OAuth</Text>
               </View>
             )}
           </View>
@@ -452,4 +488,11 @@ const s = StyleSheet.create({
 
   loadMore:     { alignItems: 'center', paddingVertical: Spacing.md },
   loadMoreText: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
+
+  oauthBanner:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, borderWidth: 1 },
+  oauthBannerConnected:   { backgroundColor: (Colors.success ?? '#2E7D32') + '12', borderColor: (Colors.success ?? '#2E7D32') + '40' },
+  oauthBannerDisconnected:{ backgroundColor: Colors.primary + '10', borderColor: Colors.primary + '40' },
+  oauthBannerLeft:        { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 },
+  oauthBannerTitle:       { fontSize: FontSize.sm, fontWeight: '700', color: Colors.text },
+  oauthBannerSub:         { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 1 },
 });

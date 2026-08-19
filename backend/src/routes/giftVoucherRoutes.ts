@@ -18,6 +18,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import {
   authMiddleware, requireAdmin, requireCashierOrAdmin, AuthRequest,
 } from '../middleware/auth';
+import { requireActiveStaff } from '../middleware/staffAuth';
 import { sendError } from '../utils/sendError';
 import GiftVoucher from '../models/GiftVoucher';
 import Order from '../models/Order';
@@ -257,7 +258,7 @@ router.get('/:code/check', checkLimiter, requireCashierOrAdmin, async (req: Auth
 
 // ── Redeem ────────────────────────────────────────────────────────────────────
 
-router.post('/redeem', redeemLimiter, requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/redeem', redeemLimiter, requireCashierOrAdmin, requireActiveStaff, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { code, amount, orderId, remarks } = req.body as {
       code?: string; amount?: number; orderId?: string; remarks?: string;

@@ -95,9 +95,17 @@ router.get('/connect', authMiddleware, requireAdmin, async (req: AuthRequest, re
     return;
   }
 
-  const state = crypto.randomBytes(32).toString('hex');
-  const hotelId = String(req.hotelId);
-  await redis.set(`razorpay_oauth_state:${state}`, hotelId, 'EX', OAUTH_STATE_TTL_SECS);
+  const state    = crypto.randomBytes(32).toString('hex');
+  const hotelId  = String(req.hotelId);
+  // Encode platform alongside hotelId so the callback can redirect to the
+  // correct destination (web URL vs. mobile deep link) without trusting any URL parameter.
+  const platform = (req.query as Record<string, string>).platform === 'mobile' ? 'mobile' : 'web';
+  await redis.set(
+    `razorpay_oauth_state:${state}`,
+    JSON.stringify({ hotelId, platform }),
+    'EX',
+    OAUTH_STATE_TTL_SECS,
+  );
 
   const params = new URLSearchParams({
     client_id:     clientId,
@@ -116,14 +124,46 @@ router.get('/connect', authMiddleware, requireAdmin, async (req: AuthRequest, re
 // Security: hotelId is derived from Redis state lookup, never from URL parameters.
 router.get('/callback', async (req: Request, res: Response) => {
   const { code, state, error: oauthError } = req.query as Record<string, string>;
+  // Resolve redirect targets after the state is parsed so we know the platform.
+  // These are declared here only as fallbacks; the real values are set below.
   const redirectBase = frontendBase();
-  const successUrl   = `${redirectBase}/settings/payments?razorpay_connected=1`;
-  const errorUrl     = (reason: string) =>
-    `${redirectBase}/settings/payments?razorpay_error=${encodeURIComponent(reason)}`;
+
+  // ── Validate state → retrieve hotelId + platform from Redis ─────────────
+  const redis = getRedisClient();
+  if (!redis) {
+    res.redirect(302, `${redirectBase}/settings/payments?razorpay_error=${encodeURIComponent('Server configuration error — Redis unavailable.')}`);
+    return;
+  }
+
+  const redisKey  = `razorpay_oauth_state:${state ?? ''}`;
+  const rawState  = state ? await redis.get(redisKey) : null;
+
+  // Parse JSON state; fall back gracefully to the old plain-string format
+  let hotelId  = '';
+  let platform = 'web';
+  if (rawState) {
+    try {
+      const parsed = JSON.parse(rawState) as { hotelId?: string; platform?: string };
+      hotelId  = parsed.hotelId  ?? rawState; // backwards compat: old value was plain hotelId string
+      platform = parsed.platform ?? 'web';
+    } catch {
+      hotelId = rawState; // legacy plain-string state
+    }
+  }
+
+  // Compute redirect URLs now that we know the platform
+  const successUrl = platform === 'mobile'
+    ? 'dinepos://razorpay/oauth?status=connected'
+    : `${redirectBase}/settings/payments?razorpay_connected=1`;
+  const errorUrl = (reason: string): string => platform === 'mobile'
+    ? `dinepos://razorpay/oauth?error=${encodeURIComponent(reason)}`
+    : `${redirectBase}/settings/payments?razorpay_error=${encodeURIComponent(reason)}`;
 
   // ── Handle Razorpay-initiated errors (e.g. hotel admin cancelled consent) ──
   if (oauthError) {
     logger.warn('razorpayOAuth: callback received error from Razorpay', { error: oauthError });
+    // Consume state even on error so it cannot be replayed (single-use on all paths).
+    if (rawState) await redis.del(redisKey);
     res.redirect(302, errorUrl('Authorization was cancelled or denied.'));
     return;
   }
@@ -133,15 +173,6 @@ router.get('/callback', async (req: Request, res: Response) => {
     return;
   }
 
-  // ── Validate state → retrieve hotelId from Redis ──────────────────────────
-  const redis = getRedisClient();
-  if (!redis) {
-    res.redirect(302, errorUrl('Server configuration error — Redis unavailable.'));
-    return;
-  }
-
-  const redisKey = `razorpay_oauth_state:${state}`;
-  const hotelId  = await redis.get(redisKey);
   if (!hotelId) {
     // State expired or was never issued — possible CSRF or replay
     logger.warn('razorpayOAuth: unknown or expired OAuth state', { state: state.slice(0, 8) + '...' });

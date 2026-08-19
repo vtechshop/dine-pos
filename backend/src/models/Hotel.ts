@@ -116,6 +116,9 @@ export interface IHotel extends Document {
   saNotedAt: Date | null;
   timezone: string;
 
+  // Bootstrap status — tracks whether initial setup completed after approval
+  bootstrapStatus: 'pending' | 'completed' | 'failed' | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -226,6 +229,9 @@ const HotelSchema: Schema = new Schema(
     saNote:             { type: String, default: '' },
     saNotedAt:          { type: Date, default: null },
     timezone:           { type: String, default: 'Asia/Kolkata' },
+
+    // Bootstrap status — tracks initial setup after approval; null = legacy/unknown
+    bootstrapStatus:    { type: String, enum: ['pending', 'completed', 'failed'], default: null },
   },
   { timestamps: true }
 );

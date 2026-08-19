@@ -76,7 +76,8 @@ export function SANotificationsPage() {
   const [searchQ,    setSearchQ]    = useState('');
 
   // ── delete tracking ──────────────────────────────────────────────────────────
-  const [deleting, setDeleting] = useState<Set<string>>(new Set());
+  const [deleting,     setDeleting]     = useState<Set<string>>(new Set());
+  const [deleteError,  setDeleteError]  = useState<string | null>(null);
 
   // ── derived ──────────────────────────────────────────────────────────────────
   const q = searchQ.toLowerCase();
@@ -127,10 +128,11 @@ export function SANotificationsPage() {
 
   async function handleDelete(id: string) {
     setDeleting(prev => new Set([...prev, id]));
+    setDeleteError(null);
     try {
       await remove(id);
-    } catch {
-      // Item stays in list; context will retry on next refresh
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete notification');
     } finally {
       setDeleting(prev => {
         const next = new Set(prev);
@@ -423,6 +425,14 @@ export function SANotificationsPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Delete error */}
+      {deleteError && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+          <AlertCircle size={14} />
+          {deleteError}
         </div>
       )}
 

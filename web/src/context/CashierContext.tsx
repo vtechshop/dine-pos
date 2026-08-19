@@ -8,6 +8,9 @@ import {
   apiOpenShift, apiGetActiveShift, apiCloseShift, apiAddMovement,
   type ShiftData,
 } from '../api/shifts';
+import {
+  listHeldBills, createHeldBill, deleteHeldBill as apiDeleteHeldBill,
+} from '../api/heldBills';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -33,6 +36,18 @@ export interface OrderPrefill {
   orderType: 'dine-in' | 'takeaway' | 'delivery';
   tableId?: string;
   tableNumber?: string;
+  // Order metadata fields restored when resuming a held bill
+  tableName?: string;
+  customerName?: string;
+  customerPhone?: string;
+  deliveryAddress?: string;
+  deliveryCharge?: number;
+  discountAmount?: number;
+  discountType?: 'flat' | 'percent';
+  couponCode?: string;
+  voucherCode?: string;
+  loyaltyPoints?: number;
+  loyaltyDiscount?: number;
 }
 
 export interface CartItem {
@@ -74,15 +89,18 @@ export interface ShiftState {
 
 export interface HeldBill {
   id: string;
+  /** MongoDB _id from server — present after successful server persist */
+  serverId?: string;
   label: string;
   heldAt: string;           // ISO
   cashierName: string;
   orderType: 'dine-in' | 'takeaway' | 'delivery';
   tableNumber?: string;
   tableId?: string;
+  tableName?: string;
   customerName?: string;
   customerPhone?: string;
-  address?: string;
+  address?: string;         // delivery address
   deliveryCharge?: number;
   deliveryPartner?: string;
   notes?: string;
@@ -90,6 +108,11 @@ export interface HeldBill {
   subtotal: number;
   taxTotal: number;
   discountAmount: number;
+  discountType?: 'flat' | 'percent';
+  couponCode?: string;
+  voucherCode?: string;
+  loyaltyPoints?: number;
+  loyaltyDiscount?: number;
   grandTotal: number;
 }
 
@@ -221,6 +244,55 @@ export function CashierProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (heldKey) localStorage.setItem(heldKey, JSON.stringify(heldBills));
   }, [heldBills, heldKey]);
+
+  // ── Merge server held bills into local state on mount ─────────────────────
+  // Fetches all held bills from the server and deduplicates against localStorage
+  // bills (matched by serverId). Bills only on the server (held from another
+  // terminal or after a page refresh) are added to the local list.
+  useEffect(() => {
+    if (!hotelId) return;
+    listHeldBills()
+      .then(serverBills => {
+        setHeldBills(prev => {
+          // Build a set of already-known server IDs so we don't add duplicates
+          const knownServerIds = new Set(prev.map(b => b.serverId).filter(Boolean));
+          const newFromServer: HeldBill[] = serverBills
+            .filter(sb => !knownServerIds.has(sb._id))
+            .map(sb => ({
+              id:             `held_server_${sb._id}`,
+              serverId:       sb._id,
+              label:          sb.label ?? '',
+              heldAt:         sb.heldAt,
+              cashierName:    sb.cashierName ?? '',
+              orderType:      (sb.metadata?.orderType as HeldBill['orderType']) ?? 'dine-in',
+              tableId:        sb.metadata?.tableId,
+              tableNumber:    sb.metadata?.tableNumber,
+              tableName:      sb.metadata?.tableName,
+              customerName:   sb.metadata?.customerName,
+              customerPhone:  sb.metadata?.customerPhone,
+              address:        sb.metadata?.deliveryAddress,
+              deliveryCharge: sb.metadata?.deliveryCharge,
+              discountAmount: sb.metadata?.discountAmount ?? 0,
+              discountType:   sb.metadata?.discountType as HeldBill['discountType'],
+              couponCode:     sb.metadata?.couponCode,
+              voucherCode:    sb.metadata?.voucherCode,
+              loyaltyPoints:  sb.metadata?.loyaltyPoints,
+              loyaltyDiscount: sb.metadata?.loyaltyDiscount,
+              notes:          sb.metadata?.notes,
+              items:          sb.items as CartItem[],
+              // Totals are not stored on server; default to 0 — the resume flow
+              // recalculates them from items when the order is rebuilt.
+              subtotal:    0,
+              taxTotal:    0,
+              grandTotal:  0,
+            }));
+          if (newFromServer.length === 0) return prev;
+          return [...prev, ...newFromServer];
+        });
+      })
+      .catch(() => { /* non-fatal — localStorage state is still valid */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelId]);
 
   useEffect(() => {
     if (drawerKey) localStorage.setItem(drawerKey, JSON.stringify(drawerMovements));
@@ -564,18 +636,77 @@ export function CashierProvider({ children }: { children: ReactNode }) {
 
   const holdBill = useCallback((bill: Omit<HeldBill, 'id' | 'heldAt'>) => {
     const id = `held_${Date.now()}`;
-    const newBill: HeldBill = { ...bill, id, heldAt: new Date().toISOString() };
+    const heldAt = new Date().toISOString();
+    const newBill: HeldBill = { ...bill, id, heldAt };
     setHeldBills(prev => [newBill, ...prev]);
+
+    // Persist to server so other terminals and page refreshes can see it.
+    // On success, patch the local bill with the server's MongoDB _id so resumeBill
+    // can call deleteHeldBill with the correct server ID.
+    createHeldBill({
+      label:    bill.label,
+      items:    bill.items,
+      heldAt,
+      metadata: {
+        orderType:       bill.orderType,
+        tableId:         bill.tableId,
+        tableNumber:     bill.tableNumber,
+        tableName:       bill.tableName,
+        customerName:    bill.customerName,
+        customerPhone:   bill.customerPhone,
+        deliveryAddress: bill.address,
+        deliveryCharge:  bill.deliveryCharge,
+        discountAmount:  bill.discountAmount,
+        discountType:    bill.discountType,
+        couponCode:      bill.couponCode,
+        voucherCode:     bill.voucherCode,
+        loyaltyPoints:   bill.loyaltyPoints,
+        loyaltyDiscount: bill.loyaltyDiscount,
+        notes:           bill.notes,
+      },
+    }).then(saved => {
+      setHeldBills(prev =>
+        prev.map(b => b.id === id ? { ...b, serverId: saved._id } : b),
+      );
+    }).catch(() => { /* non-fatal — localStorage already updated */ });
   }, []);
 
   const resumeBill = useCallback((id: string): HeldBill | null => {
     const bill = heldBillsRef.current.find(b => b.id === id) ?? null;
-    if (bill) setHeldBills(prev => prev.filter(b => b.id !== id));
+    if (bill) {
+      setHeldBills(prev => prev.filter(b => b.id !== id));
+      // Restore all order metadata into context so the order form can pre-populate
+      setOrderPrefill({
+        orderType:       bill.orderType,
+        tableId:         bill.tableId,
+        tableNumber:     bill.tableNumber,
+        tableName:       bill.tableName,
+        customerName:    bill.customerName,
+        customerPhone:   bill.customerPhone,
+        deliveryAddress: bill.address,
+        deliveryCharge:  bill.deliveryCharge,
+        discountAmount:  bill.discountAmount,
+        discountType:    bill.discountType,
+        couponCode:      bill.couponCode,
+        voucherCode:     bill.voucherCode,
+        loyaltyPoints:   bill.loyaltyPoints,
+        loyaltyDiscount: bill.loyaltyDiscount,
+      });
+      // Remove from server — fire-and-forget (non-fatal if it fails)
+      if (bill.serverId) {
+        apiDeleteHeldBill(bill.serverId).catch(() => { /* non-fatal */ });
+      }
+    }
     return bill;
   }, []);
 
   const deleteHeldBill = useCallback((id: string) => {
+    const bill = heldBillsRef.current.find(b => b.id === id);
     setHeldBills(prev => prev.filter(b => b.id !== id));
+    // Remove from server — fire-and-forget (non-fatal if it fails)
+    if (bill?.serverId) {
+      apiDeleteHeldBill(bill.serverId).catch(() => { /* non-fatal */ });
+    }
   }, []);
 
   // ── Drawer actions ────────────────────────────────────────────────────────

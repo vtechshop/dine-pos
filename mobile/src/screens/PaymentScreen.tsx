@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, ActivityIndicator, Alert,
+  StyleSheet, ActivityIndicator, Alert, BackHandler,
 } from 'react-native';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -93,8 +93,18 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     return () => { clearPendingOrder(); };
   }, [mode]);
 
+  // Stable unique reference for billing-mode UPI recovery — generated once at
+  // mount so every PaymentScreen instance gets a unique key even when orderId
+  // and orderNumber are absent (billing mode passes neither as a route param).
+  const localRef = useRef<string>(
+    `upi_billing_${Date.now()}_${Math.random().toString(36).slice(2)}`
+  );
+
   // UPI crash-gap recovery: if we find a persisted UPI success from a previous
   // launch, restore the success state so the cashier can complete the order.
+  // Use a per-order key so stale records from a prior order never match the next one.
+  const UPI_RECOVERY_KEY = `upi_pending_${orderId || orderNumber || localRef.current}`;
+
   useEffect(() => {
     if (mode !== 'billing') return;
     loadPendingUpiPayment().then(saved => {
@@ -105,7 +115,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         clearPendingUpiPayment();
         return;
       }
-      if (saved.orderRef === (orderNumber || orderId || 'ORD') && saved.amount === grandTotal) {
+      if (saved.orderRef === UPI_RECOVERY_KEY && saved.amount === grandTotal) {
         setMethod('upi_intent');
         setUpiTxnId(saved.txnId);
         setUpiStatus('success');
@@ -163,7 +173,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         savePendingUpiPayment({
           txnId,
           amount: grandTotal,
-          orderRef: orderRef,
+          orderRef: UPI_RECOVERY_KEY,
           ts: Date.now(),
           payload: pendingOrderRef.current,
         });
@@ -189,6 +199,15 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     setUpiStatus('idle');
     setUpiTxnId('');
   }, [method]);
+
+  // H-03: Block Android hardware back button while payment is in flight
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (placing) return true; // block back during payment
+      return false;
+    });
+    return () => sub.remove();
+  }, [placing]);
 
   // ── Split row helpers ──────────────────────────────────────────────────────
 
@@ -270,8 +289,20 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           cancelOrderAdmin(created._id).catch(() => {});
           throw payErr;
         }
-        // KOT fires only after payment is confirmed — never on a failed payment
-        printKOT(created, settings).catch(() => {});
+        // KOT fires only after payment is confirmed — never on a failed payment.
+        // Map selectedModifiers (SelectedModifier[]) → modifiers (string[]) so the
+        // KOT printer receives the modifier names rather than raw objects.
+        const kotInput = {
+          ...created,
+          orderNumber: created.orderNumber,
+          items: (created.items || []).map((item: any) => ({
+            ...item,
+            modifiers: (item.selectedModifiers || []).map(
+              (m: any) => m.modifierOptionName || m.name || String(m)
+            ),
+          })),
+        };
+        printKOT(kotInput, settings).catch(() => {});
         // Order successfully created — UPI pending record is no longer needed
         clearPendingUpiPayment();
         // Fire promo deductions fire-and-forget — non-blocking, non-fatal
@@ -283,9 +314,8 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           }
         }
       } else {
-        // Cashier completing an existing order
-        await completeOrderPayment(orderId!, method, details);
-        completedOrder = null; // receipt uses local copy from CashierDashboard
+        // Cashier completing an existing order — capture return value so receipt prints
+        completedOrder = await completeOrderPayment(orderId!, method, details);
       }
 
       // Print receipt
@@ -317,7 +347,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={[styles.root, { paddingTop: top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => { if (!placing) navigation.goBack(); }} style={styles.backBtn}>
           <MaterialIcons name="arrow-back" size={22} color={Colors.text} />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
@@ -462,28 +492,12 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
               keyboardType="email-address"
               autoCapitalize="none"
             />
-            {!collectSent ? (
-              <TouchableOpacity
-                style={[styles.sendBtn, !collectUpiId.trim() && styles.sendBtnDisabled]}
-                onPress={() => {
-                  if (!collectUpiId.trim()) return;
-                  setCollectSent(true);
-                }}
-                disabled={!collectUpiId.trim()}
-                activeOpacity={0.8}
-              >
-                <MaterialIcons name="send" size={18} color="#FFF" />
-                <Text style={styles.sendBtnText}>Send Collect Request</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.collectStatus}>
-                <ActivityIndicator size="small" color="#1565C0" />
-                <Text style={styles.collectStatusText}>
-                  Request sent to <Text style={{ fontWeight: '700' }}>{collectUpiId}</Text>.
-                  {'\n'}Ask customer to approve, then mark paid.
-                </Text>
-              </View>
-            )}
+            <View style={styles.collectStatus}>
+              <MaterialIcons name="info-outline" size={18} color="#E65100" />
+              <Text style={[styles.collectStatusText, { color: '#E65100' }]}>
+                UPI Collect is not supported.{'\n'}Ask customer to pay via UPI ID manually and confirm receipt.
+              </Text>
+            </View>
             <TextInput
               style={[styles.txnInput, { marginTop: 12 }]}
               placeholder="UPI Transaction ID (optional)"

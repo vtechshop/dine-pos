@@ -39,6 +39,11 @@ async function reportPrintStatus(
   }
 }
 
+// ── Socket print-job deduplication ───────────────────────────────────────────
+// Prevents the same server-assigned jobId from being executed twice in the event
+// of socket reconnect replays or duplicate server dispatches within 60 seconds.
+const RECENT_JOB_IDS = new Set<string>();
+
 // ── Module-level printer socket registry ─────────────────────────────────────
 //
 // Sockets are created on first use and kept alive across screen unmount/remount
@@ -136,6 +141,13 @@ function buildSocket(
   // uses the latest values even after a screen remount.
   socket.on('print_job', (event: PrintJobEvent) => {
     console.log(`[PrinterSocket][${role}] Print job received — jobId=${event.jobId} type=${event.jobType}`);
+    // Dedup: skip jobs we've already started within the last 60 seconds
+    if (RECENT_JOB_IDS.has(event.jobId)) {
+      console.log(`[PrinterSocket][${role}] Duplicate print_job skipped — jobId=${event.jobId}`);
+      return;
+    }
+    RECENT_JOB_IDS.add(event.jobId);
+    setTimeout(() => RECENT_JOB_IDS.delete(event.jobId), 60_000);
     const settings = st.getSettings();
     const makeReport = (errCb: ((msg: string) => void) | undefined) =>
       async (jobId: string, status: 'success' | 'failed', error?: string) => {

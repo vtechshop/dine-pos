@@ -13,7 +13,7 @@ const SA_BASE = import.meta.env.VITE_API_URL
   : 'http://localhost:5000/api/superadmin';
 
 async function saFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('pos_token');
+  const token = localStorage.getItem('sa_token');
   const res   = await fetch(`${SA_BASE}${path}`, {
     ...init,
     signal: (init as RequestInit & { signal?: AbortSignal }).signal ?? AbortSignal.timeout(20_000),
@@ -25,7 +25,7 @@ async function saFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
   if (!res.ok) {
     if (res.status === 401) {
-      localStorage.removeItem('pos_token');
+      localStorage.removeItem('sa_token');
       localStorage.removeItem('pos_role');
       window.location.replace('/super-admin/login');
       throw new Error('Session expired');
@@ -337,7 +337,7 @@ export function getAggAudit(params?: { from?: string; to?: string; type?: string
 
 // [SA-BACKEND-REQUIRED] GET /superadmin/aggregator/reports/generate?type=&from=&to=&format=
 export function getAggReport(type: string, from: string, to: string): Promise<Blob> {
-  const token = localStorage.getItem('pos_token');
+  const token = localStorage.getItem('sa_token');
   return fetch(`${SA_BASE}/aggregator/reports/generate?type=${type}&from=${from}&to=${to}&format=csv`, {
     headers: { Authorization: `Bearer ${token ?? ''}` },
   }).then(r => {

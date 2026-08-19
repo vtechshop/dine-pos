@@ -181,6 +181,9 @@ function OrderVolumeChart({ points }: { points: CompletedTrendsPoint[] }) {
 export function HotelAnalyticsPage() {
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
+  // ── refresh counter — bumped on manual refresh to re-run all effects ─────────
+  const [refreshCount, setRefreshCount] = useState(0);
+
   // ── main data (5 parallel endpoints) ────────────────────────────────────────
   const [mainLoading, setMainLoading] = useState(true);
   const [dashErr,     setDashErr]     = useState(false);
@@ -240,7 +243,7 @@ export function HotelAnalyticsPage() {
       .then(d  => { if (!cancelled) { setRevData(d);  setRevLoading(false); } })
       .catch(() => { if (!cancelled) { setRevLoading(false); } });
     return () => { cancelled = true; };
-  }, [revPeriod]);
+  }, [revPeriod, refreshCount]);
 
   // ── activity section ─────────────────────────────────────────────────────────
 
@@ -252,9 +255,9 @@ export function HotelAnalyticsPage() {
       .then(d  => { if (!cancelled) { setActHotels(d.hotels); setActLoading(false); } })
       .catch(() => { if (!cancelled) { setActError(true);     setActLoading(false); } });
     return () => { cancelled = true; };
-  }, [actBy, actPeriod]);
+  }, [actBy, actPeriod, refreshCount]);
 
-  // ── completed-order daily trends (once on mount) ──────────────────────────────
+  // ── completed-order daily trends ─────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     setTrendsLoading(true);
@@ -263,7 +266,7 @@ export function HotelAnalyticsPage() {
       .then(d  => { if (!cancelled) { setTrendsData(d);     setTrendsLoading(false); } })
       .catch(() => { if (!cancelled) { setTrendsError(true); setTrendsLoading(false); } });
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshCount]);
 
   // ── derived values ────────────────────────────────────────────────────────────
 
@@ -301,7 +304,7 @@ export function HotelAnalyticsPage() {
             </span>
           )}
           <button
-            onClick={loadMain}
+            onClick={() => { loadMain(); setRefreshCount(c => c + 1); }}
             disabled={mainLoading}
             className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-ink/60 transition hover:bg-mist disabled:opacity-50"
           >

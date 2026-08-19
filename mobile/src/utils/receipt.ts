@@ -50,7 +50,7 @@ export const generateReceiptHTML = (order: Order, settings: Settings): string =>
   // QR size in px — proportional to column width
   const qrSize = isWeb ? 160 : is58mm ? 100 : 130;
 
-  const itemRows = order.items
+  const itemRows = (order.items || [])
     .map(
       (item) => `
       <tr>
@@ -213,6 +213,8 @@ export const generateReceiptHTML = (order: Order, settings: Settings): string =>
         <td style="text-align:left;">Subtotal</td>
         <td style="text-align:right;">${settings.currencySymbol}${order.subtotal.toFixed(2)}</td>
       </tr>
+      ${(order as any).discountAmount > 0 ? `<tr><td style="text-align:left; padding:3px 2px; font-size:${fs.total}px;">DISCOUNT</td><td style="text-align:right; padding:3px 2px; font-size:${fs.total}px;">-${settings.currencySymbol ?? '₹'}${((order as any).discountAmount as number).toFixed(2)}</td></tr>` : ''}
+      ${(order as any).loyaltyDiscount > 0 ? `<tr><td style="text-align:left; padding:3px 2px; font-size:${fs.total}px;">LOYALTY DISC</td><td style="text-align:right; padding:3px 2px; font-size:${fs.total}px;">-${settings.currencySymbol ?? '₹'}${((order as any).loyaltyDiscount as number).toFixed(2)}</td></tr>` : ''}
       ${taxRows(order.subtotal, order.taxTotal, settings.currencySymbol, fs.total)}
       <tr class="grand-total">
         <td style="text-align:left;">GRAND TOTAL</td>
@@ -330,14 +332,21 @@ export const generateKOTHTML = (order: KOTOrderInput, settings: Settings): strin
     ? { title: 14, info: 10, item: 13 }
     : { title: 17, info: 12, item: 15 };
 
-  const itemRows = order.items
-    .map(
-      (item) => `
+  const itemRows = (order.items || [])
+    .map((item) => {
+      const modRows = (item.modifiers && item.modifiers.length > 0)
+        ? item.modifiers.map(m => `
+        <tr>
+          <td style="text-align:left; padding:2px 2px 2px 14px; font-size:${fs.info}px; color:#555;">+ ${escHtml(m)}</td>
+          <td></td>
+        </tr>`).join('')
+        : '';
+      return `
       <tr>
         <td style="text-align:left; padding:5px 2px; font-weight:bold;">${escHtml(item.productName)}</td>
         <td style="text-align:right; padding:5px 2px; font-weight:bold;">x${item.quantity}</td>
-      </tr>`
-    )
+      </tr>${modRows}`;
+    })
     .join('');
 
   const date = new Date(order.createdAt);

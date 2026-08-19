@@ -13,9 +13,10 @@ import {
   suspendHotel, activateHotel, getAllTickets, adminReplyTicket, updateTicketStatus,
   getBranchRevenue, setHotelPremium, Ticket, getBroadcastNotifications, createBroadcastNotification,
   deleteBroadcastNotification, getAllDevices, getSystemHealth, getRemoteConfigAdmin, updateRemoteConfig,
-  startHotelTrial, expireHotel, updateHotelFeatures, extendTrialDays, convertToPaidPlan,
+  expireHotel, updateHotelFeatures, extendTrialDays, convertToPaidPlan,
   getSADashboard, getSASubscriptionRevenue, getSAHotelGrowth, getSAFailedPayments,
   getSADeviceLicensing, getSATopHotels, registerSAPushToken,
+  clearSuperAdminToken, onSATokenExpired,
   SADashboard, SASubscriptionRevenue, SAHotelGrowth, SAFailedPayments, SADeviceLicensing, SATopHotels,
 } from '../services/api';
 import * as Notifications from 'expo-notifications';
@@ -132,10 +133,14 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [hotelTotalPages, setHotelTotalPages] = useState(1);
   const [hotelLoadingMore, setHotelLoadingMore] = useState(false);
   const [branchRevenue, setBranchRevenue] = useState<any>(null);
+  const [branchRevenueLoading, setBranchRevenueLoading] = useState(false);
+  const [branchRevenueError, setBranchRevenueError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filterStatus, setFilterStatus] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
+  const [searchText, setSearchText] = useState('');
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [selectedHotel, setSelectedHotel] = useState<Hotel | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -190,6 +195,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   // Remote Config
   const [remoteConfig, setRemoteConfig]   = useState<RemoteConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(false);
+  const [configError, setConfigError]     = useState<string | null>(null);
   const [editConfig, setEditConfig]       = useState<Partial<RemoteConfig>>({});
 
   // Health
@@ -397,6 +403,22 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  // Register 401 / session-expired handler
+  useEffect(() => {
+    onSATokenExpired(() => {
+      showAlert('Session Expired', 'Your session has expired. Please login again.', [
+        { text: 'OK', onPress: () => navigation.replace('SuperAdminLogin') },
+      ]);
+    });
+  }, [navigation]);
+
+  // Clean up search debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
+
   useEffect(() => { loadData(); }, [loadData]);
 
   // Load all overview widgets + register SA push token on mount
@@ -520,23 +542,12 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const handleStartTrial = async (hotel: Hotel) => {
-    showAlert('Start Trial', `Start a 14-day trial for ${hotel.hotelName}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Start Trial', onPress: async () => {
-          setActionLoading(true);
-          try {
-            await startHotelTrial(hotel._id, 14);
-            showAlert('Done', 'Trial started!');
-            setShowDetail(false);
-            loadData();
-          } catch (e: any) {
-            showAlert('Error', e.message);
-          } finally { setActionLoading(false); }
-        },
-      },
-    ]);
+  const handleSearchChange = (text: string) => {
+    setSearchText(text);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setSearch(text);
+    }, 400);
   };
 
   const openExtendModal = (hotel: Hotel) => {
@@ -1788,7 +1799,10 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.headerTitle}>Super Admin</Text>
           <Text style={styles.headerSubtitle}>Hotel Management Dashboard</Text>
         </View>
-        <TouchableOpacity onPress={() => navigation.replace('RoleSelect')}>
+        <TouchableOpacity onPress={async () => {
+          await clearSuperAdminToken();
+          navigation.replace('RoleSelect');
+        }}>
           <MaterialIcons name="logout" size={24} color={Colors.textSecondary} />
         </TouchableOpacity>
       </View>
@@ -1826,14 +1840,20 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
             onPress={async () => {
               setActiveTab(t.id);
               if (t.id === 'revenue' && !branchRevenue) {
-                try { setBranchRevenue(await getBranchRevenue()); } catch {}
+                setBranchRevenueLoading(true);
+                setBranchRevenueError(null);
+                getBranchRevenue()
+                  .then(data => setBranchRevenue(data))
+                  .catch((e: any) => setBranchRevenueError(e.message || 'Failed to load revenue'))
+                  .finally(() => setBranchRevenueLoading(false));
               }
               if (t.id === 'config' && !remoteConfig) {
-                try {
-                  const cfg = await getRemoteConfigAdmin();
-                  setRemoteConfig(cfg);
-                  setEditConfig(cfg);
-                } catch {}
+                setConfigLoading(true);
+                setConfigError(null);
+                getRemoteConfigAdmin()
+                  .then(cfg => { setRemoteConfig(cfg); setEditConfig(cfg); })
+                  .catch((e: any) => setConfigError(e.message || 'Failed to load config'))
+                  .finally(() => setConfigLoading(false));
               }
             }}
           >
@@ -1937,7 +1957,16 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
       ) : activeTab === 'config' ? (
         <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 80, gap: Spacing.md }}>
           {!remoteConfig ? (
-            <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+            configError ? (
+              <View style={{ padding: 16, alignItems: 'center' }}>
+                <Text style={{ color: Colors.danger }}>{configError}</Text>
+                <TouchableOpacity onPress={() => setConfigError(null)}>
+                  <Text style={{ color: Colors.primary, marginTop: 8 }}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+            )
           ) : (
             <>
               {health && (
@@ -2014,9 +2043,19 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
         </ScrollView>
       ) : activeTab === 'revenue' ? (
         <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 60 }}>
-          {!branchRevenue ? (
-            <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
-          ) : (
+          {branchRevenueLoading && !branchRevenue && <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />}
+          {branchRevenueError && !branchRevenue && (
+            <View style={{ padding: 16, alignItems: 'center' }}>
+              <Text style={{ color: Colors.danger }}>{branchRevenueError}</Text>
+              <TouchableOpacity onPress={() => {
+                setBranchRevenueError(null);
+                setBranchRevenue(null);
+              }}>
+                <Text style={{ color: Colors.primary, marginTop: 8 }}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {branchRevenue && (
             <>
               <View style={{ flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.lg }}>
                 <View style={[styles.statCard, { borderTopColor: Colors.success, flex: 1 }]}>
@@ -2051,7 +2090,7 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
           {/* Search */}
           <View style={styles.searchBar}>
             <MaterialIcons name="search" size={20} color={Colors.textMuted} />
-            <TextInput style={styles.searchInput} placeholder="Search hotel, owner, phone..." placeholderTextColor={Colors.textMuted} value={search} onChangeText={setSearch} />
+            <TextInput style={styles.searchInput} placeholder="Search hotel, owner, phone..." placeholderTextColor={Colors.textMuted} value={searchText} onChangeText={handleSearchChange} />
           </View>
           {/* Filter */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>

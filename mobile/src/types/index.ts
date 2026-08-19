@@ -239,7 +239,7 @@ export interface DailyReport {
 // satisfies this too, so the same print functions work for live and offline orders
 export interface KOTOrderInput {
   orderNumber: string;
-  items: { productName: string; quantity: number }[];
+  items: { productName: string; quantity: number; modifiers?: string[] }[];
   tableNumber: string;
   notes: string;
   createdAt: string;
@@ -914,6 +914,7 @@ export type RootStackParamList = {
   LoyaltyProgram: undefined;
   KitchenLogin: undefined;
   KitchenDisplay: undefined;
+  KitchenQueue: undefined;
   OnlineOrders: undefined;
   WaiterLogin: undefined;
   WaiterDisplay: undefined;
@@ -959,6 +960,10 @@ export type RootStackParamList = {
   BulkImageAssign: undefined;
   Coupons: undefined;
   GiftVouchers: undefined;
+  ShiftScreen: undefined;
+  CashDrawerScreen: undefined;
+  BillHistory: undefined;
+  RazorpayOAuth: { status?: string; error?: string } | undefined;
 };
 
 export type TabParamList = {

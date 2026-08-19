@@ -1,23 +1,33 @@
 const SA_BASE = `${import.meta.env.VITE_API_URL ?? ''}/superadmin`;
 
 function saToken(): string {
-  return localStorage.getItem('pos_token') ?? '';
+  return localStorage.getItem('sa_token') ?? '';
 }
 
 async function saFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${SA_BASE}${path}`, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${saToken()}`,
-      ...(opts.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { message?: string }).message ?? `HTTP ${res.status}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 65_000);
+  try {
+    const res = await fetch(`${SA_BASE}${path}`, {
+      ...opts,
+      signal: (opts as any).signal ?? controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${saToken()}`,
+        ...(opts.headers ?? {}),
+      },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error((body as { message?: string }).message ?? `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<T>;
+  } catch (err: any) {
+    if (err?.name === 'AbortError') throw new Error('Request timed out');
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return res.json() as Promise<T>;
 }
 
 export type LeadStatus = 'new' | 'contacted' | 'demo_scheduled' | 'proposal_sent' | 'won' | 'lost';

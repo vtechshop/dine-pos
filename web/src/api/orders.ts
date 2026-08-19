@@ -18,6 +18,7 @@ export interface FetchOrdersParams {
   source?: string;
   page?: number;
   limit?: number;
+  q?: string;
 }
 
 export async function fetchOrders(params: FetchOrdersParams = {}): Promise<OrdersResponse> {
@@ -29,6 +30,7 @@ export async function fetchOrders(params: FetchOrdersParams = {}): Promise<Order
   if (params.source) q.set('source', params.source);
   if (params.page)   q.set('page',   String(params.page));
   if (params.limit)  q.set('limit',  String(params.limit));
+  if (params.q)      q.set('q',      params.q);
   return apiFetch<OrdersResponse>(`/orders?${q}`);
 }
 
@@ -98,6 +100,7 @@ export interface CreateOrderPayload {
   giftVoucherCode?: string;
   redeemedPoints?: number;
   loyaltyDiscount?: number;
+  deliveryCharge?: number;
   paymentMethod?: 'cash' | 'upi' | 'card' | 'split';
   splitDetails?: { cash: number; upi: number; card: number };
   offlineId?: string;
@@ -138,6 +141,26 @@ export async function updateOrderPayment(
       ...(splitDetails    ? { splitDetails }    : {}),
       ...(transactionId   ? { transactionId }   : {}),
       ...(upiApp          ? { upiApp }          : {}),
+    }),
+  });
+}
+
+// Bug C3 + H7 fix: use PATCH /orders/:id/payment — accepted by cashier role,
+// and carries tipAmount + additionalDiscount that PUT /orders/:id dropped.
+export async function patchOrderPayment(
+  orderId: string,
+  paymentMethod: string,
+  splitDetails?: { cash: number; upi: number; card: number },
+  tipAmount?: number,
+  additionalDiscount?: number,
+): Promise<void> {
+  await apiFetch<unknown>(`/orders/${orderId}/payment`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      paymentMethod,
+      ...(splitDetails       ? { splitDetails }       : {}),
+      ...(tipAmount          ? { tipAmount }          : {}),
+      ...(additionalDiscount ? { additionalDiscount } : {}),
     }),
   });
 }
