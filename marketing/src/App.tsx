@@ -13,6 +13,10 @@ const BookDemoPage = lazy(() => import('./pages/BookDemoPage').then(m => ({ defa
 const FAQPage      = lazy(() => import('./pages/FAQPage').then(m => ({ default: m.FAQPage })));
 const BlogPage       = lazy(() => import('./pages/BlogPage').then(m => ({ default: m.BlogPage })));
 const NotFoundPage   = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
+const TermsPage      = lazy(() => import('./pages/TermsPage').then(m => ({ default: m.TermsPage })));
+const PrivacyPage    = lazy(() => import('./pages/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
+const RefundPage     = lazy(() => import('./pages/RefundPage').then(m => ({ default: m.RefundPage })));
+const ShippingPage   = lazy(() => import('./pages/ShippingPage').then(m => ({ default: m.ShippingPage })));
 
 function PageLoader() {
   return (
@@ -45,6 +49,10 @@ export function App() {
               <Route path="/book-demo" element={<BookDemoPage />} />
               <Route path="/faq"       element={<FAQPage />} />
               <Route path="/blog"      element={<BlogPage />} />
+              <Route path="/terms"     element={<TermsPage />} />
+              <Route path="/privacy"   element={<PrivacyPage />} />
+              <Route path="/refund"    element={<RefundPage />} />
+              <Route path="/shipping"  element={<ShippingPage />} />
               <Route path="*"          element={<NotFoundPage />} />
             </Routes>
           </Suspense>

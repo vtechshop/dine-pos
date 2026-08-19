@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Mail, Phone, MapPin } from 'lucide-react';
 
-const POS_LOGIN_URL = 'https://app.dinepos.com/login';
+const POS_LOGIN_URL = 'https://web.dinepos.happya.in/login';
 
 const LINKS = {
   Product: [
@@ -15,13 +15,19 @@ const LINKS = {
     { label: 'Contact', to: '/contact' },
     { label: 'FAQ',     to: '/faq' },
   ],
+  Legal: [
+    { label: 'Terms & Conditions',       to: '/terms' },
+    { label: 'Privacy Policy',           to: '/privacy' },
+    { label: 'Cancellation & Refund',    to: '/refund' },
+    { label: 'Shipping Policy',          to: '/shipping' },
+  ],
 };
 
 export function Footer() {
   return (
     <footer className="bg-[#1C0800] text-gray-300">
       <div className="mx-auto max-w-6xl px-5 py-14">
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-5">
           {/* Brand */}
           <div className="lg:col-span-2">
             <div className="mb-4 flex items-center gap-2.5">
@@ -83,7 +89,7 @@ export function Footer() {
 
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-6 sm:flex-row">
           <p className="text-xs text-gray-600">
-            © {new Date().getFullYear()} Dine POS. All rights reserved.
+            © {new Date().getFullYear()} Happya Softech. All rights reserved.
           </p>
           <a
             href={POS_LOGIN_URL}
