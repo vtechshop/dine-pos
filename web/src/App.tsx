@@ -46,6 +46,11 @@ const FollowUpsPage         = lazy(() => import('./pages/super-admin/FollowUpsPa
 const LeadDetailPage        = lazy(() => import('./pages/super-admin/LeadDetailPage').then(m => ({ default: m.LeadDetailPage })));
 const LeadPipelinePage      = lazy(() => import('./pages/super-admin/LeadPipelinePage').then(m => ({ default: m.LeadPipelinePage })));
 import { SubscriptionExpiredPage } from './pages/SubscriptionExpiredPage';
+import { TermsPage }    from './pages/legal/TermsPage';
+import { PrivacyPage }  from './pages/legal/PrivacyPage';
+import { RefundPage }   from './pages/legal/RefundPage';
+import { ShippingPage } from './pages/legal/ShippingPage';
+import { ContactPage }  from './pages/legal/ContactPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
@@ -134,6 +139,13 @@ export function App() {
                   <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
                   <Route path="/customer-display"  element={<CustomerDisplayPage />} />
                   <Route path="/subscription-expired" element={<SubscriptionExpiredPage />} />
+
+                  {/* Public legal pages — no auth required */}
+                  <Route path="/terms"    element={<TermsPage />} />
+                  <Route path="/privacy"  element={<PrivacyPage />} />
+                  <Route path="/refund"   element={<RefundPage />} />
+                  <Route path="/shipping" element={<ShippingPage />} />
+                  <Route path="/contact"  element={<ContactPage />} />
 
                   {/* Super Admin protected routes */}
                   <Route element={<SuperAdminRoute />}>
