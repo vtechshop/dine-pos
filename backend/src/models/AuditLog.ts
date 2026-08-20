@@ -1,7 +1,15 @@
 import mongoose from 'mongoose';
 
+// MIGRATION REQUIRED before deploying this schema change:
+//   db.auditlogs.updateMany(
+//     { hotelId: { $type: 'string' } },
+//     [{ $set: { hotelId: { $toObjectId: '$hotelId' } } }]
+//   )
+// Run this in the MongoDB shell against the production database BEFORE deploying.
+// Existing documents have hotelId stored as BSON String; queries with ObjectId
+// will return empty until the data is migrated.
 const auditLogSchema = new mongoose.Schema({
-  hotelId:    { type: String, required: true },
+  hotelId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Hotel', required: true },
   actorId:    { type: String, default: '' },
   actorRole:  { type: String, default: 'admin' },
   action:     { type: String, required: true },

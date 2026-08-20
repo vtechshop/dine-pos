@@ -123,13 +123,11 @@ export async function createGRNForApproval(
   notes:       string = '',
 ): Promise<GRNServiceResult> {
   const hotelOId = new mongoose.Types.ObjectId(hotelId);
-  const po = await PurchaseOrder.findOne({ _id: poId, hotelId: hotelOId, isDeleted: false });
-  if (!po) throw new Error(`PurchaseOrder ${poId} not found`);
-  if (!['approved', 'sent', 'partially_received'].includes(po.status)) {
-    throw new Error(`Cannot receive against PO in status "${po.status}"`);
-  }
 
-  // GRN number
+  // GRN number is allocated outside the transaction — same pattern as grnRoutes.ts.
+  // If the transaction is retried by MongoDB the counter increments again (a sequence
+  // gap), which is acceptable. The counter must not be inside withTransaction because
+  // a upsert-based counter can cause write-conflict aborts on concurrent GRNs.
   const counter = await DailyCounter.findOneAndUpdate(
     { key: `GRN-${hotelId}` },
     { $inc: { seq: 1 } },
@@ -137,136 +135,169 @@ export async function createGRNForApproval(
   );
   const grnNumber = `GRN-${String(counter.seq).padStart(4, '0')}`;
 
-  // Process items
-  const processedItems: Record<string, unknown>[] = [];
-  const inventoryOps: Array<() => Promise<unknown>> = [];
-
-  for (let idx = 0; idx < items.length; idx++) {
-    const raw          = items[idx];
-    const receivedQty  = Math.max(0, raw.receivedQty);
-    const damagedQty   = Math.max(0, raw.damagedQty ?? 0);
-    const rejectedQty  = Math.max(0, raw.rejectedQty ?? 0);
-    const acceptedQty  = Math.max(0, receivedQty - damagedQty - rejectedQty);
-
-    // Update PO item receivedQty
-    if (idx < po.items.length) {
-      po.items[idx].receivedQty = (po.items[idx].receivedQty || 0) + receivedQty;
-    }
-
-    const pendingQty = Math.max(0, raw.orderedQty - receivedQty);
-
-    processedItems.push({
-      poItemIndex:   idx,
-      ingredientId:  raw.ingredientId ? new mongoose.Types.ObjectId(raw.ingredientId) : null,
-      productName:   raw.productName,
-      variantId:     '',
-      variantName:   '',
-      orderedQty:    raw.orderedQty,
-      receivedQty,
-      damagedQty,
-      rejectedQty,
-      pendingQty,
-      unit:          raw.unit,
-      purchasePrice: raw.purchasePrice,
-    });
-
-    if (acceptedQty > 0 && raw.ingredientId) {
-      const iId = new mongoose.Types.ObjectId(raw.ingredientId);
-      inventoryOps.push(() =>
-        Ingredient.updateOne(
-          { _id: iId, hotelId: hotelOId },
-          { $inc: { currentStock: acceptedQty } },
-        ),
+  // All five writes (PO, GRN, stock increments, WAC, vendor ledger) are wrapped in
+  // a single transaction so any failure rolls back everything atomically.
+  let result!: GRNServiceResult;
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      // Re-read PO inside the transaction for a consistent snapshot.
+      const po = await PurchaseOrder.findOne(
+        { _id: poId, hotelId: hotelOId, isDeleted: false },
+        null,
+        { session },
       );
-    }
-  }
+      if (!po) throw new Error(`PurchaseOrder ${poId} not found`);
+      if (!['approved', 'sent', 'partially_received'].includes(po.status)) {
+        throw new Error(`Cannot receive against PO in status "${po.status}"`);
+      }
 
-  po.markModified('items');
-  const allReceived = po.items.every((pi) => (pi.receivedQty || 0) >= pi.orderedQty);
-  const anyReceived = po.items.some((pi) => (pi.receivedQty || 0) > 0);
-  if (allReceived)      po.status = 'received';
-  else if (anyReceived) po.status = 'partially_received';
-  await po.save();
+      // Process items (pure computation, no DB calls)
+      const processedItems: Record<string, unknown>[] = [];
+      const inventoryUpdates: Array<{ filter: object; update: object }> = [];
 
-  // Create GRN
-  const grn = await GRN.create({
-    hotelId:      hotelOId,
-    grnNumber,
-    poId:         po._id,
-    poNumber:     po.poNumber,
-    vendorId:     po.vendorId,
-    vendorSnapshot: po.vendorSnapshot,
-    receiveDate,
-    status:       allReceived ? 'completed' : 'partial',
-    items:        processedItems,
-    notes,
-    receivedBy:   'ocr-assistant',
-    cancelReason: '',
-    isDeleted:    false,
-  });
+      for (let idx = 0; idx < items.length; idx++) {
+        const raw          = items[idx];
+        const receivedQty  = Math.max(0, raw.receivedQty);
+        const damagedQty   = Math.max(0, raw.damagedQty ?? 0);
+        const rejectedQty  = Math.max(0, raw.rejectedQty ?? 0);
+        const acceptedQty  = Math.max(0, receivedQty - damagedQty - rejectedQty);
 
-  // Stock update
-  await Promise.all(inventoryOps.map((fn) => fn()));
+        if (idx < po.items.length) {
+          po.items[idx].receivedQty = (po.items[idx].receivedQty || 0) + receivedQty;
+        }
+        const pendingQty = Math.max(0, raw.orderedQty - receivedQty);
 
-  // WAC update (identical to grnRoutes.ts)
-  const wacOps = processedItems
-    .filter((item) => item.ingredientId && (item.purchasePrice as number) > 0)
-    .map(async (item) => {
-      const accepted = Math.max(0,
-        (item.receivedQty  as number) -
-        (item.damagedQty   as number || 0) -
-        (item.rejectedQty  as number || 0),
+        processedItems.push({
+          poItemIndex:   idx,
+          ingredientId:  raw.ingredientId ? new mongoose.Types.ObjectId(raw.ingredientId) : null,
+          productName:   raw.productName,
+          variantId:     '',
+          variantName:   '',
+          orderedQty:    raw.orderedQty,
+          receivedQty,
+          damagedQty,
+          rejectedQty,
+          pendingQty,
+          unit:          raw.unit,
+          purchasePrice: raw.purchasePrice,
+        });
+
+        if (acceptedQty > 0 && raw.ingredientId) {
+          const iId = new mongoose.Types.ObjectId(raw.ingredientId);
+          inventoryUpdates.push({
+            filter: { _id: iId, hotelId: hotelOId },
+            update: { $inc: { currentStock: acceptedQty } },
+          });
+        }
+      }
+
+      // ── Write 1: PO status + received quantities ────────────────────────────
+      po.markModified('items');
+      const allReceived = po.items.every((pi) => (pi.receivedQty || 0) >= pi.orderedQty);
+      const anyReceived = po.items.some((pi) => (pi.receivedQty || 0) > 0);
+      if (allReceived)      po.status = 'received';
+      else if (anyReceived) po.status = 'partially_received';
+      await po.save({ session });
+
+      // ── Write 2: GRN document ───────────────────────────────────────────────
+      const [grn] = await GRN.create(
+        [{
+          hotelId:        hotelOId,
+          grnNumber,
+          poId:           po._id,
+          poNumber:       po.poNumber,
+          vendorId:       po.vendorId,
+          vendorSnapshot: po.vendorSnapshot,
+          receiveDate,
+          status:         allReceived ? 'completed' : 'partial',
+          items:          processedItems,
+          notes,
+          receivedBy:     'ocr-assistant',
+          cancelReason:   '',
+          isDeleted:      false,
+        }],
+        { session },
       );
-      if (accepted <= 0) return;
-      const iId = item.ingredientId as mongoose.Types.ObjectId;
-      const ing = await Ingredient.findOne({ _id: iId, hotelId: hotelOId }).select('costPerUnit currentStock');
-      if (!ing || ing.currentStock <= 0) return;
-      const prevStock = Math.max(0, ing.currentStock - accepted);
-      const newCost   = (prevStock * ing.costPerUnit + accepted * (item.purchasePrice as number)) / ing.currentStock;
-      if (!isNaN(newCost) && newCost > 0) {
-        await Ingredient.updateOne(
+
+      // ── Write 3: ingredient stock increments ────────────────────────────────
+      for (const op of inventoryUpdates) {
+        await Ingredient.updateOne(op.filter, op.update, { session });
+      }
+
+      // ── Write 4: WAC (weighted average cost) update ─────────────────────────
+      // The findOne reads AFTER the $inc above, so currentStock is already the
+      // post-receipt value within the same transaction (read-your-own-writes).
+      for (const item of processedItems) {
+        if (!item.ingredientId || !((item.purchasePrice as number) > 0)) continue;
+        const accepted = Math.max(0,
+          (item.receivedQty  as number) -
+          (item.damagedQty   as number || 0) -
+          (item.rejectedQty  as number || 0),
+        );
+        if (accepted <= 0) continue;
+        const iId = item.ingredientId as mongoose.Types.ObjectId;
+        const ing = await Ingredient.findOne(
           { _id: iId, hotelId: hotelOId },
-          { $set: { costPerUnit: +newCost.toFixed(4) } },
+          'costPerUnit currentStock',
+          { session },
+        );
+        if (!ing || ing.currentStock <= 0) continue;
+        const prevStock = Math.max(0, ing.currentStock - accepted);
+        const newCost   = (prevStock * ing.costPerUnit + accepted * (item.purchasePrice as number)) / ing.currentStock;
+        if (!isNaN(newCost) && newCost > 0) {
+          await Ingredient.updateOne(
+            { _id: iId, hotelId: hotelOId },
+            { $set: { costPerUnit: +newCost.toFixed(4) } },
+            { session },
+          );
+        }
+      }
+
+      // ── Write 5: vendor outstanding + ledger entry ──────────────────────────
+      const grnValue = processedItems.reduce((sum, item) => {
+        const accepted = Math.max(0,
+          (item.receivedQty  as number) - (item.rejectedQty as number || 0),
+        );
+        return sum + accepted * ((item.purchasePrice as number) || 0);
+      }, 0);
+
+      if (grnValue > 0) {
+        const updatedVendor = await Vendor.findByIdAndUpdate(
+          grn.vendorId,
+          { $inc: { currentOutstanding: grnValue } },
+          { new: true, session },
+        );
+        await VendorLedgerEntry.create(
+          [{
+            hotelId:         hotelOId,
+            vendorId:        grn.vendorId,
+            entryType:       'grn',
+            referenceId:     grn._id,
+            referenceNumber: grnNumber,
+            debit:           grnValue,
+            credit:          0,
+            runningBalance:  updatedVendor?.currentOutstanding ?? grnValue,
+            description:     `GRN ${grnNumber} received via OCR import from ${po.vendorSnapshot.businessName}`,
+          }],
+          { session },
         );
       }
-    });
-  await Promise.all(wacOps);
 
-  // Vendor ledger
-  const grnValue = processedItems.reduce((sum, item) => {
-    const accepted = Math.max(0,
-      (item.receivedQty  as number) - (item.rejectedQty as number || 0),
-    );
-    return sum + accepted * ((item.purchasePrice as number) || 0);
-  }, 0);
+      logger.info('[grnService] GRN created', { grnNumber, poId, hotelId, grnValue });
 
-  if (grnValue > 0) {
-    const updatedVendor = await Vendor.findByIdAndUpdate(
-      grn.vendorId,
-      { $inc: { currentOutstanding: grnValue } },
-      { new: true },
-    );
-    await VendorLedgerEntry.create({
-      hotelId:         hotelOId,
-      vendorId:        grn.vendorId,
-      entryType:       'grn',
-      referenceId:     grn._id,
-      referenceNumber: grnNumber,
-      debit:           grnValue,
-      credit:          0,
-      runningBalance:  updatedVendor?.currentOutstanding ?? grnValue,
-      description:     `GRN ${grnNumber} received via OCR import from ${po.vendorSnapshot.businessName}`,
+      result = {
+        poId:      po._id.toString(),
+        poNumber:  po.poNumber,
+        grnId:     grn._id.toString(),
+        grnNumber,
+        grnStatus: grn.status,
+        grnValue:  +grnValue.toFixed(2),
+      };
     });
+  } finally {
+    await session.endSession();
   }
 
-  logger.info('[grnService] GRN created', { grnNumber, poId, hotelId, grnValue });
-
-  return {
-    poId:      po._id.toString(),
-    poNumber:  po.poNumber,
-    grnId:     grn._id.toString(),
-    grnNumber,
-    grnStatus: grn.status,
-    grnValue:  +grnValue.toFixed(2),
-  };
+  return result;
 }

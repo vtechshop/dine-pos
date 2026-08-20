@@ -1,5 +1,6 @@
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
 import { refreshRazorpayOAuthToken } from '../services/payment/razorpayTokenRefresh';
+import { acquireSchedulerLock, releaseSchedulerLock } from '../utils/schedulerLock';
 import { logger } from '../utils/logger';
 
 // In-memory guard — prevents a second sweep from overlapping the first in the
@@ -67,6 +68,19 @@ export async function runRazorpayTokenRefreshWorker(): Promise<void> {
     logger.info(`[razorpayTokenRefreshWorker] ${configs.length} token(s) need proactive refresh`);
 
     for (const config of configs) {
+      // Per-hotel distributed lock — prevents two instances from refreshing the same
+      // hotel's tokens simultaneously. Razorpay rotates BOTH tokens on each refresh
+      // call; a concurrent second refresh sends an already-consumed refresh_token and
+      // Razorpay rejects it, taking that hotel's gateway offline.
+      const lockName = `razorpay-token-refresh:${config._id.toString()}`;
+      const acquired = await acquireSchedulerLock(lockName, 300); // 5-minute TTL
+      if (!acquired) {
+        logger.info('[razorpayTokenRefreshWorker] lock held by another instance, skipping', {
+          configId: String(config._id),
+          hotelId:  String(config.hotelId),
+        });
+        continue;
+      }
       try {
         const updated = await refreshRazorpayOAuthToken(config);
         if (updated) {
@@ -88,6 +102,8 @@ export async function runRazorpayTokenRefreshWorker(): Promise<void> {
           hotelId:  String(config.hotelId),
           err:      String(err),
         });
+      } finally {
+        await releaseSchedulerLock(lockName);
       }
     }
   } finally {

@@ -94,5 +94,13 @@ schema.index(
   { orderId: 1 },
   { unique: true, partialFilterExpression: { status: 'success' } },
 );
+// Concurrent-request guard: prevents two racing requests from both creating a pending
+// or processing Payment for the same order (QR scan double-tap race condition).
+// Only one active attempt (pending or processing) is allowed per order at a time.
+// Failed payments are excluded so the customer can retry after a gateway failure.
+schema.index(
+  { orderId: 1, hotelId: 1 },
+  { unique: true, partialFilterExpression: { status: { $in: ['pending', 'processing'] } } },
+);
 
 export default mongoose.model<IPayment>('Payment', schema);

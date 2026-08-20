@@ -78,11 +78,28 @@ export const getLocalTables = (): Table[] => {
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
+// Fields that must not be cached locally — they are only needed at the server and
+// storing them in unencrypted SQLite exposes financial/compliance data on the device.
+const SENSITIVE_SETTINGS_FIELDS: ReadonlyArray<keyof Settings> = [
+  'bankAccountNumber',
+  'bankIfscCode',
+  'bankAccountHolder',
+  'panNumber',
+  'fssaiNumber',
+  'gstNumber',
+  'upiId',
+  'kitchenPin',
+] as const;
+
 export const saveLocalSettings = (settings: Settings): void => {
+  const safe = { ...settings } as Partial<Settings>;
+  for (const key of SENSITIVE_SETTINGS_FIELDS) {
+    delete safe[key];
+  }
   db.runSync(
     `INSERT INTO local_settings (id, data, synced_at) VALUES (1, ?, ?)
      ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at`,
-    [JSON.stringify(settings), now()],
+    [JSON.stringify(safe), now()],
   );
 };
 

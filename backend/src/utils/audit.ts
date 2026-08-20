@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import AuditLog from '../models/AuditLog';
 import { AuthRequest } from '../middleware/auth';
 
@@ -12,7 +13,7 @@ export const logAudit = (
   metadata: Record<string, any> = {},
 ): void => {
   AuditLog.create({
-    hotelId:    req.hotelId   || '',
+    hotelId:    req.hotelId ? new mongoose.Types.ObjectId(req.hotelId) : undefined,
     actorId:    req.cashierId || req.waiterId || req.hotelId || '',
     actorRole:  req.role      || 'admin',
     action,
@@ -35,7 +36,7 @@ export const logAuditRaw = (params: {
   ip?:        string;
 }): void => {
   AuditLog.create({
-    hotelId:    params.hotelId,
+    hotelId:    params.hotelId ? new mongoose.Types.ObjectId(params.hotelId) : undefined,
     actorId:    params.actorId    || params.hotelId,
     actorRole:  params.actorRole  || 'admin',
     action:     params.action,

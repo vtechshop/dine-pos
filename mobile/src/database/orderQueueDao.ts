@@ -83,12 +83,32 @@ export const markSynced = (id: string): void => {
   );
 };
 
+// Callback invoked when an order transitions to 'failed' (retries exhausted).
+// Register via setOrderFailedCallback so the UI can alert staff immediately.
+type OrderFailedCallback = (id: string, error: string) => void;
+let _onOrderFailed: OrderFailedCallback | null = null;
+
+export const setOrderFailedCallback = (cb: OrderFailedCallback): void => {
+  _onOrderFailed = cb;
+};
+
 export const markFailed = (id: string, error: string, retries: number): void => {
   const next      = nextAttemptTime(retries);
   const newStatus: QueueStatus = retries >= 5 ? 'failed' : 'pending';
   db.runSync(
     `UPDATE order_queue SET status = ?, retries = ?, next_attempt = ?, error = ? WHERE id = ?`,
     [newStatus, retries + 1, next, error, id],
+  );
+  // Surface escalation when the order is permanently failed — do not let it disappear silently.
+  if (retries >= 5) {
+    _onOrderFailed?.(id, error);
+  }
+};
+
+export const getFailedOrders = (): Array<{ id: string; payload: string; error: string; retries: number }> => {
+  return db.getAllSync<{ id: string; payload: string; error: string; retries: number }>(
+    `SELECT id, payload, error, retries FROM order_queue WHERE status = 'failed' ORDER BY created_at ASC`,
+    [],
   );
 };
 

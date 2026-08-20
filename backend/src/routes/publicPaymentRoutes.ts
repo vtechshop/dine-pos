@@ -116,17 +116,26 @@ router.post('/razorpay-order', publicPaymentLimiter, async (req: Request, res: R
     const amountPaise           = Math.round(amount * 100);
 
     // Create the Payment record in 'pending' state before calling the gateway.
-    // If the gateway call fails, we mark it 'failed' so it never stays stuck at 'pending'.
-    const payment = await Payment.create({
-      hotelId:               new mongoose.Types.ObjectId(hotelId),
-      orderId:               new mongoose.Types.ObjectId(orderId),
-      internalTransactionId,
-      gatewayType:           config.gatewayType,
-      status:                'pending',
-      amount:                amountPaise,
-      currency:              currency.toUpperCase(),
-      initiatedBy:           'customer-qr',
-    });
+    // The unique partial index on (orderId, hotelId) where status IN ['pending','processing']
+    // ensures two concurrent requests cannot both create a Payment — the second gets E11000.
+    let payment: InstanceType<typeof Payment>;
+    try {
+      payment = await Payment.create({
+        hotelId:               new mongoose.Types.ObjectId(hotelId),
+        orderId:               new mongoose.Types.ObjectId(orderId),
+        internalTransactionId,
+        gatewayType:           config.gatewayType,
+        status:                'pending',
+        amount:                amountPaise,
+        currency:              currency.toUpperCase(),
+        initiatedBy:           'customer-qr',
+      });
+    } catch (createErr: any) {
+      if (createErr?.code === 11000) {
+        return res.status(409).json({ message: 'A payment is already in progress for this order.' });
+      }
+      throw createErr;
+    }
 
     try {
       const effectiveConfig = config.isOAuthConnected

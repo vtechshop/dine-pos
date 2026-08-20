@@ -1,7 +1,15 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+// MIGRATION REQUIRED before deploying this schema change:
+//   db.chatmessages.updateMany(
+//     { hotelId: { $type: 'string' } },
+//     [{ $set: { hotelId: { $toObjectId: '$hotelId' } } }]
+//   )
+// Run this in the MongoDB shell against the production database BEFORE deploying.
+// Existing documents have hotelId stored as BSON String; queries with ObjectId
+// will return empty until the data is migrated.
 export interface IChatMessage extends Document {
-  hotelId: string;
+  hotelId: mongoose.Types.ObjectId;
   tableNumber: string;
   sender: 'customer' | 'admin';
   message: string;
@@ -11,7 +19,7 @@ export interface IChatMessage extends Document {
 
 const ChatMessageSchema: Schema = new Schema(
   {
-    hotelId:     { type: String, required: true },
+    hotelId:     { type: Schema.Types.ObjectId, ref: 'Hotel', required: true },
     tableNumber: { type: String, required: true },
     sender:      { type: String, enum: ['customer', 'admin'], required: true },
     message:     { type: String, required: true, trim: true },

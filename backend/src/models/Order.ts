@@ -274,9 +274,14 @@ OrderSchema.index({ createdAt: -1 });                                        // 
 // Adding status to the index lets MongoDB apply the status filter from the index without
 // fetching each document, reducing the effective scan size for the SA dashboard aggregations.
 OrderSchema.index({ createdAt: -1, status: 1 });
-// Sparse unique index: null values are excluded, non-null offlineIds must be globally unique.
-// This is the idempotency guard — a retry with the same offlineId is a no-op.
-OrderSchema.index({ offlineId: 1 }, { unique: true, sparse: true });
+// Per-hotel unique index for offline orders: only indexes documents where offlineId is a
+// string (partialFilterExpression excludes null/missing). Two hotels can share the same
+// mobile-generated id; a global unique index was incorrect. sparse:true cannot be used on
+// a compound index when hotelId is always present — explicit nulls are not excluded.
+OrderSchema.index(
+  { hotelId: 1, offlineId: 1 },
+  { unique: true, partialFilterExpression: { offlineId: { $type: 'string' } } },
+);
 // ── Table Session indexes (Architecture v1.1) ────────────────────────────
 // Find all orders in a session (used by guest bill aggregation and cashier merged bill)
 OrderSchema.index({ sessionId: 1 }, { sparse: true });

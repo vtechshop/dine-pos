@@ -1203,41 +1203,42 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // H-04: atomic cancellation guard — only the first concurrent request runs side-effects
+    // H-04: atomic cancellation — status change and stock restore in a single transaction.
+    // findOneAndUpdate is inside the transaction so an order cannot end up permanently
+    // cancelled if the stock restoration write fails and the transaction rolls back.
     if (status === 'cancelled') {
-      const prevDoc = await Order.findOneAndUpdate(
-        { _id: req.params.id, hotelId: req.hotelId, status: { $ne: 'cancelled' } },
-        { $set: { status: 'cancelled' } },
-        { new: false }
-      );
+      const bulkOps = existing.items.filter(i => i.product).map(item => ({
+        updateOne: {
+          filter: { _id: item.product, hotelId: req.hotelId, stock: { $gte: 0 } },
+          update: { $inc: { stock: item.quantity }, $set: { isAvailable: true } },
+        },
+      }));
+      let prevDoc: typeof existing | null = null;
+      let cancelDeltas = new Map<string, number>();
+      const cancelTx = await mongoose.startSession();
+      try {
+        await cancelTx.withTransaction(async () => {
+          prevDoc = await Order.findOneAndUpdate(
+            { _id: req.params.id, hotelId: req.hotelId, status: { $ne: 'cancelled' } },
+            { $set: { status: 'cancelled' } },
+            { new: false, session: cancelTx },
+          ) as typeof existing | null;
+          if (!prevDoc) return; // already cancelled — no side-effects
+          if (bulkOps.length > 0) await Product.bulkWrite(bulkOps as any, { session: cancelTx });
+          // Pass stored deltas so we restore exactly what was deducted (not full recipe qty)
+          const { actualDeltas } = await applyIngredientStockChange(existing.items, req.hotelId!, 1, cancelTx, existing.ingredientDeltas as Map<string, number> | undefined);
+          cancelDeltas = actualDeltas;
+        });
+      } finally {
+        await cancelTx.endSession();
+      }
+
       if (prevDoc) {
         logAudit(req, 'order.cancelled', 'order', String(existing._id), {
           orderNumber: existing.orderNumber,
           prevStatus:  existing.status,
           grandTotal:  existing.grandTotal,
         });
-        const bulkOps = existing.items.filter(i => i.product).map(item => ({
-          updateOne: {
-            filter: { _id: item.product, hotelId: req.hotelId, stock: { $gte: 0 } },
-            update: { $inc: { stock: item.quantity }, $set: { isAvailable: true } },
-          },
-        }));
-        // Wrap both stock restores in a transaction so they succeed or fail together.
-        // Guest total update is outside the tx — it's a derived value that can be
-        // recomputed, and cross-collection txns have higher abort risk.
-        let cancelDeltas = new Map<string, number>();
-        const cancelTx = await mongoose.startSession();
-        try {
-          await cancelTx.withTransaction(async () => {
-            if (bulkOps.length > 0) await Product.bulkWrite(bulkOps as any, { session: cancelTx });
-            // Pass stored deltas so we restore exactly what was deducted (not full recipe qty)
-            const { actualDeltas } = await applyIngredientStockChange(existing.items, req.hotelId!, 1, cancelTx, existing.ingredientDeltas as Map<string, number> | undefined);
-            cancelDeltas = actualDeltas;
-          });
-        } finally {
-          await cancelTx.endSession();
-        }
-
         // Best-effort: audit StockMovement records for cancellation restorations (sale_reversal type).
         // Reads current stock after restoration — resultingStock — then back-computes previousStock.
         if (cancelDeltas.size > 0) {
