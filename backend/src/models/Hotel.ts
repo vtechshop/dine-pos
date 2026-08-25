@@ -93,14 +93,26 @@ export interface IHotel extends Document {
   trialEndDate: Date | null;
 
   // Subscription
-  subscriptionPlan: 'none' | 'starter' | 'professional' | 'enterprise';
+  subscriptionPlan: 'none' | 'starter' | 'professional' | 'enterprise' | 'standard';
   planStartDate: Date | null;
   planExpiryDate: Date | null;
 
   // New subscription fields (canonical)
-  subscriptionType: 'trial' | 'starter' | 'professional' | 'enterprise';
+  subscriptionType: 'trial' | 'starter' | 'professional' | 'enterprise' | 'standard';
   subscriptionStartDate: Date | null;
   subscriptionEndDate: Date | null;
+
+  // ── DinePOS SaaS Billing (Razorpay Subscriptions) ──────────────────────────
+  saasAnnualPrice:         number | null;     // null = standard ₹12,000/year; set by SA for custom pricing (in INR)
+  rzpCustomPlanId:         string;            // plan_xxx created for custom price; empty = use RAZORPAY_PLAN_ID_STANDARD
+  rzpSubscriptionId:       string;            // sub_xxx — current Razorpay subscription
+  rzpSubscriptionStatus:   string;            // mirrors Razorpay status: created|authenticated|active|pending|halted|cancelled|completed
+  rzpNextBillingAt:        Date | null;       // next charge timestamp from Razorpay charge_at
+
+  // ── Printer Entitlement (one-time on first subscription) ───────────────────
+  printerEntitlementGranted:     boolean;     // true after first subscription activation (never reset)
+  printerEntitlementFulfilledAt: Date | null; // SA stamps when 2 printers physically shipped
+  printerEntitlementSkipped:     boolean;     // SA marks "not applicable" for this hotel
 
   // Feature flags (per-hotel capability toggles)
   features: IFeatureFlags;
@@ -172,14 +184,26 @@ const HotelSchema: Schema = new Schema(
     trialEndDate:       { type: Date, default: null },
 
     // Subscription (legacy)
-    subscriptionPlan:   { type: String, enum: ['none', 'starter', 'professional', 'enterprise'], default: 'none' },
+    subscriptionPlan:   { type: String, enum: ['none', 'starter', 'professional', 'enterprise', 'standard'], default: 'none' },
     planStartDate:      { type: Date, default: null },
     planExpiryDate:     { type: Date, default: null },
 
     // Subscription (canonical)
-    subscriptionType:       { type: String, enum: ['trial', 'starter', 'professional', 'enterprise'], default: 'trial' },
+    subscriptionType:       { type: String, enum: ['trial', 'starter', 'professional', 'enterprise', 'standard'], default: 'trial' },
     subscriptionStartDate:  { type: Date, default: null },
     subscriptionEndDate:    { type: Date, default: null },
+
+    // ── DinePOS SaaS Billing (Razorpay Subscriptions) ──────────────────────────
+    saasAnnualPrice:         { type: Number, default: null },
+    rzpCustomPlanId:         { type: String, default: '' },
+    rzpSubscriptionId:       { type: String, default: '' },
+    rzpSubscriptionStatus:   { type: String, default: '' },
+    rzpNextBillingAt:        { type: Date,   default: null },
+
+    // ── Printer Entitlement ───────────────────────────────────────────────────
+    printerEntitlementGranted:     { type: Boolean, default: false },
+    printerEntitlementFulfilledAt: { type: Date,    default: null  },
+    printerEntitlementSkipped:     { type: Boolean, default: false },
 
     // Feature flags
     features: {
@@ -243,6 +267,8 @@ HotelSchema.index({ status: 1 });                   // super admin hotel list fi
 HotelSchema.index({ adminId: 1 }, { unique: true, partialFilterExpression: { adminId: { $gt: '' } } });
 HotelSchema.index({ status: 1, trialEndDate: 1 });  // churn risk query
 HotelSchema.index({ status: 1, subscriptionEndDate: 1 }); // pending renewals query
+HotelSchema.index({ rzpSubscriptionId: 1 }, { sparse: true }); // O(1) lookup by Razorpay subscription ID in webhook handler
+HotelSchema.index({ printerEntitlementGranted: 1, printerEntitlementFulfilledAt: 1 }, { sparse: true }); // SA printer fulfillment queue
 HotelSchema.index({ createdAt: -1 });               // latest registrations
 // H-8: text index for SA hotel search — replaces per-field regex full scans
 HotelSchema.index({ hotelName: 'text', ownerName: 'text', phone: 'text', fssaiNumber: 'text' }, { name: 'hotel_search_text' });

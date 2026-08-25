@@ -75,10 +75,11 @@ const NAV_GROUPS: NavGroup[] = [
   {
     heading: 'Finance & Admin',
     items: [
-      { to: '/reports',    icon: BarChart2,  label: 'Reports'    },
-      { to: '/payments',   icon: CreditCard, label: 'Payments'   },
-      { to: '/audit-logs', icon: Shield,     label: 'Audit Logs' },
-      { to: '/settings',   icon: Settings,   label: 'Settings'   },
+      { to: '/reports',      icon: BarChart2,  label: 'Reports'      },
+      { to: '/payments',     icon: CreditCard, label: 'Payments'     },
+      { to: '/subscription', icon: RefreshCw,  label: 'Subscription' },
+      { to: '/audit-logs',   icon: Shield,     label: 'Audit Logs'   },
+      { to: '/settings',     icon: Settings,   label: 'Settings'     },
     ],
   },
   {

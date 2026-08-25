@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
+import { createSaasSubscription } from '../api/saasBilling';
 
 const SUPPORT_PHONE    = '+917871469095';
 const SUPPORT_WHATSAPP = '917871469095';
@@ -26,8 +27,9 @@ export function SubscriptionExpiredPage() {
   const info = readExpiredInfo();
   const isTrial = !info.subscriptionType || info.subscriptionType === 'trial';
 
-  const [checking, setChecking] = useState(false);
-  const [statusMsg, setStatusMsg] = useState('');
+  const [checking, setChecking]       = useState(false);
+  const [statusMsg, setStatusMsg]     = useState('');
+  const [subscribing, setSubscribing] = useState(false);
 
   const expiredDate = info.expiredOn
     ? new Date(info.expiredOn).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -57,6 +59,19 @@ export function SubscriptionExpiredPage() {
     localStorage.removeItem('pos_role');
     sessionStorage.removeItem('sub_expired_info');
     window.location.replace('/login');
+  };
+
+  const handleSubscribeNow = async () => {
+    setSubscribing(true);
+    setStatusMsg('');
+    try {
+      const data = await createSaasSubscription();
+      // Redirect to Razorpay hosted checkout
+      window.location.href = data.checkoutUrl;
+    } catch (err: any) {
+      setStatusMsg(err?.message ?? 'Could not start subscription. Please try again or contact support.');
+      setSubscribing(false);
+    }
   };
 
   const whatsappMsg = encodeURIComponent(
@@ -129,6 +144,15 @@ export function SubscriptionExpiredPage() {
             Email
           </a>
         </div>
+
+        {/* Subscribe Now — starts Razorpay hosted checkout */}
+        <button
+          onClick={() => void handleSubscribeNow()}
+          disabled={subscribing || checking}
+          className="mb-3 w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white transition hover:bg-green-700 active:scale-95 disabled:opacity-60"
+        >
+          {subscribing ? 'Starting checkout…' : '⚡ Subscribe Now — ₹12,000/year'}
+        </button>
 
         {/* Check status */}
         <button

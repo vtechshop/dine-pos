@@ -278,6 +278,30 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
   }
 };
 
+// ── JWT-only middleware (no status gate) ─────────────────────────────────────
+// Use ONLY for SaaS billing endpoints that expired/trial hotels must reach.
+// Does NOT check hotel.status — the route handler is responsible for any
+// additional access control beyond identity.
+export const requireHotelJwt = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ message: 'Authentication required.' });
+    return;
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as {
+      hotelId: string; hotelName?: string; role?: string;
+    };
+    req.hotelId   = decoded.hotelId;
+    req.hotelName = decoded.hotelName;
+    req.role      = decoded.role;
+    next();
+  } catch {
+    res.status(401).json({ message: 'Invalid or expired session. Please login again.' });
+  }
+};
+
 // ── Role guard middleware ─────────────────────────────────────────────────────
 export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
   if (req.role !== 'admin') {

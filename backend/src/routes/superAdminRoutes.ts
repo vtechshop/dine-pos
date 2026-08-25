@@ -20,10 +20,15 @@ import { redisHealthCheck } from '../config/redis';
 import { generateAdminId, generatePassword } from '../utils/credentialGenerator';
 import { bootstrapNewHotel } from '../services/bootstrapHotel';
 import { sendError } from '../utils/sendError';
-import { getPriceForPlan, getDeviceLimitForPlan } from '../utils/planLimits';
+import { getPriceForPlan, getDeviceLimitForPlan, SAAS_STANDARD_PRICE_INR } from '../utils/planLimits';
 import { logAuditRaw } from '../utils/audit';
 import { logger } from '../utils/logger';
 import { invalidateStatusCache, invalidateMaintenanceCache } from '../middleware/auth';
+import {
+  createRazorpayPlan,
+  updateSubscriptionPlan,
+  getPlanId,
+} from '../services/razorpaySubscriptionService';
 import { io } from '../server';
 import { Expo } from 'expo-server-sdk';
 
@@ -610,6 +615,164 @@ router.put('/hotels/:id/features', superAdminAuth, async (req: Request, res: Res
     await invalidateStatusCache(req.params.id);
     logAuditRaw({ action: 'superadmin.hotel.features_updated', actorRole: 'superadmin', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: update });
     return res.json({ message: 'Feature flags updated', features: hotel.features });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// ── SaaS Billing — Super Admin endpoints ─────────────────────────────────────
+
+// GET /api/superadmin/saas/subscriptions — list all hotel subscriptions with SaaS billing info
+router.get('/saas/subscriptions', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const page  = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 25));
+    const skip  = (page - 1) * limit;
+    const statusFilter = req.query.status as string | undefined;
+    const filter: any = {};
+    if (statusFilter) filter.status = statusFilter;
+
+    const [hotels, total] = await Promise.all([
+      Hotel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select('hotelName ownerName phone city status subscriptionType subscriptionPlan subscriptionEndDate saasAnnualPrice rzpSubscriptionId rzpSubscriptionStatus rzpNextBillingAt printerEntitlementGranted printerEntitlementFulfilledAt printerEntitlementSkipped')
+        .lean(),
+      Hotel.countDocuments(filter),
+    ]);
+
+    return res.json({
+      hotels,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// GET /api/superadmin/saas/printer-queue — hotels with granted but unfulfilled printer entitlement
+router.get('/saas/printer-queue', superAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const hotels = await Hotel.find({
+      printerEntitlementGranted:     true,
+      printerEntitlementFulfilledAt: null,
+      printerEntitlementSkipped:     false,
+    })
+      .select('hotelName ownerName phone city address printerEntitlementGranted printerEntitlementFulfilledAt subscriptionStartDate')
+      .sort({ subscriptionStartDate: 1 })
+      .lean();
+
+    return res.json({ printerQueue: hotels, count: hotels.length });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// PUT /api/superadmin/hotels/:id/saas-price — set/clear custom annual price per hotel
+// Setting a price: creates a Razorpay Plan for this price (if not already on same price),
+//   stores plan_id and price on hotel, and if the hotel has an active sub, updates it for next cycle.
+// Clearing (price: null): removes custom price, hotel reverts to standard ₹12,000/year plan next renewal.
+router.put('/hotels/:id/saas-price', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
+
+    const hotel = await Hotel.findById(req.params.id)
+      .select('saasAnnualPrice rzpCustomPlanId rzpSubscriptionId rzpSubscriptionStatus hotelName');
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+
+    const { price } = req.body; // null to clear; number (INR) to set
+
+    if (price === null || price === undefined) {
+      // Clear custom price — revert to standard plan next renewal
+      const wasCustom = !!hotel.saasAnnualPrice;
+      await Hotel.findByIdAndUpdate(req.params.id, {
+        saasAnnualPrice:   null,
+        rzpCustomPlanId:   '',
+      });
+      // Update active subscription to standard plan for next cycle
+      if (wasCustom && hotel.rzpSubscriptionId && hotel.rzpSubscriptionStatus === 'active') {
+        const standardPlanId = process.env.RAZORPAY_PLAN_ID_STANDARD;
+        if (standardPlanId) {
+          try {
+            await updateSubscriptionPlan(hotel.rzpSubscriptionId, standardPlanId);
+          } catch (e) {
+            logger.warn('[SA] Failed to update Razorpay sub to standard plan', { hotelId: req.params.id, err: String(e) });
+          }
+        }
+      }
+      logAuditRaw({ actorRole: 'superadmin', action: 'hotel.saas_price_cleared', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: { previous: hotel.saasAnnualPrice } });
+      return res.json({ message: 'Custom price cleared. Hotel reverts to standard ₹12,000/year from next renewal.', effectiveFrom: 'next renewal cycle' });
+    }
+
+    const priceNum = Number(price);
+    if (!Number.isFinite(priceNum) || priceNum < 1000 || priceNum > 1_000_000) {
+      return res.status(400).json({ message: 'price must be a number between 1000 and 1000000 (INR)' });
+    }
+
+    // Only create a new Razorpay Plan if price differs from current custom price
+    let planId = hotel.rzpCustomPlanId;
+    if (!planId || hotel.saasAnnualPrice !== priceNum) {
+      const label = `DinePOS SaaS — ₹${priceNum}/year (${(hotel as any).hotelName})`;
+      planId = await createRazorpayPlan(priceNum, label);
+    }
+
+    await Hotel.findByIdAndUpdate(req.params.id, {
+      saasAnnualPrice: priceNum,
+      rzpCustomPlanId: planId,
+    });
+
+    // Update active subscription to new plan for next billing cycle
+    if (hotel.rzpSubscriptionId && hotel.rzpSubscriptionStatus === 'active') {
+      try {
+        await updateSubscriptionPlan(hotel.rzpSubscriptionId, planId);
+      } catch (e) {
+        logger.warn('[SA] Failed to update Razorpay sub to custom plan — price saved, sub not updated', { hotelId: req.params.id, err: String(e) });
+      }
+    }
+
+    logAuditRaw({ actorRole: 'superadmin', action: 'hotel.saas_price_set', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: { price: priceNum, planId } });
+    return res.json({
+      message: `Custom annual price ₹${priceNum} set. Applies from next renewal cycle.`,
+      annualPrice: priceNum,
+      rzpCustomPlanId: planId,
+      effectiveFrom: 'next renewal cycle',
+    });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// PUT /api/superadmin/hotels/:id/printer-entitlement — mark printer entitlement fulfilled or skipped
+router.put('/hotels/:id/printer-entitlement', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
+
+    const { action } = req.body; // 'fulfilled' | 'skipped'
+    if (!['fulfilled', 'skipped'].includes(action)) {
+      return res.status(400).json({ message: 'action must be "fulfilled" or "skipped"' });
+    }
+
+    const hotel = await Hotel.findById(req.params.id).select('printerEntitlementGranted hotelName');
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    if (!(hotel as any).printerEntitlementGranted) {
+      return res.status(400).json({ message: 'This hotel has no printer entitlement to fulfil.' });
+    }
+
+    const update = action === 'fulfilled'
+      ? { printerEntitlementFulfilledAt: new Date(), printerEntitlementSkipped: false }
+      : { printerEntitlementSkipped: true };
+
+    await Hotel.findByIdAndUpdate(req.params.id, update);
+    logAuditRaw({ actorRole: 'superadmin', action: `hotel.printer_entitlement_${action}`, hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: { action } });
+    return res.json({
+      message: action === 'fulfilled'
+        ? '2 printers marked as shipped to hotel.'
+        : 'Printer entitlement marked as not applicable.',
+    });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// GET /api/superadmin/hotels/:id/subscriptions — billing history for one hotel
+router.get('/hotels/:id/subscriptions', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
+    const records = await Subscription.find({ hotelId: new mongoose.Types.ObjectId(req.params.id) })
+      .sort({ createdAt: -1 })
+      .lean();
+    return res.json({ subscriptions: records });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 

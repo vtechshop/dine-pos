@@ -2,7 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
   Activity, BarChart2, Building2, Heart, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Tag,
   Truck, Hotel, Monitor, ShoppingBag, ReceiptText, Globe2, Settings2, ClipboardList, FileBarChart,
-  Users, PhoneCall, CalendarCheck, Kanban,
+  Users, PhoneCall, CalendarCheck, Kanban, CreditCard,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { SANotificationsProvider } from '../../context/SANotificationsContext';
@@ -123,6 +123,20 @@ export function SuperAdminLayout() {
             >
               <Megaphone size={16} strokeWidth={1.75} />
               Broadcast
+            </NavLink>
+
+            <NavLink
+              to="/super-admin/subscriptions"
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-brand/10 text-brand'
+                    : 'text-ink/70 hover:bg-mist hover:text-ink'
+                }`
+              }
+            >
+              <CreditCard size={16} strokeWidth={1.75} />
+              Subscriptions
             </NavLink>
 
             {/* Notification bell — dropdown preview + badge */}

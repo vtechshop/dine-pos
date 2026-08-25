@@ -8,7 +8,7 @@ interface SAFetchInit extends RequestInit {
   noRedirect?: boolean;
 }
 
-async function saFetch<T>(path: string, init: SAFetchInit = {}): Promise<T> {
+export async function saFetch<T>(path: string, init: SAFetchInit = {}): Promise<T> {
   const { noRedirect = false, ...fetchInit } = init;
   const token = localStorage.getItem('sa_token');
 

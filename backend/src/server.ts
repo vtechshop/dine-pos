@@ -93,6 +93,8 @@ import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
 import GatewayFactory from './services/payment/GatewayFactory';
 import razorpayOAuthRoutes from './routes/razorpayOAuthRoutes';
 import razorpayPartnerWebhookRoutes from './routes/razorpayPartnerWebhookRoutes';
+import saasBillingRoutes from './routes/saasBillingRoutes';
+import saasBillingWebhookRoutes from './routes/saasBillingWebhookRoutes';
 import * as Sentry from '@sentry/node';
 import helmet from 'helmet';
 
@@ -277,7 +279,8 @@ app.use(express.json({
       url.startsWith('/api/aggregator') ||
       url.startsWith('/api/payment-webhooks/') ||
       url.startsWith('/api/razorpay/partner-webhook') ||
-      url.startsWith('/api/messaging-webhooks/')
+      url.startsWith('/api/messaging-webhooks/') ||
+      url.startsWith('/api/saas/webhook')
     ) {
       (req as any).rawBody = buf.toString((encoding as BufferEncoding) || 'utf8');
     }
@@ -401,6 +404,10 @@ app.use('/api/payment-webhooks',           paymentWebhookRoutes);
 app.use('/api/razorpay/oauth',             razorpayOAuthRoutes);
 // Razorpay partner-level webhook — account.app.authorization_revoked (no auth, signature-verified)
 app.use('/api/razorpay/partner-webhook',   razorpayPartnerWebhookRoutes);
+// DinePOS SaaS billing — hotel subscription management (JWT-only, no status gate)
+app.use('/api/saas',                       saasBillingRoutes);
+// DinePOS SaaS billing webhook — Razorpay subscription lifecycle events (no auth, HMAC-verified)
+app.use('/api/saas/webhook',               saasBillingWebhookRoutes);
 // AI Menu Import — rate-limited to 10 req/min (Gemini calls are expensive)
 app.use('/api/ai-menu', _rl(10, 60_000));
 app.use('/api/ai-menu', aiMenuRoutes);

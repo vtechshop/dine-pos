@@ -44,8 +44,10 @@ const LeadsPage             = lazy(() => import('./pages/super-admin/LeadsPage')
 const DemoRequestsPage      = lazy(() => import('./pages/super-admin/DemoRequestsPage').then(m => ({ default: m.DemoRequestsPage })));
 const FollowUpsPage         = lazy(() => import('./pages/super-admin/FollowUpsPage').then(m => ({ default: m.FollowUpsPage })));
 const LeadDetailPage        = lazy(() => import('./pages/super-admin/LeadDetailPage').then(m => ({ default: m.LeadDetailPage })));
-const LeadPipelinePage      = lazy(() => import('./pages/super-admin/LeadPipelinePage').then(m => ({ default: m.LeadPipelinePage })));
+const LeadPipelinePage         = lazy(() => import('./pages/super-admin/LeadPipelinePage').then(m => ({ default: m.LeadPipelinePage })));
+const SaasSubscriptionsPage    = lazy(() => import('./pages/super-admin/SaasSubscriptionsPage').then(m => ({ default: m.SaasSubscriptionsPage })));
 import { SubscriptionExpiredPage } from './pages/SubscriptionExpiredPage';
+const SubscriptionPage         = lazy(() => import('./pages/SubscriptionPage').then(m => ({ default: m.SubscriptionPage })));
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
@@ -166,6 +168,8 @@ export function App() {
                       <Route path="/super-admin/aggregator/settings"    element={<AggregatorSettingsPage />} />
                       <Route path="/super-admin/aggregator/audit"       element={<AggregatorAuditPage />} />
                       <Route path="/super-admin/aggregator/reports"     element={<AggregatorReportsPage />} />
+                      {/* SaaS Billing — subscription management & printer entitlement */}
+                      <Route path="/super-admin/subscriptions" element={<SaasSubscriptionsPage />} />
                     </Route>
                   </Route>
 
@@ -197,6 +201,7 @@ export function App() {
                     <Route path="/coupons"         element={<AdminOnly><Suspense fallback={<PageFallback />}><CouponsPage /></Suspense></AdminOnly>} />
                     <Route path="/gift-vouchers"   element={<AdminOnly><Suspense fallback={<PageFallback />}><GiftVouchersPage /></Suspense></AdminOnly>} />
                     <Route path="/audit-logs"      element={<AdminOnly><Suspense fallback={<PageFallback />}><AuditLogsPage /></Suspense></AdminOnly>} />
+                    <Route path="/subscription"    element={<AdminOnly><Suspense fallback={<PageFallback />}><SubscriptionPage /></Suspense></AdminOnly>} />
                     <Route path="/ai-menu-import"  element={<AdminOnly><Suspense fallback={<PageFallback />}><AIMenuImportPage /></Suspense></AdminOnly>} />
                     <Route path="/ai"              element={<AdminOnly><Suspense fallback={<PageFallback />}><AIDashboardPage /></Suspense></AdminOnly>} />
                     <Route path="/ai/brief"        element={<AdminOnly><Suspense fallback={<PageFallback />}><MorningBriefPage /></Suspense></AdminOnly>} />
