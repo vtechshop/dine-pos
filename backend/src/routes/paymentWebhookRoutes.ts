@@ -9,6 +9,8 @@ import GatewayFactory from '../services/payment/GatewayFactory';
 import { decrypt } from '../utils/encryption';
 import { logger } from '../utils/logger';
 import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, reverseEarnedPoints } from '../utils/loyaltyUtils';
+import { io } from '../server';
+import { scheduleKOTPrint } from '../utils/printUtils';
 
 const router = Router();
 
@@ -164,6 +166,46 @@ async function handleRazorpayEvent(event: Record<string, unknown>, eventType: st
           err:       String(e),
         });
       });
+
+      // Release QR payment-pending orders — atomic, idempotent (only the first caller wins).
+      // qr-verify may have already released the order; in that case this is a no-op.
+      const qrReleased = await Order.findOneAndUpdate(
+        { _id: pay.orderId, hotelId, status: 'payment_pending' },
+        { $set: { status: 'pending' } },
+        { new: true },
+      ).catch(() => null);
+      if (qrReleased) {
+        try {
+          io.to(`hotel_${hotelId}`).emit('new_order', {
+            _id:           qrReleased._id.toString(),
+            orderNumber:   qrReleased.orderNumber,
+            tableNumber:   qrReleased.tableNumber,
+            customerName:  qrReleased.customerName,
+            customerPhone: qrReleased.customerPhone,
+            grandTotal:    qrReleased.grandTotal,
+            itemCount:     qrReleased.items.length,
+            orderSource:   qrReleased.orderSource,
+            items:         qrReleased.items.map((i: any) => ({
+              productName: i.productName,
+              quantity:    i.quantity,
+              price:       i.price,
+            })),
+          });
+        } catch {}
+        scheduleKOTPrint(hotelId, {
+          _id:          qrReleased._id,
+          orderNumber:  qrReleased.orderNumber,
+          tableNumber:  qrReleased.tableNumber,
+          customerName: qrReleased.customerName,
+          items:        qrReleased.items as { productName: string; quantity: number }[],
+          notes:        qrReleased.notes,
+          orderSource:  qrReleased.orderSource,
+          createdAt:    qrReleased.createdAt,
+          sessionId:    qrReleased.sessionId ?? undefined,
+          guestId:      qrReleased.guestId ?? undefined,
+        }).catch(() => {});
+        logger.info(`[Webhook] QR payment_pending order released → ${qrReleased.orderNumber}`);
+      }
 
       // Loyalty earn — atomic claim prevents double-earn with concurrent verify
       ;(async () => {

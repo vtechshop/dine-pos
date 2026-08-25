@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { publicFetch } from '../api/client.ts';
+import { loadRazorpayScript } from '../utils/razorpay.ts';
 import { Bell, Search, Leaf, X } from 'lucide-react';
 import { Spinner } from '@dinepos/shared/components';
 import { useMenu } from '../context/MenuContext.tsx';
@@ -23,6 +25,17 @@ interface MenuPageProps {
 
 type ModalState = 'none' | 'cart' | 'guest-prompt' | 'placing' | 'waiter';
 
+interface PendingPaymentData {
+  orderId:               string;
+  orderNumber:           string;
+  keyId:                 string;
+  razorpayOrderId:       string;
+  internalTransactionId: string;
+  amountPaise:           number;
+  customerName?:         string;
+  customerPhone?:        string;
+}
+
 const WAITER_PRESETS = [
   '[Waiter Request] Need assistance please',
   '[Waiter Request] Need water please',
@@ -37,11 +50,12 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
   const { items, clearCart } = useCart();
   const { guestToken, guestInfo, setGuestToken, setGuestInfo, addPlacedOrder } = useGuest();
 
-  const [modal, setModal]         = useState<ModalState>('none');
-  const [placeError, setPlaceError] = useState<string | null>(null);
-  const [search, setSearch]       = useState('');
-  const [vegOnly, setVegOnly]     = useState(false);
-  const [waiterSent, setWaiterSent] = useState(false);
+  const [modal, setModal]               = useState<ModalState>('none');
+  const [placeError, setPlaceError]     = useState<string | null>(null);
+  const [search, setSearch]             = useState('');
+  const [vegOnly, setVegOnly]           = useState(false);
+  const [waiterSent, setWaiterSent]     = useState(false);
+  const [pendingPayment, setPendingPayment] = useState<PendingPaymentData | null>(null);
 
   const tableSessions = features?.tableSessions ?? false;
   const businessType  = hotel?.businessType ?? 'both';
@@ -50,47 +64,157 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
   async function doPlaceOrder(info?: GuestInfo) {
     setModal('placing');
     setPlaceError(null);
+
     try {
-      let sessionToken = guestToken;
-      if (tableSessions && !sessionToken) {
-        const config = await fetchSessionConfig(hotelId, null);
-        sessionToken = config.guestToken;
-        if (sessionToken) setGuestToken(sessionToken);
+      const guestData = info ?? guestInfo;
+      let pay: PendingPaymentData;
+
+      if (pendingPayment) {
+        // Retry after cancel — reuse the existing payment_pending order
+        pay = pendingPayment;
+      } else {
+        // First attempt — create order
+        let sessionToken = guestToken;
+        if (tableSessions && !sessionToken) {
+          const cfg = await fetchSessionConfig(hotelId, null);
+          sessionToken = cfg.guestToken;
+          if (sessionToken) setGuestToken(sessionToken);
+        }
+
+        const result = await placeOrder({
+          hotelId,
+          tableNumber,
+          items,
+          guestToken:    sessionToken,
+          name:          guestData?.name,
+          phone:         guestData?.phone,
+          tableSessions,
+        });
+
+        if (result.guestToken && !guestToken) {
+          setGuestToken(result.guestToken);
+        }
+
+        if (!tableSessions) {
+          // Legacy non-tableSessions path: no Razorpay gate
+          const placedOrder: QrOrder = {
+            _id:         result.order._id,
+            orderNumber: result.order.orderNumber,
+            status:      'pending',
+            items:       [],
+            grandTotal:  result.order.grandTotal,
+            createdAt:   new Date().toISOString(),
+          };
+          addPlacedOrder(placedOrder);
+          clearCart();
+          navigate('/orders');
+          return;
+        }
+
+        // Get Razorpay checkout params from backend
+        const rpOrder = await publicFetch<{
+          keyId:                 string;
+          razorpayOrderId:       string;
+          internalTransactionId: string;
+          amount:                number;
+        }>('/public/payments/razorpay-order', {
+          method: 'POST',
+          body: JSON.stringify({
+            hotelId,
+            orderId:      result.order._id,
+            amount:       result.order.grandTotal,
+            customerName: guestData?.name,
+          }),
+        });
+
+        pay = {
+          orderId:               result.order._id,
+          orderNumber:           result.order.orderNumber,
+          keyId:                 rpOrder.keyId,
+          razorpayOrderId:       rpOrder.razorpayOrderId,
+          internalTransactionId: rpOrder.internalTransactionId,
+          amountPaise:           rpOrder.amount,
+          customerName:          guestData?.name,
+          customerPhone:         guestData?.phone,
+        };
+        setPendingPayment(pay);
       }
 
-      const guestData = info ?? guestInfo;
-      const result = await placeOrder({
-        hotelId,
-        tableNumber,
-        items,
-        guestToken:    sessionToken,
-        name:          guestData?.name,
-        phone:         guestData?.phone,
-        tableSessions,
+      // Open Razorpay Checkout (native full-screen modal)
+      await loadRazorpayScript();
+      if (!window.Razorpay) throw new Error('Razorpay could not load. Check your internet connection.');
+
+      setModal('none'); // close our modal — Razorpay opens its own overlay
+
+      const rzpResponse = await new Promise<{
+        razorpay_payment_id: string;
+        razorpay_order_id:   string;
+        razorpay_signature:  string;
+      }>((resolve, reject) => {
+        let done = false;
+        const rzp = new window.Razorpay({
+          key:         pay.keyId,
+          amount:      pay.amountPaise,
+          currency:    'INR',
+          name:        hotel?.name ?? 'DinePOS',
+          description: `Order #${pay.orderNumber}`,
+          order_id:    pay.razorpayOrderId,
+          prefill: {
+            name:    pay.customerName,
+            contact: pay.customerPhone,
+          },
+          theme: { color: '#F97316' },
+          handler: (response) => {
+            done = true;
+            resolve(response);
+          },
+          modal: {
+            ondismiss: () => {
+              if (!done) reject(new Error('Payment cancelled. Tap "Pay Now" to try again.'));
+            },
+          },
+        });
+        rzp.open();
       });
 
-      if (result.guestToken && !guestToken) {
-        setGuestToken(result.guestToken);
-      }
+      // Server-side verification — releases the order to the kitchen
+      setModal('placing');
+      await publicFetch('/public/payments/qr-verify', {
+        method: 'POST',
+        body: JSON.stringify({
+          razorpay_payment_id:   rzpResponse.razorpay_payment_id,
+          razorpay_order_id:     rzpResponse.razorpay_order_id,
+          razorpay_signature:    rzpResponse.razorpay_signature,
+          internalTransactionId: pay.internalTransactionId,
+          orderId:               pay.orderId,
+          hotelId,
+        }),
+      });
 
+      setPendingPayment(null);
       const placedOrder: QrOrder = {
-        _id:         result.order._id,
-        orderNumber: result.order.orderNumber,
+        _id:         pay.orderId,
+        orderNumber: pay.orderNumber,
         status:      'pending',
         items:       [],
-        grandTotal:  result.order.grandTotal,
+        grandTotal:  pay.amountPaise / 100,
         createdAt:   new Date().toISOString(),
       };
       addPlacedOrder(placedOrder);
       clearCart();
       navigate('/orders');
     } catch (err) {
-      setPlaceError(err instanceof Error ? err.message : 'Failed to place order');
+      setPlaceError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
       setModal('cart');
     }
   }
 
   function handleCartConfirm() {
+    if (pendingPayment) {
+      // Retry after cancel — skip order creation and guest prompt
+      void doPlaceOrder();
+      return;
+    }
     if (tableSessions && !guestInfo) {
       setModal('guest-prompt');
     } else {

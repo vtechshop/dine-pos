@@ -46,7 +46,7 @@ export interface IOrder extends Document {
     amount: number;
     transactionId?: string;
   }>;
-  status: 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
+  status: 'pending' | 'payment_pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
   orderSource: 'dine-in' | 'takeaway' | 'swiggy' | 'zomato' | 'qr' | 'kiosk' | 'waiter' | 'admin';
   isParcel: boolean;
   customerName: string;
@@ -186,7 +186,7 @@ const OrderSchema: Schema = new Schema(
     }],
     status: {
       type: String,
-      enum: ['pending', 'preparing', 'ready', 'served', 'completed', 'cancelled'],
+      enum: ['pending', 'payment_pending', 'preparing', 'ready', 'served', 'completed', 'cancelled'],
       default: 'pending',
     },
     customerName: {

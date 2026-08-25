@@ -6,6 +6,9 @@ import Payment from '../models/Payment';
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
 import GatewayFactory from '../services/payment/GatewayFactory';
 import { ensureValidOAuthConfig } from '../services/payment/razorpayTokenRefresh';
+import { io } from '../server';
+import { scheduleKOTPrint } from '../utils/printUtils';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -178,6 +181,133 @@ router.post('/razorpay-order', publicPaymentLimiter, async (req: Request, res: R
   } catch (err) {
     return res.status(500).json({
       message: 'Failed to create payment: ' + (err instanceof Error ? err.message : String(err)),
+    });
+  }
+});
+
+// ── POST /api/public/payments/qr-verify ──────────────────────────────────────
+// Verify Razorpay payment after customer completes checkout on their phone.
+// Atomically transitions the order from payment_pending → pending and emits new_order.
+// Idempotent: safe if called multiple times or if webhook arrives first.
+
+router.post('/qr-verify', publicPaymentLimiter, async (req: Request, res: Response) => {
+  const {
+    razorpay_payment_id,
+    razorpay_order_id,
+    razorpay_signature,
+    internalTransactionId,
+    orderId,
+    hotelId,
+  } = req.body as {
+    razorpay_payment_id:   string;
+    razorpay_order_id:     string;
+    razorpay_signature:    string;
+    internalTransactionId: string;
+    orderId:               string;
+    hotelId:               string;
+  };
+
+  if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature ||
+      !internalTransactionId || !orderId || !hotelId) {
+    return res.status(400).json({ message: 'Missing required payment fields' });
+  }
+  if (!mongoose.Types.ObjectId.isValid(hotelId) || !mongoose.Types.ObjectId.isValid(orderId)) {
+    return res.status(400).json({ message: 'Invalid hotelId or orderId' });
+  }
+
+  try {
+    // Find Payment by internalTransactionId scoped to hotel — prevents cross-tenant replay
+    const pay = await Payment.findOne({ internalTransactionId, hotelId });
+    if (!pay) return res.status(404).json({ message: 'Payment record not found' });
+
+    // Idempotency: already verified (webhook may have arrived first)
+    if (pay.status === 'success') return res.json({ success: true });
+
+    // Validate orderId matches what the Payment record was created for
+    if (pay.orderId.toString() !== orderId) {
+      return res.status(422).json({ message: 'Payment does not belong to this order' });
+    }
+
+    // Load gateway config for signature verification
+    const config = await PaymentGatewayConfig.findOne({
+      hotelId:   new mongoose.Types.ObjectId(hotelId),
+      isActive:  true,
+      isDeleted: false,
+    });
+    if (!config) return res.status(422).json({ message: 'No active payment gateway configured' });
+
+    const effectiveConfig = config.isOAuthConnected
+      ? await ensureValidOAuthConfig(config)
+      : config;
+    const gateway = GatewayFactory.create(effectiveConfig);
+
+    const result = await gateway.verifyPayment({
+      gatewayTransactionId: razorpay_payment_id,
+      gatewayOrderId:       razorpay_order_id,
+      signature:            razorpay_signature,
+    });
+
+    if (!result.success) {
+      return res.status(422).json({ message: 'Payment verification failed. Please contact staff.' });
+    }
+
+    // Mark Payment success
+    pay.gatewayTransactionId = razorpay_payment_id;
+    pay.status               = 'success';
+    pay.settlementStatus     = 'pending';
+    if (result.paymentMethod) pay.paymentMethod = result.paymentMethod;
+    await pay.save();
+
+    // Atomically release the order from payment_pending — only first caller wins
+    const released = await Order.findOneAndUpdate(
+      {
+        _id:     new mongoose.Types.ObjectId(orderId),
+        hotelId: new mongoose.Types.ObjectId(hotelId),
+        status:  'payment_pending',
+      },
+      { $set: { status: 'pending', transactionId: razorpay_payment_id, paymentTime: new Date() } },
+      { new: true },
+    );
+
+    if (released) {
+      try {
+        io.to(`hotel_${hotelId}`).emit('new_order', {
+          _id:           released._id.toString(),
+          orderNumber:   released.orderNumber,
+          tableNumber:   released.tableNumber,
+          customerName:  released.customerName,
+          customerPhone: released.customerPhone,
+          grandTotal:    released.grandTotal,
+          itemCount:     released.items.length,
+          orderSource:   released.orderSource,
+          items:         released.items.map((i: any) => ({
+            productName: i.productName,
+            quantity:    i.quantity,
+            price:       i.price,
+          })),
+        });
+      } catch (emitErr: any) {
+        logger.warn('[qr-verify] socket emit failed', { orderId, error: emitErr?.message });
+      }
+      scheduleKOTPrint(hotelId, {
+        _id:          released._id,
+        orderNumber:  released.orderNumber,
+        tableNumber:  released.tableNumber,
+        customerName: released.customerName,
+        items:        released.items as { productName: string; quantity: number }[],
+        notes:        released.notes,
+        orderSource:  released.orderSource,
+        createdAt:    released.createdAt,
+        sessionId:    released.sessionId ?? undefined,
+        guestId:      released.guestId ?? undefined,
+      }).catch(() => {});
+    }
+    // else: webhook already released — still return success (idempotent)
+
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({
+      message: 'Verification failed: ' + (err instanceof Error ? err.message : String(err)),
     });
   }
 });
