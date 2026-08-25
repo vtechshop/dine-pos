@@ -36,7 +36,7 @@ export const logAuditRaw = (params: {
   ip?:        string;
 }): void => {
   AuditLog.create({
-    hotelId:    params.hotelId ? new mongoose.Types.ObjectId(params.hotelId) : undefined,
+    hotelId:    params.hotelId && mongoose.Types.ObjectId.isValid(params.hotelId) ? new mongoose.Types.ObjectId(params.hotelId) : undefined,
     actorId:    params.actorId    || params.hotelId,
     actorRole:  params.actorRole  || 'admin',
     action:     params.action,

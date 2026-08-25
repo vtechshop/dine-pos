@@ -17,6 +17,7 @@ describe('Orders — Offline Idempotency', () => {
     return {
       tableNumber: 'T5',
       customerName: 'Offline Test',
+      customerPhone: '9999999999',
       orderSource: 'dine-in',
       items: [{ productName: 'Idempotent Dish', quantity: 1, price: 100, total: 100 }],
       subtotal: 100,
