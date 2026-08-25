@@ -48,13 +48,13 @@ services:
 
       # ── Socket.IO CSP (REQUIRED) ──────────────────────────────────────────
       - key: SOCKET_ORIGIN
-        value: wss://api.dinepos.com
+        value: wss://dine-pos.onrender.com
 
       # ── CORS (REQUIRED) ───────────────────────────────────────────────────
       - key: ALLOWED_ORIGINS
         sync: false         # Comma-separated list of ALL frontend origins.
                             # Required value for production:
-                            # https://app.dinepos.com,https://qr.dinepos.com,https://admin.dinepos.com,https://www.dinepos.com
+                            # https://web.dinepos.happya.in,https://dine-pos-qr-rho.vercel.app,https://dinepos.happya.in
 
       # ── Redis (REQUIRED when maxInstances > 1) ────────────────────────────
       - key: REDIS_URL
@@ -192,7 +192,7 @@ services:
       # When set, GET /menu redirects to this URL preserving query params.
       # Leave unset during rollout to keep serving the legacy menu PWA.
       - key: QR_APP_URL
-        value: https://qr.dinepos.com
+        value: https://dine-pos-qr-rho.vercel.app
 
   # ── QR Ordering SPA ─────────────────────────────────────────────────────────
   - type: web

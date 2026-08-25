@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
-const POS_LOGIN_URL = 'https://app.dinepos.com/login';
+const POS_LOGIN_URL = 'https://web.dinepos.happya.in/login';
 
 const NAV_LINKS = [
   { to: '/',          label: 'Home' },

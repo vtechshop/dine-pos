@@ -203,7 +203,7 @@ app.use(
         // res.cloudinary.com: product images uploaded via Cloudinary
         imgSrc:                 ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com'],
         // L-8: restrict WebSocket CSP to the configured origin in production.
-        // Set SOCKET_ORIGIN=wss://api.dinepos.com in the production environment.
+        // Set SOCKET_ORIGIN=wss://dine-pos.onrender.com in the production environment.
         // Omit it in dev to retain the permissive ws:/wss: fallback.
         connectSrc: process.env.SOCKET_ORIGIN
           ? ["'self'", process.env.SOCKET_ORIGIN]

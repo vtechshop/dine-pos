@@ -6,7 +6,7 @@
  *   - Variables: body_1, body_2, ... (positional)
  *   - Returns batch-level request_id; per-message WAMIDs arrive via webhook
  *
- * SMS: POST http://api.msg91.com/api/v2/sendsms
+ * SMS: POST https://api.msg91.com/api/v2/sendsms
  *   - Free-text with personalized messages per recipient in `sms[]` array
  *   - Returns request ID in `message` field
  *   - India DLT compliance is the operator's responsibility (use registered sender ID)
@@ -27,7 +27,7 @@ import type {
 import { logger } from '../../utils/logger';
 
 const WA_ENDPOINT  = 'https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/';
-const SMS_ENDPOINT = 'http://api.msg91.com/api/v2/sendsms';
+const SMS_ENDPOINT = 'https://api.msg91.com/api/v2/sendsms';
 const CHUNK_SIZE   = 50;
 const TIMEOUT_MS   = 12_000;
 
