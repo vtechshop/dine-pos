@@ -44,6 +44,7 @@ import { guestLabel } from '../utils/guestLabel';
 import { findOrCreateOpenSession } from '../utils/sessionUtils';
 import { makeRateLimiter } from '../utils/rateLimiter';
 import { applyIngredientStockChange } from '../utils/stockUtils';
+import { scheduleKOTPrint } from '../utils/printUtils';
 import { io } from '../server';
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
 import GatewayFactory from '../services/payment/GatewayFactory';
@@ -554,15 +555,17 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     const { validatedItems, subtotal, taxTotal } = itemResult;
     const grandTotal = +(subtotal + taxTotal).toFixed(2);
 
-    // ── Enforce Razorpay-only payment for QR orders ───────────────────────────
-    const gwConfig = await PaymentGatewayConfig.findOne({
-      hotelId:   new mongoose.Types.ObjectId(String(hotelId)),
-      isActive:  true,
-      isDeleted: false,
-    }).lean();
-    if (!gwConfig || !GatewayFactory.isRegistered(gwConfig.gatewayType as Parameters<typeof GatewayFactory.isRegistered>[0])) {
-      res.status(402).json({ code: 'NO_PAYMENT_GATEWAY', message: 'Online payment is not configured for this hotel. Please order at the counter.' });
-      return;
+    // ── QR orders require an active Razorpay gateway (kiosk/admin use cash) ───
+    if (validSource === 'qr') {
+      const gwConfig = await PaymentGatewayConfig.findOne({
+        hotelId:   new mongoose.Types.ObjectId(String(hotelId)),
+        isActive:  true,
+        isDeleted: false,
+      }).lean();
+      if (!gwConfig || !GatewayFactory.isRegistered(gwConfig.gatewayType as Parameters<typeof GatewayFactory.isRegistered>[0])) {
+        res.status(402).json({ code: 'NO_PAYMENT_GATEWAY', message: 'Online payment is not configured for this hotel. Please order at the counter.' });
+        return;
+      }
     }
 
     // ── Generate order number (same atomic counter as orderRoutes.ts) ──────────
@@ -596,8 +599,8 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       customerName:   guest.displayLabel,
       notes:          String(notes ?? '').slice(0, 200),
       orderSource:    validSource,
-      paymentMethod:  'razorpay',
-      status:         'payment_pending',
+      paymentMethod:  validSource === 'qr' ? 'razorpay' : 'cash',
+      status:         validSource === 'qr' ? 'payment_pending' : 'pending',
       sessionId:      guest.sessionId,
       guestId:        guest._id,
     };
@@ -629,12 +632,50 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       $set: { qrTokenExpiresAt: null }, // once ordering started, token never idles out
     });
 
-    logger.info('QR/Kiosk order placed (payment_pending)', {
+    // ── Kiosk: immediate KOT + socket emit (no payment gate) ─────────────────
+    if (validSource !== 'qr') {
+      scheduleKOTPrint(String(hotelId), {
+        _id:          order._id,
+        orderNumber:  order.orderNumber,
+        tableNumber:  order.tableNumber,
+        customerName: order.customerName,
+        items:        order.items as { productName: string; quantity: number }[],
+        notes:        order.notes,
+        orderSource:  order.orderSource,
+        createdAt:    order.createdAt,
+        sessionId:    guest.sessionId,
+        guestId:      guest._id,
+      }).catch(() => {});
+
+      try {
+        io.to(`hotel_${hotelId}`).emit('new_order', {
+          _id:           order._id.toString(),
+          orderNumber:   order.orderNumber,
+          tableNumber:   order.tableNumber,
+          customerName:  order.customerName,
+          customerPhone: order.customerPhone,
+          grandTotal:    order.grandTotal,
+          itemCount:     order.items.length,
+          orderSource:   validSource,
+          sessionId:     String(guest.sessionId),
+          guestId:       String(guest._id),
+          items:         order.items.map((i: any) => ({
+            productName: i.productName,
+            quantity:    i.quantity,
+            price:       i.price,
+          })),
+        });
+      } catch (emitErr: any) {
+        logger.warn('Kiosk order socket emit failed', { hotelId, error: emitErr?.message });
+      }
+    }
+
+    logger.info(`${validSource} order placed`, {
       hotelId,
       sessionId:   String(guest.sessionId),
       tableNumber: guest.tableNumber,
       grandTotal,
-      orderSource: validSource,
+      status:      validSource === 'qr' ? 'payment_pending' : 'pending',
     });
 
     // Always return guestToken so client can persist it for subsequent orders.
