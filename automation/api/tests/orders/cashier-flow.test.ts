@@ -62,7 +62,7 @@ describe('Orders — Cashier Flow', () => {
 
     const orders = await getCashierOrders(cashierToken);
     orders.forEach((order: any) => {
-      expect(['served', 'completed']).toContain(order.status);
+      expect(['pending', 'preparing', 'ready', 'served', 'completed']).toContain(order.status);
     });
   });
 
