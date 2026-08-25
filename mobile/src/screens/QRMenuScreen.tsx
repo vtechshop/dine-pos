@@ -19,7 +19,7 @@ import { PremiumGate } from '../components/PremiumGate';
 import { getStoredHotelId } from '../services/api';
 import { useNavigation } from '@react-navigation/native';
 
-const DEFAULT_MENU_BASE = 'https://qr.dinepos.com';
+const DEFAULT_MENU_BASE = 'https://dine-pos-qr-rho.vercel.app';
 
 const TABLE_COUNT_KEY = 'qr_table_count';
 const CUSTOM_URL_KEY  = 'qr_custom_menu_base';
@@ -36,7 +36,7 @@ function QRMenuScreenInner() {
   const [tempURL,        setTempURL]        = useState('');
   const [hotelId,        setHotelId]        = useState('');
 
-  const menuBase = customBase || DEFAULT_MENU_BASE;
+  const menuBase = customBase || (settings as any)?.qrAppUrl || DEFAULT_MENU_BASE;
   const tableURL = (t: number) => `${menuBase}?table=${t}${hotelId ? `&hotel=${hotelId}` : ''}`;
 
   useEffect(() => {

@@ -50,6 +50,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       premiumExpiry: hotel?.premiumExpiry || null,
       trialEndsAt: hotel?.trialEndsAt || null,
       features: hotel?.features ?? {},
+      qrAppUrl: process.env.QR_APP_URL || 'https://dine-pos-qr-rho.vercel.app',
     };
 
     // Strip sensitive fields for non-admin callers (kitchen, cashier, waiter tablets)
