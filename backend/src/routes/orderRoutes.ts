@@ -1152,7 +1152,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     if ((error as any).isVoucherError) {
       return res.status(400).json({ message: error.message });
     }
-    logger.error('[POST /orders] Failed', { hotelId: req.hotelId, error: String(error), code: error.code });
+    logger.error('[POST /orders] Failed', { hotelId: req.hotelId, error: String(error), code: error.code, stack: error?.stack });
     sendError(res, 400, 'Invalid data', error);
   }
 });

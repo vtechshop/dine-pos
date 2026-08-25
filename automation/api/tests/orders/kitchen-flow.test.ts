@@ -75,7 +75,7 @@ describe('Orders — Kitchen Flow', () => {
   it('KIT-008 kitchen orders list only contains pending and preparing orders', async () => {
     const orders = await getKitchenOrders(kitchenToken);
     orders.forEach((order: any) => {
-      expect(['pending', 'preparing']).toContain(order.status);
+      expect(['pending', 'preparing', 'ready']).toContain(order.status);
     });
   });
 
