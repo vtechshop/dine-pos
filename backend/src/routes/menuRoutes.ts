@@ -255,12 +255,19 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
           socketIds:     Array.from(sockets),
         });
         io.to(room).emit('new_order', {
-          _id:          order._id.toString(),
-          orderNumber:  order.orderNumber,
-          tableNumber:  order.tableNumber,
-          customerName: order.customerName,
-          grandTotal:   order.grandTotal,
-          itemCount:    order.items.length,
+          _id:           order._id.toString(),
+          orderNumber:   order.orderNumber,
+          tableNumber:   order.tableNumber,
+          customerName:  order.customerName,
+          customerPhone: order.customerPhone,
+          grandTotal:    order.grandTotal,
+          itemCount:     order.items.length,
+          orderSource:   order.orderSource,
+          items:         order.items.map((i: any) => ({
+            productName: i.productName,
+            quantity:    i.quantity,
+            price:       i.price,
+          })),
         });
       }
     } catch (emitErr: any) {

@@ -1119,12 +1119,19 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     const roomClients = io.sockets.adapter.rooms.get(room)?.size ?? 0;
     logger.info('Emitting new_order', { room, clientsInRoom: roomClients, orderId: String(order._id) });
     io.to(room).emit('new_order', {
-      _id: order._id,
-      orderNumber: order.orderNumber,
-      tableNumber: order.tableNumber,
-      customerName: order.customerName,
-      grandTotal: order.grandTotal,
-      itemCount: order.items.length,
+      _id:           order._id,
+      orderNumber:   order.orderNumber,
+      tableNumber:   order.tableNumber,
+      customerName:  order.customerName,
+      customerPhone: order.customerPhone,
+      grandTotal:    order.grandTotal,
+      itemCount:     order.items.length,
+      orderSource:   order.orderSource,
+      items:         order.items.map((i: any) => ({
+        productName: i.productName,
+        quantity:    i.quantity,
+        price:       i.price,
+      })),
     });
 
     res.status(201).json({ ...order.toObject(), stockUpdates });

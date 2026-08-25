@@ -350,11 +350,11 @@ export function KitchenPage() {
     const handler = () => { void load(); };
     socket.on('new_order',           handler);
     socket.on('new_delivery_order',  handler);
-    socket.on('order_status_updated', handler);
+    socket.on('order_status_update', handler);
     return () => {
       socket.off('new_order',           handler);
       socket.off('new_delivery_order',  handler);
-      socket.off('order_status_updated', handler);
+      socket.off('order_status_update', handler);
     };
   }, [socket, load]);
 

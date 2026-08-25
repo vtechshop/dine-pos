@@ -101,6 +101,7 @@ export interface LiveOrder {
   orderNumber: string;
   tableNumber: string;
   guestLabel?: string;
+  customerPhone?: string;
   items: LiveOrderItem[];
   totalAmount?: number;
   orderSource?: string;

@@ -633,15 +633,21 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     // ── Socket event to admin dashboard ──────────────────────────────────────
     try {
       io.to(`hotel_${hotelId}`).emit('new_order', {
-        _id:         order._id.toString(),
-        orderNumber: order.orderNumber,
-        tableNumber: order.tableNumber,
-        customerName: order.customerName,
-        grandTotal:  order.grandTotal,
-        itemCount:   order.items.length,
-        sessionId:   String(guest.sessionId),
-        guestId:     String(guest._id),
-        orderSource: validSource,
+        _id:           order._id.toString(),
+        orderNumber:   order.orderNumber,
+        tableNumber:   order.tableNumber,
+        customerName:  order.customerName,
+        customerPhone: order.customerPhone,
+        grandTotal:    order.grandTotal,
+        itemCount:     order.items.length,
+        orderSource:   validSource,
+        sessionId:     String(guest.sessionId),
+        guestId:       String(guest._id),
+        items:         order.items.map((i: any) => ({
+          productName: i.productName,
+          quantity:    i.quantity,
+          price:       i.price,
+        })),
       });
     } catch (emitErr: any) {
       logger.warn('QR/Kiosk order socket emit failed', { hotelId, error: emitErr?.message });

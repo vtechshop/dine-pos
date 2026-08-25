@@ -4,6 +4,26 @@ import type { LiveOrder, LiveOrderItem } from '../types';
 import { useSocket } from './SocketContext';
 import { apiFetch } from '../api/client';
 
+function playNewOrderBeep() {
+  try {
+    const AudioCtx = window.AudioContext ?? (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx() as AudioContext;
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.35, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.4);
+    osc.onended = () => ctx.close().catch(() => {});
+  } catch {
+    // audio not available — do not break order processing
+  }
+}
+
 interface LiveOrdersContextType {
   orders: LiveOrder[];
   unreadCount: number;
@@ -72,12 +92,13 @@ function parseOrderEvent(data: unknown): LiveOrder | null {
     : [];
 
   return {
-    id:          String(o._id ?? Date.now()),
-    orderNumber: String(o.orderNumber ?? ''),
-    tableNumber: String(o.tableNumber ?? ''),
-    guestLabel:  o.customerName ? String(o.customerName) : undefined,
+    id:            String(o._id ?? Date.now()),
+    orderNumber:   String(o.orderNumber ?? ''),
+    tableNumber:   String(o.tableNumber ?? ''),
+    guestLabel:    o.customerName ? String(o.customerName) : undefined,
+    customerPhone: o.customerPhone ? String(o.customerPhone) : undefined,
     items,
-    totalAmount: typeof o.grandTotal === 'number'
+    totalAmount:   typeof o.grandTotal === 'number'
       ? o.grandTotal
       : typeof o.totalAmount === 'number'
       ? o.totalAmount
@@ -95,6 +116,9 @@ export function LiveOrdersProvider({ children }: { children: ReactNode }) {
   // The previous code returned clearTimeout from inside the socket event handler —
   // that return value is ignored by Socket.IO, so timers leaked on unmount.
   const fadeTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  // Tracks order IDs that have already triggered an audio beep so reconnect
+  // back-fill (SEED) and any duplicate socket events don't double-beep.
+  const beepedIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!socket) return;
@@ -104,6 +128,12 @@ export function LiveOrdersProvider({ children }: { children: ReactNode }) {
       if (!order) return;
 
       dispatch({ type: 'ADD', order });
+
+      // Play beep once per unique order — not on SEED / reconnect back-fill
+      if (!beepedIds.current.has(order.id)) {
+        beepedIds.current.add(order.id);
+        playNewOrderBeep();
+      }
 
       // Highlight fades after 6 seconds
       const t = setTimeout(() => {
