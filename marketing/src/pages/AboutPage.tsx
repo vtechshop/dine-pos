@@ -39,8 +39,7 @@ const PROBLEMS = [
 ];
 
 const ROADMAP = [
-  { label: 'Live now',       items: ['AI Menu Import', 'Loyalty & CRM', 'Vendor & Supply Chain', 'Inventory Intelligence', 'AI Analytics & Morning Brief', 'QR Ordering', 'Kiosk', 'Kitchen Display', 'Expense Tracking', 'P&L Dashboard'] },
-  { label: 'Coming in v1.1', items: ['Shift Management'] },
+  { label: 'Live now',       items: ['AI Menu Import', 'Loyalty & CRM', 'Vendor & Supply Chain', 'Inventory Intelligence', 'AI Analytics & Morning Brief', 'QR Ordering', 'Kiosk', 'Kitchen Display', 'Expense Tracking', 'P&L Dashboard', 'Shift Management'] },
   { label: 'Coming in v2',   items: ['Offline Mode'] },
 ];
 

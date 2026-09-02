@@ -727,10 +727,10 @@ const ALL_FEATURES = [
   'Zomato Integration (Beta)',
   // Operations
   'Customer Display Screen',
+  'Shift Management',
   'Owner App',
   'Android POS App',
   // Platform
-  'Offline Sync (Mobile)',
   'Multi-branch Support',
   'Device Activation',
   'Role Permissions',

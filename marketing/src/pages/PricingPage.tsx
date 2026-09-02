@@ -47,6 +47,8 @@ const PROFESSIONAL_FEATURES = [
   'AI Alerts & Recommendations',
   'AI Chat',
   'Morning Brief',
+  // ── Operations
+  'Shift Management',
   // ── Platform
   'Android POS App',
   'Role-based Access',
@@ -61,7 +63,6 @@ const PROFESSIONAL_FEATURES = [
 ];
 
 const COMING_SOON_FEATURES = [
-  'Shift Management',
   'Offline Mode',
 ];
 
@@ -98,7 +99,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'What about features listed as coming soon?',
-    a: 'Shift Management and Offline Mode are actively being built. When they ship, every existing Professional subscriber gets access automatically — no upgrade fee.',
+    a: 'Offline Mode is actively being built. When it ships, every existing Professional subscriber gets access automatically — no upgrade fee.',
   },
 ];
 
