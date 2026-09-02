@@ -409,8 +409,7 @@ export function NewOrderPanel() {
   const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
 
   useBarcodeScanner({
-    products,
-    enabled: products.length > 0 && !modifierProduct && !unknownBarcode,
+    enabled: !modifierProduct && !unknownBarcode,
     onProductFound: (product) => {
       handleAddProduct(product);
     },

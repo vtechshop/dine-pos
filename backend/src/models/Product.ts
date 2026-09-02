@@ -14,6 +14,7 @@ export interface IProduct extends Document {
   isAvailable: boolean;
   isVeg: boolean;
   shortCode: string;
+  barcode: string;
   description: string;
   stock: number;
   isDeleted: boolean;
@@ -100,6 +101,11 @@ const ProductSchema: Schema = new Schema(
       default: '',
       trim: true,
     },
+    barcode: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     description: {
       type: String,
       default: '',
@@ -145,5 +151,11 @@ const ProductSchema: Schema = new Schema(
 );
 
 ProductSchema.index({ hotelId: 1, category: 1, isAvailable: 1, isDeleted: 1 });
+// Barcode uniqueness: per-hotel, ignore empty strings (sparse-style via partial filter).
+// Same barcode may exist in different hotels (multi-tenant). Empty barcode is not unique.
+ProductSchema.index(
+  { hotelId: 1, barcode: 1 },
+  { unique: true, partialFilterExpression: { barcode: { $gt: '' } } },
+);
 
 export default mongoose.model<IProduct>('Product', ProductSchema);

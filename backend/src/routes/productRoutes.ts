@@ -66,6 +66,35 @@ router.get('/alerts/low-stock', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET product by barcode — used by POS scanner
+// Must be declared before /:id to avoid route conflict.
+router.get('/barcode/:code', async (req: AuthRequest, res: Response) => {
+  try {
+    const normalized = String(req.params.code).trim().toUpperCase();
+    if (!normalized) return res.status(400).json({ found: false, message: 'Barcode is required' });
+
+    const product = await Product.findOne({
+      hotelId:   req.hotelId,
+      barcode:   normalized,
+      isDeleted: false,
+    })
+      .populate('category', 'name color')
+      .populate('kitchenStation', 'name isActive')
+      .populate({ path: 'modifierGroups', match: { isDeleted: false } })
+      .lean();
+
+    if (!product) {
+      return res.status(404).json({ found: false, message: 'Product not found for this barcode' });
+    }
+    if (!product.isAvailable) {
+      return res.status(404).json({ found: false, inactive: true, message: 'Product is currently unavailable' });
+    }
+    res.json({ found: true, product });
+  } catch (error) {
+    sendError(res, 500, 'Server error', error);
+  }
+});
+
 // GET single product
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
@@ -97,7 +126,7 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
 // PUT update product — admin only
 router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const ALLOWED = ['name', 'description', 'price', 'taxPercent', 'hsnCode', 'category', 'isAvailable', 'isVeg', 'shortCode', 'image', 'imageSource', 'imageStatus', 'stock', 'variants', 'modifierGroups', 'kitchenStation'] as const;
+    const ALLOWED = ['name', 'description', 'price', 'taxPercent', 'hsnCode', 'category', 'isAvailable', 'isVeg', 'shortCode', 'barcode', 'image', 'imageSource', 'imageStatus', 'stock', 'variants', 'modifierGroups', 'kitchenStation'] as const;
     const update: Record<string, unknown> = {};
     for (const key of ALLOWED) {
       if (req.body[key] !== undefined) update[key] = req.body[key];

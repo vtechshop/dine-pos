@@ -88,6 +88,7 @@ export interface Product {
   isAvailable:    boolean;
   isVeg:          boolean;
   shortCode:      string;
+  barcode:        string;
   description:    string;
   stock:          number;  // -1 = not tracked
   isDeleted:      boolean;

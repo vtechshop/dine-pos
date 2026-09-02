@@ -15,6 +15,7 @@ export interface ProductInput {
   isAvailable?: boolean;
   isVeg?: boolean;
   shortCode?: string;
+  barcode?: string;
   description?: string;
   stock?: number;
   kitchenStation?: string | null;
@@ -106,6 +107,15 @@ export async function deleteVariant(productId: string, variantId: string): Promi
   return apiFetch<Product>(`/products/${productId}/variants/${variantId}`, {
     method: 'DELETE',
   });
+}
+
+export async function lookupProductByBarcode(
+  code: string,
+): Promise<{ found: true; product: Product } | { found: false; inactive?: boolean; message: string }> {
+  const normalized = code.trim().toUpperCase();
+  return apiFetch<{ found: true; product: Product } | { found: false; inactive?: boolean; message: string }>(
+    `/products/barcode/${encodeURIComponent(normalized)}`,
+  );
 }
 
 export async function fetchLowStockProducts(
