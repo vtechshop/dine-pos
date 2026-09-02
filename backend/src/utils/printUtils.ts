@@ -175,13 +175,14 @@ export async function scheduleKOTPrint(
   const cashierAddr  = s?.cashierPrinterAddress  ?? '';
   const kotAutoPrint = s?.kotAutoPrint           ?? true;
 
-  // Single mode: CashierDashboardScreen registers as 'cashier' printer — there is no
-  // dedicated kitchen device running KitchenDisplayScreen, so 'kitchen' PrinterDevice
-  // is never registered and KOT jobs would queue as pending forever.
-  // Dispatch to 'cashier' in single mode so the active device actually receives the job.
-  // Dual mode: a separate KitchenDisplayScreen device registers as 'kitchen'.
-  const printerTarget: 'kitchen' | 'cashier' = mode === 'dual' ? 'kitchen' : 'cashier';
-  const kotAddress = mode === 'dual' ? kitchenAddr : (cashierAddr || kitchenAddr);
+  // Single-printer mode: KOT is not printed — the one cashier device handles receipts only.
+  // Dual mode: a separate kitchen device receives the KOT.
+  if (mode === 'single') {
+    logger.info('[scheduleKOTPrint] Skipping — printerMode=single, KOT suppressed', { hotelId, orderId: String(order._id) });
+    return;
+  }
+  const printerTarget = 'kitchen' as const;
+  const kotAddress    = kitchenAddr;
 
   logger.info('[scheduleKOTPrint] Dispatching', { hotelId, orderId: String(order._id), printerTarget, kotAddress: kotAddress || '(none)', mode, kotAutoPrint });
 
@@ -248,10 +249,11 @@ export async function scheduleOrderReceiptPrint(
   const mode           = s?.printerMode           ?? 'single';
   const kitchenAddr    = s?.kitchenPrinterAddress ?? '';
   const cashierAddr    = s?.cashierPrinterAddress ?? '';
-  // In single mode the only registered PrinterDevice is 'kitchen' — target it.
-  // In dual mode the dedicated cashier device handles receipts.
-  const printerTarget: 'kitchen' | 'cashier' = mode === 'dual' ? 'cashier' : 'kitchen';
-  const printerAddress = mode === 'dual' ? cashierAddr : kitchenAddr;
+  // Receipts always target the 'cashier' printer in both modes.
+  // Dual: dedicated cashier device. Single: the one 'cashier' device handles KOT + receipts.
+  // Address: in single mode fall back to kitchenAddr in case only that field is configured.
+  const printerTarget = 'cashier' as const;
+  const printerAddress = mode === 'dual' ? cashierAddr : (cashierAddr || kitchenAddr);
 
   const payload: ReceiptPayload = {
     templateType:  'receipt',
@@ -333,7 +335,10 @@ export async function scheduleReceiptPrint(
   const mode           = s?.printerMode            ?? 'single';
   const kitchenAddr    = s?.kitchenPrinterAddress  ?? '';
   const cashierAddr    = s?.cashierPrinterAddress  ?? '';
-  const printerAddress = mode === 'dual' ? cashierAddr : kitchenAddr;
+  // Receipts always target the 'cashier' printer in both modes.
+  // Single: the one 'cashier' device handles receipts only. Fall back to kitchenAddr
+  // in case only that address field is configured.
+  const printerAddress = mode === 'dual' ? cashierAddr : (cashierAddr || kitchenAddr);
 
   let subtotal = 0;
   let taxTotal = 0;
@@ -379,7 +384,7 @@ export async function scheduleReceiptPrint(
     createdAt:             new Date().toISOString(),
   };
 
-  const printerTarget: 'kitchen' | 'cashier' = mode === 'dual' ? 'cashier' : 'kitchen';
+  const printerTarget = 'cashier' as const;
 
   await dispatchPrintJob(
     hotelId,
