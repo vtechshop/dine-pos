@@ -34,6 +34,27 @@ export class RazorpayGateway implements PaymentGateway {
 
   // ── Create a Razorpay Order (step 1 of checkout flow) ─────────────────────────
   async createPayment(params: CreatePaymentParams): Promise<CreatePaymentResult> {
+    // Test bypass: skip live API call when running under the integration test harness.
+    // NODE_ENV=test is set by start-test.js; RAZORPAY_TEST_BYPASS gates this branch
+    // so it is never reachable in production or staging builds.
+    if (process.env.NODE_ENV === 'test' && process.env.RAZORPAY_TEST_BYPASS === 'true') {
+      const fakeId = `order_test_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      return {
+        gatewayTransactionId: fakeId,
+        gatewayOrderId:       fakeId,
+        metadata: {
+          keyId:         this.config.apiKey,
+          orderId:       fakeId,
+          amount:        params.amount,
+          currency:      params.currency ?? 'INR',
+          customerName:  params.customerName  ?? '',
+          customerEmail: '',
+          customerPhone: '',
+          description:   params.description  ?? '',
+        },
+      };
+    }
+
     // Razorpay receipt max = 40 chars
     const receipt = params.internalTransactionId.slice(0, 40);
 
@@ -91,6 +112,11 @@ export class RazorpayGateway implements PaymentGateway {
           gatewayResponse: { error: 'Signature verification failed', payment_id: gatewayTransactionId },
         };
       }
+    }
+
+    // Test bypass: HMAC verified above; skip live fetch in test harness.
+    if (process.env.NODE_ENV === 'test' && process.env.RAZORPAY_TEST_BYPASS === 'true') {
+      return { success: true, status: 'success', paymentMethod: 'upi', gatewayResponse: { bypass: true } };
     }
 
     // Fetch live payment status from Razorpay

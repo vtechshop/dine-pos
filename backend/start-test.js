@@ -7,4 +7,7 @@
 // This sets NODE_ENV=test BEFORE server.ts loads dotenv, so the rate-limiter
 // skip() check sees 'test' regardless of what backend/.env says.
 process.env.NODE_ENV = 'test';
+// Allows integration tests to exercise the full payment flow without live Razorpay API calls.
+// The gateway still verifies HMAC signatures — only the final payments.fetch() is skipped.
+process.env.RAZORPAY_TEST_BYPASS = 'true';
 require('./dist/server.js');
