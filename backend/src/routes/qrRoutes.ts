@@ -308,16 +308,18 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       name,
       phone,
       orderSource,
+      paymentMethod: reqPaymentMethod,
     } = req.body as {
-      hotelId?:     string;
-      guestToken?:  string;
-      items?:       any[];
-      notes?:       string;
-      tableId?:     string;
-      tableNumber?: string;
-      name?:        string;
-      phone?:       string;
-      orderSource?: string;
+      hotelId?:        string;
+      guestToken?:     string;
+      items?:          any[];
+      notes?:          string;
+      tableId?:        string;
+      tableNumber?:    string;
+      name?:           string;
+      phone?:          string;
+      orderSource?:    string;
+      paymentMethod?:  string;
     };
 
     if (!hotelId || !mongoose.isValidObjectId(hotelId)) {
@@ -351,6 +353,8 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     if (!features) return;
 
     const validSource = isKiosk ? 'kiosk' : 'qr';
+    // Kiosk supports cash or Razorpay; QR is always Razorpay
+    const kioskWantsRazorpay = isKiosk && String(reqPaymentMethod || '').toLowerCase() === 'razorpay';
 
     let guest: any;
     let rawGuestToken = '';
@@ -564,8 +568,8 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     const { validatedItems, subtotal, taxTotal } = itemResult;
     const grandTotal = +(subtotal + taxTotal).toFixed(2);
 
-    // ── QR orders require an active Razorpay gateway (kiosk/admin use cash) ───
-    if (validSource === 'qr') {
+    // ── QR always requires Razorpay; kiosk requires it only when Razorpay is selected ───
+    if (validSource === 'qr' || kioskWantsRazorpay) {
       const gwConfig = await PaymentGatewayConfig.findOne({
         hotelId:   new mongoose.Types.ObjectId(String(hotelId)),
         isActive:  true,
@@ -608,8 +612,8 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       customerName:   guest.displayLabel,
       notes:          String(notes ?? '').slice(0, 200),
       orderSource:    validSource,
-      paymentMethod:  validSource === 'qr' ? 'razorpay' : 'cash',
-      status:         validSource === 'qr' ? 'payment_pending' : 'pending',
+      paymentMethod:  (validSource === 'qr' || kioskWantsRazorpay) ? 'razorpay' : 'cash',
+      status:         (validSource === 'qr' || kioskWantsRazorpay) ? 'payment_pending' : 'pending',
       sessionId:      guest.sessionId,
       guestId:        guest._id,
     };
@@ -641,8 +645,9 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       $set: { qrTokenExpiresAt: null }, // once ordering started, token never idles out
     });
 
-    // ── Kiosk: immediate KOT + socket emit (no payment gate) ─────────────────
-    if (validSource !== 'qr') {
+    // ── Kiosk cash: immediate KOT + socket emit.
+    // QR and kiosk Razorpay orders stay payment_pending until qr-verify releases them.
+    if (validSource === 'kiosk' && !kioskWantsRazorpay) {
       scheduleKOTPrint(String(hotelId), {
         _id:          order._id,
         orderNumber:  order.orderNumber,
@@ -684,7 +689,7 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       sessionId:   String(guest.sessionId),
       tableNumber: guest.tableNumber,
       grandTotal,
-      status:      validSource === 'qr' ? 'payment_pending' : 'pending',
+      status:      (validSource === 'qr' || kioskWantsRazorpay) ? 'payment_pending' : 'pending',
     });
 
     // Always return guestToken so client can persist it for subsequent orders.

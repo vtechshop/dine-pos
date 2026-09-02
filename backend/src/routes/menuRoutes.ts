@@ -11,6 +11,8 @@ import { io } from '../server';
 import { sendError } from '../utils/sendError';
 import { logger } from '../utils/logger';
 import { scheduleKOTPrint } from '../utils/printUtils';
+import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
+import GatewayFactory from '../services/payment/GatewayFactory';
 
 const router = Router();
 
@@ -129,7 +131,7 @@ router.get('/menu', publicReadLimiter, async (req: Request, res: Response) => {
 router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) => {
   try {
     // Accept both 'hotel' and 'hotelId' field names for backward compatibility
-    const { hotel, hotelId: hotelIdField, items: clientItems, tableNumber, customerName, notes, isParcel, source } = req.body;
+    const { hotel, hotelId: hotelIdField, items: clientItems, tableNumber, customerName, notes, isParcel, source, orderSource: reqOrderSource, paymentMethod: reqPaymentMethod } = req.body;
     const hotelParam = hotel || hotelIdField;
 
     if (!hotelParam || !mongoose.Types.ObjectId.isValid(hotelParam)) {
@@ -154,6 +156,22 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
 
     const hotelId = String(hotelParam);
 
+    // Resolve orderSource from body (accepts 'orderSource' and legacy 'source' field)
+    const rawSource = String(reqOrderSource || source || '');
+    const orderSource: 'qr' | 'kiosk' | 'dine-in' =
+      rawSource === 'kiosk' ? 'kiosk' :
+      rawSource === 'dine-in' ? 'dine-in' : 'qr';
+
+    const wantsRazorpay = String(reqPaymentMethod || '').toLowerCase() === 'razorpay';
+
+    // QR orders are Razorpay-only — cash must be rejected before any DB work
+    if (orderSource === 'qr' && !wantsRazorpay) {
+      return res.status(400).json({
+        code:    'CASH_NOT_ALLOWED',
+        message: 'QR orders require Razorpay payment. Cash is not accepted for QR ordering.',
+      });
+    }
+
     // Idempotency guard: if the client sends an offlineId (UUID generated before the request),
     // return the existing order rather than creating a duplicate. The sparse unique index on
     // Order.offlineId is the DB-level guard; this findOne is the fast path.
@@ -176,7 +194,7 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
       hotelId,
       isAvailable: true,
       isDeleted: { $ne: true },
-    }).select('_id name price taxPercent').lean() : [];
+    }).select('_id name price taxPercent channelPrices').lean() : [];
     const productMap: Record<string, any> = {};
     for (const p of dbProducts) productMap[(p._id as mongoose.Types.ObjectId).toString()] = p;
 
@@ -190,18 +208,22 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
         const prod = productMap[String(ci.product)];
         if (!prod) continue; // product not found / unavailable — skip
         const qty = Math.max(1, Math.floor(Number(ci.quantity) || 1));
-        const taxAmt = (prod.price * qty * (prod.taxPercent || 0)) / 100;
-        const total  = prod.price * qty + taxAmt;
+        const channelPrice =
+          orderSource === 'kiosk' ? ((prod as any).channelPrices?.kiosk || null) :
+          orderSource === 'qr'    ? ((prod as any).channelPrices?.qr    || null) : null;
+        const unitPrice = (channelPrice && channelPrice > 0) ? channelPrice : prod.price;
+        const taxAmt = (unitPrice * qty * (prod.taxPercent || 0)) / 100;
+        const total  = unitPrice * qty + taxAmt;
         validatedItems.push({
           product:     prod._id,
           productName: prod.name,
           quantity:    qty,
-          price:       prod.price,
+          price:       unitPrice,
           taxPercent:  prod.taxPercent || 0,
           taxAmount:   +taxAmt.toFixed(2),
           total:       +total.toFixed(2),
         });
-        subtotal += prod.price * qty;
+        subtotal += unitPrice * qty;
         taxTotal += taxAmt;
       }
     }
@@ -209,6 +231,25 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
     if (validatedItems.length === 0) {
       return res.status(400).json({ message: 'No valid items' });
     }
+
+    // Verify Razorpay gateway is configured for orders that require it
+    const isRazorpayOrder = wantsRazorpay && (orderSource === 'qr' || orderSource === 'kiosk');
+    if (isRazorpayOrder) {
+      const gwConfig = await PaymentGatewayConfig.findOne({
+        hotelId:   new mongoose.Types.ObjectId(hotelId),
+        isActive:  true,
+        isDeleted: false,
+      }).lean();
+      if (!gwConfig || !GatewayFactory.isRegistered((gwConfig as any).gatewayType)) {
+        return res.status(402).json({
+          code:    'NO_PAYMENT_GATEWAY',
+          message: 'Online payment is not configured for this hotel. Please pay at the counter.',
+        });
+      }
+    }
+
+    const orderStatus     = isRazorpayOrder ? 'payment_pending' : 'pending';
+    const paymentMethodDb = isRazorpayOrder ? 'razorpay' : 'cash';
 
     const grandTotal = subtotal + taxTotal;
     const orderNumber = await generateOrderNumber(hotelId);
@@ -225,53 +266,58 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
       customerName: String(customerName || '').slice(0, 60),
       notes:        String(notes || '').slice(0, 200),
       isParcel:     Boolean(isParcel),
-      orderSource:  source === 'dine-in' ? 'dine-in' : 'qr',
-      paymentMethod: 'cash',
+      orderSource:   orderSource,
+      paymentMethod: paymentMethodDb,
+      status:        orderStatus as any,
     });
     await order.save();
 
-    // Fire-and-forget KOT print — never blocks the order response
-    scheduleKOTPrint(hotelId, {
-      _id:         order._id,
-      orderNumber: order.orderNumber,
-      tableNumber: order.tableNumber,
-      customerName: order.customerName,
-      items:       order.items as { productName: string; quantity: number }[],
-      notes:       order.notes,
-      orderSource: order.orderSource,
-      createdAt:   order.createdAt,
-    }).catch(() => {});
+    // Only confirmed (cash) orders go to kitchen immediately.
+    // Razorpay orders (QR or kiosk) stay as payment_pending until qr-verify releases them.
+    if (orderStatus === 'pending') {
+      // Fire-and-forget KOT print — never blocks the order response
+      scheduleKOTPrint(hotelId, {
+        _id:         order._id,
+        orderNumber: order.orderNumber,
+        tableNumber: order.tableNumber,
+        customerName: order.customerName,
+        items:       order.items as { productName: string; quantity: number }[],
+        notes:       order.notes,
+        orderSource: order.orderSource,
+        createdAt:   order.createdAt,
+      }).catch(() => {});
 
-    // Emit socket event so admin sees the order instantly
-    try {
-      if (!io) {
-        logger.error('[menuRoutes] io is undefined — circular import issue');
-      } else {
-        const room = `hotel_${hotelId}`;
-        const sockets = await io.in(room).allSockets();
-        logger.info('[menuRoutes] emitting new_order', {
-          room,
-          clientsInRoom: sockets.size,
-          socketIds:     Array.from(sockets),
-        });
-        io.to(room).emit('new_order', {
-          _id:           order._id.toString(),
-          orderNumber:   order.orderNumber,
-          tableNumber:   order.tableNumber,
-          customerName:  order.customerName,
-          customerPhone: order.customerPhone,
-          grandTotal:    order.grandTotal,
-          itemCount:     order.items.length,
-          orderSource:   order.orderSource,
-          items:         order.items.map((i: any) => ({
-            productName: i.productName,
-            quantity:    i.quantity,
-            price:       i.price,
-          })),
-        });
+      // Emit socket event so admin sees the order instantly
+      try {
+        if (!io) {
+          logger.error('[menuRoutes] io is undefined — circular import issue');
+        } else {
+          const room = `hotel_${hotelId}`;
+          const sockets = await io.in(room).allSockets();
+          logger.info('[menuRoutes] emitting new_order', {
+            room,
+            clientsInRoom: sockets.size,
+            socketIds:     Array.from(sockets),
+          });
+          io.to(room).emit('new_order', {
+            _id:           order._id.toString(),
+            orderNumber:   order.orderNumber,
+            tableNumber:   order.tableNumber,
+            customerName:  order.customerName,
+            customerPhone: order.customerPhone,
+            grandTotal:    order.grandTotal,
+            itemCount:     order.items.length,
+            orderSource:   order.orderSource,
+            items:         order.items.map((i: any) => ({
+              productName: i.productName,
+              quantity:    i.quantity,
+              price:       i.price,
+            })),
+          });
+        }
+      } catch (emitErr: any) {
+        logger.error('[menuRoutes] socket emit error', { error: emitErr?.message || String(emitErr) });
       }
-    } catch (emitErr: any) {
-      logger.error('[menuRoutes] socket emit error', { error: emitErr?.message || String(emitErr) });
     }
 
     res.status(201).json(order);
