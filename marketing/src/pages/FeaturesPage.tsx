@@ -268,6 +268,22 @@ const LIVE_FEATURES: FeatureBlock[] = [
       'Works on affordable Android hardware',
     ],
   },
+  // ── Shift Management ──────────────────────────────────────────────────────
+  {
+    icon: Clock,
+    title: 'Shift Management',
+    desc: 'Open and close shifts with cash drawer reconciliation, live stats, and a printable Z-Report.',
+    bullets: [
+      'Open shift with opening cash and handover notes',
+      'Live stats: cash sales, online sales, total orders, total sales',
+      'Cash-in and cash-out drawer movements with reason codes',
+      'Expected vs. actual cash reconciliation on close',
+      'Variance tracking — surplus or shortage highlighted',
+      'Z-Report: full shift breakdown with print support',
+      'Shift history with pagination',
+      'Long-shift reminder after 7.5 hours',
+    ],
+  },
   // ── People & Security ─────────────────────────────────────────────────────
   {
     icon: Users,
@@ -312,12 +328,6 @@ const BETA_FEATURES: BetaBlock[] = [
 // ── Genuinely coming soon ──────────────────────────────────────────────────────
 
 const COMING_SOON: ComingSoonBlock[] = [
-  {
-    icon: Clock,
-    title: 'Shift Management',
-    desc: 'Open and close shifts with cash drawer reconciliation, shift-wise reports, and handover notes.',
-    eta: 'v1.1',
-  },
   {
     icon: Wifi,
     title: 'Offline Mode',
