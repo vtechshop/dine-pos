@@ -162,6 +162,16 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
       rawSource === 'kiosk' ? 'kiosk' :
       rawSource === 'dine-in' ? 'dine-in' : 'qr';
 
+    // Kiosk orderSource requires the premium kiosk feature flag to be enabled.
+    // Without this check, any public client with a known hotelId could send
+    // orderSource=kiosk + paymentMethod=cash to bypass QR Razorpay enforcement.
+    if (orderSource === 'kiosk' && (hotelDoc as any).features?.kiosk !== true) {
+      return res.status(403).json({
+        code:    'FEATURE_DISABLED',
+        message: 'Kiosk ordering is not enabled for this hotel.',
+      });
+    }
+
     const wantsRazorpay = String(reqPaymentMethod || '').toLowerCase() === 'razorpay';
 
     // QR orders are Razorpay-only — cash must be rejected before any DB work

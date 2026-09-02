@@ -24,7 +24,7 @@
  */
 
 import { api } from '../../../utils/api-client';
-import { authHeaders } from '../../../utils/env';
+import { authHeaders, superAdminHeaders } from '../../../utils/env';
 import { getHotelA, getHotelB } from '../../setup/testEnv';
 import { createCategory, createProduct } from '../../helpers/menu.helper';
 import { v4 as uuidv4 } from 'uuid';
@@ -68,6 +68,13 @@ describe('Payment Flow — QR & Kiosk (POST /api/public/orders)', () => {
     const cat  = await createCategory(adminToken);
     const prod = await createProduct(adminToken, cat.id);
     testProductId = prod.id;
+
+    // Enable kiosk feature on hotel A — required by the security guard in menuRoutes.ts
+    // that prevents unauthenticated clients from using kiosk orderSource to bypass QR Razorpay.
+    await api
+      .put(`/api/superadmin/hotels/${hotelId}/features`)
+      .set(superAdminHeaders)
+      .send({ kiosk: true });
 
     baseItems = [{
       product:     testProductId,
@@ -297,14 +304,17 @@ describe('Payment Flow — QR & Kiosk (POST /api/public/orders)', () => {
 
   // ─── M. Cross-hotel Kiosk access → MUST FAIL ────────────────────────────
 
-  it('M: Kiosk order for hotel B with hotel A productId → no valid items', async () => {
+  it('M: Kiosk order for hotel B with hotel A productId → rejected (403 no kiosk, 400 no items, or 404)', async () => {
     const res = await api.post('/api/public/orders').send(legacyOrderBody({
       hotelId:       hotelBId,
       orderSource:   'kiosk',
       paymentMethod: 'cash',
       items:         baseItems, // productId belongs to hotel A
     }));
-    expect([400, 404]).toContain(res.status);
+    // 403: hotel B doesn't have kiosk feature enabled (security guard fires first)
+    // 400: hotel B catalog doesn't contain hotel A's product (no valid items)
+    // 404: hotel B not found
+    expect([400, 403, 404]).toContain(res.status);
     expect(res.status).not.toBe(201);
     expect(res.status).not.toBe(200);
   });
