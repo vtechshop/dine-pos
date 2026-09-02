@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
-import { getPublicMenu, getEffectiveHotelId, saveMenuCache, loadMenuCache } from '../services/api';
+import { getPublicMenu, getEffectiveHotelId, saveMenuCache, loadMenuCache, getKioskHotelId } from '../services/api';
 import { Category, Product, SelectedModifier, ModifierGroup } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../utils/constants';
 import { applyCloudinaryTransform } from '../utils/cloudinary';
@@ -35,11 +35,6 @@ const CustomerMenuScreen: React.FC = () => {
   const CARD_FONT = isTablet ? FontSize.lg : FontSize.md;
   const PRICE_FONT = isTablet ? FontSize.xxl : FontSize.xl;
 
-  const qrPrice = (p: Product): number => {
-    const cp = p.channelPrices?.qr;
-    return cp && cp > 0 ? cp : p.price;
-  };
-
   const [categories,         setCategories]          = useState<Category[]>([]);
   const [products,           setProducts]            = useState<Product[]>([]);
   const [filtered,           setFiltered]            = useState<Product[]>([]);
@@ -52,6 +47,17 @@ const CustomerMenuScreen: React.FC = () => {
   const [modifierPicker, setModifierPicker] = useState<{ product: Product; effectivePrice: number; variantId?: string; variantName?: string } | null>(null);
   const [modSelections, setModSelections] = useState<Record<string, string[]>>({});
   const [isOffline,          setIsOffline]           = useState(false);
+  const [isKioskDevice,      setIsKioskDevice]       = useState(false);
+
+  // Use kiosk channel price when device is locked as a kiosk; fall back to QR price, then base price.
+  const qrPrice = (p: Product): number => {
+    if (isKioskDevice) {
+      const kp = p.channelPrices?.kiosk;
+      if (kp && kp > 0) return kp;
+    }
+    const cp = p.channelPrices?.qr;
+    return cp && cp > 0 ? cp : p.price;
+  };
   const tapCount = useRef(0);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSecretTap = () => {
@@ -66,6 +72,8 @@ const CustomerMenuScreen: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
+      const kioskId = await getKioskHotelId();
+      setIsKioskDevice(!!kioskId);
       const { categories: cats, products: prods } = await getPublicMenu();
       setCategories(cats);
       setProducts(prods);

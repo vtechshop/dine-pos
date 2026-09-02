@@ -122,10 +122,12 @@ async function validateHotelForQR(
 }
 
 // ── Shared helper: validate and price items against the product catalog ────────
+// orderSource is used to pick the correct channel price (kiosk/qr); falls back to base price.
 async function validateItems(
   res: Response,
   clientItems: any[],
-  hotelId: string
+  hotelId: string,
+  orderSource: 'qr' | 'kiosk' = 'qr',
 ): Promise<{ validatedItems: any[]; subtotal: number; taxTotal: number } | null> {
   const productIds = clientItems
     .map((i: any) => i.product)
@@ -137,7 +139,7 @@ async function validateItems(
         hotelId,
         isAvailable: true,
         isDeleted: { $ne: true },
-      }).select('_id name price taxPercent').lean()
+      }).select('_id name price taxPercent channelPrices').lean()
     : [];
 
   const productMap: Record<string, any> = {};
@@ -152,18 +154,25 @@ async function validateItems(
     const prod = productMap[String(ci.product)];
     if (!prod) continue;
     const qty = Math.max(1, Math.floor(Number(ci.quantity) || 1));
-    const taxAmt = (prod.price * qty * (prod.taxPercent || 0)) / 100;
-    const total  = prod.price * qty + taxAmt;
+
+    // Resolve channel price: kiosk → channelPrices.kiosk, qr → channelPrices.qr, fallback to base price
+    const channelPrice = orderSource === 'kiosk'
+      ? (prod.channelPrices?.kiosk || null)
+      : (prod.channelPrices?.qr    || null);
+    const unitPrice = (channelPrice && channelPrice > 0) ? channelPrice : prod.price;
+
+    const taxAmt = (unitPrice * qty * (prod.taxPercent || 0)) / 100;
+    const total  = unitPrice * qty + taxAmt;
     validatedItems.push({
       product:     prod._id,
       productName: prod.name,
       quantity:    qty,
-      price:       prod.price,
+      price:       unitPrice,
       taxPercent:  prod.taxPercent || 0,
       taxAmount:   +taxAmt.toFixed(2),
       total:       +total.toFixed(2),
     });
-    subtotal += prod.price * qty;
+    subtotal += unitPrice * qty;
     taxTotal += taxAmt;
   }
 
@@ -549,7 +558,7 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     }
 
     // ── Item validation + pricing (server-side; client prices never trusted) ──
-    const itemResult = await validateItems(res, clientItems, hotelId);
+    const itemResult = await validateItems(res, clientItems, hotelId, validSource as 'qr' | 'kiosk');
     if (!itemResult) return;
 
     const { validatedItems, subtotal, taxTotal } = itemResult;

@@ -16,7 +16,7 @@ import { applyCloudinaryTransform } from '../utils/cloudinary';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import * as api from '../services/api';
-import { getEffectiveHotelId, enqueueCustomerOrder, getSocketUrl } from '../services/api';
+import { getEffectiveHotelId, enqueueCustomerOrder, getSocketUrl, getKioskHotelId } from '../services/api';
 import type { PublicGatewayInfo } from '../services/api';
 import { CUSTOMER_ORDER_KEY } from './CustomerOrderStatusScreen';
 import { io as socketIO, Socket } from 'socket.io-client';
@@ -52,6 +52,7 @@ const CustomerCartScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const [placing, setPlacing] = useState(false);
   const [payChoice, setPayChoice] = useState<'counter' | 'upi_qr'>('counter');
+  const [isKioskDevice, setIsKioskDevice] = useState(false);
   const [nameError, setNameError] = useState(false);
   const [phoneError, setPhoneError] = useState(false);
   const [activeGateway, setActiveGateway] = useState<PublicGatewayInfo | null>(null);
@@ -75,6 +76,13 @@ const CustomerCartScreen: React.FC = () => {
   };
 
   const billUrl = placedOrder ? `${BACKEND_URL}/bill/${placedOrder._id}` : '';
+
+  // Detect kiosk mode once on mount
+  useEffect(() => {
+    let mounted = true;
+    getKioskHotelId().then(id => { if (mounted) setIsKioskDevice(!!id); }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   // Fetch active payment gateway once on mount (decides whether to show Pay Online)
   useEffect(() => {
@@ -151,7 +159,7 @@ const CustomerCartScreen: React.FC = () => {
     const orderPayload = {
       hotel:         hotelId,
       source:        'dine-in' as const,
-      orderSource:   'qr',
+      orderSource:   isKioskDevice ? 'kiosk' : 'qr',
       items:         cart.items.map(item => ({
         product:           item.product._id,
         productName:       item.product.name,
@@ -248,7 +256,7 @@ const CustomerCartScreen: React.FC = () => {
     const orderPayload = {
       hotel: hotelId,
       source: 'dine-in' as const,
-      orderSource: 'dine-in',
+      orderSource: isKioskDevice ? 'kiosk' : 'dine-in',
       items: cart.items.map(item => ({
         product:           item.product._id,
         productName:       item.product.name,
