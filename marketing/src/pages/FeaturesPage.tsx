@@ -1,9 +1,9 @@
 import {
   ShoppingCart, LayoutGrid, Package, Archive,
-  BarChart2, Printer, Users, Shield, Sparkles, Sliders,
-  Globe, Monitor, Smartphone, Image,
-  CreditCard, Truck, Clock, ShoppingBag, Wifi,
-  TrendingUp, Brain, DollarSign, MessageSquare,
+  BarChart2, Printer, Users, Shield,
+  Globe, Smartphone, Image,
+  CreditCard, Clock, ShoppingBag, Wifi,
+  DollarSign,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePageSEO } from '../hooks/usePageSEO';
@@ -70,46 +70,6 @@ const LIVE_FEATURES: FeatureBlock[] = [
       'Product variants with per-variant pricing',
     ],
   },
-  // ── AI ────────────────────────────────────────────────────────────────────
-  {
-    icon: Sparkles,
-    title: 'AI Menu Import',
-    desc: 'Upload any existing menu — AI extracts every item and imports it instantly.',
-    bullets: [
-      'Upload photo or PDF of your current menu',
-      'Gemini AI extracts dish names, prices, categories',
-      'One-click import — 40 items in under 2 minutes',
-      'Review and edit before going live',
-      'Works on handwritten menus and scanned images',
-      'No manual typing required',
-    ],
-  },
-  {
-    icon: Brain,
-    title: 'AI Business Intelligence',
-    desc: 'Gemini-powered analytics that surface insights you would otherwise miss.',
-    bullets: [
-      'Anomaly and fraud detection from order history',
-      'Staff performance KPIs — orders, AOV, cancel rate, discount usage',
-      'Kitchen efficiency — fulfillment time, p90 latency, SLA breach rate',
-      '7-day and 30-day revenue and item demand forecast',
-      'Inventory stock-out prediction per ingredient',
-      'AI-generated daily alerts and action recommendations',
-    ],
-  },
-  {
-    icon: MessageSquare,
-    title: 'AI Chat & Morning Brief',
-    desc: 'Ask questions about your restaurant in plain language — and start every day with a Gemini-generated summary.',
-    bullets: [
-      'Natural-language queries about sales, stock, and staff',
-      'Context-aware answers from your live data',
-      'Conversation history across sessions',
-      'Auto-generated morning brief with yesterday\'s KPIs',
-      'Actionable daily recommendations',
-      'Available on web and Android app',
-    ],
-  },
   // ── Customers ─────────────────────────────────────────────────────────────
   {
     icon: CreditCard,
@@ -141,56 +101,29 @@ const LIVE_FEATURES: FeatureBlock[] = [
   // ── Inventory ─────────────────────────────────────────────────────────────
   {
     icon: Archive,
-    title: 'Inventory & Wastage',
-    desc: 'Track ingredients from delivery to plate — and log every loss.',
+    title: 'Wastage Tracking',
+    desc: 'Log every item loss with quantity, reason, and estimated value — then see it in your analytics.',
     bullets: [
-      'Ingredient stock tracking by unit',
-      'Low-stock threshold alerts',
-      'Cost-per-unit tracking',
-      'Recipe costing per dish',
-      'Auto stock deduction when orders are placed',
-      'Wastage logging with reason — analytics and estimated loss value',
-    ],
-  },
-  {
-    icon: TrendingUp,
-    title: 'Inventory Intelligence',
-    desc: 'Smart analysis of your stock patterns — reorder right and never over-buy.',
-    bullets: [
-      'Fast, slow, and dead stock classification',
-      'Stock turnover ratio per ingredient',
-      'Reorder suggestions with 14-day demand coverage calculation',
-      'Overstock and expiry alerts from GRN batch data',
-      'Vendor price comparison across purchase history',
-      'Cost variance analysis — actual vs budgeted spend',
-    ],
-  },
-  // ── Supply Chain ──────────────────────────────────────────────────────────
-  {
-    icon: Truck,
-    title: 'Vendor & Supply Chain',
-    desc: 'Full procure-to-pay: from purchase order to vendor ledger.',
-    bullets: [
-      'Vendor profiles with contact and credit terms',
-      'Purchase Orders with line items and status tracking',
-      'Goods Receive Notes (GRN) with batch and expiry dates',
-      'GRN auto-increments ingredient stock on receipt',
-      'Vendor ledger with outstanding balance',
-      'Vendor payment tracking and history',
+      'Wastage logging per item with quantity and unit',
+      'Reason tagging (spoilage, overcooking, expiry, etc.)',
+      'Estimated loss value per wastage entry',
+      'Daily and range-based wastage analytics',
+      'Staff-attributed wastage tracking',
+      'Dashboard summary: total wastage vs revenue',
     ],
   },
   // ── Finance ───────────────────────────────────────────────────────────────
   {
     icon: DollarSign,
     title: 'Expense Tracking & Finance',
-    desc: 'Log expenses, see your true profit, and drill into cost-per-dish.',
+    desc: 'Log daily expenses, see revenue vs spend, and track net profit in one view.',
     bullets: [
       'Daily expense logging by category',
-      'Revenue vs COGS dashboard',
-      'Gross and net profit calculation',
-      'Menu profitability — margin % and gross profit per dish',
-      'COGS trend grouped by day, week, or month',
+      'Expense category breakdown',
+      'Revenue vs expense comparison',
+      'Net profit and loss calculation',
       'P&L view combining revenue and expenses',
+      'Date-range filtered reports',
     ],
   },
   // ── Reports ───────────────────────────────────────────────────────────────
@@ -221,38 +154,14 @@ const LIVE_FEATURES: FeatureBlock[] = [
     ],
   },
   {
-    icon: Monitor,
-    title: 'Kiosk & Customer Display',
-    desc: 'Self-service kiosk on any Android tablet; a second screen shows the running bill live.',
-    bullets: [
-      'Full self-order kiosk on any Android tablet',
-      'UPI and cash payment options on kiosk',
-      'Orders go directly to Kitchen Display',
-      'Customer display: real-time cart on any browser or TV',
-      'No customer app download needed for either',
-    ],
-  },
-  {
     icon: Image,
     title: 'Product Images',
-    desc: 'Every dish with a photo — from your gallery, camera, or bulk-assigned.',
+    desc: 'Every dish with a photo — visible on your QR menu and in the POS.',
     bullets: [
       'Bulk image assignment from your gallery',
       'Camera capture per product',
       'Cloudinary CDN delivery — fast on any connection',
-      'Images shown on QR menu, kiosk, and customer display',
-    ],
-  },
-  {
-    icon: Sliders,
-    title: 'Modifier Groups',
-    desc: 'Add-ons, variants, and combos — build any menu customisation.',
-    bullets: [
-      'Add-on groups (extras, toppings, sauces)',
-      'Choice modifiers (size, spice level, cooking style)',
-      'Mandatory and optional modifier groups',
-      'Per-modifier pricing',
-      'Attach modifier groups to any menu item',
+      'Images shown on QR menu and in the POS',
     ],
   },
   {
@@ -329,7 +238,7 @@ const COMING_SOON: ComingSoonBlock[] = [
 export function FeaturesPage() {
   usePageSEO(
     'Features — Dine POS',
-    'All Dine POS features: AI analytics, loyalty & CRM, vendor management, inventory intelligence, expense tracking, QR ordering, kiosk, kitchen display, Android POS, and more.',
+    'All Dine POS features: billing & orders, loyalty & CRM, wastage tracking, expense & P&L, QR ordering, kitchen display, Android POS, reports, and more.',
   );
   return (
     <div>
@@ -339,7 +248,7 @@ export function FeaturesPage() {
           Every feature your restaurant needs
         </h1>
         <p className="mx-auto max-w-xl text-gray-400">
-          From AI menu import to full vendor management and loyalty — Dine POS ships all of it in one system.
+          From billing and loyalty to kitchen display and QR ordering — Dine POS ships it all in one system.
           No extra modules. No per-feature pricing.
         </p>
       </section>
