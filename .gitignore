@@ -47,3 +47,11 @@ mobile/google-play-key.json
 mobile/android/keystore.properties
 mobile/android/*.keystore
 mobile/android/app/*.keystore
+
+# Claude Code internal files (worktrees contain node_modules, local session state)
+.claude/
+
+# CI log archives (generated, binary)
+ci_logs.zip
+ci_logs_extracted/
+ci_logs_out/
