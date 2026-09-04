@@ -88,6 +88,7 @@ jobs:
           SUPER_ADMIN_ID: ${{ secrets.SUPER_ADMIN_ID || 'ci-superadmin' }}
           SUPER_ADMIN_PASS: ${{ secrets.SUPER_ADMIN_PASS || 'ci-superpass-1234' }}
           AGGREGATOR_SECRET: ${{ secrets.AGGREGATOR_SECRET || 'ci-aggregator-secret-not-for-production' }}
+          PAYMENT_ENCRYPTION_KEY: ${{ secrets.PAYMENT_ENCRYPTION_KEY || 'c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1' }}
           NODE_ENV: test
         run: |
           npm start &

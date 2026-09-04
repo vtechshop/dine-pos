@@ -9,12 +9,13 @@ import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 import { makeRateLimiter } from '../utils/rateLimiter';
+import { ipKeyGenerator } from 'express-rate-limit';
 
 // Distributed rate limiter for AI image generation: 5 req/hotel/minute, Redis-backed
 const imgGenRateLimiter = makeRateLimiter({
   windowMs:     60_000,
   max:          5,
-  keyGenerator: (req: any) => `img:${req.hotelId ?? req.ip}`,
+  keyGenerator: (req: any) => `img:${req.hotelId ?? ipKeyGenerator(req.ip ?? '')}`,
   message:      { message: 'Too many image generation requests. Try again in a minute.' },
 });
 

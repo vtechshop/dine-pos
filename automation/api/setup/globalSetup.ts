@@ -58,7 +58,7 @@ async function registerAndApproveHotel(label: string): Promise<{
   const approveRes = await api
     .put(`/api/superadmin/hotels/${hotelId}/approve`)
     .set(superAdminHeaders)
-    .send({ plan: 'basic', trialDays: 14 });
+    .send({ plan: 'basic', trialDays: 14, features: { ai: true, ingredients: true } });
 
   if (approveRes.status !== 200) {
     throw new Error(`[Setup] approveHotel ${label} failed: ${approveRes.status} ${JSON.stringify(approveRes.body)}`);
@@ -281,6 +281,40 @@ export default async function globalSetup(): Promise<void> {
   // and the unique index rejects the second insert even with sparse:true
   const hotelA = await setupHotel('A');
   const hotelB = await setupHotel('B');
+
+  // Create and activate a Razorpay gateway config for hotel A so that QR order
+  // tests can place Razorpay orders without hitting 402 NO_PAYMENT_GATEWAY.
+  // RAZORPAY_TEST_BYPASS=true is NOT set here — QR order tests only need the
+  // gateway to exist and be registered; they don't execute payment verification.
+  const adminTokenA = (hotelA as any).adminToken as string;
+  const hotelIdA    = (hotelA as any).hotelId as string;
+  try {
+    const gwRes = await api
+      .post('/api/payment-gateway-configs')
+      .set({ Authorization: `Bearer ${adminTokenA}` })
+      .send({
+        gatewayType:   'razorpay',
+        displayName:   'CI Test Gateway (globalSetup)',
+        apiKey:        'rzp_test_CI_SETUP_00000001',
+        apiSecret:     'ci_setup_api_secret_000001',
+        webhookSecret: 'ci_setup_webhook_secret_01',
+        environment:   'sandbox',
+      });
+    if (gwRes.status === 201 || gwRes.status === 200) {
+      const gwId = gwRes.body._id;
+      if (gwId) {
+        await api
+          .patch(`/api/payment-gateway-configs/${gwId}/toggle`)
+          .set({ Authorization: `Bearer ${adminTokenA}` });
+        (hotelA as any).gwConfigId = gwId;
+        console.log(`[GlobalSetup] Razorpay gateway created and activated for hotel A: ${gwId}`);
+      }
+    } else {
+      console.warn(`[GlobalSetup] Gateway config creation returned ${gwRes.status} — QR order tests may skip payment flow`);
+    }
+  } catch (err) {
+    console.warn('[GlobalSetup] Gateway config setup warning (non-fatal):', err);
+  }
 
   // Also register a pending (unapproved) hotel for status tests
   const pendingPhone = nextPhone();

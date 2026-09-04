@@ -59,6 +59,7 @@ jobs:
           SUPER_ADMIN_ID: ${{ secrets.SUPER_ADMIN_ID || 'ci-superadmin' }}
           SUPER_ADMIN_PASS: ${{ secrets.SUPER_ADMIN_PASS || 'ci-superpass-1234' }}
           NODE_ENV: test
+          SUPER_ADMIN_JWT_SECRET: ${{ secrets.SUPER_ADMIN_JWT_SECRET || 'ci-superadmin-jwt-secret-not-for-production-32ch' }}
           AGGREGATOR_SECRET: ${{ secrets.AGGREGATOR_SECRET || 'ci-aggregator-secret-not-for-production' }}
         run: |
           npm ci

@@ -60,17 +60,22 @@ describe('Orders — QR Self-Order', () => {
     expect([400, 422]).toContain(res.status);
   });
 
-  it('QR-012 QR order appears in kitchen orders', async () => {
+  it('QR-012 QR Razorpay order is payment_pending and not yet visible in kitchen', async () => {
+    // QR orders use Razorpay and start as payment_pending.
+    // Kitchen only shows status=pending|preparing|ready — payment_pending is excluded
+    // until server-side payment verification releases the order.
     const payload = qrOrderPayload(hotelId, { items: qrItems() });
     const createRes = await api.post('/api/public/orders').send(payload);
-    const orderId = (createRes.body.order || createRes.body)._id;
+    expect([200, 201]).toContain(createRes.status);
+    const order = createRes.body.order || createRes.body;
+    expect(order.status).toBe('payment_pending');
 
     const { getHotelA: getA } = await import('../../setup/testEnv');
     const hotelA = getA();
     const kitchenRes = await api.get('/api/orders/kitchen').set(authHeaders(hotelA.kitchenToken));
     const orders = kitchenRes.body.orders || kitchenRes.body.data || kitchenRes.body;
-    const found = orders.some((o: any) => o._id === orderId);
-    expect(found).toBe(true);
+    const found = Array.isArray(orders) && orders.some((o: any) => o._id === order._id);
+    expect(found).toBe(false);
   });
 
   it('QR-013 QR order for suspended hotel is rejected', async () => {

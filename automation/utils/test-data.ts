@@ -130,6 +130,7 @@ export function qrOrderPayload(hotelId: string, overrides: Record<string, unknow
     grandTotal: 163.5,
     notes: 'Less spicy please',
     orderSource: 'qr',
+    paymentMethod: 'razorpay',
     ...overrides,
   };
 }

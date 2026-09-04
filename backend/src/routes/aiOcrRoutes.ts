@@ -13,6 +13,7 @@ import {
 } from '../services/purchaseSuggestion';
 import { sendError } from '../utils/sendError';
 import { makeRateLimiter } from '../utils/rateLimiter';
+import { ipKeyGenerator } from 'express-rate-limit';
 import { getRedisClient } from '../config/redis';
 
 const OCR_PENDING_CAP = parseInt(process.env.OCR_PENDING_CAP ?? '10', 10);
@@ -21,7 +22,7 @@ const OCR_PENDING_CAP = parseInt(process.env.OCR_PENDING_CAP ?? '10', 10);
 const ocrUploadRateLimiter = makeRateLimiter({
   windowMs:     15 * 60_000,
   max:          20,
-  keyGenerator: (req: any) => `ocr:upload:${req.hotelId ?? req.ip}`,
+  keyGenerator: (req: any) => `ocr:upload:${req.hotelId ?? ipKeyGenerator(req.ip ?? '')}`,
   message:      { message: 'Too many OCR upload requests. Try again in 15 minutes.' },
 });
 
