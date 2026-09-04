@@ -477,12 +477,12 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         loyaltyDiscountAmount: updateFields.loyaltyDiscountAmount,
       }).catch(() => {});
 
-      // Sync paymentMethod and mark orders completed so daily/range reports
-      // reflect the correct payment breakdown for session-billed dine-in guests.
-      Order.updateMany(
+      // D-10: Await order sync — fire-and-forget left reports and kitchen display stale.
+      // Any failure is surfaced to the caller so the billing inconsistency is visible.
+      await Order.updateMany(
         { sessionId: session._id, guestId: updated._id, status: { $ne: 'cancelled' } },
         { $set: { paymentMethod, status: 'completed' } },
-      ).catch(() => {});
+      );
 
       const billingDiscount = guestAfterLoyalty.loyaltyDiscountAmount ?? 0;
       const netPayable = guestAfterLoyalty.totalAmount - billingDiscount - guestVoucherAmount;
@@ -520,13 +520,10 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         res.status(403).json({ message: 'Waiters cannot mark guests as left' });
         return;
       }
-      if (guest.status !== 'active') {
-        res.status(409).json({ message: `Guest is already ${guest.status}` });
-        return;
-      }
-
-      const updated = await Guest.findByIdAndUpdate(
-        guest._id,
+      // D-03: status guard is inside the atomic MongoDB filter, not a separate
+      // read — prevents a concurrent bill from being overwritten by a left action.
+      const updated = await Guest.findOneAndUpdate(
+        { _id: guest._id, hotelId: req.hotelId, status: 'active' },
         {
           $set: {
             status: 'left',
@@ -534,8 +531,12 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
             qrTokenExpiresAt: null,
           },
         },
-        { new: true }
+        { new: true },
       );
+      if (!updated) {
+        res.status(409).json({ message: `Guest is already ${guest.status}` });
+        return;
+      }
 
       io.to(`hotel_${req.hotelId}`).emit('guest_updated', {
         sessionId: session._id,
@@ -1089,6 +1090,10 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
           giftVoucherId: null,
           giftVoucherCode: '',
           giftVoucherAmount: 0,
+          // D-09: clear idempotency guards so re-billing earns points and
+          // updates lifetime spend exactly once on the re-billed amount.
+          loyaltyEarnedAt: null,
+          lifetimeSpendAt: null,
         },
       },
       { new: true }

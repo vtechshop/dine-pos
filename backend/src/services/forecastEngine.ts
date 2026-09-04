@@ -7,6 +7,7 @@ import DailySnapshot from '../models/DailySnapshot';
 import { autoForecast, wma, addDays, ForecastResult } from '../utils/statisticalForecast';
 import { generateNarrative } from '../utils/geminiNarrative';
 import { getCachedNarrative, setCachedNarrative, hashNarrativeInput } from '../utils/aiReportCache';
+import { consumeAiQuota } from '../utils/aiUsageTracker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -365,6 +366,7 @@ export async function buildForecast(hotelId: string): Promise<SalesForecast | nu
       tableUtilNext7d,
       revenueAccuracy,
     };
+    await consumeAiQuota(hotelId, 'report');
     const prompt    = buildForecastNarrativePrompt(partialFc);
     const generated = await generateNarrative(prompt);
     if (generated) {

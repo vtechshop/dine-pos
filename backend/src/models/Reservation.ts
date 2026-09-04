@@ -34,6 +34,8 @@ export interface IReservation extends Document {
   noShowAt:            Date | null;
   confirmedAt:         Date | null;
   arrivedAt:           Date | null;
+  /** D-14: set when the guest is physically seated at the table */
+  seatedAt:            Date | null;
   createdAt:           Date;
   updatedAt:           Date;
 }
@@ -82,6 +84,7 @@ const ReservationSchema: Schema = new Schema(
     noShowAt:           { type: Date,   default: null },
     confirmedAt:        { type: Date,   default: null },
     arrivedAt:          { type: Date,   default: null },
+    seatedAt:           { type: Date,   default: null },
   },
   { timestamps: true },
 );
@@ -96,5 +99,21 @@ ReservationSchema.pre('save', function (next) {
 ReservationSchema.index({ hotelId: 1, date: -1 });
 ReservationSchema.index({ hotelId: 1, tableId: 1, date: 1, status: 1 });
 ReservationSchema.index({ hotelId: 1, status: 1, date: 1 });
+// Prevent concurrent requests from double-booking the same table at the same
+// time on the same date. date is included because startMinutes is time-of-day
+// only (minutes from midnight) — without date, the same slot on different days
+// would conflict. partialFilterExpression restricts enforcement to active
+// reservations; completed / cancelled / no_show records are never excluded.
+// tableId type guard skips unassigned (null) reservations.
+ReservationSchema.index(
+  { hotelId: 1, tableId: 1, date: 1, startMinutes: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      tableId: { $type: 'objectId' },
+      status:  { $in: ['pending', 'confirmed', 'arrived', 'seated'] },
+    },
+  },
+);
 
 export default mongoose.model<IReservation>('Reservation', ReservationSchema);

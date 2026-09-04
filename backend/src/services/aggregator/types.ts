@@ -38,4 +38,6 @@ export interface MenuSyncResult {
   failedCount:  number;
   failedItems:  { name: string; error: string }[];
   error?:       string;
+  /** E-F14: true when AGGREGATOR_EXTERNAL_ENABLED≠'true' — no real sync occurred */
+  dryRun?:      boolean;
 }

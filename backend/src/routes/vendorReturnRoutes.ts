@@ -8,11 +8,13 @@ import Ingredient from '../models/Ingredient';
 import StockMovement from '../models/StockMovement';
 import DailyCounter from '../models/DailyCounter';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware, requireAdmin);
+router.use(requireFeature('supplyChain'));
 
 // ── GET / — List vendor returns ───────────────────────────────────────────────
 
@@ -250,7 +252,7 @@ router.post('/:id/complete', async (req: AuthRequest, res: Response) => {
     const vendor = await Vendor.findOne({ _id: vendorReturn.vendorId, hotelId, isDeleted: false });
     if (!vendor) return sendError(res, 400, 'Associated vendor not found');
 
-    // Pre-validate: no over-return, no negative inventory
+    // Pre-validate: no over-return per GRN item
     for (const item of vendorReturn.items) {
       const grnItem = grn.items[item.grnItemIndex];
       if (!grnItem) return sendError(res, 400, `GRN item at index ${item.grnItemIndex} not found`);
@@ -265,16 +267,31 @@ router.post('/:id/complete', async (req: AuthRequest, res: Response) => {
           `Over-return on complete: "${grnItem.productName}" available ${availableToReturn}, trying to return ${item.returnQty}`,
         );
       }
+    }
 
-      if (item.ingredientId) {
-        const ing = await Ingredient.findOne({ _id: item.ingredientId, hotelId }).lean();
-        if (!ing) return sendError(res, 400, `Ingredient not found for "${item.productName}"`);
-        if (ing.currentStock < item.returnQty) {
-          return sendError(
-            res, 400,
-            `Insufficient stock: "${item.productName}" has ${ing.currentStock} ${ing.unit}, cannot return ${item.returnQty}`,
-          );
-        }
+    // B-13: Aggregate returnQty by ingredientId before stock validation.
+    // Checking each line independently allows a combined return exceeding available stock
+    // (e.g. two items both returning 8 units of the same ingredient when only 10 are in stock).
+    const returnQtyByIngredient = new Map<string, { qty: number; name: string }>();
+    for (const item of vendorReturn.items) {
+      if (!item.ingredientId) continue;
+      const key = String(item.ingredientId);
+      const existing = returnQtyByIngredient.get(key);
+      if (existing) {
+        existing.qty += item.returnQty;
+      } else {
+        returnQtyByIngredient.set(key, { qty: item.returnQty, name: item.productName ?? '' });
+      }
+    }
+    for (const [ingId, { qty: totalReturnQty, name: ingName }] of returnQtyByIngredient) {
+      const ing = await Ingredient.findOne({ _id: ingId, hotelId }).lean();
+      if (!ing) return sendError(res, 400, `Ingredient not found for "${ingName}"`);
+      if ((ing as any).currentStock < totalReturnQty) {
+        return sendError(
+          res, 400,
+          `Insufficient stock: "${(ing as any).name}" has ${(ing as any).currentStock} ${(ing as any).unit}, ` +
+          `cannot return ${totalReturnQty} in total across all line items`,
+        );
       }
     }
 

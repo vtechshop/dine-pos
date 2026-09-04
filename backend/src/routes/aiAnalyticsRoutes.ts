@@ -41,6 +41,9 @@ router.get('/analytics/anomalies', async (req: AuthRequest, res: Response) => {
     await setCachedAnomaly(hotelId, report);
     return res.json(report);
   } catch (err) {
+    if ((err as any)?.code === 'AI_QUOTA_EXCEEDED') {
+      return res.status(429).json({ code: 'AI_QUOTA_EXCEEDED', message: (err as any).message });
+    }
     sendError(res, 500, 'Failed to build anomaly report', err);
   }
 });

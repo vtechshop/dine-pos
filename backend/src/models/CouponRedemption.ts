@@ -39,8 +39,21 @@ const CouponRedemptionSchema = new Schema<ICouponRedemption>(
 CouponRedemptionSchema.index({ hotelId: 1, couponId: 1, orderId: 1 }, { unique: true });
 // Admin list: all redemptions for a coupon sorted by time
 CouponRedemptionSchema.index({ hotelId: 1, couponId: 1, redeemedAt: -1 });
-// Per-customer limit count by CustomerProfile ID
-CouponRedemptionSchema.index({ hotelId: 1, couponId: 1, customerId: 1 }, { sparse: true });
+// Per-customer active-redemption uniqueness: one 'redeemed' record per identified
+// customer per coupon. partialFilterExpression excludes anonymous (null customerId)
+// and reversed redemptions so that: (a) anonymous guests are never blocked,
+// (b) a customer can re-redeem after a cancellation/reversal.
+// Replaces the old sparse non-unique index on the same key set.
+CouponRedemptionSchema.index(
+  { hotelId: 1, couponId: 1, customerId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status:     'redeemed',
+      customerId: { $type: 'objectId' },
+    },
+  },
+);
 // Per-customer limit count by phone (guests without a CustomerProfile)
 CouponRedemptionSchema.index({ hotelId: 1, couponId: 1, phone: 1 }, { sparse: true });
 // Cancellation + refund reversal lookup by orderId

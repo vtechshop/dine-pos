@@ -22,6 +22,7 @@ export interface IWasteLog extends Document {
   estimatedLoss: number;
   date: Date;
   notes: string;
+  actualDeduction?: number;  // actual stock deducted (may be < quantity if stock was insufficient)
 }
 
 const WasteLogSchema: Schema = new Schema(
@@ -37,9 +38,10 @@ const WasteLogSchema: Schema = new Schema(
       enum: ['expired', 'spoiled', 'damaged', 'overcooked', 'returned', 'overproduction', 'preparation', 'spillage', 'other'],
       default: 'other',
     },
-    estimatedLoss: { type: Number, default: 0, min: 0 },
-    date:          { type: Date, required: true, default: Date.now },
-    notes:         { type: String, default: '' },
+    estimatedLoss:   { type: Number, default: 0, min: 0 },
+    date:            { type: Date, required: true, default: Date.now },
+    notes:           { type: String, default: '' },
+    actualDeduction: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );

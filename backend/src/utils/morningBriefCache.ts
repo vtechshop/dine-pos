@@ -39,8 +39,9 @@ export async function setCachedBrief(
 ): Promise<void> {
   const ttl = isToday ? TODAY_TTL : HISTORY_TTL;
   await cacheSet(briefKey(hotelId, date), payload, ttl);
-  // Also update the latest pointer
-  await cacheSet(latestKey(hotelId), payload, ttl);
+  // Only update the latest pointer for today's brief; past-date regeneration
+  // must not overwrite the latest key with stale data.
+  if (isToday) await cacheSet(latestKey(hotelId), payload, ttl);
 }
 
 export async function getCachedLatestBrief(hotelId: string): Promise<unknown | null> {

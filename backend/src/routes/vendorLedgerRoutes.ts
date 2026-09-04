@@ -5,11 +5,13 @@ import VendorPayment from '../models/VendorPayment';
 import Vendor from '../models/Vendor';
 import GRN from '../models/GRN';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware, requireAdmin);
+router.use(requireFeature('supplyChain'));
 
 // ── GET /report — outstanding dashboard + aging ───────────────────────────────
 
@@ -208,49 +210,68 @@ router.post('/:vendorId/opening-balance', async (req: AuthRequest, res: Response
     if (amount === undefined || amount === null) return sendError(res, 400, 'amount is required');
     const amt = Number(amount);
 
-    const vendor = await Vendor.findOne({ _id: vendorId, hotelId, isDeleted: false });
-    if (!vendor) return sendError(res, 404, 'Vendor not found');
+    // Validate vendor exists before starting the transaction
+    const exists = await Vendor.exists({ _id: vendorId, hotelId, isDeleted: false });
+    if (!exists) return sendError(res, 404, 'Vendor not found');
 
-    const oldBalance = vendor.openingBalance;
-    const diff       = amt - oldBalance;
+    let finalOutstanding = 0;
+    let oldBalance       = 0;
 
     const session = await mongoose.startSession();
-    await session.withTransaction(async () => {
-      const existing = await VendorLedgerEntry.findOne({
-        hotelId, vendorId: new mongoose.Types.ObjectId(vendorId), entryType: 'opening_balance',
-      }).session(session);
+    try {
+      await session.withTransaction(async () => {
+        // Read vendor INSIDE the transaction so MongoDB's serializable snapshot
+        // detects concurrent writes and retries — preventing double-increment races.
+        const vendor = await Vendor.findOne(
+          { _id: vendorId, hotelId, isDeleted: false },
+          'openingBalance currentOutstanding',
+          { session },
+        );
+        if (!vendor) throw new Error('Vendor not found');
 
-      if (existing) {
-        existing.debit          = amt;
-        existing.runningBalance = amt;
-        existing.description    = String(notes || 'Opening balance');
-        await existing.save({ session });
-      } else {
-        await VendorLedgerEntry.create([{
-          hotelId,
-          vendorId,
-          entryType:       'opening_balance',
-          referenceId:     null,
-          referenceNumber: '',
-          debit:           amt,
-          credit:          0,
-          runningBalance:  amt,
-          description:     String(notes || 'Opening balance'),
-        }], { session });
-      }
+        oldBalance = vendor.openingBalance;
+        const diff = amt - oldBalance;
 
-      vendor.openingBalance     = amt;
-      vendor.currentOutstanding = vendor.currentOutstanding + diff;
-      await vendor.save({ session });
-    });
-    await session.endSession();
+        const existing = await VendorLedgerEntry.findOne({
+          hotelId, vendorId: new mongoose.Types.ObjectId(vendorId), entryType: 'opening_balance',
+        }).session(session);
+
+        if (existing) {
+          existing.debit          = amt;
+          existing.runningBalance = amt;
+          existing.description    = String(notes || 'Opening balance');
+          await existing.save({ session });
+        } else {
+          await VendorLedgerEntry.create([{
+            hotelId,
+            vendorId,
+            entryType:       'opening_balance',
+            referenceId:     null,
+            referenceNumber: '',
+            debit:           amt,
+            credit:          0,
+            runningBalance:  amt,
+            description:     String(notes || 'Opening balance'),
+          }], { session });
+        }
+
+        const updated = await Vendor.findOneAndUpdate(
+          { _id: vendorId, hotelId },
+          { $set: { openingBalance: amt }, $inc: { currentOutstanding: diff } },
+          { new: true, session },
+        );
+        finalOutstanding = updated?.currentOutstanding ?? (vendor.currentOutstanding + diff);
+      });
+    } finally {
+      await session.endSession();
+    }
 
     logAudit(req, 'vendor_ledger.opening_balance', 'vendor', vendorId, { amount: amt, oldBalance });
 
     return res.json({
       success:            true,
-      openingBalance:     vendor.openingBalance,
-      currentOutstanding: vendor.currentOutstanding,
+      openingBalance:     amt,
+      currentOutstanding: finalOutstanding,
     });
   } catch (err) {
     return sendError(res, 500, 'Failed to set opening balance', err);

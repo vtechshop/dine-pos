@@ -8,11 +8,15 @@ import { logger } from '../utils/logger';
 export async function runMenuSyncWorker(): Promise<void> {
   const now = new Date();
 
-  // Find enabled integrations that have auto-sync due and are not already syncing
+  // E-F07: Treat a 'syncing' lock as stale if it was set more than 15 minutes ago.
+  // This recovers from a crashed/hung sync worker that never cleared the lease.
+  const staleBefore = new Date(now.getTime() - 15 * 60_000);
   const due = await AggregatorIntegration.find({
     enabled:         true,
     autoSyncEnabled: true,
-    menuSyncStatus:  { $ne: 'syncing' },
+    // Skip only integrations with a FRESH sync lock (started within the last 15 min).
+    // A stale lock (syncingStartedAt null or older than 15 min) is treated as idle.
+    $nor: [{ menuSyncStatus: 'syncing', syncingStartedAt: { $gte: staleBefore } }],
     $or: [
       { nextAutoSyncAt: { $lte: now } },
       { nextAutoSyncAt: null },

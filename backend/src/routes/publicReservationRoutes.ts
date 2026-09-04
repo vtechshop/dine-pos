@@ -8,12 +8,20 @@ import Hotel from '../models/Hotel';
 import Reservation, { parseTimeToMinutes } from '../models/Reservation';
 import { makeRateLimiter } from '../utils/rateLimiter';
 import { sendError } from '../utils/sendError';
+import { startOfBusinessDay, endOfBusinessDay } from '../utils/businessDate';
 
 const router = Router();
-const limiter = makeRateLimiter({ windowMs: 60_000, max: 10 });
+
+// D-11: Split limiters — slot-check (GET) is read-only and can be more generous;
+// booking (POST) is a mutation and must be stricter.
+const slotsLimiter   = makeRateLimiter({ windowMs: 60_000, max: 30 });
+const bookingLimiter = makeRateLimiter({ windowMs: 60_000, max: 5 });
+
+// Canonical time regex matching Reservation.parseTimeToMinutes format
+const TIME_RE = /^(1[0-2]|0?[1-9]):[0-5]\d\s*(AM|PM)$/i;
 
 // GET /:hotelId/slots?date=YYYY-MM-DD — booked slots for a date
-router.get('/:hotelId/slots', limiter, async (req: Request, res: Response) => {
+router.get('/:hotelId/slots', slotsLimiter, async (req: Request, res: Response) => {
   try {
     const { hotelId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(hotelId)) {
@@ -25,11 +33,11 @@ router.get('/:hotelId/slots', limiter, async (req: Request, res: Response) => {
 
     const dateStr = req.query.date as string;
     if (!dateStr) return res.status(400).json({ message: 'date is required' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return res.status(400).json({ message: 'Invalid date format (expected YYYY-MM-DD)' });
 
-    const d = new Date(dateStr + 'T00:00:00');
-    if (isNaN(d.getTime())) return res.status(400).json({ message: 'Invalid date' });
-    const start = new Date(d); start.setHours(0, 0, 0, 0);
-    const end   = new Date(d); end.setHours(23, 59, 59, 999);
+    // D-05: Use IST-aware boundaries so reservations near midnight are bucketed correctly
+    const start = startOfBusinessDay(dateStr, 'Asia/Kolkata');
+    const end   = endOfBusinessDay(dateStr, 'Asia/Kolkata');
 
     const taken = await Reservation.find({
       hotelId,
@@ -44,7 +52,7 @@ router.get('/:hotelId/slots', limiter, async (req: Request, res: Response) => {
 });
 
 // POST /:hotelId/book — guest self-booking (creates a pending reservation)
-router.post('/:hotelId/book', limiter, async (req: Request, res: Response) => {
+router.post('/:hotelId/book', bookingLimiter, async (req: Request, res: Response) => {
   try {
     const { hotelId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(hotelId)) {
@@ -62,16 +70,48 @@ router.post('/:hotelId/book', limiter, async (req: Request, res: Response) => {
 
     if (!customerName?.trim()) return res.status(400).json({ message: 'customerName is required' });
     if (!phone?.trim())        return res.status(400).json({ message: 'phone is required' });
-    if (!partySize || partySize < 1) return res.status(400).json({ message: 'partySize must be ≥ 1' });
-    if (!dateStr)              return res.status(400).json({ message: 'date is required' });
-    if (!time)                 return res.status(400).json({ message: 'time is required' });
 
-    const dateObj = new Date(dateStr + 'T00:00:00');
+    // D-07: validate phone format — require 10–15 digits
+    const phoneDigits = String(phone).replace(/\D/g, '');
+    if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+      return res.status(400).json({ message: 'phone must contain 10–15 digits' });
+    }
+
+    if (!partySize || partySize < 1) return res.status(400).json({ message: 'partySize must be ≥ 1' });
+    // D-08: enforce partySize upper bound (matches the Reservation model max:200)
+    if (parseInt(partySize) > 200) return res.status(400).json({ message: 'partySize cannot exceed 200' });
+
+    if (!dateStr) return res.status(400).json({ message: 'date is required' });
+    if (!time)    return res.status(400).json({ message: 'time is required' });
+
+    // D-06: reject malformed time values that would silently become 0 in parseTimeToMinutes
+    if (!TIME_RE.test(String(time))) {
+      return res.status(400).json({ message: "time must be in h:mm AM/PM format (e.g. 7:30 PM)" });
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr))) {
+      return res.status(400).json({ message: 'Invalid date format (expected YYYY-MM-DD)' });
+    }
+    const dateObj = new Date(dateStr + 'T00:00:00Z');
     if (isNaN(dateObj.getTime())) return res.status(400).json({ message: 'Invalid date' });
 
-    // Prevent past-date bookings
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    if (dateObj < today) return res.status(400).json({ message: 'Cannot book a reservation in the past' });
+    // D-05: Compute IST "today" for past-date comparison
+    const nowIst    = new Date(Date.now() + 330 * 60_000); // shift to IST
+    const todayStr  = nowIst.toISOString().slice(0, 10);
+    const todayDate = new Date(todayStr + 'T00:00:00Z');
+
+    if (dateObj < todayDate) {
+      return res.status(400).json({ message: 'Cannot book a reservation in the past' });
+    }
+
+    // D-08: Prevent booking a time slot that has already passed today (same-day past-time)
+    if (dateStr === todayStr) {
+      const slotMins = parseTimeToMinutes(String(time));
+      const nowMins  = nowIst.getUTCHours() * 60 + nowIst.getUTCMinutes();
+      if (slotMins <= nowMins) {
+        return res.status(400).json({ message: 'Cannot book a time slot that has already passed today' });
+      }
+    }
 
     const reservation = await Reservation.create({
       hotelId,
@@ -80,7 +120,7 @@ router.post('/:hotelId/book', limiter, async (req: Request, res: Response) => {
       partySize:    parseInt(partySize),
       date:         dateObj,
       time,
-      startMinutes: parseTimeToMinutes(time),
+      startMinutes: parseTimeToMinutes(String(time)),
       notes:        String(notes).trim(),
       occasion:     String(occasion).trim(),
       source:       'website',

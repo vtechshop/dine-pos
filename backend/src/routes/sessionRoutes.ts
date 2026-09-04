@@ -408,6 +408,22 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
         }
       }
 
+      // D-04: Block bulk-bill while any active kitchen orders remain for this session.
+      // Mirrors the individual-bill guard in guestRoutes.ts to prevent closing a table
+      // with unserved items still pending in the kitchen.
+      const kitchenActiveCount = await Order.countDocuments({
+        sessionId: session._id,
+        hotelId:   req.hotelId,
+        status:    { $in: ['pending', 'preparing', 'ready'] },
+      });
+      if (kitchenActiveCount > 0) {
+        res.status(409).json({
+          message:           `Cannot bulk-bill: ${kitchenActiveCount} order(s) are still in the kitchen. Mark them as served first.`,
+          pendingOrderCount: kitchenActiveCount,
+        });
+        return;
+      }
+
       const now = new Date();
       await Guest.updateMany(
         { sessionId: session._id, status: 'active' },
@@ -427,6 +443,14 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
               : {}),
           },
         }
+      );
+
+      // D-10: Mark session orders as completed so reports and kitchen display are consistent.
+      // Unlike individual billing (where orders belong to one guest), bulk bill closes all
+      // active orders for the whole session.
+      await Order.updateMany(
+        { sessionId: session._id, status: { $ne: 'cancelled' } },
+        { $set: { paymentMethod, status: 'completed' } },
       );
 
       // Gift voucher deduction for bulk bill (best-effort, logged on failure)

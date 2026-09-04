@@ -523,7 +523,9 @@ export async function computeAlerts(
     ].filter((a): a is SmartAlert => a !== null);
 
     // ── Persist alerts to MongoDB (upsert — deduplicate by type+date) ────────
-    const dedupDate = toBusinessDate(new Date(), 'Asia/Kolkata');
+    // A-02: use the historical `date` parameter, not today, so past-date alerts
+    // dedup against the snapshot date and don't corrupt today's active alerts.
+    const dedupDate = date;
     if (alerts.length > 0) {
       const upsertOps = alerts.map((a) => ({
         updateOne: {

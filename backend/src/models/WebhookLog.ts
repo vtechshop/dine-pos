@@ -22,7 +22,7 @@ const schema = new Schema<IWebhookLog>(
     hotelId:         { type: Schema.Types.ObjectId, ref: 'Hotel', default: null },
     platform:        { type: String, enum: ['swiggy', 'zomato', 'generic'], required: true },
     event:           { type: String, default: 'new_order' },
-    rawBody:         { type: String, maxlength: 20000, default: '' },
+    rawBody:         { type: String, maxlength: 100000, default: '' },
     headers:         { type: Schema.Types.Mixed, default: {} },
     status:          { type: String, enum: ['success', 'failed', 'retrying'], default: 'success' },
     errorMessage:    { type: String, default: null },

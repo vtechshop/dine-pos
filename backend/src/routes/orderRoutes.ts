@@ -25,6 +25,7 @@ import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, redeemPoints, reve
 import Coupon from '../models/Coupon';
 import CouponRedemption from '../models/CouponRedemption';
 import GiftVoucher from '../models/GiftVoucher';
+import WalletTransaction from '../models/WalletTransaction';
 import { resolveCoupon, CouponResult } from '../utils/couponUtils';
 
 const router = Router();
@@ -872,7 +873,19 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       ? Math.round(Math.min(voucherDoc.balance, recalc.grandTotal) * 100) / 100
       : 0;
     const cappedDeliveryFee = Math.max(0, Math.min(Number(b.deliveryFee ?? b.deliveryCharge) || 0, 9999));
-    const finalGrandTotal = Math.round(Math.max(0, recalc.grandTotal - serverVoucherAmount + cappedDeliveryFee) * 100) / 100;
+    const grandTotalBeforeWallet = Math.round(Math.max(0, recalc.grandTotal - serverVoucherAmount + cappedDeliveryFee) * 100) / 100;
+
+    // C-03: Server-authoritative wallet amount — capped at the remaining payable balance.
+    const rawWalletCustomerId = b.walletCustomerId ? String(b.walletCustomerId) : null;
+    const rawWalletAmount     = Math.max(0, Number(b.walletAmount) || 0);
+    let walletCustomerOId: mongoose.Types.ObjectId | null = null;
+    let serverWalletAmount = 0;
+    if (rawWalletCustomerId && rawWalletAmount > 0 && mongoose.Types.ObjectId.isValid(rawWalletCustomerId)) {
+      walletCustomerOId  = new mongoose.Types.ObjectId(rawWalletCustomerId);
+      serverWalletAmount = Math.round(Math.min(rawWalletAmount, grandTotalBeforeWallet) * 100) / 100;
+    }
+
+    const finalGrandTotal = Math.round(Math.max(0, grandTotalBeforeWallet - serverWalletAmount) * 100) / 100;
     const order = new Order({
       tableNumber:         b.tableNumber,
       customerName:        b.customerName,
@@ -884,7 +897,9 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       splitDetails:        b.splitDetails,
       tableId:             b.tableId,
       sessionId:           b.sessionId,
-      guestId:             b.guestId,
+      // F-5: validate guestId format before storing — prevents malformed values from
+      // breaking downstream queries that cast it to ObjectId.
+      guestId:             (b.guestId && mongoose.isValidObjectId(b.guestId)) ? b.guestId : undefined,
       offlineId:           b.offlineId ?? null,
       deliveryAddress:     b.deliveryAddress,
       platformOrderId:     b.platformOrderId,
@@ -906,6 +921,8 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       giftVoucherId:       voucherDoc ? voucherDoc._id : null,
       giftVoucherCode:     rawVoucherCode || '',
       giftVoucherAmount:   serverVoucherAmount,
+      walletAmount:        serverWalletAmount,
+      walletCustomerId:    walletCustomerOId,
       grandTotal:          finalGrandTotal,
     });
     // ── Atomic transaction: persist order + deduct stock atomically ──────────
@@ -925,6 +942,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
 
     let ingredientDeltas = new Map<string, number>();
     let saleMovementPrevStocks = new Map<string, number>();
+    let ingredientShortfalls = new Map<string, number>();
     const txSession = await mongoose.startSession();
     try {
       await txSession.withTransaction(async () => {
@@ -948,6 +966,14 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
           if (!couponDoc) {
             const e = new Error('Coupon usage limit reached — please try a different coupon');
             (e as any).isCouponError = true;
+            throw e;
+          }
+
+          // C-11: perCustomerLimit requires customer identity — cannot skip by omitting phone
+          if (couponDoc.perCustomerLimit > 0 && !couponCustomerId && !couponCustomerPhone) {
+            const e = new Error('This coupon requires customer phone number to enforce per-customer limits');
+            (e as any).isCouponError = true;
+            (e as any).code = 'COUPON_IDENTITY_REQUIRED';
             throw e;
           }
 
@@ -1023,11 +1049,43 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
           }
         }
 
+        // C-03: Atomically deduct wallet balance inside the same transaction.
+        // Using findOneAndUpdate with balance >= check prevents overdraft even under concurrency.
+        if (walletCustomerOId && serverWalletAmount > 0) {
+          const walletUpdated = await CustomerProfile.findOneAndUpdate(
+            {
+              _id:           walletCustomerOId,
+              hotelId:       new mongoose.Types.ObjectId(req.hotelId!),
+              walletBalance: { $gte: serverWalletAmount },
+            },
+            { $inc: { walletBalance: -serverWalletAmount } },
+            { new: true, session: txSession },
+          );
+          if (!walletUpdated) {
+            const e = new Error('Insufficient wallet balance — please re-validate');
+            (e as any).isWalletError = true;
+            throw e;
+          }
+          await WalletTransaction.create([{
+            hotelId:      new mongoose.Types.ObjectId(req.hotelId!),
+            customerId:   walletCustomerOId,
+            type:         'debit',
+            source:       'redemption',
+            amount:       serverWalletAmount,
+            balanceAfter: +((walletUpdated as any).walletBalance ?? 0).toFixed(2),
+            orderId:      order._id,
+            paymentRef:   '',
+            remarks:      `Order ${orderNumber} payment`,
+            createdBy:    req.cashierId || req.waiterId || req.hotelId || 'cashier',
+          }], { session: txSession });
+        }
+
         // Ingredient deduction runs first so we capture actual clamped deltas
         // and persist them on the order for use during cancellation restoration.
-        const { actualDeltas, previousStocks } = await applyIngredientStockChange(order.items, req.hotelId!, -1, txSession);
+        const { actualDeltas, previousStocks, shortfalls, ingredientNames } = await applyIngredientStockChange(order.items, req.hotelId!, -1, txSession);
         ingredientDeltas = actualDeltas;
         saleMovementPrevStocks = previousStocks;
+        ingredientShortfalls = shortfalls;
         if (ingredientDeltas.size > 0) order.ingredientDeltas = ingredientDeltas;
         await order.save({ session: txSession });
         if (stockItems.length > 0) {
@@ -1044,39 +1102,33 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
             { orderId: String(order._id), createdBy: req.cashierName || 'cashier' },
           );
         }
+        // B-01: StockMovement for sale is now inside the transaction — atomic with the
+        // stock deduction so neither can succeed without the other.
+        if (ingredientDeltas.size > 0) {
+          const saleMovements = Array.from(ingredientDeltas.entries()).flatMap(([id, delta]) => {
+            if (delta <= 0) return [] as any[];
+            const prev = saleMovementPrevStocks.get(id) ?? 0;
+            return [{
+              hotelId:        req.hotelId,
+              ingredientId:   id,
+              ingredientName: ingredientNames.get(id) ?? 'Unknown',
+              type:           'sale' as const,
+              delta:          -delta,
+              previousStock:  prev,
+              resultingStock: prev - delta,
+              referenceId:    String(order._id),
+              referenceType:  'order' as const,
+              reason:         `Order #${order.orderNumber ?? ''}`,
+              performedBy:    String((req as any).cashierId ?? (req as any).waiterId ?? ''),
+            }];
+          });
+          if (saleMovements.length > 0) {
+            await StockMovement.insertMany(saleMovements, { session: txSession });
+          }
+        }
       });
     } finally {
       await txSession.endSession();
-    }
-
-    // Best-effort: audit StockMovement records for recipe-based deductions (sale type).
-    // Runs after the transaction so audit failure never rolls back the order.
-    if (ingredientDeltas.size > 0) {
-      const saleIngIds = Array.from(ingredientDeltas.keys());
-      Ingredient.find({ _id: { $in: saleIngIds }, hotelId: req.hotelId }).select('_id name').lean()
-        .then(ings => {
-          const nameMap = new Map((ings as any[]).map(i => [String(i._id), String(i.name)]));
-          const movements = saleIngIds.map(id => {
-            const delta = ingredientDeltas.get(id)!;
-            if (delta <= 0) return null;
-            const prev = saleMovementPrevStocks.get(id) ?? 0;
-            return {
-              hotelId: req.hotelId,
-              ingredientId: id,
-              ingredientName: nameMap.get(id) ?? 'Unknown',
-              type: 'sale' as const,
-              delta: -delta,
-              previousStock: prev,
-              resultingStock: prev - delta,
-              referenceId: String(order._id),
-              referenceType: 'order' as const,
-              reason: `Order #${order.orderNumber ?? ''}`,
-              performedBy: String((req as any).cashierId ?? (req as any).waiterId ?? ''),
-            };
-          }).filter(Boolean);
-          if (movements.length > 0) return StockMovement.insertMany(movements);
-        })
-        .catch(() => {});
     }
 
     logger.info('Order saved', { orderId: String(order._id), orderNumber: order.orderNumber, hotelId: req.hotelId });
@@ -1134,7 +1186,11 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       })),
     });
 
-    res.status(201).json({ ...order.toObject(), stockUpdates });
+    const responseBody: Record<string, unknown> = { ...order.toObject(), stockUpdates };
+    if (ingredientShortfalls.size > 0) {
+      responseBody.stockShortfall = Object.fromEntries(ingredientShortfalls);
+    }
+    res.status(201).json(responseBody);
 
   } catch (error: any) {
     // Race condition: two concurrent syncs of the same offlineId both pass the
@@ -1150,6 +1206,9 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       return res.status(409).json({ message: error.message, code: (error as any).code ?? 'COUPON_USAGE_LIMIT' });
     }
     if ((error as any).isVoucherError) {
+      return res.status(400).json({ message: error.message });
+    }
+    if ((error as any).isWalletError) {
       return res.status(400).json({ message: error.message });
     }
     logger.error('[POST /orders] Failed', { hotelId: req.hotelId, error: String(error), code: error.code, stack: error?.stack });
@@ -1235,6 +1294,38 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
           // Pass stored deltas so we restore exactly what was deducted (not full recipe qty)
           const { actualDeltas } = await applyIngredientStockChange(existing.items, req.hotelId!, 1, cancelTx, existing.ingredientDeltas as Map<string, number> | undefined);
           cancelDeltas = actualDeltas;
+          // B-01: StockMovement for sale_reversal inside the transaction — atomic with restoration.
+          // Read post-restoration currentStock for resultingStock (read-your-own-writes within tx).
+          if (cancelDeltas.size > 0) {
+            const cancelIngIds = Array.from(cancelDeltas.keys());
+            const cancelIngs = await Ingredient.find(
+              { _id: { $in: cancelIngIds }, hotelId: req.hotelId },
+              { name: 1, currentStock: 1 },
+              { session: cancelTx },
+            ).lean();
+            const reversalMovements = (cancelIngs as any[]).flatMap((i: any) => {
+              const id = String(i._id);
+              const delta = cancelDeltas.get(id);
+              if (!delta || delta <= 0) return [] as any[];
+              const resultingStock = Number(i.currentStock);
+              return [{
+                hotelId:        req.hotelId,
+                ingredientId:   id,
+                ingredientName: String(i.name),
+                type:           'sale_reversal' as const,
+                delta:          +delta,
+                previousStock:  resultingStock - delta,
+                resultingStock,
+                referenceId:    String(existing._id),
+                referenceType:  'order' as const,
+                reason:         `Order #${existing.orderNumber ?? ''} cancelled`,
+                performedBy:    String((req as any).cashierId ?? (req as any).waiterId ?? ''),
+              }];
+            });
+            if (reversalMovements.length > 0) {
+              await StockMovement.insertMany(reversalMovements, { session: cancelTx });
+            }
+          }
         });
       } finally {
         await cancelTx.endSession();
@@ -1246,37 +1337,6 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
           prevStatus:  existing.status,
           grandTotal:  existing.grandTotal,
         });
-        // Best-effort: audit StockMovement records for cancellation restorations (sale_reversal type).
-        // Reads current stock after restoration — resultingStock — then back-computes previousStock.
-        if (cancelDeltas.size > 0) {
-          const cancelIngIds = Array.from(cancelDeltas.keys());
-          Ingredient.find({ _id: { $in: cancelIngIds }, hotelId: req.hotelId })
-            .select('_id name currentStock')
-            .lean()
-            .then(ings => {
-              const movements = (ings as any[]).map(i => {
-                const id = String(i._id);
-                const delta = cancelDeltas.get(id);
-                if (!delta || delta <= 0) return null;
-                const resultingStock = Number(i.currentStock);
-                return {
-                  hotelId: req.hotelId,
-                  ingredientId: id,
-                  ingredientName: String(i.name),
-                  type: 'sale_reversal' as const,
-                  delta: +delta,
-                  previousStock: resultingStock - delta,
-                  resultingStock,
-                  referenceId: String(existing._id),
-                  referenceType: 'order' as const,
-                  reason: `Order #${existing.orderNumber ?? ''} cancelled`,
-                  performedBy: String((req as any).cashierId ?? (req as any).waiterId ?? ''),
-                };
-              }).filter(Boolean);
-              if (movements.length > 0) return StockMovement.insertMany(movements);
-            })
-            .catch(() => {});
-        }
         if (existing.guestId) {
           await Guest.findByIdAndUpdate(existing.guestId, [
             { $set: { totalAmount: { $max: [0, { $subtract: ['$totalAmount', existing.grandTotal] }] } } },
@@ -1417,6 +1477,50 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
             }
           })();
         }
+
+        // C-04: Wallet refund on cancellation — fire-and-forget, idempotent via walletRestoredAt.
+        const cancelWalletAmt = (existing as any).walletAmount as number | undefined;
+        if (cancelWalletAmt && cancelWalletAmt > 0 && (existing as any).walletCustomerId) {
+          ;(async () => {
+            try {
+              const claimed = await Order.findOneAndUpdate(
+                { _id: existing._id, hotelId: req.hotelId, walletRestoredAt: null },
+                { $set: { walletRestoredAt: new Date() } },
+              );
+              if (!claimed) return; // already refunded by a concurrent request
+              const refundHotelOId    = new mongoose.Types.ObjectId(req.hotelId!);
+              const refundCustomerOId = new mongoose.Types.ObjectId(String((existing as any).walletCustomerId));
+              const refundSession = await mongoose.startSession();
+              try {
+                await refundSession.withTransaction(async () => {
+                  const refunded = await CustomerProfile.findOneAndUpdate(
+                    { _id: refundCustomerOId, hotelId: refundHotelOId },
+                    { $inc: { walletBalance: cancelWalletAmt } },
+                    { new: true, session: refundSession },
+                  );
+                  if (refunded) {
+                    await WalletTransaction.create([{
+                      hotelId:      refundHotelOId,
+                      customerId:   refundCustomerOId,
+                      type:         'credit',
+                      source:       'refund',
+                      amount:       cancelWalletAmt,
+                      balanceAfter: +((refunded as any).walletBalance ?? 0).toFixed(2),
+                      orderId:      existing._id,
+                      paymentRef:   '',
+                      remarks:      `Refund: Order #${(existing as any).orderNumber ?? ''}`,
+                      createdBy:    'system:cancel',
+                    }], { session: refundSession });
+                  }
+                });
+              } finally {
+                await refundSession.endSession();
+              }
+            } catch (e) {
+              logger.warn('[wallet] refund on cancellation failed', { orderId: String(existing._id), err: String(e) });
+            }
+          })();
+        }
       }
     }
 
@@ -1431,7 +1535,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
           orderId: existing._id,
           hotelId: req.hotelId,
           status: 'success',
-          method: { $in: ['razorpay', 'razorpay_link'] },
+          gatewayType: { $in: ['razorpay', 'razorpay_link'] },
         }).select('_id').lean();
         if (!razorpayPmt) {
           return res.status(400).json({ message: 'Payment verification required before completing a Razorpay order.' });
@@ -1536,7 +1640,11 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
 
             if (!loyaltyCfg.enabled || (earnProfile as any).loyaltyOptOut) return;
 
-            const pts = calculateEarnedPoints(existing.grandTotal, loyaltyCfg);
+            // C-06: respect calculationBase — before_gst excludes tax from the earning base.
+            const earnBase = loyaltyCfg.calculationBase === 'before_gst'
+              ? Math.max(0, existing.grandTotal - (existing.taxTotal ?? 0))
+              : existing.grandTotal;
+            const pts = calculateEarnedPoints(earnBase, loyaltyCfg);
             if (pts <= 0) return;
 
             await earnPoints(

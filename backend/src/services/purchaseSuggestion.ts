@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 import Ingredient from '../models/Ingredient';
 import PurchaseOrder from '../models/PurchaseOrder';
 import OcrJob, { IExtractedInvoice, IExtractedItem } from '../models/OcrJob';
-import { createApprovedPO, createGRNForApproval, GRNServiceItem } from './grnService';
+import { createPOAndGRNAtomically, GRNServiceItem, GRNServiceResult } from './grnService';
 import { logger } from '../utils/logger';
 
 export interface PurchaseSuggestion {
@@ -262,15 +262,29 @@ export async function approveOcrJob(
 ): Promise<ApprovalResult> {
   const hotelOId = new mongoose.Types.ObjectId(hotelId);
 
-  const job = await OcrJob.findOne({ _id: jobId, hotelId: hotelOId });
-  if (!job) throw new Error('OCR job not found');
-  if (job.status !== 'completed') throw new Error(`Job is not in completed state (current: ${job.status})`);
+  // Atomic race guard: transition completed → approved claims the job exclusively.
+  // A concurrent approval that already made this transition will return null here,
+  // preventing double-PO / double-GRN creation.
+  const job = await OcrJob.findOneAndUpdate(
+    { _id: jobId, hotelId: hotelOId, status: 'completed' },
+    { $set: { status: 'approved' } },
+    { new: false },
+  );
+  if (!job) {
+    const existing = await OcrJob.findOne({ _id: jobId, hotelId: hotelOId }, 'status').lean();
+    if (!existing) throw new Error('OCR job not found');
+    const alreadyErr = new Error(`Job already processed (status: ${(existing as any).status})`) as any;
+    alreadyErr.code = 'ALREADY_PROCESSED';
+    throw alreadyErr;
+  }
 
   // Use reviewedData from request if provided, else from DB, else extractedData
   const activeData: IExtractedInvoice | null =
     reviewedData ?? job.reviewedData ?? job.extractedData ?? null;
 
   if (!activeData || activeData.items.length === 0) {
+    // Revert so the admin can retry after fixing the OCR data
+    await OcrJob.updateOne({ _id: job._id }, { $set: { status: 'completed' } });
     throw new Error('No invoice data available to approve');
   }
 
@@ -279,39 +293,55 @@ export async function approveOcrJob(
     productName:   item.productName,
     ingredientId:  item.ingredientId ?? null,
     orderedQty:    item.quantity,
-    receivedQty:   item.quantity, // fully received on approval
+    receivedQty:   item.quantity,
     unit:          item.unit,
     purchasePrice: item.unitPrice,
     taxPercent:    item.taxPercent,
   }));
 
-  // Step 1: Create PO (status=approved)
-  const { po, poNumber } = await createApprovedPO(
-    hotelId,
-    selectedVendorId,
-    items,
-    0,
-    `Imported via OCR — Invoice: ${activeData.invoiceNumber} | ${activeData.vendorName}`,
-  );
+  let grnResult: GRNServiceResult;
+  try {
+    // A-05: single outer transaction — PO + GRN created atomically to prevent
+    // orphaned PO when GRN creation fails after PO has already committed.
+    // A-17: Validate the OCR-extracted date before use. new Date(arbitrary string) can
+    // silently produce an Invalid Date or a wrong date (e.g. "15-03-2024" parses as
+    // "March 15" in some environments but "Invalid Date" in others). Only accept
+    // ISO-8601 YYYY-MM-DD; fall back to today for anything else.
+    let invoiceDate = new Date();
+    if (activeData.invoiceDate) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(activeData.invoiceDate))) {
+        const candidate = new Date(String(activeData.invoiceDate) + 'T00:00:00Z');
+        if (!isNaN(candidate.getTime())) invoiceDate = candidate;
+      }
+    }
+    grnResult = await createPOAndGRNAtomically(
+      hotelId,
+      selectedVendorId,
+      items,
+      invoiceDate,
+      `Imported via OCR — Invoice: ${activeData.invoiceNumber} | ${activeData.vendorName}`,
+      `OCR import — Invoice ${activeData.invoiceNumber}`,
+      0,
+      String(job._id), // B-07: use OCR job ID as idempotency key to prevent duplicate GRN on retry
+    );
+  } catch (financialErr) {
+    // Financial operations failed — revert status so the admin can retry
+    await OcrJob.updateOne({ _id: job._id }, { $set: { status: 'completed' } });
+    throw financialErr;
+  }
 
-  // Step 2: Create GRN + stock update + WAC + ledger
-  const grnResult = await createGRNForApproval(
-    hotelId,
-    po._id.toString(),
-    items,
-    activeData.invoiceDate ? new Date(activeData.invoiceDate) : new Date(),
-    `OCR import — Invoice ${activeData.invoiceNumber}`,
+  // Step 3: Persist financial record links (status already set atomically above)
+  await OcrJob.updateOne(
+    { _id: job._id },
+    { $set: {
+      reviewedData:   reviewedData ?? job.reviewedData ?? null,
+      selectedVendorId,
+      createdPoId:    grnResult.poId,
+      createdGrnId:   grnResult.grnId,
+      approvedBy,
+      approvedAt:     new Date(),
+    }},
   );
-
-  // Step 3: Mark OcrJob as approved
-  job.status            = 'approved';
-  job.reviewedData      = reviewedData ?? job.reviewedData ?? null;
-  job.selectedVendorId  = selectedVendorId;
-  job.createdPoId       = grnResult.poId;
-  job.createdGrnId      = grnResult.grnId;
-  job.approvedBy        = approvedBy;
-  job.approvedAt        = new Date();
-  await job.save();
 
   logger.info('[purchaseSuggestion] OCR job approved', {
     jobId, poId: grnResult.poId, grnId: grnResult.grnId,

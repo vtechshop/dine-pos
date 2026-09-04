@@ -17,6 +17,7 @@ export interface IGRNItem {
   returnedQty?:      number;
   unit:              string;
   purchasePrice:     number;
+  prevCostPerUnit?:  number;  // WAC before this GRN was received — used to reverse WAC on cancellation
   batchNumber?:      string;
   manufacturingDate?: Date;
   expiryDate?:       Date;
@@ -59,6 +60,7 @@ const GRNItemSchema = new Schema<IGRNItem>(
     returnedQty:      { type: Number, default: 0, min: 0 },
     unit:             { type: String, default: 'pcs', trim: true },
     purchasePrice:    { type: Number, default: 0, min: 0 },
+    prevCostPerUnit:  { type: Number, default: null },
     batchNumber:      { type: String, default: '', trim: true },
     manufacturingDate: { type: Date, default: null },
     expiryDate:       { type: Date, default: null },

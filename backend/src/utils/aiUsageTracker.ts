@@ -82,6 +82,47 @@ export async function isOverLimit(
 }
 
 /**
+ * Atomically consume one quota slot. Throws AiQuotaError if over limit.
+ * Safe to call inside service functions at the Gemini boundary.
+ * Redis path: INCR → check → DECR rollback on overage (atomic reservation).
+ * No-Redis fallback: check-then-track (existing behavior, same fail-open policy).
+ */
+export async function consumeAiQuota(
+  hotelId: string,
+  type: 'chat' | 'report',
+): Promise<void> {
+  const limit = type === 'chat' ? CHAT_HARD_LIMIT : REPORT_LIMIT;
+  try {
+    const redis = getRedisClient();
+    if (!redis) {
+      // No-Redis path: non-atomic but consistent with existing fail-open policy
+      const over = await isOverLimit(hotelId, type);
+      if (over) throw makeQuotaError(type, limit);
+      await trackUsage(hotelId, type);
+      return;
+    }
+    const key   = usageKey(hotelId, type);
+    const count = await redis.incr(key);
+    if (count === 1) await redis.expire(key, 25 * 60 * 60);
+    if (count > limit) {
+      await redis.decr(key); // atomic rollback — don't count this request
+      throw makeQuotaError(type, limit);
+    }
+  } catch (err: any) {
+    if (err?.code === 'AI_QUOTA_EXCEEDED') throw err;
+    // Redis error — fail open (never block on infra issues)
+    logger.warn('[aiUsage] consumeAiQuota Redis error, failing open', { hotelId, type, err: String(err) });
+  }
+}
+
+function makeQuotaError(type: string, limit: number): Error & { code: string; status: number } {
+  const err: any = new Error(`AI ${type} limit (${limit}/day) reached. Resets at midnight.`);
+  err.code   = 'AI_QUOTA_EXCEEDED';
+  err.status = 429;
+  return err;
+}
+
+/**
  * Express middleware: check usage + track on pass.
  */
 export function requireAiQuota(type: 'chat' | 'report') {

@@ -5,11 +5,13 @@ import VendorLedgerEntry from '../models/VendorLedgerEntry';
 import Vendor from '../models/Vendor';
 import DailyCounter from '../models/DailyCounter';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware, requireAdmin);
+router.use(requireFeature('supplyChain'));
 
 // ── GET /report ───────────────────────────────────────────────────────────────
 

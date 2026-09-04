@@ -4,6 +4,19 @@ import type { ParsedAggregatorOrder, MenuSyncResult, ConnectorContext } from './
 
 const BASE_URL = 'https://api.zomato.com/business/v1';
 
+const _fetch = fetch;
+const CONNECTOR_TIMEOUT_MS = 12_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), CONNECTOR_TIMEOUT_MS);
+  try {
+    return await _fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
 function zomatoAvailable(p: Record<string, unknown>): 0 | 1 {
   const override = (p.channelAvailability as Record<string, boolean | null> | undefined)?.zomato;
   if (override === null || override === undefined) {
@@ -22,8 +35,10 @@ export class ZomatoConnector extends BaseConnector {
     headers:       Record<string, string>,
     webhookSecret: string,
   ): boolean {
-    const secret = webhookSecret || process.env.AGGREGATOR_SECRET || '';
-    if (!secret) return false;
+    // Fail closed: never fall back to a global secret. A missing per-hotel
+    // webhookSecret means the hotel is not configured — reject all webhooks.
+    if (!webhookSecret) return false;
+    const secret = webhookSecret;
 
     const sigHeader   = headers['x-zomato-signature'] || '';
     const incomingHex = sigHeader.startsWith('sha256=')
@@ -115,7 +130,7 @@ export class ZomatoConnector extends BaseConnector {
       return;
     }
 
-    const res = await fetch(`${BASE_URL}/orders/${platformOrderId}/status`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/orders/${platformOrderId}/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': ctx.apiKey },
       body: JSON.stringify({ status: 'Accepted', prep_time: estimatedPrepMinutes }),
@@ -138,7 +153,7 @@ export class ZomatoConnector extends BaseConnector {
       return;
     }
 
-    const res = await fetch(`${BASE_URL}/orders/${platformOrderId}/status`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/orders/${platformOrderId}/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': ctx.apiKey },
       body: JSON.stringify({ status: 'Rejected', rejection_reason: reason }),
@@ -160,7 +175,7 @@ export class ZomatoConnector extends BaseConnector {
       return;
     }
 
-    const res = await fetch(`${BASE_URL}/orders/${platformOrderId}/status`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/orders/${platformOrderId}/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': ctx.apiKey },
       body: JSON.stringify({ status: 'Ready' }),
@@ -182,7 +197,7 @@ export class ZomatoConnector extends BaseConnector {
       return;
     }
 
-    const res = await fetch(`${BASE_URL}/orders/${platformOrderId}/status`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/orders/${platformOrderId}/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': ctx.apiKey },
       body: JSON.stringify({ status: 'Dispatched' }),
@@ -206,7 +221,7 @@ export class ZomatoConnector extends BaseConnector {
         categoryCount: (categories as any[]).length,
         productCount:  (products as any[]).length,
       });
-      return { success: true, syncedCount: (products as any[]).length, failedCount: 0, failedItems: [] };
+      return { success: true, syncedCount: (products as any[]).length, failedCount: 0, failedItems: [], dryRun: true };
     }
 
     const menu = {
@@ -226,7 +241,7 @@ export class ZomatoConnector extends BaseConnector {
       })),
     };
 
-    const res = await fetch(`${BASE_URL}/menu/upload`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/menu/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': ctx.apiKey },
       body: JSON.stringify(menu),
@@ -266,7 +281,7 @@ export class ZomatoConnector extends BaseConnector {
       return;
     }
 
-    const res = await fetch(`${BASE_URL}/menu/items/${platformItemId}`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/menu/items/${platformItemId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'apikey': ctx.apiKey },
       body: JSON.stringify({ availability: available ? 1 : 0 }),

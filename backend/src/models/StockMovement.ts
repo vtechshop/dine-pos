@@ -9,6 +9,7 @@ export type StockMovementType =
   | 'adjustment'     // Physical-count correction
   | 'opening_stock'  // Initial stock set when ingredient is created with stock > 0
   | 'grn'            // Goods-received note receipt
+  | 'grn_cancel'     // GRN cancellation — stock removed, WAC restored to prevCostPerUnit
   | 'vendor_return'; // Return to vendor — stock removed, vendor outstanding reduced
 
 export interface IStockMovement extends Document {
@@ -39,7 +40,7 @@ const StockMovementSchema: Schema = new Schema(
     ingredientName: { type: String, required: true, trim: true },
     type: {
       type: String,
-      enum: ['stock_in', 'restock', 'sale', 'sale_reversal', 'waste', 'adjustment', 'opening_stock', 'grn', 'vendor_return'],
+      enum: ['stock_in', 'restock', 'sale', 'sale_reversal', 'waste', 'adjustment', 'opening_stock', 'grn', 'grn_cancel', 'vendor_return'],
       required: true,
     },
     delta:          { type: Number, required: true },

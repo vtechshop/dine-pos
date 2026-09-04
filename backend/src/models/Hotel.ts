@@ -33,9 +33,10 @@ export interface IFeatureFlags {
   marketingCampaigns: boolean;
 
   // ── Operations (v1.2) ────────────────────────────────────────────────────
-  shift: boolean;   // shift management with backend persistence
-  kiosk: boolean;   // self-service kiosk mode (premium)
-  ai: boolean;      // AI suite — analytics, alerts, forecasting, chat, OCR (premium)
+  shift: boolean;       // shift management with backend persistence
+  kiosk: boolean;       // self-service kiosk mode (premium)
+  ai: boolean;          // AI suite — analytics, alerts, forecasting, chat, OCR (premium)
+  supplyChain: boolean; // GRN, PO, vendors, purchase invoices, vendor returns
 }
 
 export type BusinessType =
@@ -238,9 +239,10 @@ const HotelSchema: Schema = new Schema(
       marketingCampaigns:      { type: Boolean, default: false },
 
       // ── Operations (v1.2) ──────────────────────────────────────────────
-      shift:  { type: Boolean, default: true  },
-      kiosk:  { type: Boolean, default: false },
-      ai:     { type: Boolean, default: false },
+      shift:       { type: Boolean, default: true  },
+      kiosk:       { type: Boolean, default: false },
+      ai:          { type: Boolean, default: false },
+      supplyChain: { type: Boolean, default: true  }, // default ON for existing hotels
     },
 
     // Legacy premium fields (backwards compat)

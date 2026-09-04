@@ -330,7 +330,22 @@ async function processAggregatorWebhook(
     deliveryFee:         parsed.deliveryFee,
     estimatedPickupTime: parsed.estimatedPickupTime ? new Date(parsed.estimatedPickupTime) : null,
   });
-  await order.save();
+  try {
+    await order.save();
+  } catch (saveErr: any) {
+    // E-F02: concurrent webhook delivery — the compound unique index catches the duplicate.
+    // Return idempotent success instead of propagating the E11000 as a 500.
+    if (saveErr?.code === 11000 && parsed.platformOrderId) {
+      const dup = await Order.findOne({ hotelId, platformOrderId: parsed.platformOrderId }).lean();
+      if (dup) {
+        console.warn('[aggregatorRoutes] duplicate webhook — returning existing order idempotently', {
+          platformOrderId: parsed.platformOrderId,
+        });
+        return { hotelId, event: parsed.event, orderId: (dup as any)._id.toString(), platformOrderId: parsed.platformOrderId };
+      }
+    }
+    throw saveErr;
+  }
 
   // 10. Update lastOrderAt on integration
   if (integration) {
@@ -340,17 +355,38 @@ async function processAggregatorWebhook(
     });
   }
 
-  // 11. Auto-accept if configured
+  // 11. Auto-accept if configured (E-F05: claim status atomically before external API call
+  //     to prevent a concurrent manual accept from also calling the external endpoint;
+  //     E-F06: track actual outcome before using in socket payload)
+  let autoAccepted = false;
   if (integration?.autoAccept && parsed.platformOrderId) {
     try {
-      await AggregatorService.acceptOrder(hotelId, platform, parsed.platformOrderId);
-      await Order.findByIdAndUpdate(order._id, { acceptedAt: new Date(), status: 'preparing' });
+      // E-F05: Atomic claim — only proceed with the external call if we win the status lock.
+      // A concurrent manual accept that already transitioned status will return null here.
+      const claimed = await Order.findOneAndUpdate(
+        { _id: order._id, status: 'pending' },
+        { $set: { status: 'preparing', acceptedAt: new Date() } },
+        { new: true },
+      );
+      if (claimed) {
+        try {
+          await AggregatorService.acceptOrder(hotelId, platform, parsed.platformOrderId);
+          autoAccepted = true;
+        } catch (externalErr) {
+          // External call failed — revert local state so the cashier can retry manually
+          await Order.findOneAndUpdate(
+            { _id: order._id, status: 'preparing' },
+            { $set: { status: 'pending', acceptedAt: null } },
+          );
+          console.error('[AggregatorService] auto-accept external call failed (reverted):', externalErr);
+        }
+      }
     } catch (err) {
       console.error('[AggregatorService] auto-accept failed:', err);
     }
   }
 
-  // 12. Emit socket events
+  // 12. Emit socket events — status reflects actual final state (not assumed)
   io.to(`hotel_${hotelId}`).emit('new_order', {
     _id:             order._id,
     orderNumber:     order.orderNumber,
@@ -367,7 +403,7 @@ async function processAggregatorWebhook(
     orderNumber:         order.orderNumber,
     orderSource:         platform,
     platformOrderId:     parsed.platformOrderId,
-    status:              integration?.autoAccept ? 'preparing' : 'pending',
+    status:              autoAccepted ? 'preparing' : 'pending',
     customerName:        order.customerName,
     customerPhone:       parsed.customerPhone,
     deliveryAddress:     order.deliveryAddress ?? '',
@@ -385,7 +421,7 @@ async function processAggregatorWebhook(
       total:       i.total,
     })),
     notes:               order.notes ?? '',
-    acceptedAt:          integration?.autoAccept ? new Date().toISOString() : null,
+    acceptedAt:          autoAccepted ? new Date().toISOString() : null,
     rejectedAt:          null,
     rejectionReason:     '',
     estimatedPickupTime: order.estimatedPickupTime
@@ -475,7 +511,7 @@ router.post('/webhook/swiggy', webhookRateLimiter, async (req: Request, res: Res
   const logEntry = new WebhookLog({
     platform:        'swiggy',
     event:           'new_order',
-    rawBody:         rawBody.slice(0, 20000),
+    rawBody:         rawBody.slice(0, 100000),
     headers:         { 'x-swiggy-signature': headers['x-swiggy-signature'] || '' },
     status:          'retrying',
     platformOrderId: '',
@@ -491,7 +527,7 @@ router.post('/webhook/swiggy', webhookRateLimiter, async (req: Request, res: Res
       logEntry.status          = 'failed';
       logEntry.errorMessage    = result.error;
       logEntry.processingTimeMs = processingTimeMs;
-      await logEntry.save().catch(() => {});
+      await logEntry.save().catch((e: unknown) => logger.error('[aggregatorRoutes] WebhookLog save failed', { error: String(e) }));
       return res.status(200).json({ success: false, error: result.error });
     }
 
@@ -529,7 +565,7 @@ router.post('/webhook/zomato', webhookRateLimiter, async (req: Request, res: Res
   const logEntry = new WebhookLog({
     platform:        'zomato',
     event:           'new_order',
-    rawBody:         rawBody.slice(0, 20000),
+    rawBody:         rawBody.slice(0, 100000),
     headers:         { 'x-zomato-signature': headers['x-zomato-signature'] || '' },
     status:          'retrying',
     platformOrderId: '',
@@ -545,7 +581,7 @@ router.post('/webhook/zomato', webhookRateLimiter, async (req: Request, res: Res
       logEntry.status           = 'failed';
       logEntry.errorMessage     = result.error;
       logEntry.processingTimeMs = processingTimeMs;
-      await logEntry.save().catch(() => {});
+      await logEntry.save().catch((e: unknown) => logger.error('[aggregatorRoutes] WebhookLog save failed', { error: String(e) }));
       return res.status(200).json({ success: false, error: result.error });
     }
 
@@ -725,8 +761,9 @@ router.post(
         triggeredByUserId: (req as any).userId ?? undefined,
         syncType:         'full',
       });
-      logAudit(req, 'aggregator.menu.sync', 'AggregatorIntegration', '', { platform, syncedCount: result.syncedCount, failedCount: result.failedCount });
-      res.json({ success: result.success, result });
+      logAudit(req, 'aggregator.menu.sync', 'AggregatorIntegration', '', { platform, syncedCount: result.syncedCount, failedCount: result.failedCount, dryRun: result.dryRun ?? false });
+      // E-F14: surface dryRun flag so callers can distinguish real vs simulated sync
+      res.json({ success: result.success, dryRun: result.dryRun ?? false, result });
     } catch (err: any) {
       console.error('[aggregatorRoutes] sync-menu error:', err);
       res.status(500).json({ message: err.message || 'Server error' });
@@ -911,24 +948,44 @@ router.post(
       const { orderId } = req.params;
       const prepMin     = Number(req.body.prepMin) || 20;
 
-      const order = await Order.findOne({ _id: orderId, hotelId });
-      if (!order) return res.status(404).json({ message: 'Order not found' });
-      if (!['swiggy', 'zomato'].includes(order.orderSource)) {
-        return res.status(400).json({ message: 'Not a delivery platform order' });
+      // E-F05 + E-F03: atomic claim BEFORE external API call — prevents two
+      // concurrent requests from both calling the platform and double-accepting.
+      const order = await Order.findOneAndUpdate(
+        {
+          _id:         orderId,
+          hotelId,
+          status:      'pending',
+          orderSource: { $in: ['swiggy', 'zomato'] },
+        },
+        { $set: { status: 'preparing', acceptedAt: new Date() } },
+        { new: false },
+      );
+      if (!order) {
+        const exists = await Order.exists({ _id: orderId, hotelId });
+        return res.status(exists ? 409 : 404).json({
+          message: exists
+            ? 'Order cannot be accepted in its current state (may already be accepted or cancelled)'
+            : 'Order not found',
+        });
       }
-      if (order.status !== 'pending') {
-        return res.status(400).json({ message: `Cannot accept order in '${order.status}' state` });
-      }
-
-      await order.updateOne({ acceptedAt: new Date(), status: 'preparing' });
 
       if (order.platformOrderId) {
-        await AggregatorService.acceptOrder(
-          hotelId,
-          order.orderSource as AggregatorPlatform,
-          order.platformOrderId,
-          prepMin,
-        );
+        try {
+          await AggregatorService.acceptOrder(
+            hotelId,
+            order.orderSource as AggregatorPlatform,
+            order.platformOrderId,
+            prepMin,
+          );
+        } catch (apiErr: any) {
+          // External API failed — revert local state so the cashier can retry.
+          await Order.findOneAndUpdate(
+            { _id: order._id, hotelId, status: 'preparing' },
+            { $set: { status: 'pending', acceptedAt: null } },
+          ).catch(() => {});
+          console.error('[aggregatorRoutes] accept external API failed, reverted to pending:', apiErr);
+          return res.status(502).json({ message: 'Platform API call failed; order reverted to pending for retry' });
+        }
       }
 
       io.to(`hotel_${hotelId}`).emit('order_accepted', {
@@ -964,28 +1021,41 @@ router.post(
       const { orderId } = req.params;
       const reason      = String(req.body.reason || 'Rejected by restaurant');
 
-      const order = await Order.findOne({ _id: orderId, hotelId });
-      if (!order) return res.status(404).json({ message: 'Order not found' });
-      if (!['swiggy', 'zomato'].includes(order.orderSource)) {
-        return res.status(400).json({ message: 'Not a delivery platform order' });
+      // E-F05 + E-F03: atomic claim prevents concurrent reject + accept race.
+      const order = await Order.findOneAndUpdate(
+        {
+          _id:         orderId,
+          hotelId,
+          status:      { $in: ['pending', 'preparing'] },
+          orderSource: { $in: ['swiggy', 'zomato'] },
+        },
+        { $set: { status: 'cancelled', rejectedAt: new Date(), rejectionReason: reason } },
+        { new: false },
+      );
+      if (!order) {
+        const exists = await Order.exists({ _id: orderId, hotelId });
+        return res.status(exists ? 409 : 404).json({
+          message: exists ? 'Order cannot be rejected in its current state' : 'Order not found',
+        });
       }
-      if (!['pending', 'preparing'].includes(order.status)) {
-        return res.status(400).json({ message: `Cannot reject order in '${order.status}' state` });
-      }
-
-      await order.updateOne({
-        rejectedAt:      new Date(),
-        rejectionReason: reason,
-        status:          'cancelled',
-      });
 
       if (order.platformOrderId) {
-        await AggregatorService.rejectOrder(
-          hotelId,
-          order.orderSource as AggregatorPlatform,
-          order.platformOrderId,
-          reason,
-        );
+        try {
+          await AggregatorService.rejectOrder(
+            hotelId,
+            order.orderSource as AggregatorPlatform,
+            order.platformOrderId,
+            reason,
+          );
+        } catch (apiErr: any) {
+          // External API failed — revert to previous status so the action can be retried.
+          await Order.findOneAndUpdate(
+            { _id: order._id, hotelId, status: 'cancelled' },
+            { $set: { status: order.status, rejectedAt: null, rejectionReason: '' } },
+          ).catch(() => {});
+          console.error('[aggregatorRoutes] reject external API failed, reverted:', apiErr);
+          return res.status(502).json({ message: 'Platform API call failed; order reverted for retry' });
+        }
       }
 
       io.to(`hotel_${hotelId}`).emit('order_rejected', {
@@ -1015,16 +1085,23 @@ router.post(
       const hotelId     = req.hotelId!;
       const { orderId } = req.params;
 
-      const order = await Order.findOne({ _id: orderId, hotelId });
-      if (!order) return res.status(404).json({ message: 'Order not found' });
-      if (!['swiggy', 'zomato'].includes(order.orderSource)) {
-        return res.status(400).json({ message: 'Not a delivery platform order' });
+      // E-F03: atomic claim ensures local state updates before external call.
+      const order = await Order.findOneAndUpdate(
+        {
+          _id:         orderId,
+          hotelId,
+          status:      'preparing',
+          orderSource: { $in: ['swiggy', 'zomato'] },
+        },
+        { $set: { status: 'ready' } },
+        { new: false },
+      );
+      if (!order) {
+        const exists = await Order.exists({ _id: orderId, hotelId });
+        return res.status(exists ? 409 : 404).json({
+          message: exists ? `Cannot mark ready from current state` : 'Order not found',
+        });
       }
-      if (order.status !== 'preparing') {
-        return res.status(400).json({ message: `Cannot mark ready from '${order.status}' state` });
-      }
-
-      await order.updateOne({ status: 'ready' });
 
       if (order.platformOrderId) {
         try {
@@ -1034,7 +1111,7 @@ router.post(
             order.platformOrderId,
           );
         } catch (err) {
-          console.error('[aggregatorRoutes] markReady external call failed (non-fatal):', err);
+          logger.error('[aggregatorRoutes] markReady external call failed (non-fatal)', { err: String(err) });
         }
       }
 
@@ -1070,23 +1147,34 @@ router.post(
       const hotelId     = req.hotelId!;
       const { orderId } = req.params;
 
-      const order = await Order.findOne({ _id: orderId, hotelId });
-      if (!order) return res.status(404).json({ message: 'Order not found' });
-      if (!['swiggy', 'zomato'].includes(order.orderSource)) {
-        return res.status(400).json({ message: 'Not a delivery platform order' });
+      // E-F03: atomic claim prevents concurrent dispatch from duplicating external calls.
+      const order = await Order.findOneAndUpdate(
+        {
+          _id:         orderId,
+          hotelId,
+          status:      'ready',
+          orderSource: { $in: ['swiggy', 'zomato'] },
+        },
+        { $set: { status: 'completed' } },
+        { new: false },
+      );
+      if (!order) {
+        const exists = await Order.exists({ _id: orderId, hotelId });
+        return res.status(exists ? 409 : 404).json({
+          message: exists ? `Cannot dispatch from current state` : 'Order not found',
+        });
       }
-      if (order.status !== 'ready') {
-        return res.status(400).json({ message: `Cannot dispatch from '${order.status}' state. Mark order ready first.` });
-      }
-
-      await order.updateOne({ status: 'completed' });
 
       if (order.platformOrderId) {
-        await AggregatorService.markDispatched(
-          hotelId,
-          order.orderSource as AggregatorPlatform,
-          order.platformOrderId,
-        );
+        try {
+          await AggregatorService.markDispatched(
+            hotelId,
+            order.orderSource as AggregatorPlatform,
+            order.platformOrderId,
+          );
+        } catch (err) {
+          logger.error('[aggregatorRoutes] markDispatched external call failed (non-fatal)', { err: String(err) });
+        }
       }
 
       io.to(`hotel_${hotelId}`).emit('order_dispatched', {

@@ -89,64 +89,84 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
     let resolvedIngredientId: mongoose.Types.ObjectId | null = null;
     let resolvedEstimatedLoss = typeof estimatedLoss === 'number' ? estimatedLoss : 0;
+    let resolvedActualDeduction = 0;
 
     if (ingredientId) {
-      // Validate ingredient belongs to this hotel
-      const ingredient = await Ingredient.findOne({ _id: ingredientId, hotelId: req.hotelId });
-      if (!ingredient) {
-        return res.status(404).json({ message: 'Ingredient not found for this hotel' });
-      }
-
       const qty = typeof quantity === 'number' ? quantity : parseFloat(quantity) || 0;
       if (qty <= 0) {
         return res.status(400).json({ message: 'quantity must be positive' });
       }
 
-      const prevStock = (ingredient as any).currentStock as number;
-      const costPerUnit = (ingredient as any).costPerUnit as number;
+      // B-01: Wrap stock decrement, StockMovement, and WasteLog in a single transaction
+      // so the database cannot be left half-updated if any write fails.
+      let savedLog: any = null;
+      let is404         = false;
+      const txSession   = await mongoose.startSession();
+      try {
+        await txSession.withTransaction(async () => {
+          // B-14: Atomic pipeline update — clamps to 0, returns PRE-UPDATE document.
+          const preDoc = await Ingredient.findOneAndUpdate(
+            { _id: ingredientId, hotelId: req.hotelId },
+            [{ $set: { currentStock: { $max: [0, { $subtract: ['$currentStock', qty] }] } } }],
+            { new: false, session: txSession },
+          );
+          if (!preDoc) { is404 = true; return; }
 
-      // Clamp deduction to available stock — never go below 0
-      const actualDeduction = Math.min(qty, Math.max(0, prevStock));
+          const prevStock       = Math.max(0, (preDoc as any).currentStock as number);
+          const costPerUnit     = (preDoc as any).costPerUnit as number;
+          const actualDeduction = Math.min(qty, prevStock);
 
-      // Auto-compute estimated loss if not manually provided
-      if (typeof estimatedLoss !== 'number') {
-        resolvedEstimatedLoss = actualDeduction * costPerUnit;
+          resolvedActualDeduction = actualDeduction;
+          resolvedIngredientId    = (preDoc as any)._id;
+
+          if (typeof estimatedLoss !== 'number') {
+            resolvedEstimatedLoss = actualDeduction * costPerUnit;
+          }
+
+          if (actualDeduction > 0) {
+            await StockMovement.create([{
+              hotelId:        req.hotelId,
+              ingredientId:   resolvedIngredientId,
+              ingredientName: (preDoc as any).name,
+              type:           'waste',
+              delta:          -actualDeduction,
+              previousStock:  prevStock,
+              resultingStock: prevStock - actualDeduction,
+              costPerUnit,
+              totalCost:      resolvedEstimatedLoss,
+              referenceType:  'waste',
+              reason:         rest.reason ?? 'other',
+              notes:          rest.notes ?? '',
+              performedBy:    req.role ?? 'admin',
+            }], { session: txSession });
+          }
+
+          const newLog = new WasteLog({
+            ...rest,
+            quantity,
+            estimatedLoss:   resolvedEstimatedLoss,
+            hotelId:         req.hotelId,
+            ingredientId:    resolvedIngredientId,
+            actualDeduction: resolvedActualDeduction,
+          });
+          await newLog.save({ session: txSession });
+          savedLog = newLog;
+        });
+      } finally {
+        await txSession.endSession();
       }
 
-      resolvedIngredientId = (ingredient as any)._id;
-
-      // Deduct stock
-      if (actualDeduction > 0) {
-        await Ingredient.updateOne(
-          { _id: ingredientId, hotelId: req.hotelId },
-          { $inc: { currentStock: -actualDeduction } },
-        );
-
-        // Record stock movement — best-effort (don't fail the waste log on audit failure)
-        StockMovement.create({
-          hotelId:        req.hotelId,
-          ingredientId:   resolvedIngredientId,
-          ingredientName: (ingredient as any).name,
-          type:           'waste',
-          delta:          -actualDeduction,
-          previousStock:  prevStock,
-          resultingStock: prevStock - actualDeduction,
-          costPerUnit,
-          totalCost:      resolvedEstimatedLoss,
-          referenceType:  'waste',
-          reason:         rest.reason ?? 'other',
-          notes:          rest.notes ?? '',
-          performedBy:    req.role ?? 'admin',
-        }).catch(() => {});
-      }
+      if (is404) return res.status(404).json({ message: 'Ingredient not found for this hotel' });
+      return res.status(201).json(savedLog);
     }
 
     const log = new WasteLog({
       ...rest,
       quantity,
-      estimatedLoss: resolvedEstimatedLoss,
-      hotelId: req.hotelId,
-      ingredientId: resolvedIngredientId,
+      estimatedLoss:   resolvedEstimatedLoss,
+      hotelId:         req.hotelId,
+      ingredientId:    resolvedIngredientId,
+      actualDeduction: resolvedActualDeduction,
     });
     await log.save();
     res.status(201).json(log);
@@ -158,8 +178,51 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 // ── DELETE /:id ───────────────────────────────────────────────────────────────
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const log = await WasteLog.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });
-    if (!log) return res.status(404).json({ message: 'Log not found' });
+    // B-01: Wrap log deletion, stock restoration, and StockMovement in one transaction.
+    let log: any    = null;
+    let isNotFound  = false;
+    const txSession = await mongoose.startSession();
+    try {
+      await txSession.withTransaction(async () => {
+        log = await WasteLog.findOneAndDelete(
+          { _id: req.params.id, hotelId: req.hotelId },
+          { session: txSession },
+        );
+        if (!log) { isNotFound = true; return; }
+
+        // B-15: Restore ingredient stock when a waste log is deleted.
+        const restorable = (log as any).actualDeduction as number | undefined;
+        if (!log.ingredientId || !restorable || restorable <= 0) return;
+
+        const preRestore = await Ingredient.findOneAndUpdate(
+          { _id: log.ingredientId, hotelId: req.hotelId },
+          { $inc: { currentStock: restorable } },
+          { new: false, session: txSession },
+        );
+        if (!preRestore) return; // ingredient deleted — still remove the log
+
+        const prevStock = Math.max(0, (preRestore as any).currentStock as number);
+        await StockMovement.create([{
+          hotelId:        req.hotelId,
+          ingredientId:   log.ingredientId,
+          ingredientName: (log as any).productName,
+          type:           'adjustment',
+          delta:          +restorable,
+          previousStock:  prevStock,
+          resultingStock: prevStock + restorable,
+          costPerUnit:    (preRestore as any).costPerUnit ?? null,
+          totalCost:      null,
+          referenceId:    String(log._id),
+          referenceType:  'waste',
+          reason:         'Waste log deleted — stock restored',
+          performedBy:    req.role ?? 'admin',
+        }], { session: txSession });
+      });
+    } finally {
+      await txSession.endSession();
+    }
+
+    if (isNotFound) return res.status(404).json({ message: 'Log not found' });
     res.json({ message: 'Deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });

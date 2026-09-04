@@ -71,7 +71,9 @@ async function withRetry<T>(
 // Product names and inventory item names are user-created strings — strip
 // characters that could be used to inject instructions into a Gemini prompt.
 function sanitize(s: string): string {
-  return String(s).replace(/[<>{}\[\]\\|`]/g, '').slice(0, 80).trim();
+  // A-15: also strip newline/carriage-return so a product name cannot inject lines
+  // that match the response-parser's startsWith('SUMMARY:') / 'REC' markers.
+  return String(s).replace(/[\r\n]+/g, ' ').replace(/[<>{}\[\]\\|`]/g, '').slice(0, 80).trim();
 }
 
 // ─── Payment method label ─────────────────────────────────────────────────────

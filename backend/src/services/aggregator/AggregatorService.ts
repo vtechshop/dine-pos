@@ -117,7 +117,11 @@ class AggregatorServiceClass {
       totalItems,
     });
 
-    await AggregatorIntegration.findByIdAndUpdate(integration._id, { menuSyncStatus: 'syncing' });
+    // E-F07: set syncingStartedAt so the menu sync worker can detect and recover stale locks
+    await AggregatorIntegration.findByIdAndUpdate(integration._id, {
+      menuSyncStatus:   'syncing',
+      syncingStartedAt: new Date(),
+    });
 
     try {
       const result = await this.getConnector(platform).syncMenu(
@@ -128,18 +132,25 @@ class AggregatorServiceClass {
 
       const completedAt = new Date();
       const durationMs  = completedAt.getTime() - startedAt.getTime();
-      const syncStatus: 'success' | 'partial' | 'failed' =
-        result.failedCount === 0 ? 'success'
-        : result.syncedCount > 0 ? 'partial'
+      const isExternalEnabled = process.env.AGGREGATOR_EXTERNAL_ENABLED === 'true';
+      // E-F14: A dry run (externalEnabled=false) must not be recorded as a real sync success.
+      // We set status back to 'idle' so the dashboard shows the last REAL sync timestamp
+      // rather than a misleading "just synced" from a simulation.
+      const syncStatus: 'idle' | 'success' | 'partial' | 'failed' =
+        !isExternalEnabled  ? 'idle'
+        : result.failedCount === 0 ? 'success'
+        : result.syncedCount > 0   ? 'partial'
         : 'failed';
 
       const integrationUpdate: Record<string, unknown> = {
-        menuSyncStatus:  syncStatus,
-        lastSyncAt:      completedAt,
-        syncedItemCount: result.syncedCount,
-        failedItemCount: result.failedCount,
-        lastSyncError:   result.error ?? null,
+        menuSyncStatus:   syncStatus,
+        syncingStartedAt: null,  // clear lease on completion
+        syncedItemCount:  result.syncedCount,
+        failedItemCount:  result.failedCount,
+        lastSyncError:    result.error ?? null,
       };
+      // Only update lastSyncAt for real external syncs
+      if (isExternalEnabled) integrationUpdate.lastSyncAt = completedAt;
       if (options?.triggeredBy === 'scheduled') {
         integrationUpdate.lastAutoSyncAt = completedAt;
       }
@@ -169,9 +180,10 @@ class AggregatorServiceClass {
 
       await Promise.all([
         AggregatorIntegration.findByIdAndUpdate(integration._id, {
-          menuSyncStatus: 'failed',
-          lastSyncAt:     completedAt,
-          lastSyncError:  msg,
+          menuSyncStatus:   'failed',
+          syncingStartedAt: null,  // clear lease on failure too
+          lastSyncAt:       completedAt,
+          lastSyncError:    msg,
         }),
         MenuSyncHistory.findByIdAndUpdate(historyDoc._id, {
           status:         'failed',

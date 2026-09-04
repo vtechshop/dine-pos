@@ -3,12 +3,14 @@ import mongoose from 'mongoose';
 import Reservation, { parseTimeToMinutes } from '../models/Reservation';
 import CustomerProfile from '../models/CustomerProfile';
 import Table from '../models/Table';
+import TableSession from '../models/TableSession';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import { sendError } from '../utils/sendError';
 import { logAudit } from '../utils/audit';
 import { getMessagingProvider } from '../services/messagingProvider';
 import { makeRateLimiter } from '../utils/rateLimiter';
+import { startOfBusinessDay, endOfBusinessDay, toBusinessDate } from '../utils/businessDate';
 
 const router = Router();
 router.use(authMiddleware);
@@ -31,15 +33,29 @@ const TERMINAL = new Set(['completed', 'cancelled', 'no_show']);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function dayBounds(d: Date): { start: Date; end: Date } {
-  const start = new Date(d); start.setHours(0, 0, 0, 0);
-  const end   = new Date(d); end.setHours(23, 59, 59, 999);
-  return { start, end };
+// D-05: Use IST (Asia/Kolkata) for day boundaries so reservations near midnight
+// are bucketed to the correct business date regardless of server timezone.
+function dayBounds(dateStr: string, tz = 'Asia/Kolkata'): { start: Date; end: Date } {
+  return {
+    start: startOfBusinessDay(dateStr, tz),
+    end:   endOfBusinessDay(dateStr, tz),
+  };
 }
 
 function parseDateStr(s: string): Date | null {
-  const d = new Date(s + 'T00:00:00');
+  // Validate YYYY-MM-DD format before parsing to avoid silent coercions
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(s + 'T00:00:00Z');
   return isNaN(d.getTime()) ? null : d;
+}
+
+// Canonical time regex matching the Reservation model's parseTimeToMinutes format
+const TIME_RE = /^(1[0-2]|0?[1-9]):[0-5]\d\s*(AM|PM)$/i;
+
+// Phone: accept 10–15 digits after stripping non-digit characters
+function isValidPhone(raw: string): boolean {
+  const digits = raw.replace(/\D/g, '');
+  return digits.length >= 10 && digits.length <= 15;
 }
 
 function hasOverlap(aStart: number, aDur: number, bStart: number, bDur: number): boolean {
@@ -49,13 +65,13 @@ function hasOverlap(aStart: number, aDur: number, bStart: number, bDur: number):
 async function checkConflict(
   hotelId: string,
   tableId: mongoose.Types.ObjectId,
-  dateObj: Date,
+  dateStr: string,
   startMins: number,
   duration: number,
   excludeId?: string,
   session?: mongoose.ClientSession,
 ): Promise<boolean> {
-  const { start, end } = dayBounds(dateObj);
+  const { start, end } = dayBounds(dateStr);
   const query: Record<string, any> = {
     hotelId,
     tableId,
@@ -86,7 +102,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     if (req.query.date) {
       const d = parseDateStr(req.query.date as string);
       if (!d) return res.status(400).json({ message: 'Invalid date' });
-      const { start, end } = dayBounds(d);
+      const { start, end } = dayBounds(req.query.date as string);
       filter.date = { $gte: start, $lte: end };
     }
 
@@ -120,7 +136,7 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     if (req.query.date) {
       const d = parseDateStr(req.query.date as string);
       if (d) {
-        const { start, end } = dayBounds(d);
+        const { start, end } = dayBounds(req.query.date as string);
         filter.date = { $gte: start, $lte: end };
       }
     }
@@ -149,7 +165,7 @@ router.get('/availability', async (req: AuthRequest, res: Response) => {
     const d = parseDateStr(req.query.date as string);
     if (!d) return res.status(400).json({ message: 'Invalid date' });
 
-    const { start, end } = dayBounds(d);
+    const { start, end } = dayBounds(req.query.date as string);
     const taken = await Reservation.find({
       hotelId: req.hotelId,
       date: { $gte: start, $lte: end },
@@ -180,9 +196,13 @@ router.post('/', createLimiter, async (req: AuthRequest, res: Response) => {
 
     if (!customerName?.trim()) return res.status(400).json({ message: 'customerName is required' });
     if (!phone?.trim())        return res.status(400).json({ message: 'phone is required' });
+    // D-07: reject clearly malformed phone numbers (less than 10 or more than 15 digits)
+    if (!isValidPhone(String(phone))) return res.status(400).json({ message: 'phone must contain 10–15 digits' });
     if (!partySize || partySize < 1) return res.status(400).json({ message: 'partySize must be ≥ 1' });
     if (!dateStr)              return res.status(400).json({ message: 'date is required' });
     if (!time)                 return res.status(400).json({ message: 'time is required' });
+    // D-06: reject malformed time values that would silently become 0 (midnight) in parseTimeToMinutes
+    if (!TIME_RE.test(String(time))) return res.status(400).json({ message: "time must be in h:mm AM/PM format (e.g. 7:30 PM)" });
 
     const dateObj = parseDateStr(dateStr);
     if (!dateObj) return res.status(400).json({ message: 'Invalid date' });
@@ -195,21 +215,7 @@ router.post('/', createLimiter, async (req: AuthRequest, res: Response) => {
       tableId = new mongoose.Types.ObjectId(tableIdRaw);
     }
 
-    // Atomic double-booking check
-    if (tableId) {
-      const sess = await mongoose.startSession();
-      let conflict = false;
-      try {
-        await sess.withTransaction(async () => {
-          conflict = await checkConflict(req.hotelId!, tableId!, dateObj, startMins, duration, undefined, sess);
-        });
-      } finally {
-        await sess.endSession();
-      }
-      if (conflict) return res.status(409).json({ message: 'Table already has a reservation in that time window' });
-    }
-
-    // Auto-link customer by phone
+    // Auto-link customer by phone (best-effort, read-only — safe outside transaction)
     let customerId: mongoose.Types.ObjectId | null = null;
     try {
       const cust = await CustomerProfile.findOne(
@@ -219,26 +225,59 @@ router.post('/', createLimiter, async (req: AuthRequest, res: Response) => {
       if (cust) customerId = cust._id as mongoose.Types.ObjectId;
     } catch { /* best-effort link */ }
 
-    const reservation = await Reservation.create({
-      hotelId:      req.hotelId,
-      customerName: customerName.trim(),
-      phone:        phone.trim(),
-      email:        email?.trim() || '',
-      partySize:    parseInt(partySize),
-      date:         dateObj,
+    const reservationDoc = {
+      hotelId:         req.hotelId,
+      customerName:    customerName.trim(),
+      phone:           phone.trim(),
+      email:           email?.trim() || '',
+      partySize:       parseInt(partySize),
+      date:            dateObj,
       time,
-      startMinutes: startMins,
+      startMinutes:    startMins,
       durationMinutes: duration,
       tableId,
-      tableNumber:  tableNumber ? parseInt(tableNumber) : null,
+      tableNumber:     tableNumber ? parseInt(tableNumber) : null,
       customerId,
-      notes:        String(notes).trim(),
-      occasion:     String(occasion).trim(),
+      notes:           String(notes).trim(),
+      occasion:        String(occasion).trim(),
       source,
-      depositAmount: parseFloat(depositAmount) || 0,
+      depositAmount:   parseFloat(depositAmount) || 0,
       depositStatus,
-      status: 'pending',
-    });
+      status:          'pending' as const,
+    };
+
+    let reservation: any;
+
+    if (tableId) {
+      // Conflict check + create are in the same transaction so no slot can be
+      // taken between the two operations. E11000 from the partial unique index
+      // (Sprint 1 D-01) is the final guard against concurrent duplicate writes.
+      const sess = await mongoose.startSession();
+      try {
+        await sess.withTransaction(async () => {
+          const conflict = await checkConflict(req.hotelId!, tableId!, dateStr, startMins, duration, undefined, sess);
+          if (conflict) {
+            const slotErr = new Error('SLOT_CONFLICT') as any;
+            slotErr.isSlotConflict = true;
+            throw slotErr;
+          }
+          [reservation] = await Reservation.create([reservationDoc], { session: sess });
+        });
+      } catch (txErr: any) {
+        if (txErr.isSlotConflict) {
+          return res.status(409).json({ message: 'Table already has a reservation in that time window' });
+        }
+        const errCode = txErr.code ?? txErr.cause?.code;
+        if (errCode === 11000) {
+          return res.status(409).json({ message: 'Reservation slot already taken (concurrent booking)' });
+        }
+        throw txErr;
+      } finally {
+        await sess.endSession();
+      }
+    } else {
+      reservation = await Reservation.create(reservationDoc);
+    }
 
     logAudit(req, 'reservation.create', 'Reservation', reservation._id.toString(), {
       customerName: reservation.customerName,
@@ -281,6 +320,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     r.set('status', newStatus);
     if (newStatus === 'confirmed')  r.set('confirmedAt', now);
     if (newStatus === 'arrived')    r.set('arrivedAt', now);
+    if (newStatus === 'seated')     r.set('seatedAt', now);  // D-14
     if (newStatus === 'cancelled') {
       r.set('cancelledAt', now);
       r.set('cancelledBy', req.cashierId || req.waiterId || req.hotelId || '');
@@ -296,6 +336,26 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         { _id: r.tableId, hotelId: req.hotelId, status: { $in: ['available', 'reserved'] } },
         { status: 'occupied' },
       ).catch(() => {});
+    }
+
+    // D-02: Restore table on terminal transitions (completed/cancelled/no_show).
+    // Guard: skip if an open TableSession currently holds the table — session
+    // close already restores the table and is the authoritative cleanup path.
+    if (TERMINAL.has(newStatus) && r.tableId) {
+      ;(async () => {
+        try {
+          const openSession = await TableSession.findOne(
+            { tableId: r.tableId, hotelId: req.hotelId, status: 'open' },
+            '_id',
+          ).lean();
+          if (!openSession) {
+            await Table.findOneAndUpdate(
+              { _id: r.tableId, hotelId: req.hotelId, status: { $in: ['occupied', 'reserved'] } },
+              { $set: { status: 'available' } },
+            );
+          }
+        } catch { /* best-effort — table restore must never fail the reservation save */ }
+      })();
     }
 
     logAudit(req, `reservation.status.${newStatus}`, 'Reservation', r._id.toString(), {
@@ -349,6 +409,8 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 
     const newDate     = dateStr ? parseDateStr(dateStr) : r.date;
     if (!newDate) return res.status(400).json({ message: 'Invalid date' });
+    // D-05: compute the date string (YYYY-MM-DD in IST) for IST-aware conflict checks
+    const newDateStr  = dateStr ?? toBusinessDate(r.date, 'Asia/Kolkata');
 
     const newTime     = time !== undefined ? time : r.time;
     const newDuration = durRaw !== undefined
@@ -373,7 +435,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       try {
         await sess.withTransaction(async () => {
           conflict = await checkConflict(
-            req.hotelId!, newTableId!, newDate, newStartMins, newDuration,
+            req.hotelId!, newTableId!, newDateStr, newStartMins, newDuration,
             r._id.toString(), sess,
           );
         });
@@ -431,11 +493,30 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     }
 
     // Soft-cancel
-    if (!TERMINAL.has(r.status)) {
+    const wasTerminal = TERMINAL.has(r.status);
+    if (!wasTerminal) {
       r.set('status', 'cancelled');
       r.set('cancelledAt', new Date());
       r.set('cancelledBy', req.cashierId || req.waiterId || req.hotelId || '');
       await r.save();
+
+      // D-02: restore table after soft-cancel (same guard as PATCH handler)
+      if (r.tableId) {
+        ;(async () => {
+          try {
+            const openSession = await TableSession.findOne(
+              { tableId: r.tableId, hotelId: req.hotelId, status: 'open' },
+              '_id',
+            ).lean();
+            if (!openSession) {
+              await Table.findOneAndUpdate(
+                { _id: r.tableId, hotelId: req.hotelId, status: { $in: ['occupied', 'reserved'] } },
+                { $set: { status: 'available' } },
+              );
+            }
+          } catch { /* best-effort */ }
+        })();
+      }
     }
     logAudit(req, 'reservation.cancel', 'Reservation', r._id.toString(), { customerName: r.customerName });
     res.json(r);

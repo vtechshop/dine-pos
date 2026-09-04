@@ -8,8 +8,8 @@ export const applyIngredientStockChange = async (
   sign: 1 | -1,
   session?: mongoose.ClientSession,
   overrides?: Map<string, number>,
-): Promise<{ actualDeltas: Map<string, number>; previousStocks: Map<string, number> }> => {
-  const empty = () => ({ actualDeltas: new Map<string, number>(), previousStocks: new Map<string, number>() });
+): Promise<{ actualDeltas: Map<string, number>; previousStocks: Map<string, number>; shortfalls: Map<string, number>; ingredientNames: Map<string, string> }> => {
+  const empty = () => ({ actualDeltas: new Map<string, number>(), previousStocks: new Map<string, number>(), shortfalls: new Map<string, number>(), ingredientNames: new Map<string, string>() });
 
   const productIds = orderItems.filter(i => i.product).map(i => i.product);
   if (productIds.length === 0) return empty();
@@ -40,18 +40,22 @@ export const applyIngredientStockChange = async (
     const ingredientIds = Array.from(recipeDemand.keys());
     const ingredients = await Ingredient.find(
       { _id: { $in: ingredientIds }, hotelId },
-    ).select('_id currentStock').session(session ?? null);
+    ).select('_id currentStock name').session(session ?? null);
 
     const stockMap = new Map<string, number>();
+    const nameMap  = new Map<string, string>();
     for (const ing of ingredients) {
       stockMap.set(ing._id.toString(), (ing as any).currentStock ?? 0);
+      nameMap.set(ing._id.toString(), (ing as any).name ?? '');
     }
 
+    const shortfalls = new Map<string, number>();
     const bulkOps: any[] = [];
     for (const [ingredientId, qty] of recipeDemand) {
       const currentStock = stockMap.get(ingredientId) ?? 0;
       const actual = Math.min(qty, Math.max(0, currentStock));
       actualDeltas.set(ingredientId, actual);
+      if (actual < qty) shortfalls.set(ingredientId, qty - actual); // shortfall = unfulfilled portion
       if (actual <= 0) continue;
       bulkOps.push({
         updateOne: {
@@ -64,8 +68,8 @@ export const applyIngredientStockChange = async (
       await Ingredient.bulkWrite(bulkOps, { session });
     }
 
-    // Return stockMap as previousStocks — used by callers to create StockMovement audit records
-    return { actualDeltas, previousStocks: stockMap };
+    // Return stockMap and nameMap — used by callers to create StockMovement audit records
+    return { actualDeltas, previousStocks: stockMap, shortfalls, ingredientNames: nameMap };
   }
 
   // sign === 1: Restoration — use recorded deltas when available so we restore exactly
@@ -86,5 +90,5 @@ export const applyIngredientStockChange = async (
     await Ingredient.bulkWrite(bulkOps, { session });
   }
 
-  return { actualDeltas, previousStocks: new Map() };
+  return { actualDeltas, previousStocks: new Map(), shortfalls: new Map(), ingredientNames: new Map() };
 };

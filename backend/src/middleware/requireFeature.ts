@@ -36,9 +36,10 @@ const FEATURE_DEFAULTS: Record<BooleanFeatureKey, boolean> = {
   customerOrderHistory:   false,
   marketingCampaigns:     false,
   // ── Operations v1.2 ────────────────────────────────────────────────────
-  shift:  true,   // core POS feature — on by default
-  kiosk:  false,  // premium
-  ai:     false,  // premium
+  shift:       true,   // core POS feature — on by default
+  kiosk:       false,  // premium
+  ai:          false,  // premium
+  supplyChain: true,   // default ON — existing hotels keep access without migration
 };
 
 /**

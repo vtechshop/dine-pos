@@ -12,6 +12,13 @@ router.use(requireFeature('reservations'));
 
 const TERMINAL = new Set(['seated', 'cancelled', 'expired']);
 
+// D-15: Allowed transitions — prevents impossible state jumps.
+// 'expired' is a system-only terminal state reached by the expiry worker, not via PATCH.
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  waiting:  ['notified', 'cancelled', 'expired'],
+  notified: ['waiting', 'seated', 'cancelled', 'expired'],
+};
+
 // ── GET / ─────────────────────────────────────────────────────────────────────
 
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -73,37 +80,69 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
   try {
     const { status, estimatedWaitMinutes } = req.body as Record<string, any>;
-    const allowed = ['waiting', 'notified', 'seated', 'cancelled', 'expired'];
-    if (!allowed.includes(status)) return res.status(400).json({ message: 'Invalid status' });
 
-    const entry = await Waitlist.findOne({ _id: req.params.id, hotelId: req.hotelId });
-    if (!entry) return res.status(404).json({ message: 'Waitlist entry not found' });
-    if (TERMINAL.has(entry.status)) {
-      return res.status(409).json({ message: `Entry is already ${entry.status}` });
+    // D-15: Use the explicit transition table, not just an allowlist
+    const staffAllowed = ['waiting', 'notified', 'seated', 'cancelled'];
+    if (!staffAllowed.includes(status)) {
+      return res.status(400).json({ message: `Invalid status. Allowed: ${staffAllowed.join(', ')}` });
     }
 
-    entry.set('status', status);
-    if (status === 'notified') entry.set('notifiedAt', new Date());
+    // Snapshot the current entry to validate the transition
+    const existing = await Waitlist.findOne({ _id: req.params.id, hotelId: req.hotelId });
+    if (!existing) return res.status(404).json({ message: 'Waitlist entry not found' });
+    if (TERMINAL.has(existing.status)) {
+      return res.status(409).json({ message: `Entry is already ${existing.status}` });
+    }
+
+    const allowedNext = VALID_TRANSITIONS[existing.status] ?? [];
+    if (!allowedNext.includes(status)) {
+      return res.status(409).json({
+        message: `Cannot transition from '${existing.status}' to '${status}'. Allowed: ${allowedNext.filter(s => staffAllowed.includes(s)).join(', ') || 'none'}`,
+      });
+    }
+
+    // D-15: Atomic conditional update — guards against concurrent PATCH races
+    const extraUpdate: Record<string, unknown> = {};
+    if (status === 'notified') extraUpdate.notifiedAt = new Date();
     if (estimatedWaitMinutes !== undefined) {
-      entry.set('estimatedWaitMinutes', parseInt(estimatedWaitMinutes) || 0);
+      extraUpdate.estimatedWaitMinutes = parseInt(estimatedWaitMinutes) || 0;
     }
 
-    await entry.save();
-    logAudit(req, `waitlist.${status}`, 'Waitlist', entry._id.toString(), { guestName: entry.guestName });
-    res.json(entry);
+    const updated = await Waitlist.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId, status: existing.status },
+      { $set: { status, ...extraUpdate } },
+      { new: true },
+    );
+    if (!updated) {
+      return res.status(409).json({ message: 'Entry was modified concurrently. Please refresh and retry.' });
+    }
+
+    logAudit(req, `waitlist.${status}`, 'Waitlist', updated._id.toString(), { guestName: updated.guestName });
+    res.json(updated);
   } catch (err) {
     sendError(res, 500, 'Failed to update waitlist entry', err);
   }
 });
 
 // ── DELETE /:id ───────────────────────────────────────────────────────────────
+// D-13: Soft delete — transition to 'cancelled' rather than hard-deleting the record.
+// Audit history is preserved; the UI hides cancelled entries by default.
 
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const entry = await Waitlist.findOneAndDelete({ _id: req.params.id, hotelId: req.hotelId });
-    if (!entry) return res.status(404).json({ message: 'Waitlist entry not found' });
-    logAudit(req, 'waitlist.delete', 'Waitlist', entry._id.toString(), { guestName: entry.guestName });
-    res.json({ message: 'Removed from waitlist' });
+    const entry = await Waitlist.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId, status: { $nin: ['seated', 'expired'] } },
+      { $set: { status: 'cancelled' } },
+      { new: true },
+    );
+    if (!entry) {
+      // Either not found or already in a terminal state — do a plain check to give better message
+      const exists = await Waitlist.findOne({ _id: req.params.id, hotelId: req.hotelId });
+      if (!exists) return res.status(404).json({ message: 'Waitlist entry not found' });
+      return res.status(409).json({ message: `Entry is already ${exists.status} and cannot be removed` });
+    }
+    logAudit(req, 'waitlist.cancel', 'Waitlist', entry._id.toString(), { guestName: entry.guestName });
+    res.json({ message: 'Removed from waitlist', entry });
   } catch (err) {
     sendError(res, 500, 'Failed to remove from waitlist', err);
   }

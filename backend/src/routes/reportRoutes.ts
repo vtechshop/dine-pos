@@ -122,9 +122,10 @@ router.get('/tally', async (req: AuthRequest, res: Response) => {
         subtotal: 1, taxTotal: 1, discountAmount: 1, grandTotal: 1, orderSource: 1 },
     ).sort({ createdAt: 1 }).lean();
 
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
     const ddmmyyyy = (d: Date) => {
-      const dt = new Date(d);
-      return `${String(dt.getDate()).padStart(2, '0')}-${String(dt.getMonth() + 1).padStart(2, '0')}-${dt.getFullYear()}`;
+      const ist = new Date(new Date(d).getTime() + IST_OFFSET_MS);
+      return `${String(ist.getUTCDate()).padStart(2, '0')}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-${ist.getUTCFullYear()}`;
     };
 
     const rows = (orders as any[]).map(o => ({

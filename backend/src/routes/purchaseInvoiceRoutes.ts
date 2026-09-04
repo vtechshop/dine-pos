@@ -18,6 +18,7 @@ import mongoose from 'mongoose';
 import {
   authMiddleware, requireAdmin, AuthRequest,
 } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { sendError } from '../utils/sendError';
 import PurchaseInvoice from '../models/PurchaseInvoice';
 import Vendor from '../models/Vendor';
@@ -28,6 +29,7 @@ import { logAudit } from '../utils/audit';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('supplyChain'));
 
 async function generateInvoiceNumber(hotelId: string): Promise<string> {
   const dateStr = new Date().toISOString().slice(0, 7).replace('-', '');

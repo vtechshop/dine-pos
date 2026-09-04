@@ -26,6 +26,7 @@ import CampaignMessage from '../models/CampaignMessage';
 import Hotel           from '../models/Hotel';
 import { getMessagingProvider } from '../services/messagingProvider';
 import type { WaTemplateOptions } from '../services/messagingProvider';
+import { getRedisClient } from '../config/redis';
 
 const router = Router();
 router.use(authMiddleware);
@@ -469,11 +470,35 @@ router.post('/:id/duplicate', async (req: AuthRequest, res: Response): Promise<v
 // Does NOT alter campaign status.
 // Does NOT enforce marketingOptIn (it is a test).
 
-const _testSendLimiter = new Map<string, { count: number; resetAt: number }>();
-const TEST_SEND_MAX = 5;
-const TEST_SEND_WINDOW_MS = 10 * 60 * 1000;
+// C-12: Campaign test-send rate limiter — Redis-backed when available, in-memory fallback.
+// Keyed per campaignId (hotel-scoped via ObjectId) — 5 sends per 10 minutes.
+const TEST_SEND_MAX        = 5;
+const TEST_SEND_WINDOW_S   = 600; // 10 minutes in seconds
+const TEST_SEND_WINDOW_MS  = TEST_SEND_WINDOW_S * 1000;
 
-function _checkTestSendLimit(campaignId: string): boolean {
+// In-memory fallback (per-process, non-distributed — logged at startup if Redis unavailable)
+const _testSendLimiter = new Map<string, { count: number; resetAt: number }>();
+let _cleanupStarted = false;
+if (!_cleanupStarted) {
+  _cleanupStarted = true;
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of _testSendLimiter) {
+      if (now > v.resetAt) _testSendLimiter.delete(k);
+    }
+  }, 60_000).unref();
+}
+
+async function _checkTestSendLimit(campaignId: string): Promise<boolean> {
+  const redis = getRedisClient();
+  if (redis) {
+    // Redis path: INCR + EXPIRE (atomic within single key, distributed across workers)
+    const key   = `campaign:test:${campaignId}`;
+    const count = await (redis as any).incr(key) as number;
+    if (count === 1) await (redis as any).expire(key, TEST_SEND_WINDOW_S);
+    return count <= TEST_SEND_MAX;
+  }
+  // In-memory fallback (per-process only — non-distributed)
   const now   = Date.now();
   const state = _testSendLimiter.get(campaignId);
   if (!state || now > state.resetAt) {
@@ -483,18 +508,6 @@ function _checkTestSendLimit(campaignId: string): boolean {
   if (state.count >= TEST_SEND_MAX) return false;
   state.count++;
   return true;
-}
-
-// Periodic cleanup — purge expired rate-limiter entries every 60 s.
-let _testSendCleanupStarted = false;
-if (!_testSendCleanupStarted) {
-  _testSendCleanupStarted = true;
-  setInterval(() => {
-    const now = Date.now();
-    for (const [k, v] of _testSendLimiter) {
-      if (now > v.resetAt) _testSendLimiter.delete(k);
-    }
-  }, 60_000).unref();
 }
 
 router.post('/:id/test-send', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -509,7 +522,7 @@ router.post('/:id/test-send', async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    if (!_checkTestSendLimit(String(campaignObjId))) {
+    if (!await _checkTestSendLimit(String(campaignObjId))) {
       res.status(429).json({ message: 'Too many test sends. Wait 10 minutes before trying again.' });
       return;
     }

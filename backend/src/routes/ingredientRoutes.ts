@@ -159,14 +159,18 @@ router.post('/:id/stock-in', async (req: AuthRequest, res: Response) => {
         {
           $set: {
             // WAC uses pre-update values (all $-refs resolve from pre-update doc in the same $set stage)
+            // B-23: round WAC to 4 decimal places (matches GRN path) to prevent
+            // floating-point noise from accumulating across repeated stock-in operations.
             costPerUnit: {
               $cond: [
                 { $gt: [{ $add: ['$currentStock', quantity] }, 0] },
                 {
-                  $divide: [
-                    { $add: [{ $multiply: ['$currentStock', '$costPerUnit'] }, quantity * costPerUnit] },
-                    { $add: ['$currentStock', quantity] },
-                  ],
+                  $round: [{
+                    $divide: [
+                      { $add: [{ $multiply: ['$currentStock', '$costPerUnit'] }, quantity * costPerUnit] },
+                      { $add: ['$currentStock', quantity] },
+                    ],
+                  }, 4],
                 },
                 costPerUnit,
               ],
@@ -290,37 +294,87 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 // ── PATCH /:id/restock — legacy increment endpoint ───────────────────────────
 router.patch('/:id/restock', async (req: AuthRequest, res: Response) => {
   try {
-    const { quantity } = req.body;
+    const { quantity, costPerUnit: bodyCost } = req.body;
     if (typeof quantity !== 'number' || quantity <= 0) {
       return res.status(400).json({ message: 'Valid positive quantity required' });
     }
+    if (bodyCost !== undefined && (typeof bodyCost !== 'number' || bodyCost < 0)) {
+      return res.status(400).json({ message: 'costPerUnit must be a non-negative number' });
+    }
 
-    const before = await Ingredient.findOne({ _id: req.params.id, hotelId: req.hotelId });
-    if (!before) return res.status(404).json({ message: 'Ingredient not found' });
+    let ingredient: any = null;
+    let prevStock    = 0;
+    let incomingCost = 0;
+    let is404        = false;
 
-    const prevStock = (before as any).currentStock as number;
+    // B-01: Wrap stock update + StockMovement in a single transaction so
+    // neither can succeed without the other.
+    const txSession = await mongoose.startSession();
+    try {
+      await txSession.withTransaction(async () => {
+        const before = await Ingredient.findOne(
+          { _id: req.params.id, hotelId: req.hotelId },
+          null,
+          { session: txSession },
+        );
+        if (!before) { is404 = true; return; }
 
-    const ingredient = await Ingredient.findOneAndUpdate(
-      { _id: req.params.id, hotelId: req.hotelId },
-      { $inc: { currentStock: quantity } },
-      { new: true },
-    );
-    if (!ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+        prevStock    = (before as any).currentStock as number;
+        incomingCost = (typeof bodyCost === 'number') ? bodyCost : (before as any).costPerUnit ?? 0;
 
-    // Record in StockMovement for audit trail
-    await StockMovement.create({
-      hotelId:        req.hotelId,
-      ingredientId:   req.params.id,
-      ingredientName: (ingredient as any).name,
-      type:           'restock',
-      delta:          quantity,
-      previousStock:  prevStock,
-      resultingStock: prevStock + quantity,
-      referenceType:  'manual',
-      performedBy:    req.role ?? 'admin',
-    }).catch(() => { /* Audit failure must not break the restock response */ });
+        await Ingredient.findOneAndUpdate(
+          { _id: req.params.id, hotelId: req.hotelId },
+          [
+            {
+              $set: {
+                // B-23: round WAC to 4dp (matches GRN/stock-in path)
+                costPerUnit: {
+                  $cond: [
+                    { $gt: [{ $add: ['$currentStock', quantity] }, 0] },
+                    {
+                      $round: [{
+                        $divide: [
+                          { $add: [{ $multiply: ['$currentStock', '$costPerUnit'] }, quantity * incomingCost] },
+                          { $add: ['$currentStock', quantity] },
+                        ],
+                      }, 4],
+                    },
+                    incomingCost,
+                  ],
+                },
+                currentStock: { $add: ['$currentStock', quantity] },
+              },
+            },
+          ],
+          { new: false, session: txSession },
+        );
 
-    logAudit(req, 'ingredient.restocked', 'ingredient', req.params.id, { name: (ingredient as any).name, quantity });
+        ingredient = await Ingredient.findOne(
+          { _id: req.params.id, hotelId: req.hotelId },
+          null,
+          { session: txSession },
+        );
+
+        await StockMovement.create([{
+          hotelId:        req.hotelId,
+          ingredientId:   req.params.id,
+          ingredientName: (ingredient as any)?.name,
+          type:           'restock',
+          delta:          quantity,
+          previousStock:  prevStock,
+          resultingStock: prevStock + quantity,
+          costPerUnit:    (ingredient as any)?.costPerUnit ?? null,
+          totalCost:      quantity * incomingCost,
+          referenceType:  'manual',
+          performedBy:    req.role ?? 'admin',
+        }], { session: txSession });
+      });
+    } finally {
+      await txSession.endSession();
+    }
+
+    if (is404 || !ingredient) return res.status(404).json({ message: 'Ingredient not found' });
+    logAudit(req, 'ingredient.restocked', 'ingredient', req.params.id, { name: (ingredient as any).name, quantity, costPerUnit: incomingCost });
     res.json(ingredient);
   } catch (error) {
     sendError(res, 500, 'Failed to restock ingredient', error);

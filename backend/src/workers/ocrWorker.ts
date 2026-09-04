@@ -8,6 +8,11 @@ import { extractInvoiceData } from '../services/ocrPipeline';
 import { matchVendors } from '../services/vendorMatcher';
 import { detectDuplicate } from '../services/duplicateDetector';
 import { logger } from '../utils/logger';
+import { getRedisClient } from '../config/redis';
+
+function decrementPendingCap(hotelId: string): void {
+  getRedisClient()?.decr(`ocr:pending:${hotelId}`).catch(() => {});
+}
 
 let _timer: ReturnType<typeof setInterval> | null = null;
 let _running = false; // true while processNextJob is executing
@@ -36,16 +41,40 @@ async function recoverStuckJobs(): Promise<void> {
   }
 }
 
+// ─── Per-hotel fairness ───────────────────────────────────────────────────────
+// A-10: Track the last hotel we processed so the next pick-up prefers a
+// different hotel, preventing one hotel from monopolising the queue when others
+// have pending jobs. Falls back to any pending job if no other hotel has one.
+let _lastProcessedHotelId: string | null = null;
+
+async function pickPendingJob() {
+  const now = new Date();
+  const filter = { status: 'pending' };
+  const update = { $set: { status: 'processing', processingStartedAt: now } };
+  const opts   = { sort: { createdAt: 1 }, new: true } as const;
+
+  // Prefer a job from a hotel different from the last one processed
+  if (_lastProcessedHotelId) {
+    const job = await OcrJob.findOneAndUpdate(
+      { ...filter, hotelId: { $ne: _lastProcessedHotelId } },
+      update,
+      opts,
+    );
+    if (job) { _lastProcessedHotelId = job.hotelId.toString(); return job; }
+  }
+
+  // Fallback: any pending job (including from the same hotel if it's the only one)
+  const job = await OcrJob.findOneAndUpdate(filter, update, opts);
+  if (job) _lastProcessedHotelId = job.hotelId.toString();
+  return job;
+}
+
 // ─── Single job processor ─────────────────────────────────────────────────────
 
 async function processNextJob(): Promise<void> {
   // Atomic pick-up: only one instance grabs this job; record processingStartedAt
   // so stuck-job recovery can identify orphans after a crash.
-  const job = await OcrJob.findOneAndUpdate(
-    { status: 'pending' },
-    { $set: { status: 'processing', processingStartedAt: new Date() } },
-    { sort: { createdAt: 1 }, new: true },
-  );
+  const job = await pickPendingJob();
 
   if (!job) return; // nothing to process
 
@@ -66,6 +95,7 @@ async function processNextJob(): Promise<void> {
       job.processingStartedAt = null;
       job.fileData            = ''; // clear regardless
       await job.save();
+      decrementPendingCap(hotelId);
       logger.warn('[ocrWorker] Extraction failed', { jobId });
       return;
     }
@@ -101,6 +131,7 @@ async function processNextJob(): Promise<void> {
     }
 
     await job.save();
+    decrementPendingCap(hotelId);
 
     logger.info('[ocrWorker] Job completed', {
       jobId,
@@ -124,6 +155,7 @@ async function processNextJob(): Promise<void> {
           },
         },
       );
+      decrementPendingCap(hotelId);
     } catch { /* last-resort — ignore update failure */ }
   }
 }

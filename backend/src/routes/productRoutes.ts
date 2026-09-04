@@ -5,22 +5,18 @@ import Product from '../models/Product';
 import Ingredient from '../models/Ingredient';
 import ModifierGroup from '../models/ModifierGroup';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
+import { makeRateLimiter } from '../utils/rateLimiter';
 
-// Simple in-memory rate limiter for AI image generation (5 req/hotel/minute)
-const _imgGenBucket = new Map<string, { count: number; resetAt: number }>();
-function checkImgGenRate(hotelId: string): boolean {
-  const now = Date.now();
-  const entry = _imgGenBucket.get(hotelId);
-  if (!entry || entry.resetAt < now) {
-    _imgGenBucket.set(hotelId, { count: 1, resetAt: now + 60_000 });
-    return true;
-  }
-  if (entry.count >= 5) return false;
-  entry.count++;
-  return true;
-}
+// Distributed rate limiter for AI image generation: 5 req/hotel/minute, Redis-backed
+const imgGenRateLimiter = makeRateLimiter({
+  windowMs:     60_000,
+  max:          5,
+  keyGenerator: (req: any) => `img:${req.hotelId ?? req.ip}`,
+  message:      { message: 'Too many image generation requests. Try again in a minute.' },
+});
 
 const router = Router();
 
@@ -330,12 +326,8 @@ router.put('/:id/recipe', requireAdmin, async (req: AuthRequest, res: Response) 
 
 // POST /products/:id/generate-image — generate an AI image using Gemini (admin only)
 // Returns { url, prompt } — does NOT auto-save. Frontend must call PUT /:id to persist.
-router.post('/:id/generate-image', requireAdmin, async (req: AuthRequest, res: Response) => {
+router.post('/:id/generate-image', requireAdmin, requireFeature('ai'), imgGenRateLimiter, async (req: AuthRequest, res: Response) => {
   try {
-    if (!checkImgGenRate(String(req.hotelId))) {
-      return res.status(429).json({ message: 'Too many image generation requests. Try again in a minute.' });
-    }
-
     const product = await Product.findOne({ _id: req.params.id, hotelId: req.hotelId, isDeleted: false });
     if (!product) return res.status(404).json({ message: 'Product not found' });
 

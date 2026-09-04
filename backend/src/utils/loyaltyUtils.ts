@@ -293,14 +293,15 @@ export async function adjustPoints(
   let updated: any;
   if (delta < 0) {
     updated = await CustomerProfile.findOneAndUpdate(
-      { _id: customerId, loyaltyBalance: { $gte: -delta } },
+      { _id: customerId, hotelId: new mongoose.Types.ObjectId(hotelId), loyaltyBalance: { $gte: -delta } },
       { $inc: { loyaltyBalance: delta } },
       { new: true },
     );
     if (!updated) throw new Error('Insufficient loyalty points for debit adjustment');
   } else {
-    updated = await CustomerProfile.findByIdAndUpdate(
-      customerId,
+    // C-10: credit path must also be hotel-scoped to prevent cross-hotel balance manipulation
+    updated = await CustomerProfile.findOneAndUpdate(
+      { _id: customerId, hotelId: new mongoose.Types.ObjectId(hotelId) },
       { $inc: { loyaltyBalance: delta } },
       { new: true },
     );

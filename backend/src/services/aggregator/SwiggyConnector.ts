@@ -4,6 +4,19 @@ import type { ParsedAggregatorOrder, MenuSyncResult, ConnectorContext } from './
 
 const BASE_URL = 'https://partner.swiggy.com/api/v2';
 
+const _fetch = fetch;
+const CONNECTOR_TIMEOUT_MS = 12_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), CONNECTOR_TIMEOUT_MS);
+  try {
+    return await _fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
 function swiggyAvailable(p: Record<string, unknown>): 0 | 1 {
   const override = (p.channelAvailability as Record<string, boolean | null> | undefined)?.swiggy;
   if (override === null || override === undefined) {
@@ -22,8 +35,10 @@ export class SwiggyConnector extends BaseConnector {
     headers:       Record<string, string>,
     webhookSecret: string,
   ): boolean {
-    const secret = webhookSecret || process.env.AGGREGATOR_SECRET || '';
-    if (!secret) return false;
+    // Fail closed: never fall back to a global secret. A missing per-hotel
+    // webhookSecret means the hotel is not configured — reject all webhooks.
+    if (!webhookSecret) return false;
+    const secret = webhookSecret;
 
     const sigHeader  = headers['x-swiggy-signature'] || '';
     const incomingHex = sigHeader.startsWith('sha256=')
@@ -112,7 +127,7 @@ export class SwiggyConnector extends BaseConnector {
       return;
     }
 
-    const res = await fetch(`${BASE_URL}/orders/${platformOrderId}/accept`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/orders/${platformOrderId}/accept`, {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
@@ -138,7 +153,7 @@ export class SwiggyConnector extends BaseConnector {
       return;
     }
 
-    const res = await fetch(`${BASE_URL}/orders/${platformOrderId}/reject`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/orders/${platformOrderId}/reject`, {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
@@ -163,7 +178,7 @@ export class SwiggyConnector extends BaseConnector {
       return;
     }
 
-    const res = await fetch(`${BASE_URL}/orders/${platformOrderId}/ready`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/orders/${platformOrderId}/ready`, {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
@@ -187,7 +202,7 @@ export class SwiggyConnector extends BaseConnector {
       return;
     }
 
-    const res = await fetch(`${BASE_URL}/orders/${platformOrderId}/dispatched`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/orders/${platformOrderId}/dispatched`, {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
@@ -213,7 +228,7 @@ export class SwiggyConnector extends BaseConnector {
         categoryCount: (categories as any[]).length,
         productCount:  (products as any[]).length,
       });
-      return { success: true, syncedCount: (products as any[]).length, failedCount: 0, failedItems: [] };
+      return { success: true, syncedCount: (products as any[]).length, failedCount: 0, failedItems: [], dryRun: true };
     }
 
     const catalog = {
@@ -233,7 +248,7 @@ export class SwiggyConnector extends BaseConnector {
       })),
     };
 
-    const res = await fetch(`${BASE_URL}/catalog/upload`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/catalog/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ctx.apiKey}` },
       body: JSON.stringify(catalog),
@@ -273,7 +288,7 @@ export class SwiggyConnector extends BaseConnector {
       return;
     }
 
-    const res = await fetch(`${BASE_URL}/catalog/items/${platformItemId}/availability`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/catalog/items/${platformItemId}/availability`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ctx.apiKey}` },
       body: JSON.stringify({ in_stock: available }),

@@ -4,12 +4,14 @@ import PurchaseOrder, { POStatus } from '../models/PurchaseOrder';
 import Vendor from '../models/Vendor';
 import DailyCounter from '../models/DailyCounter';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('supplyChain'));
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -363,18 +365,21 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 });
 
 // ── POST /:id/submit — draft → pending_approval ───────────────────────────────
+// B-17: Atomic findOneAndUpdate with status precondition eliminates the TOCTOU window
+// between "check status" and "save new status".
 router.post('/:id/submit', async (req: AuthRequest, res: Response) => {
   try {
-    const po = await PurchaseOrder.findOne({ _id: req.params.id, hotelId: req.hotelId, isDeleted: false });
-    if (!po) return res.status(404).json({ message: 'Purchase order not found' });
-    if (!SUBMITTABLE_STATUSES.includes(po.status)) {
-      return res.status(409).json({ message: `Cannot submit a PO in "${po.status}" status` });
+    const po = await PurchaseOrder.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId, isDeleted: false, status: { $in: SUBMITTABLE_STATUSES } },
+      { $set: { status: 'pending_approval', updatedBy: req.hotelId ?? '' } },
+      { new: true },
+    );
+    if (!po) {
+      const exists = await PurchaseOrder.exists({ _id: req.params.id, hotelId: req.hotelId, isDeleted: false });
+      return res.status(exists ? 409 : 404).json({
+        message: exists ? `PO cannot be submitted from its current status` : 'Purchase order not found',
+      });
     }
-
-    po.status    = 'pending_approval';
-    po.updatedBy = req.hotelId ?? '';
-    await po.save();
-
     logAudit(req, 'po.submitted', 'purchase_order', req.params.id, { poNumber: po.poNumber });
     res.json(po);
   } catch (error) {
@@ -385,18 +390,18 @@ router.post('/:id/submit', async (req: AuthRequest, res: Response) => {
 // ── POST /:id/approve — pending_approval|draft → approved ─────────────────────
 router.post('/:id/approve', async (req: AuthRequest, res: Response) => {
   try {
-    const po = await PurchaseOrder.findOne({ _id: req.params.id, hotelId: req.hotelId, isDeleted: false });
-    if (!po) return res.status(404).json({ message: 'Purchase order not found' });
-    if (!APPROVABLE_STATUSES.includes(po.status)) {
-      return res.status(409).json({ message: `Cannot approve a PO in "${po.status}" status` });
+    const now = new Date();
+    const po = await PurchaseOrder.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId, isDeleted: false, status: { $in: APPROVABLE_STATUSES } },
+      { $set: { status: 'approved', approvedBy: req.hotelId ?? '', approvedAt: now, updatedBy: req.hotelId ?? '' } },
+      { new: true },
+    );
+    if (!po) {
+      const exists = await PurchaseOrder.exists({ _id: req.params.id, hotelId: req.hotelId, isDeleted: false });
+      return res.status(exists ? 409 : 404).json({
+        message: exists ? `PO cannot be approved from its current status` : 'Purchase order not found',
+      });
     }
-
-    po.status     = 'approved';
-    po.approvedBy = req.hotelId ?? '';
-    po.approvedAt = new Date();
-    po.updatedBy  = req.hotelId ?? '';
-    await po.save();
-
     logAudit(req, 'po.approved', 'purchase_order', req.params.id, { poNumber: po.poNumber });
     res.json(po);
   } catch (error) {
@@ -407,16 +412,17 @@ router.post('/:id/approve', async (req: AuthRequest, res: Response) => {
 // ── POST /:id/send — approved → sent ─────────────────────────────────────────
 router.post('/:id/send', async (req: AuthRequest, res: Response) => {
   try {
-    const po = await PurchaseOrder.findOne({ _id: req.params.id, hotelId: req.hotelId, isDeleted: false });
-    if (!po) return res.status(404).json({ message: 'Purchase order not found' });
-    if (!SENDABLE_STATUSES.includes(po.status)) {
-      return res.status(409).json({ message: `Cannot send a PO in "${po.status}" status` });
+    const po = await PurchaseOrder.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId, isDeleted: false, status: { $in: SENDABLE_STATUSES } },
+      { $set: { status: 'sent', updatedBy: req.hotelId ?? '' } },
+      { new: true },
+    );
+    if (!po) {
+      const exists = await PurchaseOrder.exists({ _id: req.params.id, hotelId: req.hotelId, isDeleted: false });
+      return res.status(exists ? 409 : 404).json({
+        message: exists ? `PO cannot be sent from its current status` : 'Purchase order not found',
+      });
     }
-
-    po.status    = 'sent';
-    po.updatedBy = req.hotelId ?? '';
-    await po.save();
-
     logAudit(req, 'po.sent', 'purchase_order', req.params.id, { poNumber: po.poNumber });
     res.json(po);
   } catch (error) {
@@ -427,19 +433,20 @@ router.post('/:id/send', async (req: AuthRequest, res: Response) => {
 // ── POST /:id/cancel ──────────────────────────────────────────────────────────
 router.post('/:id/cancel', async (req: AuthRequest, res: Response) => {
   try {
-    const po = await PurchaseOrder.findOne({ _id: req.params.id, hotelId: req.hotelId, isDeleted: false });
-    if (!po) return res.status(404).json({ message: 'Purchase order not found' });
-    if (!CANCELLABLE_STATUSES.includes(po.status)) {
-      return res.status(409).json({ message: `Cannot cancel a PO in "${po.status}" status` });
+    const cancelReason = String(req.body.reason || '').trim();
+    const po = await PurchaseOrder.findOneAndUpdate(
+      { _id: req.params.id, hotelId: req.hotelId, isDeleted: false, status: { $in: CANCELLABLE_STATUSES } },
+      { $set: { status: 'cancelled', cancelReason, updatedBy: req.hotelId ?? '' } },
+      { new: true },
+    );
+    if (!po) {
+      const exists = await PurchaseOrder.exists({ _id: req.params.id, hotelId: req.hotelId, isDeleted: false });
+      return res.status(exists ? 409 : 404).json({
+        message: exists ? `PO cannot be cancelled from its current status` : 'Purchase order not found',
+      });
     }
-
-    po.status       = 'cancelled';
-    po.cancelReason = String(req.body.reason || '').trim();
-    po.updatedBy    = req.hotelId ?? '';
-    await po.save();
-
     logAudit(req, 'po.cancelled', 'purchase_order', req.params.id, {
-      poNumber: po.poNumber, reason: po.cancelReason,
+      poNumber: po.poNumber, reason: cancelReason,
     });
     res.json(po);
   } catch (error) {

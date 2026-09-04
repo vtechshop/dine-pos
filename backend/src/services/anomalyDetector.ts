@@ -8,6 +8,7 @@ import DailySnapshot from '../models/DailySnapshot';
 import Order from '../models/Order';
 import { generateNarrative } from '../utils/geminiNarrative';
 import { logger } from '../utils/logger';
+import { consumeAiQuota } from '../utils/aiUsageTracker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -479,6 +480,7 @@ For each anomaly, provide:
 
 Keep each explanation to 2-3 sentences. Total response under 200 words. Use professional, neutral language.`;
 
+    await consumeAiQuota(hotelId, 'report');
     const narrative = await generateNarrative(prompt);
     if (narrative) summary = narrative.trim();
   }

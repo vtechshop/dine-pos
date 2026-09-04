@@ -249,16 +249,16 @@ router.post('/validate', requireCashierOrAdmin, requireActiveStaff, async (req: 
 
 router.post('/:id/apply', requireCashierOrAdmin, requireActiveStaff, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const coupon = await Coupon.findOneAndUpdate(
-      {
-        _id: req.params.id,
-        hotelId: new mongoose.Types.ObjectId(req.hotelId!),
-        isDeleted: false,
-        $or: [{ usageLimit: { $lte: 0 } }, { $expr: { $lt: ['$usageCount', '$usageLimit'] } }],
-      },
-      { $inc: { usageCount: 1 } },
-      { new: true },
-    );
+    // C-05: validation only — no permanent usageCount increment here.
+    // The authoritative increment lives inside the order transaction in orderRoutes.ts,
+    // which also creates the CouponRedemption record. A second increment here caused
+    // every coupon application to count twice.
+    const coupon = await Coupon.findOne({
+      _id: req.params.id,
+      hotelId: new mongoose.Types.ObjectId(req.hotelId!),
+      isDeleted: false,
+      $or: [{ usageLimit: { $lte: 0 } }, { $expr: { $lt: ['$usageCount', '$usageLimit'] } }],
+    });
     if (!coupon) { res.status(404).json({ message: 'Coupon not found' }); return; }
     logAudit(req, 'coupon_applied', 'Coupon', String(coupon._id), { code: coupon.code, usageCount: coupon.usageCount });
     res.json({ success: true, usageCount: coupon.usageCount });

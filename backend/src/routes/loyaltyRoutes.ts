@@ -30,7 +30,7 @@ import Settings from '../models/Settings';
 import CustomerProfile from '../models/CustomerProfile';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
 import DailyCounter from '../models/DailyCounter';
-import { getLoyaltyConfig, adjustPoints, calculateMaxRedeemablePoints, calculateRedeemValue, calculateTier, redeemPoints } from '../utils/loyaltyUtils';
+import { getLoyaltyConfig, adjustPoints, calculateMaxRedeemablePoints, calculateRedeemValue, calculateTier } from '../utils/loyaltyUtils';
 import { normalizePhone } from '../utils/phoneUtils';
 import LoyaltyOtp from '../models/LoyaltyOtp';
 import crypto from 'crypto';
@@ -854,6 +854,13 @@ router.post('/otp/send', requireCashierOrAdmin, async (req: AuthRequest, res: Re
       return;
     }
 
+    // C-07: Invalidate all pending OTPs for this customer before issuing a new one.
+    // Prevents multiple simultaneously-valid OTPs when a customer requests resend.
+    await LoyaltyOtp.updateMany(
+      { hotelId: hotelObjId, customerId: (customer as any)._id, purpose: 'redemption', usedAt: null },
+      { $set: { usedAt: new Date() } },
+    );
+
     // Generate 6-digit OTP — hashed before storage, never logged or returned
     const rawOtp    = String(crypto.randomInt(100000, 1000000));
     const hashedOtp = crypto.createHash('sha256').update(rawOtp).digest('hex');
@@ -979,48 +986,44 @@ router.post('/otp/verify', requireCashierOrAdmin, async (req: AuthRequest, res: 
       return;
     }
 
-    // Increment attempt count atomically — max 5 attempts per OTP
-    const updated = await LoyaltyOtp.findOneAndUpdate(
-      { _id: otpDoc._id, attempts: { $lt: 5 }, usedAt: null },
-      { $inc: { attempts: 1 } },
+    // C-07: Atomic verify — check hash, increment attempts, and mark used in a single
+    // findOneAndUpdate so concurrent verify calls cannot both succeed on the same OTP.
+    const verified = await LoyaltyOtp.findOneAndUpdate(
+      { _id: otpDoc._id, usedAt: null, otp: hashedInput, attempts: { $lt: 5 } },
+      { $inc: { attempts: 1 }, $set: { usedAt: new Date() } },
       { new: true },
     );
-    if (!updated) {
-      res.status(429).json({ message: 'Too many incorrect attempts. Please request a new OTP.' });
-      return;
-    }
 
-    if (updated.otp !== hashedInput) {
-      const remaining = 5 - updated.attempts;
+    if (!verified) {
+      // Either wrong hash, already used, or max attempts exceeded.
+      // Track the failed attempt without marking as used.
+      const still = await LoyaltyOtp.findOneAndUpdate(
+        { _id: otpDoc._id, usedAt: null, attempts: { $lt: 5 } },
+        { $inc: { attempts: 1 } },
+        { new: true },
+      );
+      if (!still) {
+        res.status(429).json({ message: 'Too many incorrect attempts. Please request a new OTP.' });
+        return;
+      }
+      const remaining = 5 - still.attempts;
       res.status(400).json({ message: `Incorrect OTP. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.` });
       return;
     }
 
-    // OTP is correct — mark as used
-    await LoyaltyOtp.updateOne({ _id: otpDoc._id }, { $set: { usedAt: new Date() } });
-
-    // Deduct points
+    // OTP is verified — compute the discount preview without deducting points.
+    // Actual deduction happens atomically inside the order transaction (orderRoutes.ts).
     const config = await getLoyaltyConfig(req.hotelId!);
-    const discountValue = await redeemPoints(
-      (customer as any)._id,
-      req.hotelId!,
-      Math.round(points),
-      config,
-      {
-        orderId:   orderId || undefined,
-        createdBy: req.cashierName || 'cashier',
-        remarks:   `OTP-verified redemption: ${Math.round(points)} ${config.rewardName}`,
-      },
-    );
+    const discountValue = calculateRedeemValue(Math.round(points), config);
 
     res.json({
-      success:       true,
+      success:        true,
       discountValue,
       pointsRedeemed: Math.round(points),
       customer: {
         customerId:    (customer as any).customerId,
         name:          (customer as any).name,
-        loyaltyBalance: (customer as any).loyaltyBalance - Math.round(points),
+        loyaltyBalance: (customer as any).loyaltyBalance,
       },
     });
   } catch (err: any) {

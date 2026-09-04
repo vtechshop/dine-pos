@@ -133,6 +133,9 @@ router.get('/recommendations', async (req: AuthRequest, res: Response) => {
     await setCachedRecommendations(hotelId, date, result, isToday);
     return res.json({ ...result, date: snap.date });
   } catch (err) {
+    if ((err as any)?.code === 'AI_QUOTA_EXCEEDED') {
+      return res.status(429).json({ code: 'AI_QUOTA_EXCEEDED', message: (err as any).message });
+    }
     sendError(res, 500, 'Failed to build recommendations', err);
   }
 });
@@ -161,6 +164,9 @@ router.get('/recommendations/:date', async (req: AuthRequest, res: Response) => 
     await setCachedRecommendations(hotelId, date, result, isToday);
     return res.json(result);
   } catch (err) {
+    if ((err as any)?.code === 'AI_QUOTA_EXCEEDED') {
+      return res.status(429).json({ code: 'AI_QUOTA_EXCEEDED', message: (err as any).message });
+    }
     sendError(res, 500, 'Failed to build recommendations', err);
   }
 });

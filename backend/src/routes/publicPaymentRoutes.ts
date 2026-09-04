@@ -220,8 +220,55 @@ router.post('/qr-verify', publicPaymentLimiter, async (req: Request, res: Respon
     const pay = await Payment.findOne({ internalTransactionId, hotelId });
     if (!pay) return res.status(404).json({ message: 'Payment record not found' });
 
-    // Idempotency: already verified (webhook may have arrived first)
-    if (pay.status === 'success') return res.json({ success: true });
+    // Idempotency: already verified (webhook may have arrived first, OR a prior call
+    // saved pay.success but crashed before releasing the order). In the crash case
+    // the order is still payment_pending — attempt release so it is not stuck forever.
+    if (pay.status === 'success') {
+      const recoverReleased = await Order.findOneAndUpdate(
+        {
+          _id:     new mongoose.Types.ObjectId(orderId),
+          hotelId: new mongoose.Types.ObjectId(hotelId),
+          status:  'payment_pending',
+        },
+        { $set: { status: 'pending', transactionId: pay.gatewayTransactionId, paymentTime: new Date() } },
+        { new: true },
+      );
+      if (recoverReleased) {
+        try {
+          io.to(`hotel_${hotelId}`).emit('new_order', {
+            _id:           recoverReleased._id.toString(),
+            orderNumber:   recoverReleased.orderNumber,
+            tableNumber:   recoverReleased.tableNumber,
+            customerName:  recoverReleased.customerName,
+            customerPhone: recoverReleased.customerPhone,
+            grandTotal:    recoverReleased.grandTotal,
+            itemCount:     recoverReleased.items.length,
+            orderSource:   recoverReleased.orderSource,
+            items:         recoverReleased.items.map((i: any) => ({
+              productName: i.productName,
+              quantity:    i.quantity,
+              price:       i.price,
+            })),
+          });
+        } catch (emitErr: any) {
+          logger.warn('[qr-verify] crash-recovery socket emit failed', { orderId, error: emitErr?.message });
+        }
+        scheduleKOTPrint(hotelId, {
+          _id:          recoverReleased._id,
+          orderNumber:  recoverReleased.orderNumber,
+          tableNumber:  recoverReleased.tableNumber,
+          customerName: recoverReleased.customerName,
+          items:        recoverReleased.items as { productName: string; quantity: number }[],
+          notes:        recoverReleased.notes,
+          orderSource:  recoverReleased.orderSource,
+          createdAt:    recoverReleased.createdAt,
+          sessionId:    recoverReleased.sessionId ?? undefined,
+          guestId:      recoverReleased.guestId ?? undefined,
+        }).catch(() => {});
+        logger.info('[qr-verify] crash-recovery: order released', { orderId });
+      }
+      return res.json({ success: true });
+    }
 
     // Validate orderId matches what the Payment record was created for
     if (pay.orderId.toString() !== orderId) {

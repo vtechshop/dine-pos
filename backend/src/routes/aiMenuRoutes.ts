@@ -131,8 +131,8 @@ function preValidate(categories: ImportCategory[]): {
         continue;
       }
 
-      if (prod.price !== null && prod.price !== undefined && prod.price < 0) {
-        errors.push({ name: prod.name, reason: 'Negative base price is not allowed' });
+      if (prod.price !== null && prod.price !== undefined && (prod.price < 0 || prod.price > 50_000)) {
+        errors.push({ name: prod.name, reason: 'Base price must be between 0 and ₹50,000' });
         continue;
       }
 
@@ -152,7 +152,7 @@ function preValidate(categories: ImportCategory[]): {
           errors.push({ name: prod.name, reason: 'A variant is missing a name' });
           skip = true; break;
         }
-        if (typeof v.price !== 'number' || v.price < 0) {
+        if (typeof v.price !== 'number' || v.price < 0 || v.price > 50_000) {
           errors.push({ name: prod.name, reason: `Variant "${v.name}" has invalid price` });
           skip = true; break;
         }
@@ -169,7 +169,7 @@ function preValidate(categories: ImportCategory[]): {
             errors.push({ name: prod.name, reason: `Modifier group "${mg.name}" has an option with no name` });
             skip = true; break;
           }
-          if (typeof opt.price !== 'number' || opt.price < 0) {
+          if (typeof opt.price !== 'number' || opt.price < 0 || opt.price > 50_000) {
             errors.push({ name: prod.name, reason: `Modifier option "${opt.name}" has invalid price` });
             skip = true; break;
           }
@@ -401,6 +401,20 @@ router.post('/import', async (req: AuthRequest, res: Response) => {
 
   if (!Array.isArray(categories) || categories.length === 0) {
     return res.status(400).json({ message: 'categories array is required and must not be empty' });
+  }
+
+  // A-06: prevent an AI response from importing an unreasonably large menu in one transaction.
+  // 500 products covers the largest real restaurant menus; beyond that the transaction becomes
+  // too expensive and the AI response is almost certainly malformed.
+  const AI_MENU_IMPORT_CAP = 500;
+  const totalProducts = categories.reduce(
+    (sum: number, cat: any) => sum + (Array.isArray(cat.products) ? cat.products.length : 0),
+    0,
+  );
+  if (totalProducts > AI_MENU_IMPORT_CAP) {
+    return res.status(400).json({
+      message: `AI menu import is capped at ${AI_MENU_IMPORT_CAP} products. The response contained ${totalProducts}. Please reduce the import batch size.`,
+    });
   }
 
   const { valid, errors: preErrors } = preValidate(categories);

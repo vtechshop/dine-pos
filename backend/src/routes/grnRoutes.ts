@@ -7,6 +7,7 @@ import DailyCounter from '../models/DailyCounter';
 import Vendor from '../models/Vendor';
 import VendorLedgerEntry from '../models/VendorLedgerEntry';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 import StockMovement from '../models/StockMovement';
@@ -14,6 +15,7 @@ import StockMovement from '../models/StockMovement';
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('supplyChain'));
 
 const RECEIVABLE_STATUSES = ['approved', 'sent', 'partially_received'];
 const VALID_SORT = new Set(['receiveDate', 'grnNumber', 'status', 'createdAt']);
@@ -228,9 +230,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
         // Build processedItems and inventory ops using the confirmed PO state
         const processedItems: Array<Record<string, unknown>> = [];
-        const inventoryOps: Array<{ ingredientId: mongoose.Types.ObjectId; acceptedQty: number; purchasePrice: number }> = [];
+        const inventoryOps: Array<{ ingredientId: mongoose.Types.ObjectId; acceptedQty: number; purchasePrice: number; grnItemIdx: number }> = [];
 
-        for (const raw of items) {
+        for (let rawIdx = 0; rawIdx < items.length; rawIdx++) {
+          const raw = items[rawIdx];
           const receivedQty  = Math.max(0, Number(raw.receivedQty) || 0);
           const damagedQty   = Math.max(0, Number(raw.damagedQty) || 0);
           const rejectedQty  = Math.max(0, Number(raw.rejectedQty) || 0);
@@ -241,7 +244,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
           po.items[poIdx].receivedQty = (po.items[poIdx].receivedQty || 0) + receivedQty;
           const cumulativeReceived = po.items[poIdx].receivedQty;
-          const pendingQty = Math.max(0, orderedQty - cumulativeReceived);
+          // B-09: use the PO's authoritative orderedQty, not the client-supplied value,
+          // so the pendingQty on the GRN item is always computed from the correct base.
+          const pendingQty = Math.max(0, po.items[poIdx].orderedQty - cumulativeReceived);
 
           processedItems.push({
             poItemIndex:      poIdx,
@@ -269,6 +274,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
               ingredientId: new mongoose.Types.ObjectId(String(raw.ingredientId)),
               acceptedQty,
               purchasePrice,
+              grnItemIdx:   rawIdx,
             });
           }
         }
@@ -325,12 +331,19 @@ router.post('/', async (req: AuthRequest, res: Response) => {
             .select('costPerUnit currentStock')
             .session(session);
           if (!ing || ing.currentStock <= 0) continue;
-          const prevStock = Math.max(0, ing.currentStock - op.acceptedQty);
-          const newCost   = (prevStock * ing.costPerUnit + op.acceptedQty * op.purchasePrice) / ing.currentStock;
+          const prevStock       = Math.max(0, ing.currentStock - op.acceptedQty);
+          const prevCostPerUnit = ing.costPerUnit;  // B-06: snapshot WAC before this GRN changes it
+          const newCost         = (prevStock * ing.costPerUnit + op.acceptedQty * op.purchasePrice) / ing.currentStock;
           if (!isNaN(newCost) && newCost > 0) {
             await Ingredient.updateOne(
               { _id: op.ingredientId, hotelId: req.hotelId },
               { $set: { costPerUnit: +newCost.toFixed(4) } },
+              { session },
+            );
+            // B-06: Persist pre-GRN WAC on the GRN item so GRN cancellation can reverse it.
+            await GRN.updateOne(
+              { _id: grn._id },
+              { $set: { [`items.${op.grnItemIdx}.prevCostPerUnit`]: prevCostPerUnit } },
               { session },
             );
           }
@@ -474,6 +487,19 @@ router.post('/:id/cancel', async (req: AuthRequest, res: Response) => {
             { $inc: { currentStock: -accepted } },
             { session },
           );
+
+          // B-06: Reverse WAC — restore ingredient's costPerUnit to its pre-GRN value.
+          // prevCostPerUnit is snapshotted at GRN receive time and stored on the GRN item.
+          // Restoring it is a LIFO approximation; out-of-order GRN cancellations may leave
+          // WAC slightly imprecise (an exact reversal would require a full WAC ledger).
+          const prevCost = (item as any).prevCostPerUnit as number | undefined;
+          if (prevCost !== undefined && prevCost !== null && prevCost >= 0) {
+            await Ingredient.updateOne(
+              { _id: item.ingredientId, hotelId: req.hotelId },
+              { $set: { costPerUnit: +prevCost.toFixed(4) } },
+              { session },
+            );
+          }
 
           // HIGH-1 FIX: StockMovement inside transaction — no longer best-effort
           await StockMovement.create([{

@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import DailySnapshot from '../models/DailySnapshot';
 import { generateNarrative } from '../utils/geminiNarrative';
 import { getCachedNarrative, setCachedNarrative, hashNarrativeInput } from '../utils/aiReportCache';
+import { consumeAiQuota } from '../utils/aiUsageTracker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -299,6 +300,7 @@ export async function buildRecommendations(
     insight       = cached;
     insightSource = 'cache';
   } else {
+    await consumeAiQuota(hotelId, 'report');
     const prompt    = buildInsightPrompt(date, classified, upsellTargets, slowMovers);
     const generated = await generateNarrative(prompt);
     if (generated) {

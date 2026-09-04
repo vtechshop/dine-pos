@@ -4,12 +4,14 @@ import Vendor from '../models/Vendor';
 import VendorLedgerEntry from '../models/VendorLedgerEntry';
 import DailyCounter from '../models/DailyCounter';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 
 const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
+router.use(requireFeature('supplyChain'));
 
 // ── GET /report — vendor summary (must precede /:id) ─────────────────────────
 router.get('/report', async (req: AuthRequest, res: Response) => {
@@ -238,11 +240,15 @@ router.patch('/:id/outstanding', async (req: AuthRequest, res: Response) => {
 
     const session = await mongoose.startSession();
     await session.withTransaction(async () => {
-      await Vendor.updateOne(
+      // B-12: use { new: true } so we capture the post-update balance for the ledger entry,
+      // eliminating the stale-read race where a concurrent GRN could change the balance
+      // between the pre-transaction read and this $inc.
+      const updatedVendor = await Vendor.findOneAndUpdate(
         { _id: vendor._id },
         { $inc: { currentOutstanding: amount }, $set: { updatedBy: req.cashierId || req.waiterId || req.hotelId || '' } },
-        { session },
+        { new: true, session },
       );
+      const postBalance = updatedVendor?.currentOutstanding ?? (vendor.currentOutstanding + amount);
       await VendorLedgerEntry.create([{
         hotelId:         req.hotelId,
         vendorId:        vendor._id,
@@ -251,7 +257,7 @@ router.patch('/:id/outstanding', async (req: AuthRequest, res: Response) => {
         referenceNumber: '',
         debit:           amount > 0 ? amount : 0,
         credit:          amount < 0 ? Math.abs(amount) : 0,
-        runningBalance:  vendor.currentOutstanding + amount,
+        runningBalance:  postBalance,
         description:     `Manual outstanding adjustment (${amount > 0 ? '+' : ''}${amount})`,
       }], { session });
     });

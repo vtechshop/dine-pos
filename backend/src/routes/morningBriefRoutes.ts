@@ -8,6 +8,7 @@ import {
   getCachedBrief, setCachedBrief, getCachedLatestBrief, invalidateBriefCache,
 } from '../utils/morningBriefCache';
 import { sendError } from '../utils/sendError';
+import { requireAiQuota } from '../utils/aiUsageTracker';
 
 const router = Router();
 router.use(authMiddleware);
@@ -118,7 +119,7 @@ router.get('/morning-brief-history', async (req: AuthRequest, res: Response) => 
 // Useful when data was corrected after the scheduled run.
 // Body: { date?: string } — defaults to yesterday if omitted.
 
-router.post('/morning-brief/regenerate', async (req: AuthRequest, res: Response) => {
+router.post('/morning-brief/regenerate', requireAiQuota('report'), async (req: AuthRequest, res: Response) => {
   try {
     const hotelId = req.hotelId!;
     let { date }  = req.body as { date?: string };

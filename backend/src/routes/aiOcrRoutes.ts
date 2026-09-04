@@ -12,6 +12,18 @@ import {
   rejectOcrJob,
 } from '../services/purchaseSuggestion';
 import { sendError } from '../utils/sendError';
+import { makeRateLimiter } from '../utils/rateLimiter';
+import { getRedisClient } from '../config/redis';
+
+const OCR_PENDING_CAP = parseInt(process.env.OCR_PENDING_CAP ?? '10', 10);
+
+// Per-hotel upload rate limit: 20 uploads per 15 minutes, Redis-backed
+const ocrUploadRateLimiter = makeRateLimiter({
+  windowMs:     15 * 60_000,
+  max:          20,
+  keyGenerator: (req: any) => `ocr:upload:${req.hotelId ?? req.ip}`,
+  message:      { message: 'Too many OCR upload requests. Try again in 15 minutes.' },
+});
 
 const router = Router();
 router.use(authMiddleware);
@@ -29,7 +41,7 @@ const upload = multer({
 // Creates OcrJob with status=pending and returns jobId immediately.
 // Background worker picks it up within 10 seconds.
 
-router.post('/ocr/upload', upload.single('invoice'), async (req: AuthRequest, res: Response) => {
+router.post('/ocr/upload', ocrUploadRateLimiter, upload.single('invoice'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded. Field name must be "invoice".' });
@@ -43,7 +55,35 @@ router.post('/ocr/upload', upload.single('invoice'), async (req: AuthRequest, re
       return res.status(400).json({ message: validation.error });
     }
 
-    const hotelOId = new mongoose.Types.ObjectId(req.hotelId!);
+    const hotelId  = req.hotelId!;
+    const hotelOId = new mongoose.Types.ObjectId(hotelId);
+
+    // ── Pending-job cap: atomic Redis INCR with MongoDB fallback ──────────────
+    const pendingKey = `ocr:pending:${hotelId}`;
+    const redis = getRedisClient();
+    if (redis) {
+      const active = await redis.incr(pendingKey);
+      await redis.expire(pendingKey, 24 * 3600); // 24h safety TTL
+      if (active > OCR_PENDING_CAP) {
+        await redis.decr(pendingKey); // rollback
+        return res.status(429).json({
+          code:    'OCR_QUEUE_FULL',
+          message: `OCR queue is full (${OCR_PENDING_CAP} active jobs). Wait for existing jobs to complete.`,
+        });
+      }
+    } else {
+      const activeCount = await OcrJob.countDocuments({
+        hotelId: hotelOId,
+        status:  { $in: ['pending', 'processing'] },
+      });
+      if (activeCount >= OCR_PENDING_CAP) {
+        return res.status(429).json({
+          code:    'OCR_QUEUE_FULL',
+          message: `OCR queue is full (${OCR_PENDING_CAP} active jobs). Wait for existing jobs to complete.`,
+        });
+      }
+    }
+
     const job = await OcrJob.create({
       hotelId:       hotelOId,
       status:        'pending',
@@ -61,6 +101,8 @@ router.post('/ocr/upload', upload.single('invoice'), async (req: AuthRequest, re
       message:  'Invoice queued for OCR processing. Poll /api/ai/ocr/job/:jobId for status.',
     });
   } catch (err) {
+    // If job creation failed after we incremented the Redis counter, roll it back
+    getRedisClient()?.decr(`ocr:pending:${req.hotelId!}`).catch(() => {});
     sendError(res, 500, 'Failed to queue OCR job', err);
   }
 });

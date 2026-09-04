@@ -75,6 +75,10 @@ export interface IOrder extends Document {
   giftVoucherCode:       string;
   giftVoucherAmount:     number;
   giftVoucherRestoredAt: Date | null;
+  // ── Wallet (Sprint 4 C-03/C-04) ─────────────────────────────────────────
+  walletAmount:     number;
+  walletCustomerId: mongoose.Types.ObjectId | null;
+  walletRestoredAt: Date | null;
   // ── Delivery / aggregator fields ─────────────────────────────────────────
   platformOrderId:     string;   // Swiggy/Zomato order ref
   deliveryAddress:     string;
@@ -243,6 +247,11 @@ const OrderSchema: Schema = new Schema(
     giftVoucherAmount:     { type: Number, default: 0, min: 0 },
     giftVoucherRestoredAt: { type: Date, default: null },
 
+    // ── Wallet (Sprint 4 C-03/C-04) ──────────────────────────────────────
+    walletAmount:     { type: Number, default: 0, min: 0 },
+    walletCustomerId: { type: Schema.Types.ObjectId, ref: 'CustomerProfile', default: null },
+    walletRestoredAt: { type: Date, default: null },
+
     // ── Delivery / aggregator fields ──────────────────────────────────────
     platformOrderId:     { type: String, default: '' },
     deliveryAddress:     { type: String, default: '', maxlength: 500 },
@@ -292,7 +301,17 @@ OrderSchema.index({ sessionId: 1, guestId: 1 }, { sparse: true });
 // Legacy table bill: menuRoutes filters by hotelId + tableNumber + createdAt (today's orders)
 OrderSchema.index({ hotelId: 1, tableNumber: 1, createdAt: -1 });
 // ── Aggregator / delivery index ───────────────────────────────────────────
-OrderSchema.index({ platformOrderId: 1 }, { sparse: true });
+// Unique per-hotel aggregator order reference — prevents Swiggy/Zomato webhook
+// retries from creating duplicate orders. partialFilterExpression excludes normal
+// POS/QR/Kiosk orders where platformOrderId is '' (the default). The old
+// single-field sparse index is superseded by this compound index.
+OrderSchema.index(
+  { hotelId: 1, platformOrderId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { platformOrderId: { $type: 'string', $gt: '' } },
+  },
+);
 // ── AI analytics indexes ──────────────────────────────────────────────────
 // Kitchen analytics: filters by status IN ['completed','served'] + completedAt != null.
 // Without completedAt in the index, MongoDB must fetch every doc in the date window

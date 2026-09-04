@@ -78,19 +78,25 @@ router.post('/', async (req: Request, res: Response) => {
 
   logger.info('[saasBillingWebhook] received', { event, rzpSubscriptionId });
 
-  // Always return 200 quickly to Razorpay — process asynchronously
-  res.status(200).json({ received: true });
-
   if (!rzpSubscriptionId) {
     logger.warn('[saasBillingWebhook] No subscription id in payload', { event });
-    return;
+    // Return 200 so Razorpay does not retry a structurally valid but unactionable event
+    return res.status(200).json({ received: true });
   }
 
+  // F-4: Process BEFORE returning 200 so that if the DB write fails, Razorpay will
+  // retry the webhook on a non-200 response. Returning 200 first meant a process
+  // crash or DB error after the ack would silently lose the subscription event.
   try {
     await handleSaasWebhookEvent(event, rzpSubscriptionId, entity, invoice, payload);
   } catch (err) {
-    logger.error('[saasBillingWebhook] handler error', { event, rzpSubscriptionId, err: String(err) });
+    logger.error('[saasBillingWebhook] handler error — returning 500 so Razorpay will retry', {
+      event, rzpSubscriptionId, err: String(err),
+    });
+    return res.status(500).json({ message: 'Webhook processing failed — will retry' });
   }
+
+  return res.status(200).json({ received: true });
 });
 
 // ── Event handler ─────────────────────────────────────────────────────────────

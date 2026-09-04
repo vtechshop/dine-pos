@@ -706,7 +706,7 @@ export function OnlineOrdersPage() {
   const [statFilter,  setStatFilter]  = useState<StatusFilter>('all');
   const [search,      setSearch]      = useState('');
   const { toasts, add: toast } = useToasts();
-  const { socket } = useSocket();
+  const { socket, reconnectCount } = useSocket();
   const shownRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
@@ -722,7 +722,8 @@ export function OnlineOrdersPage() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  // E-F12: re-fetch on reconnect to back-fill orders that arrived during the gap
+  useEffect(() => { void load(); }, [load, reconnectCount]);
 
   // Auto-refresh every 2 minutes as fallback for missed socket events
   useEffect(() => {

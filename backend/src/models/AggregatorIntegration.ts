@@ -14,6 +14,8 @@ export interface IAggregatorIntegration extends Document {
   /** AES-256-GCM encrypted — never returned to frontend */
   webhookSecretEnc: string;
   menuSyncStatus:          'idle' | 'syncing' | 'success' | 'partial' | 'failed';
+  /** E-F07: timestamp when the last 'syncing' status was set — used for stale-sync detection */
+  syncingStartedAt:        Date | null;
   lastSyncAt:              Date | null;
   lastSyncError:           string | null;
   syncedItemCount:         number;
@@ -42,6 +44,7 @@ const schema = new Schema<IAggregatorIntegration>(
     apiSecretEnc:     { type: String, default: '' },
     webhookSecretEnc: { type: String, default: '' },
     menuSyncStatus:          { type: String, enum: ['idle', 'syncing', 'success', 'partial', 'failed'], default: 'idle' },
+    syncingStartedAt:        { type: Date, default: null },
     lastSyncAt:              { type: Date,   default: null },
     lastSyncError:           { type: String, default: null },
     syncedItemCount:         { type: Number, default: 0 },
@@ -61,6 +64,12 @@ const schema = new Schema<IAggregatorIntegration>(
 );
 
 schema.index({ hotelId: 1, platform: 1 }, { unique: true });
-schema.index({ platform: 1, storeId: 1 });
+// Prevent two hotels from being mapped to the same platform storeId, which
+// would cause incoming webhooks to be mis-routed. partialFilterExpression
+// excludes integrations that have not yet had a storeId configured (default '').
+schema.index(
+  { platform: 1, storeId: 1 },
+  { unique: true, partialFilterExpression: { storeId: { $type: 'string', $gt: '' } } },
+);
 
 export default mongoose.model<IAggregatorIntegration>('AggregatorIntegration', schema);
