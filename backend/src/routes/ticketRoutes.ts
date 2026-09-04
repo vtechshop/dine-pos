@@ -14,6 +14,17 @@ const safeEqual = (a: string, b: string): boolean => {
   } catch { return false; }
 };
 
+// Exported for unit testing — never call with user-supplied envId/envPass; always pass process.env values.
+export function verifySuperAdminCredentials(
+  id: string | undefined,
+  pass: string | undefined,
+  envId: string | undefined,
+  envPass: string | undefined,
+): boolean {
+  if (!id || !pass || !envId || !envPass) return false;
+  return safeEqual(id, envId) && safeEqual(pass, envPass);
+}
+
 // Super admin auth — JWT Bearer (SA app / web dashboard) or credential headers (CI / automation)
 const superAdminAuth = (req: Request, res: Response, next: Function) => {
   const authHeader = req.headers.authorization;
@@ -25,11 +36,9 @@ const superAdminAuth = (req: Request, res: Response, next: Function) => {
   }
   const id   = req.headers['x-super-admin-id']   as string | undefined;
   const pass = req.headers['x-super-admin-pass'] as string | undefined;
-  if (
-    id && pass &&
-    safeEqual(id,   process.env.SUPER_ADMIN_ID   || 'superadmin') &&
-    safeEqual(pass, process.env.SUPER_ADMIN_PASS || 'super1234')
-  ) return next();
+  if (verifySuperAdminCredentials(id, pass, process.env.SUPER_ADMIN_ID, process.env.SUPER_ADMIN_PASS)) {
+    return next();
+  }
   return res.status(401).json({ message: 'Unauthorized' });
 };
 

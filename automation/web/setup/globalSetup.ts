@@ -6,8 +6,8 @@ import dotenv from 'dotenv';
 dotenv.config({ path: path.resolve(__dirname, '../../.env.test') });
 
 const API_URL = process.env.TEST_API_URL || 'http://localhost:5000';
-const SUPER_ADMIN_ID = process.env.SUPER_ADMIN_ID || 'ci-superadmin';
-const SUPER_ADMIN_PASS = process.env.SUPER_ADMIN_PASS || 'ci-superpass-1234';
+const SUPER_ADMIN_ID = process.env.SUPER_ADMIN_ID || '';
+const SUPER_ADMIN_PASS = process.env.SUPER_ADMIN_PASS || '';
 
 const STATE_FILE = path.resolve(__dirname, '../.web-test-state.json');
 
