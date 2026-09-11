@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
-import { createSaasSubscription } from '../api/saasBilling';
+import { createSaasSubscription, createSaasSubscriptionPublic, checkSaasStatusPublic } from '../api/saasBilling';
 
 const SUPPORT_PHONE    = '+917871469095';
 const SUPPORT_WHATSAPP = '917871469095';
@@ -12,6 +12,7 @@ interface ExpiredInfo {
   hotelName:        string;
   expiredOn:        string;
   subscriptionType: string;
+  hotelId:          string;
 }
 
 function readExpiredInfo(): ExpiredInfo {
@@ -19,7 +20,7 @@ function readExpiredInfo(): ExpiredInfo {
     const raw = sessionStorage.getItem('sub_expired_info');
     if (raw) return JSON.parse(raw) as ExpiredInfo;
   } catch { /* ignore */ }
-  return { code: 'TRIAL_EXPIRED', hotelName: '', expiredOn: '', subscriptionType: 'trial' };
+  return { code: 'TRIAL_EXPIRED', hotelName: '', expiredOn: '', subscriptionType: 'trial', hotelId: '' };
 }
 
 export function SubscriptionExpiredPage() {
@@ -39,12 +40,30 @@ export function SubscriptionExpiredPage() {
     setChecking(true);
     setStatusMsg('');
     try {
-      const data = await apiFetch<{ isExpired: boolean; subscriptionStatus: string }>('/hotels/subscription');
-      if (!data.isExpired) {
-        sessionStorage.removeItem('sub_expired_info');
-        navigate('/dashboard', { replace: true });
+      const hasJwt = !!localStorage.getItem('pos_token');
+      if (hasJwt) {
+        // Authenticated path — hotel had a valid session
+        const data = await apiFetch<{ isExpired: boolean; subscriptionStatus: string }>('/hotels/subscription');
+        if (!data.isExpired) {
+          sessionStorage.removeItem('sub_expired_info');
+          navigate('/dashboard', { replace: true });
+        } else {
+          setStatusMsg('Still expired. Please contact support to renew.');
+        }
       } else {
-        setStatusMsg('Still expired. Please contact support to renew.');
+        // No JWT — expired hotel: check via public endpoint using stored hotelId
+        if (!info.hotelId) {
+          setStatusMsg('Session information missing. Please try logging in again.');
+          return;
+        }
+        const data = await checkSaasStatusPublic(info.hotelId);
+        if (data.isActive) {
+          sessionStorage.removeItem('sub_expired_info');
+          setStatusMsg('Your account is now active! Redirecting to login…');
+          setTimeout(() => window.location.replace('/login'), 1500);
+        } else {
+          setStatusMsg('Still processing. If you have paid, please allow a few minutes and try again.');
+        }
       }
     } catch {
       setStatusMsg('Could not connect. Check your internet connection.');
@@ -65,7 +84,19 @@ export function SubscriptionExpiredPage() {
     setSubscribing(true);
     setStatusMsg('');
     try {
-      const data = await createSaasSubscription();
+      const hasJwt = !!localStorage.getItem('pos_token');
+      let data;
+      if (hasJwt) {
+        data = await createSaasSubscription();
+      } else {
+        // Expired hotel has no JWT — use the public endpoint with stored hotelId
+        if (!info.hotelId) {
+          setStatusMsg('Session information missing. Please close the browser and try logging in again.');
+          setSubscribing(false);
+          return;
+        }
+        data = await createSaasSubscriptionPublic(info.hotelId);
+      }
       // Redirect to Razorpay hosted checkout
       window.location.href = data.checkoutUrl;
     } catch (err: any) {

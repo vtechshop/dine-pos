@@ -13,7 +13,7 @@
  *   GET  /api/saas/invoices         — list past Subscription records (billing history)
  */
 
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Hotel from '../models/Hotel';
 import Subscription from '../models/Subscription';
@@ -26,10 +26,113 @@ import {
 } from '../services/razorpaySubscriptionService';
 import { logger } from '../utils/logger';
 import { SAAS_STANDARD_PRICE_INR } from '../utils/planLimits';
+import { makeRateLimiter } from '../utils/rateLimiter';
 
 const router = Router();
 
-// All routes require valid hotel JWT (no status gate — expired hotels must reach billing)
+// Strict rate limits for unauthenticated endpoints
+const publicSubscribeLimiter = makeRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { message: 'Too many subscribe attempts. Please try again after 15 minutes.' },
+});
+
+const publicStatusLimiter = makeRateLimiter({
+  windowMs: 5 * 60 * 1000,
+  max: 20,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { message: 'Too many status checks. Please wait a few minutes.' },
+});
+
+// ── POST /api/saas/subscribe-public ──────────────────────────────────────────
+// Unauthenticated subscribe endpoint for expired hotels that cannot log in.
+// Accepts { hotelId } and validates the hotel is genuinely expired before
+// creating a Razorpay subscription. No JWT required — security comes from the
+// DB check that the hotel status is 'expired'.
+router.post('/subscribe-public', publicSubscribeLimiter, async (req: Request, res: Response) => {
+  const { hotelId } = req.body as { hotelId?: string };
+
+  if (!hotelId || typeof hotelId !== 'string' || !mongoose.Types.ObjectId.isValid(hotelId)) {
+    return res.status(400).json({ message: 'Valid hotelId required.' });
+  }
+
+  try {
+    const hotel = await Hotel.findById(hotelId)
+      .select('status rzpSubscriptionId rzpSubscriptionStatus rzpCustomPlanId saasAnnualPrice subscriptionType')
+      .lean();
+
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found.' });
+    const h = hotel as any;
+
+    // Only genuinely expired hotels may use this endpoint
+    if (h.status !== 'expired') {
+      return res.status(403).json({ message: 'This endpoint is only available for expired accounts.' });
+    }
+
+    // Block if already has an active/authenticated subscription
+    const blockedStatuses = ['active', 'authenticated', 'created'];
+    if (h.rzpSubscriptionId && blockedStatuses.includes(h.rzpSubscriptionStatus)) {
+      return res.status(409).json({
+        message: 'You already have an active subscription.',
+        rzpSubscriptionStatus: h.rzpSubscriptionStatus,
+      });
+    }
+
+    const planId = getPlanId(h);
+    const sub    = await createSubscription(planId, hotelId);
+
+    await Hotel.findByIdAndUpdate(hotelId, {
+      rzpSubscriptionId:     sub.id,
+      rzpSubscriptionStatus: sub.status,
+    });
+
+    logger.info('[saasBillingRoutes] POST /subscribe-public — subscription created', {
+      hotelId,
+      subscriptionId: sub.id,
+    });
+
+    return res.status(201).json({
+      subscriptionId: sub.id,
+      checkoutUrl:    sub.short_url,
+      status:         sub.status,
+    });
+  } catch (err) {
+    logger.error('[saasBillingRoutes] POST /subscribe-public error', { hotelId, err: String(err) });
+    return res.status(500).json({ message: 'Failed to create subscription. Please try again.' });
+  }
+});
+
+// ── GET /api/saas/status-public?hotelId=xxx ───────────────────────────────────
+// Unauthenticated endpoint so expired hotels can check if their account has been
+// activated (e.g. after completing a Razorpay payment and returning to the app).
+// Returns only whether the hotel is now active — no sensitive billing data.
+router.get('/status-public', publicStatusLimiter, async (req: Request, res: Response) => {
+  const { hotelId } = req.query as { hotelId?: string };
+
+  if (!hotelId || typeof hotelId !== 'string' || !mongoose.Types.ObjectId.isValid(hotelId)) {
+    return res.status(400).json({ message: 'Valid hotelId required.' });
+  }
+
+  try {
+    const hotel = await Hotel.findById(hotelId)
+      .select('status subscriptionType')
+      .lean();
+
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found.' });
+    const h = hotel as any;
+
+    return res.json({
+      isActive: h.status === 'active',
+      status:   h.status,
+    });
+  } catch (err) {
+    logger.error('[saasBillingRoutes] GET /status-public error', { hotelId, err: String(err) });
+    return res.status(500).json({ message: 'Failed to check status.' });
+  }
+});
+
+// All routes below require valid hotel JWT (no status gate — expired hotels must reach billing)
 router.use(requireHotelJwt);
 
 // ── GET /api/saas/status ──────────────────────────────────────────────────────

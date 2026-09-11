@@ -88,6 +88,7 @@ async function checkHotelStatus(
     res.status(403).json({
       code: 'TRIAL_EXPIRED',
       message: 'Your free trial has ended. Please contact support to activate your subscription.',
+      hotelId,
     });
     return { blocked: true };
   }
@@ -98,6 +99,7 @@ async function checkHotelStatus(
       message: isTrial
         ? 'Your free trial has ended. Please contact support to activate your subscription.'
         : 'Your subscription has expired. Please renew to continue.',
+      hotelId,
     });
     return { blocked: true };
   }
@@ -139,6 +141,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       return res.status(403).json({
         code: 'TRIAL_EXPIRED',
         message: 'Your free trial has ended. Please contact support to activate your subscription.',
+        hotelId: hotel._id,
       });
     }
     if (hotel.status === 'expired') {
@@ -148,6 +151,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
         message: isTrial
           ? 'Your free trial has ended. Please contact support to activate your subscription.'
           : 'Your subscription has expired. Please renew to continue.',
+        hotelId: hotel._id,
       });
     }
 

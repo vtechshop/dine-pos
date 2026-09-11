@@ -107,13 +107,14 @@ export async function apiFetch<T>(path: string, init: ExtendedInit = {}): Promis
       }
       throw new ApiError(401, 'Session expired');
     }
-    const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string; hotelName?: string; expiredOn?: string; subscriptionType?: string };
+    const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string; hotelName?: string; expiredOn?: string; subscriptionType?: string; hotelId?: string };
     if (res.status === 403 && (body.code === 'TRIAL_EXPIRED' || body.code === 'PLAN_EXPIRED')) {
       sessionStorage.setItem('sub_expired_info', JSON.stringify({
         code:             body.code,
         hotelName:        body.hotelName        ?? '',
         expiredOn:        body.expiredOn         ?? '',
         subscriptionType: body.subscriptionType  ?? 'trial',
+        hotelId:          body.hotelId           ?? '',
       }));
       window.location.replace('/subscription-expired');
       throw new ApiError(403, body.message ?? 'Subscription expired', body.code);

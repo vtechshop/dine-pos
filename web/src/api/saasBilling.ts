@@ -71,6 +71,18 @@ export const getSaasPlan = (): Promise<SaasPlan> =>
 export const createSaasSubscription = (): Promise<SaasSubscribeResponse> =>
   apiFetch<SaasSubscribeResponse>('/saas/subscribe', { method: 'POST' });
 
+// For expired hotels that cannot log in (no JWT available).
+// Uses the public endpoint which validates hotel is genuinely expired via DB.
+export const createSaasSubscriptionPublic = (hotelId: string): Promise<SaasSubscribeResponse> =>
+  apiFetch<SaasSubscribeResponse>('/saas/subscribe-public', {
+    method: 'POST',
+    body: JSON.stringify({ hotelId }),
+  });
+
+// Check if an expired hotel's account has since been activated (e.g. after payment).
+export const checkSaasStatusPublic = (hotelId: string): Promise<{ isActive: boolean; status: string }> =>
+  apiFetch<{ isActive: boolean; status: string }>(`/saas/status-public?hotelId=${encodeURIComponent(hotelId)}`);
+
 export const cancelSaasSubscription = (): Promise<{ message: string }> =>
   apiFetch<{ message: string }>('/saas/cancel', { method: 'POST' });
 
