@@ -98,7 +98,7 @@ export async function createSubscription(
 
   const params: Record<string, unknown> = {
     plan_id:         planId,
-    total_count:     120,       // 120 yearly cycles ≈ 10 years — effectively perpetual
+    total_count:     100,       // Razorpay max for yearly interval — effectively perpetual
     quantity:        1,
     customer_notify: 1,
     notes: {
