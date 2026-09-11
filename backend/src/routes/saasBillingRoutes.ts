@@ -71,7 +71,8 @@ router.post('/subscribe-public', publicSubscribeLimiter, async (req: Request, re
     }
 
     // Block if already has an active/authenticated subscription
-    const blockedStatuses = ['active', 'authenticated', 'created'];
+    // 'created' means checkout opened but payment not completed — allow retry
+    const blockedStatuses = ['active', 'authenticated'];
     if (h.rzpSubscriptionId && blockedStatuses.includes(h.rzpSubscriptionStatus)) {
       return res.status(409).json({
         message: 'You already have an active subscription.',
@@ -214,7 +215,8 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
     const h = hotel as any;
 
     // Block if already has an active/authenticated subscription
-    const blockedStatuses = ['active', 'authenticated', 'created'];
+    // 'created' means checkout opened but payment not completed — allow retry
+    const blockedStatuses = ['active', 'authenticated'];
     if (h.rzpSubscriptionId && blockedStatuses.includes(h.rzpSubscriptionStatus)) {
       return res.status(409).json({
         message: 'You already have an active subscription.',
