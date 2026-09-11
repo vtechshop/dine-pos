@@ -116,7 +116,9 @@ export async function apiFetch<T>(path: string, init: ExtendedInit = {}): Promis
         subscriptionType: body.subscriptionType  ?? 'trial',
         hotelId:          body.hotelId           ?? '',
       }));
-      window.location.replace('/subscription-expired');
+      if (!window.location.pathname.includes('subscription-expired')) {
+        window.location.replace('/subscription-expired');
+      }
       throw new ApiError(403, body.message ?? 'Subscription expired', body.code);
     }
     throw new ApiError(res.status, body.message ?? `HTTP ${res.status}`, body.code);
