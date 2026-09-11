@@ -3,7 +3,7 @@ import {
   BarChart2, Printer, Users, Shield, Sparkles, Sliders,
   Globe, Monitor, Smartphone, Image,
   CreditCard, Truck, Clock, ShoppingBag, Wifi,
-  TrendingUp, Brain, DollarSign, MessageSquare,
+  TrendingUp, Brain, DollarSign, MessageSquare, Megaphone,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePageSEO } from '../hooks/usePageSEO';
@@ -42,6 +42,7 @@ const LIVE_FEATURES: FeatureBlock[] = [
       'Cash, UPI, card, split, and Razorpay payments',
       'GST auto-calculation per item',
       'Discount and promo engine',
+      'Barcode scanning for fast product lookup at the counter',
     ],
   },
   {
@@ -52,9 +53,10 @@ const LIVE_FEATURES: FeatureBlock[] = [
       'Customisable table grid',
       'Live status: available / occupied / reserved',
       'Transfer guests between tables',
-      'Merge bills from multiple tables',
+      'Merge guest bills within a table session',
       'Session tracking per table',
       'Advance reservations with confirm / seat / cancel / no-show flow',
+      'Waitlist management with real-time status and seating workflow',
     ],
   },
   {
@@ -104,7 +106,7 @@ const LIVE_FEATURES: FeatureBlock[] = [
     bullets: [
       'Natural-language queries about sales, stock, and staff',
       'Context-aware answers from your live data',
-      'Conversation history across sessions',
+      'Recent AI conversation context',
       'Auto-generated morning brief with yesterday\'s KPIs',
       'Actionable daily recommendations',
       'Available on web and Android app',
@@ -122,6 +124,17 @@ const LIVE_FEATURES: FeatureBlock[] = [
       'Gift vouchers with balance and expiry tracking',
       'Coupon codes with usage limits and date windows',
       'Lifetime spend, visit count, and birthday tracking',
+    ],
+  },
+  {
+    icon: Megaphone,
+    title: 'Marketing Campaigns',
+    desc: 'Reach your customer base with targeted campaigns and track their performance.',
+    bullets: [
+      'Campaign creation with name, audience, and scheduled dates',
+      'Campaign status tracking — draft, active, and completed',
+      'Delivery reporting and full campaign history',
+      'Audience targeting from CRM and loyalty data',
     ],
   },
   // ── Kitchen ───────────────────────────────────────────────────────────────
@@ -177,6 +190,8 @@ const LIVE_FEATURES: FeatureBlock[] = [
       'GRN auto-increments ingredient stock on receipt',
       'Vendor ledger with outstanding balance',
       'Vendor payment tracking and history',
+      'Vendor returns with stock reconciliation and outstanding tracking',
+      'Purchase invoices with tax breakup, payment tracking and attachments',
     ],
   },
   // ── Finance ───────────────────────────────────────────────────────────────

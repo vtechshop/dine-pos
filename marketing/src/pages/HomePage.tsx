@@ -163,7 +163,7 @@ const FEATURES = [
   {
     icon: Printer,
     title: 'Kitchen Display & Printing',
-    desc: 'Real-time kitchen screen and auto-print KOTs. Bluetooth, WiFi, and USB thermal printers supported.',
+    desc: 'Real-time kitchen screen and auto-print KOTs. Bluetooth thermal printers supported.',
   },
   {
     icon: Smartphone,
@@ -676,8 +676,10 @@ const ALL_FEATURES = [
   // Ordering & Tables
   'POS Billing',
   'KOT Printing',
+  'Barcode Scanning',
   'Table Management',
   'Table Reservations',
+  'Waitlist Management',
   'QR Menu Ordering',
   'Kiosk Ordering',
   'Captain / Waiter App',
@@ -699,6 +701,7 @@ const ALL_FEATURES = [
   'Customer Wallet',
   'Gift Vouchers',
   'Coupon Codes',
+  'Marketing Campaigns',
   // Inventory
   'Inventory Tracking',
   'Recipe Costing',
@@ -711,6 +714,8 @@ const ALL_FEATURES = [
   'Purchase Orders',
   'Goods Receive Notes (GRN)',
   'Vendor Ledger',
+  'Vendor Returns',
+  'Purchase Invoices',
   // Finance & Reporting
   'Expense Tracking',
   'P&L Dashboard',
@@ -731,7 +736,6 @@ const ALL_FEATURES = [
   'Owner App',
   'Android POS App',
   // Platform
-  'Multi-branch Support',
   'Device Activation',
   'Role Permissions',
   'Audit Logs',
@@ -778,7 +782,7 @@ const INTEGRATIONS = [
   { name: 'Zomato',    cat: 'Aggregators',  badge: 'Beta' },
 ];
 
-const COMING_SOON = ['WhatsApp', 'Tally'];
+const COMING_SOON = ['WhatsApp Auto-Receipts', 'Tally Direct Sync'];
 
 const CAT_COLOR: Record<string, string> = {
   Payments:    'bg-blue-50 text-blue-600',

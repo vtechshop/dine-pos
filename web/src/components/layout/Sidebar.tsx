@@ -3,7 +3,7 @@ import {
   LayoutDashboard, ShoppingCart, LayoutGrid, Users, Package, Archive, BarChart2,
   Settings, CalendarDays, ChefHat, CreditCard, Truck, Link2, RefreshCw, Layers,
   Store, ShoppingBag, ClipboardList, Wallet, TrendingUp, Sparkles, X, Bot, Sunrise, RotateCcw,
-  FileBarChart, MessageSquare, Bell, Lightbulb, ScanLine, Tag, Gift, Shield,
+  FileBarChart, FileText, MessageSquare, Bell, Lightbulb, ScanLine, Tag, Gift, Shield,
   Plus, PauseCircle, Search, Printer, UserCircle, History,
   type LucideIcon,
 } from 'lucide-react';
@@ -68,8 +68,9 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/vendors',         icon: Store,         label: 'Vendors'         },
       { to: '/purchase-orders', icon: ShoppingBag,   label: 'Purchase Orders' },
       { to: '/grn',             icon: ClipboardList, label: 'Receive Goods'   },
-      { to: '/vendor-returns',  icon: RotateCcw,     label: 'Returns'         },
-      { to: '/vendor-ledger',   icon: Wallet,        label: 'Vendor Ledger'   },
+      { to: '/vendor-returns',    icon: RotateCcw,  label: 'Returns'          },
+      { to: '/purchase-invoices', icon: FileText,   label: 'Invoices'         },
+      { to: '/vendor-ledger',     icon: Wallet,     label: 'Vendor Ledger'    },
     ],
   },
   {

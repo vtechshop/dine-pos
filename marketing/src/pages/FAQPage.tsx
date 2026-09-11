@@ -39,7 +39,7 @@ const FAQ_GROUPS: { heading: string; items: FAQItem[] }[] = [
       },
       {
         q: 'Can I use Dine POS for takeaway and delivery orders?',
-        a: 'Yes. Parcel and takeaway orders are tracked separately with their own billing flow. Online delivery integration is on the roadmap.',
+        a: 'Yes. Parcel and takeaway orders are tracked separately with their own billing flow. Swiggy and Zomato integration is available in Beta — contact us to enable it for your outlet.',
       },
       {
         q: 'Does Dine POS support split billing?',

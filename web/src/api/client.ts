@@ -99,7 +99,10 @@ export async function apiFetch<T>(path: string, init: ExtendedInit = {}): Promis
       // shared contexts (NotificationContext, SettingsProvider) must NOT
       // redirect; just throw so the catch in each context handles it silently.
       _onAuthExpired?.();
-      if (localStorage.getItem('pos_role') !== 'superadmin') {
+      if (
+        localStorage.getItem('pos_role') !== 'superadmin' &&
+        !window.location.pathname.includes('subscription-expired')
+      ) {
         window.location.replace('/login');
       }
       throw new ApiError(401, 'Session expired');

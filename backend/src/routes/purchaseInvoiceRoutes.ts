@@ -173,24 +173,58 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
 
 router.patch('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const invoice = await PurchaseInvoice.findOne({
+    const hotelId = new mongoose.Types.ObjectId(req.hotelId);
+
+    // Read current values for grand-total validation (using the draft-only filter
+    // here gives a clean 409 message before the more expensive validation below)
+    const existing = await PurchaseInvoice.findOne({
       _id: req.params.id,
-      hotelId: new mongoose.Types.ObjectId(req.hotelId),
+      hotelId,
+      status: 'draft',
       isDeleted: false,
-    });
-    if (!invoice) { res.status(404).json({ message: 'Invoice not found' }); return; }
-    if (invoice.status !== 'draft') {
-      res.status(409).json({ message: `Cannot edit invoice in "${invoice.status}" status` });
+    }).lean();
+    if (!existing) {
+      res.status(409).json({ message: 'Invoice not found or not editable (must be in draft status)' });
       return;
     }
 
     const allowed = ['vendorInvoiceNo', 'invoiceDate', 'subtotal', 'taxBreakup', 'taxTotal', 'freight', 'otherCharges', 'discount', 'grandTotal', 'notes'] as const;
+    const $set: Record<string, unknown> = {};
     for (const key of allowed) {
-      if (req.body[key] !== undefined) (invoice as any)[key] = req.body[key];
+      if (req.body[key] !== undefined) $set[key] = req.body[key];
     }
-    await invoice.save();
 
-    logAudit(req, 'purchaseinvoice.update', 'PurchaseInvoice', invoice._id.toString(), { fields: Object.keys(req.body) });
+    // Re-validate grand total whenever any financial field changes
+    const financialKeys = ['subtotal', 'taxTotal', 'freight', 'otherCharges', 'discount', 'grandTotal'] as const;
+    if (financialKeys.some(f => $set[f] !== undefined)) {
+      const sub  = Number($set.subtotal      ?? existing.subtotal);
+      const tt   = Number($set.taxTotal       ?? existing.taxTotal);
+      const fr   = Number($set.freight        ?? existing.freight);
+      const oc   = Number($set.otherCharges   ?? existing.otherCharges);
+      const disc = Number($set.discount       ?? existing.discount);
+      const gt   = Number($set.grandTotal     ?? existing.grandTotal);
+      const computedTotal = Math.round((sub + tt + fr + oc - disc) * 100) / 100;
+      if (Math.abs(computedTotal - gt) > 1) {
+        res.status(400).json({
+          message: `grandTotal ₹${gt.toFixed(2)} does not match computed ₹${computedTotal.toFixed(2)}`,
+        });
+        return;
+      }
+    }
+
+    // Atomic update — status: 'draft' in the filter prevents a PATCH from landing
+    // on an invoice that was concurrently verified between the read above and this write.
+    const invoice = await PurchaseInvoice.findOneAndUpdate(
+      { _id: req.params.id, hotelId, status: 'draft', isDeleted: false },
+      { $set },
+      { new: true, runValidators: true },
+    );
+    if (!invoice) {
+      res.status(409).json({ message: 'Invoice was modified concurrently — please reload and try again' });
+      return;
+    }
+
+    logAudit(req, 'purchaseinvoice.update', 'PurchaseInvoice', invoice._id.toString(), { fields: Object.keys($set) });
     res.json({ invoice });
   } catch (err) {
     sendError(res, 500, 'Failed to update invoice', err);
@@ -249,7 +283,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
         status: { $in: ['draft', 'verified'] },
         isDeleted: false,
       },
-      { $set: { status: 'cancelled', cancelReason: reason || '', isDeleted: true } },
+      { $set: { status: 'cancelled', cancelReason: reason || '' } },
       { new: true },
     );
     if (!invoice) { res.status(404).json({ message: 'Invoice not found or already paid/cancelled' }); return; }

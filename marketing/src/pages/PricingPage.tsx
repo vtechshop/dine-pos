@@ -9,7 +9,9 @@ const PROFESSIONAL_FEATURES = [
   'Unlimited Products',
   // ── Core POS
   'POS Billing (Web + Android)',
+  'Barcode Scanning',
   'Table Management & Reservations',
+  'Waitlist Management',
   'QR Ordering',
   'Kiosk Ordering',
   'Kitchen Display System',
@@ -25,6 +27,7 @@ const PROFESSIONAL_FEATURES = [
   'Customer Wallet',
   'Gift Vouchers',
   'Coupon Codes',
+  'Marketing Campaigns',
   // ── Inventory & Supply Chain
   'Inventory Management',
   'Recipe Costing',
@@ -32,6 +35,8 @@ const PROFESSIONAL_FEATURES = [
   'Inventory Intelligence',
   'Vendor Management',
   'Purchase Orders & GRN',
+  'Vendor Returns',
+  'Purchase Invoices',
   'Vendor Ledger',
   // ── Finance
   'Expense Tracking',

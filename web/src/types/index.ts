@@ -714,3 +714,65 @@ export interface InventorySummary {
   stockValue: number;
   todayWasteLoss: number;
 }
+
+// ── Purchase Invoices ─────────────────────────────────────────────────────────
+
+export type InvoiceStatus = 'draft' | 'verified' | 'paid' | 'cancelled';
+
+export interface InvoiceAttachment {
+  _id?:       string;
+  filename:   string;
+  url:        string;
+  fileSize:   number;
+  mimeType:   string;
+  uploadedAt: string;
+  uploadedBy: string;
+}
+
+export interface InvoiceTaxBreakupItem {
+  label:  string;
+  rate:   number;
+  amount: number;
+}
+
+export interface PurchaseInvoice {
+  _id:            string;
+  invoiceNumber:  string;
+  vendorInvoiceNo: string;
+  invoiceDate:    string;
+  vendorId:       string;
+  vendorSnapshot: {
+    businessName: string;
+    gstNumber:    string;
+    pan:          string;
+    vendorCode:   string;
+  };
+  grnIds:       string[];
+  grnNumbers:   string[];
+  subtotal:     number;
+  taxBreakup:   InvoiceTaxBreakupItem[];
+  taxTotal:     number;
+  freight:      number;
+  otherCharges: number;
+  discount:     number;
+  grandTotal:   number;
+  status:       InvoiceStatus;
+  notes:        string;
+  attachments:  InvoiceAttachment[];
+  verifiedBy:   string;
+  verifiedAt:   string | null;
+  paidAt:       string | null;
+  paymentRef:   string;
+  cancelReason: string;
+  isDeleted:    boolean;
+  createdBy:    string;
+  createdAt:    string;
+  updatedAt:    string;
+}
+
+export interface PurchaseInvoicesResponse {
+  invoices: PurchaseInvoice[];
+  total:    number;
+  page:     number;
+  limit:    number;
+}
