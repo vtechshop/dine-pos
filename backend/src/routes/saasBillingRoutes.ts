@@ -97,9 +97,10 @@ router.post('/subscribe-public', publicSubscribeLimiter, async (req: Request, re
       checkoutUrl:    sub.short_url,
       status:         sub.status,
     });
-  } catch (err) {
-    logger.error('[saasBillingRoutes] POST /subscribe-public error', { hotelId, err: String(err) });
-    return res.status(500).json({ message: 'Failed to create subscription. Please try again.' });
+  } catch (err: any) {
+    const rzpMsg = err?.error?.description ?? err?.message ?? String(err);
+    logger.error('[saasBillingRoutes] POST /subscribe-public error', { hotelId, rzpMsg, err: String(err) });
+    return res.status(500).json({ message: `Razorpay error: ${rzpMsg}` });
   }
 });
 
