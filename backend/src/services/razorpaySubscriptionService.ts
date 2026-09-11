@@ -98,7 +98,7 @@ export async function createSubscription(
 
   const params: Record<string, unknown> = {
     plan_id:         planId,
-    total_count:     100,       // Razorpay max for yearly interval — effectively perpetual
+    total_count:     10,        // 10-year mandate — NPCI "Others" category rejects >30yr mandates
     quantity:        1,
     customer_notify: 1,
     notes: {
