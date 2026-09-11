@@ -278,7 +278,7 @@ async function handleSaasWebhookEvent(
       break;
     }
 
-    // ── Completed (total_count reached — effectively never for 120-cycle plan) ──
+    // ── Completed (total_count reached — effectively never for 100-cycle yearly plan) ──
     case 'subscription.completed': {
       await Hotel.findByIdAndUpdate(hotel._id, {
         status:                'expired',

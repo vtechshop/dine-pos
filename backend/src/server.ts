@@ -404,10 +404,11 @@ app.use('/api/payment-webhooks',           paymentWebhookRoutes);
 app.use('/api/razorpay/oauth',             razorpayOAuthRoutes);
 // Razorpay partner-level webhook — account.app.authorization_revoked (no auth, signature-verified)
 app.use('/api/razorpay/partner-webhook',   razorpayPartnerWebhookRoutes);
+// DinePOS SaaS billing webhook — MUST be mounted before /api/saas so the webhook
+// path is not intercepted by saasBillingRoutes' requireHotelJwt middleware.
+app.use('/api/saas/webhook',               saasBillingWebhookRoutes);
 // DinePOS SaaS billing — hotel subscription management (JWT-only, no status gate)
 app.use('/api/saas',                       saasBillingRoutes);
-// DinePOS SaaS billing webhook — Razorpay subscription lifecycle events (no auth, HMAC-verified)
-app.use('/api/saas/webhook',               saasBillingWebhookRoutes);
 // AI Menu Import — rate-limited to 10 req/min (Gemini calls are expensive)
 app.use('/api/ai-menu', _rl(10, 60_000));
 app.use('/api/ai-menu', aiMenuRoutes);
