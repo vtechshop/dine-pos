@@ -192,18 +192,19 @@ describe('Vendor & Procurement', () => {
   it('GRN-003 duplicate GRN idempotencyKey returns existing record', async () => {
     if (!createdVendorId || !createdPOId) return;
     const idKey = `IDEMPOTENT-GRN-${Date.now()}`;
+    // Backend reads idempotency key from x-idempotency-key header, not request body
+    const idemHeaders = { ...authHeaders(adminToken), 'x-idempotency-key': idKey };
     const payload = {
-      vendorId:       createdVendorId,
-      poId:           createdPOId,
-      idempotencyKey: idKey,
-      receivedDate:   new Date().toISOString(),
+      vendorId:     createdVendorId,
+      poId:         createdPOId,
+      receivedDate: new Date().toISOString(),
       items: [
         { productName: 'Fresh Tomatoes', receivedQty: 10, unit: 'kg', poItemIndex: 0 },
       ],
     };
 
-    const res1 = await api.post('/api/grn').set(authHeaders(adminToken)).send(payload);
-    const res2 = await api.post('/api/grn').set(authHeaders(adminToken)).send(payload);
+    const res1 = await api.post('/api/grn').set(idemHeaders).send(payload);
+    const res2 = await api.post('/api/grn').set(idemHeaders).send(payload);
 
     expect([200, 201]).toContain(res1.status);
     expect([200, 201]).toContain(res2.status);
