@@ -69,12 +69,13 @@ describe('Inventory — Ingredients & Stock', () => {
     expect([400, 422]).toContain(res.status);
   });
 
-  it('INV-005 create ingredient without unit returns 400', async () => {
+  it('INV-005 create ingredient without unit uses default unit (200)', async () => {
     const res = await api
       .post('/api/ingredients')
       .set(authHeaders(adminToken))
       .send({ name: 'No Unit Ingredient', currentStock: 5 });
-    expect([400, 422]).toContain(res.status);
+    // unit field has default: 'kg' in schema — omitting it succeeds, not 400
+    expect([200, 201]).toContain(res.status);
   });
 
   // ── List ingredients ──────────────────────────────────────────────────────
@@ -98,10 +99,10 @@ describe('Inventory — Ingredients & Stock', () => {
     const res = await api
       .put(`/api/ingredients/${createdIngredientId}`)
       .set(authHeaders(adminToken))
-      .send({ minimumStock: 5, costPerUnit: 60 });
+      .send({ lowStockThreshold: 5, costPerUnit: 60 });
     expect(res.status).toBe(200);
     const ingredient = res.body.ingredient || res.body;
-    expect(ingredient.minimumStock).toBe(5);
+    expect(ingredient.lowStockThreshold).toBe(5);
   });
 
   // ── Stock operations ──────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ describe('Inventory — Ingredients & Stock', () => {
     const res = await api
       .post(`/api/ingredients/${createdIngredientId}/stock-in`)
       .set(authHeaders(adminToken))
-      .send({ quantity: 5, notes: 'Delivery received' });
+      .send({ quantity: 5, costPerUnit: 55, notes: 'Delivery received' });
     expect([200, 201]).toContain(res.status);
   });
 
@@ -129,7 +130,7 @@ describe('Inventory — Ingredients & Stock', () => {
     const res = await api
       .post(`/api/ingredients/${createdIngredientId}/adjust`)
       .set(authHeaders(adminToken))
-      .send({ quantity: 12, reason: 'Physical count correction' });
+      .send({ physicalStock: 12, reason: 'Physical count correction' });
     expect([200, 201]).toContain(res.status);
   });
 
@@ -145,7 +146,7 @@ describe('Inventory — Ingredients & Stock', () => {
   it('INV-013 GET /api/ingredients/alerts/low-stock returns 200 for admin', async () => {
     const res = await api.get('/api/ingredients/alerts/low-stock').set(authHeaders(adminToken));
     expect(res.status).toBe(200);
-    const items = res.body.alerts || res.body.data || res.body;
+    const items = res.body.alerts || res.body.ingredients || res.body.data || res.body;
     expect(Array.isArray(items)).toBe(true);
   });
 

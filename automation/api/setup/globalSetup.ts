@@ -58,7 +58,7 @@ async function registerAndApproveHotel(label: string): Promise<{
   const approveRes = await api
     .put(`/api/superadmin/hotels/${hotelId}/approve`)
     .set(superAdminHeaders)
-    .send({ plan: 'basic', trialDays: 14, features: { ai: true, ingredients: true } });
+    .send({ plan: 'basic', trialDays: 14, features: { ai: true, ingredients: true, supplyChain: true, payment: true } });
 
   if (approveRes.status !== 200) {
     throw new Error(`[Setup] approveHotel ${label} failed: ${approveRes.status} ${JSON.stringify(approveRes.body)}`);

@@ -60,17 +60,17 @@ describe('Vendor & Procurement', () => {
       .post('/api/vendors')
       .set(authHeaders(adminToken))
       .send({
-        name:        'Fresh Foods Pvt Ltd',
-        contactName: 'Ramesh Kumar',
-        phone:       '9876543210',
-        email:       'fresh@example.com',
-        gstin:       '29ABCDE1234F1Z5',
-        category:    'Vegetables',
+        businessName: 'Fresh Foods Pvt Ltd',
+        contactName:  'Ramesh Kumar',
+        mobile:       '9876543210',
+        email:        'fresh@example.com',
+        gstNumber:    '29ABCDE1234F1Z5',
+        category:     'Vegetables',
       });
     expect([200, 201]).toContain(res.status);
     const vendor = res.body.vendor || res.body;
     expect(vendor._id).toBeDefined();
-    expect(vendor.name).toBe('Fresh Foods Pvt Ltd');
+    expect(vendor.businessName).toBe('Fresh Foods Pvt Ltd');
     createdVendorId = vendor._id;
   });
 

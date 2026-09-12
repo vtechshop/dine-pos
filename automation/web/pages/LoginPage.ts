@@ -9,7 +9,7 @@ export class LoginPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.adminIdInput = page.locator('input[name="userId"], input[placeholder*="Admin ID"], input[placeholder*="admin id"]').first();
+    this.adminIdInput = page.locator('input#userId').first();
     this.passwordInput = page.locator('input[type="password"]').first();
     this.loginButton = page.locator('button[type="submit"], button:has-text("Login"), button:has-text("Sign In")').first();
     this.errorMessage = page.locator('[data-testid="error-message"], .error-message, .alert-error').first();

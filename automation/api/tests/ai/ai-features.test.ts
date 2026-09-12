@@ -35,8 +35,8 @@ describe('AI Features', () => {
 
   // ── Authorization guard: all AI endpoints require a valid token ──────────
 
-  it('AI-001 GET /api/ai/metrics returns 401 without token', async () => {
-    const res = await api.get('/api/ai/metrics');
+  it('AI-001 GET /api/ai/metrics/today returns 401 without token', async () => {
+    const res = await api.get('/api/ai/metrics/today');
     expect(res.status).toBe(401);
   });
 
@@ -60,8 +60,8 @@ describe('AI Features', () => {
     expect(res.status).toBe(401);
   });
 
-  it('AI-006 GET /api/ai/analytics returns 401 without token', async () => {
-    const res = await api.get('/api/ai/analytics');
+  it('AI-006 GET /api/ai/analytics/anomalies returns 401 without token', async () => {
+    const res = await api.get('/api/ai/analytics/anomalies');
     expect(res.status).toBe(401);
   });
 
@@ -78,14 +78,14 @@ describe('AI Features', () => {
   // ── Role authorization: kitchen/waiter tokens must not access AI ─────────
 
   it('AI-009 kitchen token is rejected from AI endpoints (403 or 401)', async () => {
-    const res = await api.get('/api/ai/metrics').set(authHeaders(kitchenToken));
+    const res = await api.get('/api/ai/metrics/today').set(authHeaders(kitchenToken));
     expect([401, 403]).toContain(res.status);
   });
 
   // ── Authorized access: admin can reach AI endpoints ──────────────────────
 
-  it('AI-010 admin can call GET /api/ai/metrics (returns 200 or service error)', async () => {
-    const res = await api.get('/api/ai/metrics').set(authHeaders(adminToken));
+  it('AI-010 admin can call GET /api/ai/metrics/today (returns 200 or service error)', async () => {
+    const res = await api.get('/api/ai/metrics/today').set(authHeaders(adminToken));
     // 200 with data OR 503/500 if Gemini key not configured — both are acceptable
     expect([200, 500, 503]).toContain(res.status);
     if (res.status === 200) {
@@ -108,8 +108,8 @@ describe('AI Features', () => {
     expect([200, 500, 503]).toContain(res.status);
   });
 
-  it('AI-014 admin can call GET /api/ai/analytics (returns 200 or service error)', async () => {
-    const res = await api.get('/api/ai/analytics').set(authHeaders(adminToken));
+  it('AI-014 admin can call GET /api/ai/analytics/anomalies (returns 200 or service error)', async () => {
+    const res = await api.get('/api/ai/analytics/anomalies').set(authHeaders(adminToken));
     expect([200, 500, 503]).toContain(res.status);
   });
 
@@ -127,8 +127,8 @@ describe('AI Features', () => {
     // Both admins get 200/500/503, but their data is isolated by JWT-derived hotelId.
     // This test verifies Hotel B's token is accepted (200/500/503), not silently upgraded
     // to Hotel A's admin.
-    const resA = await api.get('/api/ai/metrics').set(authHeaders(adminToken));
-    const resB = await api.get('/api/ai/metrics').set(authHeaders(hotelBAdminToken));
+    const resA = await api.get('/api/ai/metrics/today').set(authHeaders(adminToken));
+    const resB = await api.get('/api/ai/metrics/today').set(authHeaders(hotelBAdminToken));
     // Both should succeed auth (200/500/503) — neither should see a 401/403
     expect([200, 500, 503]).toContain(resA.status);
     expect([200, 500, 503]).toContain(resB.status);
