@@ -167,7 +167,11 @@ describe('Vendor & Procurement', () => {
   });
 
   it('GRN-002 admin can create a GRN', async () => {
-    if (!createdVendorId) return;
+    if (!createdVendorId || !createdPOId) return;
+    // GRN requires PO in approved/sent/partially_received — approve before receiving
+    await api
+      .post(`/api/purchase-orders/${createdPOId}/approve`)
+      .set(authHeaders(adminToken));
     const res = await api
       .post('/api/grn')
       .set(authHeaders(adminToken))
