@@ -56,7 +56,7 @@ describe('Vendor & Procurement', () => {
   // ── Vendor CRUD ───────────────────────────────────────────────────────────
 
   it('VND-004 admin can create a vendor', async () => {
-    const uniqueMobile = `9${String(Date.now()).slice(-9)}`;
+    const uniqueMobile = `9${Math.floor(Math.random() * 900000000 + 100000000)}`;
     const res = await api
       .post('/api/vendors')
       .set(authHeaders(adminToken))
