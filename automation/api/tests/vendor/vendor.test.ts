@@ -127,7 +127,7 @@ describe('Vendor & Procurement', () => {
         expectedDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         notes:       'Weekly order',
         items: [
-          { description: 'Fresh Tomatoes', quantity: 50, unit: 'kg', unitPrice: 30 },
+          { productName: 'Fresh Tomatoes', orderedQty: 100, unit: 'kg', unitPrice: 30 },
         ],
       });
     expect([200, 201]).toContain(res.status);
@@ -172,14 +172,12 @@ describe('Vendor & Procurement', () => {
       .post('/api/grn')
       .set(authHeaders(adminToken))
       .send({
-        vendorId:      createdVendorId,
-        purchaseOrderId: createdPOId || undefined,
-        invoiceNumber: `INV-${Date.now()}`,
-        receivedDate:  new Date().toISOString(),
+        vendorId:     createdVendorId,
+        poId:         createdPOId,
+        receivedDate: new Date().toISOString(),
         items: [
-          { description: 'Tomatoes', quantity: 50, unit: 'kg', unitPrice: 28, totalPrice: 1400 },
+          { productName: 'Fresh Tomatoes', receivedQty: 50, unit: 'kg', poItemIndex: 0 },
         ],
-        totalAmount: 1400,
       });
     expect([200, 201]).toContain(res.status);
     const grn = res.body.grn || res.body;
@@ -188,17 +186,16 @@ describe('Vendor & Procurement', () => {
   });
 
   it('GRN-003 duplicate GRN idempotencyKey returns existing record', async () => {
-    if (!createdVendorId) return;
+    if (!createdVendorId || !createdPOId) return;
     const idKey = `IDEMPOTENT-GRN-${Date.now()}`;
     const payload = {
       vendorId:       createdVendorId,
-      invoiceNumber:  idKey,
-      receivedDate:   new Date().toISOString(),
+      poId:           createdPOId,
       idempotencyKey: idKey,
+      receivedDate:   new Date().toISOString(),
       items: [
-        { description: 'Salt', quantity: 10, unit: 'kg', unitPrice: 20, totalPrice: 200 },
+        { productName: 'Fresh Tomatoes', receivedQty: 10, unit: 'kg', poItemIndex: 0 },
       ],
-      totalAmount: 200,
     };
 
     const res1 = await api.post('/api/grn').set(authHeaders(adminToken)).send(payload);
@@ -275,18 +272,18 @@ describe('Vendor & Procurement', () => {
   });
 
   it('VRET-003 admin can create a vendor return', async () => {
-    if (!createdVendorId) return;
+    if (!createdVendorId || !createdGRNId) return;
     const res = await api
       .post('/api/vendor-returns')
       .set(authHeaders(adminToken))
       .send({
         vendorId:   createdVendorId,
+        grnId:      createdGRNId,
         reason:     'Damaged goods',
         returnDate: new Date().toISOString(),
         items: [
-          { description: 'Bad Tomatoes', quantity: 5, unit: 'kg', unitPrice: 28, totalPrice: 140 },
+          { grnItemIndex: 0, returnQty: 5, productName: 'Fresh Tomatoes' },
         ],
-        totalAmount: 140,
       });
     expect([200, 201]).toContain(res.status);
   });
