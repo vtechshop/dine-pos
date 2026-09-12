@@ -69,7 +69,7 @@ export function productPayload(categoryId?: string, overrides: Record<string, un
 
 export function categoryPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    name: `Test Category ${faker.commerce.department()}`,
+    name: `Test Category ${faker.commerce.department()} ${crypto.randomUUID().slice(0, 8)}`,
     color: '#FF5733',
     icon: '🍕',
     isActive: true,
