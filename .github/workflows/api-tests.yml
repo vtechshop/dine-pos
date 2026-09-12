@@ -89,6 +89,7 @@ jobs:
           SUPER_ADMIN_PASS: ${{ secrets.SUPER_ADMIN_PASS || 'ci-superpass-1234' }}
           AGGREGATOR_SECRET: ${{ secrets.AGGREGATOR_SECRET || 'ci-aggregator-secret-not-for-production' }}
           PAYMENT_ENCRYPTION_KEY: ${{ secrets.PAYMENT_ENCRYPTION_KEY || 'c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1' }}
+          RAZORPAY_TEST_BYPASS: 'true'
           NODE_ENV: test
         run: |
           npm start &

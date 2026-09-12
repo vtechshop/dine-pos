@@ -56,13 +56,14 @@ describe('Vendor & Procurement', () => {
   // ── Vendor CRUD ───────────────────────────────────────────────────────────
 
   it('VND-004 admin can create a vendor', async () => {
+    const uniqueMobile = `9${String(Date.now()).slice(-9)}`;
     const res = await api
       .post('/api/vendors')
       .set(authHeaders(adminToken))
       .send({
         businessName: 'Fresh Foods Pvt Ltd',
         contactName:  'Ramesh Kumar',
-        mobile:       '9876543210',
+        mobile:       uniqueMobile,
         email:        'fresh@example.com',
         gstNumber:    '29ABCDE1234F1Z5',
         category:     'Vegetables',
@@ -223,7 +224,7 @@ describe('Vendor & Procurement', () => {
   });
 
   it('LDG-002 admin can read vendor ledger', async () => {
-    const res = await api.get('/api/vendor-ledger').set(authHeaders(adminToken));
+    const res = await api.get('/api/vendor-ledger/report').set(authHeaders(adminToken));
     expect(res.status).toBe(200);
     const body = res.body;
     expect(body).toBeDefined();

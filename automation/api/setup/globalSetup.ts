@@ -239,6 +239,8 @@ async function cleanupLeftoverTestData(): Promise<void> {
     const relatedCollections = [
       'orders', 'products', 'categories', 'tables', 'settings', 'waiters',
       'cashiers', 'refreshtokens', 'dailycounters', 'notifications',
+      'vendors', 'purchaseorders', 'grns', 'vendorpayments', 'vendorreturns',
+      'ingredients', 'stockmovements', 'purchaseinvoices',
     ];
 
     await Promise.all(
