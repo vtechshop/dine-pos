@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import supertest from 'supertest';
 import dotenv from 'dotenv';
 
@@ -245,11 +245,16 @@ async function cleanupLeftoverTestData(): Promise<void> {
 
     await Promise.all(
       leftover.map(async (h: any) => {
-        const hid = h._id.toString();
+        const hObjectId = h._id instanceof ObjectId ? h._id : new ObjectId(h._id.toString());
+        const hid = hObjectId.toString();
         await Promise.all([
-          db.collection('hotels').deleteOne({ _id: h._id }),
+          db.collection('hotels').deleteOne({ _id: hObjectId }),
           ...relatedCollections.map(c =>
-            db.collection(c).deleteMany({ hotelId: hid }).catch(() => {})
+            // Mongoose may store hotelId as ObjectId or string depending on schema — delete both
+            Promise.all([
+              db.collection(c).deleteMany({ hotelId: hObjectId }).catch(() => {}),
+              db.collection(c).deleteMany({ hotelId: hid }).catch(() => {}),
+            ])
           ),
         ]);
       })

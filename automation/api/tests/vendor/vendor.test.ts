@@ -56,7 +56,10 @@ describe('Vendor & Procurement', () => {
   // ── Vendor CRUD ───────────────────────────────────────────────────────────
 
   it('VND-004 admin can create a vendor', async () => {
-    const uniqueMobile = `9${Math.floor(Math.random() * 900000000 + 100000000)}`;
+    const r = Math.floor(Math.random() * 900000000 + 100000000);
+    const uniqueMobile  = `9${r}`;
+    const uniqueEmail   = `vendor-${r}@example.com`;
+    const uniqueGst     = `29ABCDE${String(r).slice(0, 4)}F1Z5`;
     const res = await api
       .post('/api/vendors')
       .set(authHeaders(adminToken))
@@ -64,8 +67,8 @@ describe('Vendor & Procurement', () => {
         businessName: 'Fresh Foods Pvt Ltd',
         contactName:  'Ramesh Kumar',
         mobile:       uniqueMobile,
-        email:        'fresh@example.com',
-        gstNumber:    '29ABCDE1234F1Z5',
+        email:        uniqueEmail,
+        gstNumber:    uniqueGst,
         category:     'Vegetables',
       });
     expect([200, 201]).toContain(res.status);
