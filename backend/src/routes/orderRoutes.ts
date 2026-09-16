@@ -10,7 +10,10 @@ import CustomerProfile from '../models/CustomerProfile';
 import { findOrCreateOpenSession, findOrCreateDefaultGuest } from '../utils/sessionUtils';
 import { scheduleKOTPrint, scheduleOrderReceiptPrint } from '../utils/printUtils';
 import { createWhatsAppReceiptJob } from '../services/whatsappReceiptService';
-import { createTallySyncJobForOrder } from '../services/tallySyncService';
+import {
+  createTallySyncJobForOrder,
+  createTallySyncJobForCancellation,
+} from '../services/tallySyncService';
 import { applyIngredientStockChange } from '../utils/stockUtils';
 import Ingredient from '../models/Ingredient';
 import StockMovement from '../models/StockMovement';
@@ -1363,6 +1366,10 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
           prevStatus:  existing.status,
           grandTotal:  existing.grandTotal,
         });
+
+        // Tally Direct Sync — fire-and-forget; failure NEVER rolls back the cancellation
+        void createTallySyncJobForCancellation(req.hotelId!, existing._id);
+
         if (existing.guestId) {
           await Guest.findByIdAndUpdate(existing.guestId, [
             { $set: { totalAmount: { $max: [0, { $subtract: ['$totalAmount', existing.grandTotal] }] } } },

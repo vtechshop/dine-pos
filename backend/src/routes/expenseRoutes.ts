@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import { sendError } from '../utils/sendError';
 import { requireFeature } from '../middleware/requireFeature';
 import { isValidDateParam } from '../utils/dateParam';
+import { createTallySyncJobForExpense } from '../services/tallySyncService';
 
 const router = Router();
 router.use(authMiddleware);
@@ -109,6 +110,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const expense = new Expense({ ...req.body, hotelId: req.hotelId });
     await expense.save();
     logAudit(req, 'expense.created', 'expense', String((expense as any)._id), { description: (expense as any).description, amount: (expense as any).amount });
+
+    // Tally Direct Sync — fire-and-forget; failure NEVER rolls back the expense creation
+    void createTallySyncJobForExpense(req.hotelId!, (expense as any)._id);
+
     res.status(201).json(expense);
   } catch (error) {
     sendError(res, 400, 'Invalid data', error);

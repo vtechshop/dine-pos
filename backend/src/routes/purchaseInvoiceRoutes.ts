@@ -25,6 +25,7 @@ import Vendor from '../models/Vendor';
 import GRN from '../models/GRN';
 import DailyCounter from '../models/DailyCounter';
 import { logAudit } from '../utils/audit';
+import { createTallySyncJobForPurchaseInvoice } from '../services/tallySyncService';
 
 const router = Router();
 router.use(authMiddleware);
@@ -265,6 +266,10 @@ router.post('/:id/mark-paid', async (req: AuthRequest, res: Response): Promise<v
     );
     if (!invoice) { res.status(404).json({ message: 'Invoice not found or already in terminal status' }); return; }
     logAudit(req, 'purchaseinvoice.paid', 'PurchaseInvoice', invoice._id.toString(), { paymentRef });
+
+    // Tally Direct Sync — fire-and-forget; failure NEVER rolls back the payment
+    void createTallySyncJobForPurchaseInvoice(req.hotelId!, invoice._id);
+
     res.json({ invoice });
   } catch (err) {
     sendError(res, 500, 'Failed to mark invoice as paid', err);
