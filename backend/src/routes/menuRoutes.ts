@@ -129,6 +129,9 @@ router.get('/menu', publicReadLimiter, async (req: Request, res: Response) => {
 // POST /api/public/orders
 // Public order placement — no auth, used by QR menu customers
 router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) => {
+  // Hoisted so the duplicate-key catch block can use the server-validated value
+  // rather than re-reading from req.body.
+  let resolvedHotelId = '';
   try {
     // Accept both 'hotel' and 'hotelId' field names for backward compatibility
     const { hotel, hotelId: hotelIdField, items: clientItems, tableNumber, customerName, notes, isParcel, source, orderSource: reqOrderSource, paymentMethod: reqPaymentMethod } = req.body;
@@ -155,6 +158,7 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
     }
 
     const hotelId = String(hotelParam);
+    resolvedHotelId = hotelId; // make available to the duplicate-key catch block
 
     // Resolve orderSource from body (accepts 'orderSource' and legacy 'source' field)
     const rawSource = String(reqOrderSource || source || '');
@@ -339,7 +343,7 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
       try {
         const saved = await Order.findOne({
           offlineId: req.body.offlineId,
-          hotelId:   String(req.body.hotel || req.body.hotelId || ''),
+          hotelId:   resolvedHotelId, // server-validated; never from req.body directly
         });
         if (saved) return res.status(200).json(saved);
       } catch { /* fall through to generic error */ }

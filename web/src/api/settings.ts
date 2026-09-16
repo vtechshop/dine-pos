@@ -31,3 +31,17 @@ export interface SubscriptionInfo {
 export async function fetchSubscription(): Promise<SubscriptionInfo> {
   return apiFetch('/hotels/subscription');
 }
+
+export async function updateOrgLoyaltySetting(orgLoyalty: boolean): Promise<{ orgLoyalty: boolean }> {
+  return apiFetch('/settings/org-loyalty', {
+    method: 'PATCH',
+    body: JSON.stringify({ orgLoyalty }),
+  });
+}
+
+export async function updateBranchOrgLoyaltyEnabled(branchId: string, orgLoyaltyEnabled: boolean): Promise<{ orgLoyaltyEnabled: boolean }> {
+  return apiFetch(`/branches/${branchId}/org-loyalty-enabled`, {
+    method: 'PATCH',
+    body: JSON.stringify({ orgLoyaltyEnabled }),
+  });
+}

@@ -9,6 +9,8 @@ import Guest from '../models/Guest';
 import CustomerProfile from '../models/CustomerProfile';
 import { findOrCreateOpenSession, findOrCreateDefaultGuest } from '../utils/sessionUtils';
 import { scheduleKOTPrint, scheduleOrderReceiptPrint } from '../utils/printUtils';
+import { createWhatsAppReceiptJob } from '../services/whatsappReceiptService';
+import { createTallySyncJobForOrder } from '../services/tallySyncService';
 import { applyIngredientStockChange } from '../utils/stockUtils';
 import Ingredient from '../models/Ingredient';
 import StockMovement from '../models/StockMovement';
@@ -21,7 +23,7 @@ import { sendError } from '../utils/sendError';
 import { normalizePhone } from '../utils/phoneUtils';
 import Payment from '../models/Payment';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
-import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, redeemPoints, reverseEarnedPoints } from '../utils/loyaltyUtils';
+import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, redeemPoints, reverseEarnedPoints, resolveOrgLoyalty, earnOrgPoints, redeemOrgPoints, reverseOrgEarnedPoints, type OrgLoyaltyContext } from '../utils/loyaltyUtils';
 import Coupon from '../models/Coupon';
 import CouponRedemption from '../models/CouponRedemption';
 import GiftVoucher from '../models/GiftVoucher';
@@ -832,23 +834,32 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     const rawRedeemedPts = Math.max(0, Number(req.body.redeemedPoints) || 0);
     let verifiedLoyaltyDiscount = Math.max(0, Number(req.body.loyaltyDiscount) || 0);
     let h2LoyaltyCfg: Awaited<ReturnType<typeof getLoyaltyConfig>> | null = null;
-    let h2RedeemProfile: { _id: mongoose.Types.ObjectId } | null = null;
+    let h2RedeemProfile: { _id: mongoose.Types.ObjectId; orgCustomerId?: mongoose.Types.ObjectId | null } | null = null;
+    let h2OrgCtx: OrgLoyaltyContext | null = null;
     if (rawRedeemedPts > 0) {
-      h2LoyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+      // ── H1: Pre-fetch profile (needed for both branch and org-loyalty paths) ──
+      const e164Phone = normalizePhone(String(req.body.customerPhone || ''));
+      if (e164Phone) {
+        h2RedeemProfile = await CustomerProfile.findOne({
+          hotelId:       new mongoose.Types.ObjectId(req.hotelId),
+          phone:         e164Phone,
+          status:        'active',
+          loyaltyOptOut: { $ne: true },
+        }).select('_id orgCustomerId') as { _id: mongoose.Types.ObjectId; orgCustomerId?: mongoose.Types.ObjectId | null } | null;
+      }
+      if (h2RedeemProfile) {
+        // Check if org-loyalty is active for this customer — if so, use HQ config
+        h2OrgCtx = await resolveOrgLoyalty(h2RedeemProfile, req.hotelId!);
+      }
+      // Use org HQ config when org-loyalty is active; otherwise use branch config
+      h2LoyaltyCfg = h2OrgCtx ? h2OrgCtx.hqConfig : await getLoyaltyConfig(req.hotelId!);
       // maxAllowedDiscount = points × (pointValueInPaisa / 100) in rupees
       const maxAllowedDiscount = rawRedeemedPts * (h2LoyaltyCfg.pointValueInPaisa / 100);
       verifiedLoyaltyDiscount = Math.min(verifiedLoyaltyDiscount, maxAllowedDiscount);
-      // Pre-fetch profile for H2 (redeemPoints moved inside transaction)
-      if (h2LoyaltyCfg.enabled) {
-        const e164Phone = normalizePhone(String(req.body.customerPhone || ''));
-        if (e164Phone) {
-          h2RedeemProfile = await CustomerProfile.findOne({
-            hotelId:       new mongoose.Types.ObjectId(req.hotelId),
-            phone:         e164Phone,
-            status:        'active',
-            loyaltyOptOut: { $ne: true },
-          }).select('_id') as { _id: mongoose.Types.ObjectId } | null;
-        }
+      if (!h2LoyaltyCfg.enabled || !h2RedeemProfile) {
+        verifiedLoyaltyDiscount = 0;
+        h2RedeemProfile = null;
+        h2OrgCtx = null;
       }
     } else {
       verifiedLoyaltyDiscount = 0; // no points redeemed → zero loyalty discount allowed
@@ -1094,13 +1105,28 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
         // H2: loyalty redemption inside transaction — if it fails the whole order is rolled back
         // so the loyalty ledger and order discount are always consistent.
         if (order.redeemedPoints > 0 && h2LoyaltyCfg?.enabled && h2RedeemProfile) {
-          await redeemPoints(
-            h2RedeemProfile._id as mongoose.Types.ObjectId,
-            req.hotelId!,
-            order.redeemedPoints,
-            h2LoyaltyCfg,
-            { orderId: String(order._id), createdBy: req.cashierName || 'cashier' },
-          );
+          if (h2OrgCtx) {
+            // Org-loyalty path: deduct from OrganizationCustomer.orgLoyaltyBalance
+            await redeemOrgPoints(
+              h2OrgCtx.orgCustomer!._id as mongoose.Types.ObjectId,
+              h2OrgCtx.orgCustomer!.orgHotelId.toString(),
+              req.hotelId!,
+              h2RedeemProfile._id as mongoose.Types.ObjectId,
+              order.redeemedPoints,
+              h2LoyaltyCfg,
+              { orderId: String(order._id), createdBy: req.cashierName || 'cashier' },
+              txSession,
+            );
+          } else {
+            // Branch-loyalty path (unchanged behavior)
+            await redeemPoints(
+              h2RedeemProfile._id as mongoose.Types.ObjectId,
+              req.hotelId!,
+              order.redeemedPoints,
+              h2LoyaltyCfg,
+              { orderId: String(order._id), createdBy: req.cashierName || 'cashier' },
+            );
+          }
         }
         // B-01: StockMovement for sale is now inside the transaction — atomic with the
         // stock deduction so neither can succeed without the other.
@@ -1347,7 +1373,6 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         ;(async () => {
           try {
             const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
-            if (!loyaltyCfg.enabled) return;
 
             const customerPhone = existing.customerPhone;
             if (!customerPhone) return;
@@ -1356,8 +1381,14 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
               hotelId: new mongoose.Types.ObjectId(req.hotelId),
               phone:   customerPhone,
               status:  { $ne: 'merged' },
-            }).select('_id').lean();
+            }).select('_id orgCustomerId').lean();
             if (!cancelProfile) return;
+
+            const cancelOrgCtx = await resolveOrgLoyalty(cancelProfile as any, req.hotelId!);
+            const cancelCfg    = cancelOrgCtx ? cancelOrgCtx.hqConfig : loyaltyCfg;
+
+            // Skip if neither branch nor org loyalty is enabled
+            if (!cancelCfg.enabled && !cancelOrgCtx) return;
 
             const profileId = (cancelProfile as any)._id;
             const orderId   = String(existing._id);
@@ -1375,12 +1406,29 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
                 { $set: { loyaltyReversedAt: new Date() } },
               );
               if (claimedPay) {
-                await reverseEarnedPoints(profileId, req.hotelId!, claimedPay.loyaltyEarnPoints, loyaltyCfg, {
-                  orderId,
-                  paymentId: String(claimedPay._id),
-                  createdBy: req.cashierName || 'system:cancel',
-                  remarks:   `Earn reversal: Order #${existing.orderNumber ?? ''} cancelled`,
-                });
+                if (cancelOrgCtx) {
+                  await reverseOrgEarnedPoints(
+                    cancelOrgCtx.orgCustomer!._id as mongoose.Types.ObjectId,
+                    cancelOrgCtx.orgCustomer!.orgHotelId.toString(),
+                    req.hotelId!,
+                    profileId,
+                    claimedPay.loyaltyEarnPoints,
+                    cancelCfg,
+                    {
+                      orderId,
+                      paymentId: String(claimedPay._id),
+                      createdBy: req.cashierName || 'system:cancel',
+                      remarks:   `Earn reversal: Order #${existing.orderNumber ?? ''} cancelled`,
+                    },
+                  );
+                } else {
+                  await reverseEarnedPoints(profileId, req.hotelId!, claimedPay.loyaltyEarnPoints, cancelCfg, {
+                    orderId,
+                    paymentId: String(claimedPay._id),
+                    createdBy: req.cashierName || 'system:cancel',
+                    remarks:   `Earn reversal: Order #${existing.orderNumber ?? ''} cancelled`,
+                  });
+                }
               }
             } else {
               // Reverse earned points via Order earn path (cash/UPI takeaway)
@@ -1397,11 +1445,27 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
                   { $set: { loyaltyEarnedAt: null } },
                 );
                 if (claimedOrder) {
-                  await reverseEarnedPoints(profileId, req.hotelId!, earnTx.points, loyaltyCfg, {
-                    orderId,
-                    createdBy: req.cashierName || 'system:cancel',
-                    remarks:   `Earn reversal: Order #${existing.orderNumber ?? ''} cancelled`,
-                  });
+                  if (cancelOrgCtx) {
+                    await reverseOrgEarnedPoints(
+                      cancelOrgCtx.orgCustomer!._id as mongoose.Types.ObjectId,
+                      cancelOrgCtx.orgCustomer!.orgHotelId.toString(),
+                      req.hotelId!,
+                      profileId,
+                      earnTx.points,
+                      cancelCfg,
+                      {
+                        orderId,
+                        createdBy: req.cashierName || 'system:cancel',
+                        remarks:   `Earn reversal: Order #${existing.orderNumber ?? ''} cancelled`,
+                      },
+                    );
+                  } else {
+                    await reverseEarnedPoints(profileId, req.hotelId!, earnTx.points, cancelCfg, {
+                      orderId,
+                      createdBy: req.cashierName || 'system:cancel',
+                      remarks:   `Earn reversal: Order #${existing.orderNumber ?? ''} cancelled`,
+                    });
+                  }
                 }
               }
             }
@@ -1409,11 +1473,31 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
             // 2. Restore redeemed points
             const redeemedPts = (existing as any).redeemedPoints ?? 0;
             if (redeemedPts > 0) {
-              await earnPoints(profileId, req.hotelId!, redeemedPts, loyaltyCfg, {
-                orderId,
-                createdBy: req.cashierName || 'system:cancel',
-                remarks:   `Redemption restored: Order #${existing.orderNumber ?? ''} cancelled`,
-              });
+              if (cancelOrgCtx) {
+                // Do NOT pass orderId here — it would generate idempotency key
+                // "${orgCustomerId}:earn:${orderId}", colliding with the original earn
+                // transaction from order completion and causing the restore to be silently
+                // rejected. The outer cancellation state guard (order.status = cancelled)
+                // provides idempotency. Remarks carry the audit trail.
+                await earnOrgPoints(
+                  cancelOrgCtx.orgCustomer!._id as mongoose.Types.ObjectId,
+                  cancelOrgCtx.orgCustomer!.orgHotelId.toString(),
+                  req.hotelId!,
+                  profileId,
+                  redeemedPts,
+                  cancelCfg,
+                  {
+                    createdBy: req.cashierName || 'system:cancel',
+                    remarks:   `Redemption restored: Order #${existing.orderNumber ?? ''} (${orderId}) cancelled`,
+                  },
+                );
+              } else {
+                await earnPoints(profileId, req.hotelId!, redeemedPts, cancelCfg, {
+                  orderId,
+                  createdBy: req.cashierName || 'system:cancel',
+                  remarks:   `Redemption restored: Order #${existing.orderNumber ?? ''} cancelled`,
+                });
+              }
             }
           } catch (e) {
             logger.warn('[loyalty] cancellation reversal failed', { orderId: String(existing._id), err: String(e) });
@@ -1601,6 +1685,17 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         logger.warn('Receipt print dispatch failed', { orderId: String(existing._id), error: err?.message });
       });
 
+      // WhatsApp receipt — fire-and-forget; failure NEVER rolls back the sale
+      void createWhatsAppReceiptJob(
+        req.hotelId!,
+        existing._id,
+        existing.customerPhone ?? null,
+        existing.walletCustomerId?.toString() ?? null,
+      );
+
+      // Tally Direct Sync — fire-and-forget; failure NEVER rolls back the sale
+      void createTallySyncJobForOrder(req.hotelId!, existing._id);
+
       // Loyalty earn for non-dine-in orders (idempotent, fire-and-forget)
       if (!['dine-in'].includes(existing.orderSource)) {
         ;(async () => {
@@ -1629,7 +1724,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
               hotelId: new mongoose.Types.ObjectId(req.hotelId),
               phone,
               status:  { $ne: 'merged' },
-            }).select('_id loyaltyOptOut').lean();
+            }).select('_id loyaltyOptOut orgCustomerId').lean();
             if (!earnProfile) return;
 
             // lifetimeSpend is incremented once per completed order (gated by claimedOrder above)
@@ -1638,22 +1733,40 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
               { $inc: { lifetimeSpend: existing.grandTotal }, $set: { lastVisitAt: new Date() } },
             ).catch(() => {});
 
-            if (!loyaltyCfg.enabled || (earnProfile as any).loyaltyOptOut) return;
+            // Determine if org-loyalty is active for this customer
+            const earnOrgCtx = await resolveOrgLoyalty(earnProfile as any, req.hotelId!);
+            const earnCfg    = earnOrgCtx ? earnOrgCtx.hqConfig : loyaltyCfg;
+
+            if (!earnCfg.enabled || (earnProfile as any).loyaltyOptOut) return;
 
             // C-06: respect calculationBase — before_gst excludes tax from the earning base.
-            const earnBase = loyaltyCfg.calculationBase === 'before_gst'
+            const earnBase = earnCfg.calculationBase === 'before_gst'
               ? Math.max(0, existing.grandTotal - (existing.taxTotal ?? 0))
               : existing.grandTotal;
-            const pts = calculateEarnedPoints(earnBase, loyaltyCfg);
+            const pts = calculateEarnedPoints(earnBase, earnCfg);
             if (pts <= 0) return;
 
-            await earnPoints(
-              (earnProfile as any)._id,
-              req.hotelId!,
-              pts,
-              loyaltyCfg,
-              { orderId: String(existing._id), createdBy: req.cashierName || 'system:order_complete' },
-            );
+            if (earnOrgCtx) {
+              // Org-loyalty path: credit OrganizationCustomer.orgLoyaltyBalance
+              await earnOrgPoints(
+                earnOrgCtx.orgCustomer!._id as mongoose.Types.ObjectId,
+                earnOrgCtx.orgCustomer!.orgHotelId.toString(),
+                req.hotelId!,
+                (earnProfile as any)._id,
+                pts,
+                earnCfg,
+                { orderId: String(existing._id), createdBy: req.cashierName || 'system:order_complete' },
+              );
+            } else {
+              // Branch-loyalty path (unchanged behavior)
+              await earnPoints(
+                (earnProfile as any)._id,
+                req.hotelId!,
+                pts,
+                earnCfg,
+                { orderId: String(existing._id), createdBy: req.cashierName || 'system:order_complete' },
+              );
+            }
           } catch (e) {
             logger.warn('[loyalty] order completion earn failed', { orderId: String(existing._id), err: String(e) });
           }

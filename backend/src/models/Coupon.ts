@@ -20,6 +20,10 @@ export interface ICoupon extends Document {
   applicableProducts:  mongoose.Types.ObjectId[];
   isActive:            boolean;
   isDeleted:           boolean;
+  // Multi-branch scope (additive — defaults to 'branch' for backward compat)
+  scope:               'branch' | 'organization';
+  orgHotelId:          mongoose.Types.ObjectId | null;   // set when scope='organization'
+  selectedBranchIds:   mongoose.Types.ObjectId[];        // empty = all branches; populated = restricted branches
   createdBy:           string;
   createdAt:           Date;
   updatedAt:           Date;
@@ -43,6 +47,9 @@ const CouponSchema = new Schema<ICoupon>(
     applicableProducts:   [{ type: Schema.Types.ObjectId, ref: 'Product' }],
     isActive:  { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },
+    scope:            { type: String, enum: ['branch', 'organization'], default: 'branch' },
+    orgHotelId:       { type: Schema.Types.ObjectId, ref: 'Hotel', default: null },
+    selectedBranchIds:[{ type: Schema.Types.ObjectId, ref: 'Hotel' }],
     createdBy: { type: String, default: '' },
   },
   { timestamps: true },
@@ -51,5 +58,7 @@ const CouponSchema = new Schema<ICoupon>(
 CouponSchema.index({ hotelId: 1, code: 1 }, { unique: true });
 CouponSchema.index({ hotelId: 1, isActive: 1, isDeleted: 1 });
 CouponSchema.index({ hotelId: 1, validFrom: 1, validUntil: 1 });
+// Org-scoped coupon lookup: sparse so null orgHotelId doesn't create index bloat
+CouponSchema.index({ orgHotelId: 1, scope: 1, code: 1, isActive: 1, isDeleted: 1 }, { sparse: true });
 
 export default mongoose.model<ICoupon>('Coupon', CouponSchema);

@@ -37,6 +37,16 @@ export interface IFeatureFlags {
   kiosk: boolean;       // self-service kiosk mode (premium)
   ai: boolean;          // AI suite — analytics, alerts, forecasting, chat, OCR (premium)
   supplyChain: boolean; // GRN, PO, vendors, purchase invoices, vendor returns
+
+  // ── Accounting Integrations (v1.3) ───────────────────────────────────────
+  tally: boolean;       // Tally Direct Sync — outbox → Local Bridge → TallyPrime
+
+  // ── Multi-Branch (v1.4) ───────────────────────────────────────────────────
+  multiBranch: boolean; // org-level branch management — each branch is a separate Hotel doc
+
+  // ── Org Loyalty (v1.5) ────────────────────────────────────────────────────
+  orgLoyalty:        boolean; // HQ master switch — enables org-wide loyalty
+  orgLoyaltyEnabled: boolean; // per-branch switch (HQ admin only; default true)
 }
 
 export type BusinessType =
@@ -131,6 +141,15 @@ export interface IHotel extends Document {
 
   // Bootstrap status — tracks whether initial setup completed after approval
   bootstrapStatus: 'pending' | 'completed' | 'failed' | null;
+
+  // ── Multi-Branch (v1.4) ───────────────────────────────────────────────────
+  // null = standalone hotel (default) or a headquarters org.
+  // set  = this Hotel is a branch; parentHotelId points to the HQ Hotel.
+  parentHotelId:  mongoose.Types.ObjectId | null;
+  branchCode:     string;     // short unique code within the org (e.g. "NORTH", "MALL")
+  branchName:     string;     // display name for this branch location
+  isHeadquarters: boolean;    // true once the first child branch is created under this Hotel
+  maxBranches:    number;     // subscription-enforced branch limit (default 1)
 
   createdAt: Date;
   updatedAt: Date;
@@ -243,7 +262,24 @@ const HotelSchema: Schema = new Schema(
       kiosk:       { type: Boolean, default: false },
       ai:          { type: Boolean, default: false },
       supplyChain: { type: Boolean, default: true  }, // default ON for existing hotels
+
+      // ── Accounting Integrations (v1.3) ─────────────────────────────────
+      tally:       { type: Boolean, default: false },
+
+      // ── Multi-Branch (v1.4) ───────────────────────────────────────────
+      multiBranch: { type: Boolean, default: false },
+
+      // ── Org Loyalty (v1.5) ─────────────────────────────────────────────
+      orgLoyalty:        { type: Boolean, default: false },
+      orgLoyaltyEnabled: { type: Boolean, default: true  },
     },
+
+    // ── Multi-Branch fields (v1.4) ────────────────────────────────────────
+    parentHotelId:  { type: Schema.Types.ObjectId, ref: 'Hotel', default: null },
+    branchCode:     { type: String, default: '' },
+    branchName:     { type: String, default: '' },
+    isHeadquarters: { type: Boolean, default: false },
+    maxBranches:    { type: Number, default: 1 },
 
     // Legacy premium fields (backwards compat)
     isPremium:          { type: Boolean, default: false },
@@ -276,5 +312,12 @@ HotelSchema.index({ createdAt: -1 });               // latest registrations
 HotelSchema.index({ hotelName: 'text', ownerName: 'text', phone: 'text', fssaiNumber: 'text' }, { name: 'hotel_search_text' });
 // M-13: sparse index on resetRequested — SA dashboard polls this field every 30s
 HotelSchema.index({ resetRequested: 1 }, { sparse: true });
+// Multi-Branch v1.4 — list all branches of an HQ hotel efficiently
+HotelSchema.index({ parentHotelId: 1 }, { sparse: true });
+// branchCode must be unique within an org; exclude standalone hotels (parentHotelId:null)
+HotelSchema.index(
+  { parentHotelId: 1, branchCode: 1 },
+  { unique: true, sparse: true, partialFilterExpression: { parentHotelId: { $type: 'objectId' }, branchCode: { $gt: '' } } },
+);
 
 export default mongoose.model<IHotel>('Hotel', HotelSchema);

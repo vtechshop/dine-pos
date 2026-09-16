@@ -26,6 +26,7 @@ import mongoose from 'mongoose';
 import { decrypt } from '../utils/encryption';
 import MessagingProviderConfig from '../models/MessagingProviderConfig';
 import CampaignMessage         from '../models/CampaignMessage';
+import WhatsAppReceipt         from '../models/WhatsAppReceipt';
 import { logger }              from '../utils/logger';
 
 const router = Router();
@@ -151,7 +152,8 @@ async function _processEvent(
   const newRank = STATUS_RANK[newStatus] ?? 0;
   const doNotOverwrite = Object.keys(STATUS_RANK).filter(s => (STATUS_RANK[s] ?? 0) > newRank);
 
-  const result = await CampaignMessage.findOneAndUpdate(
+  // Update CampaignMessage records (existing marketing path)
+  const campaignResult = await CampaignMessage.findOneAndUpdate(
     {
       requestId,
       phone,
@@ -162,18 +164,38 @@ async function _processEvent(
     { new: false },
   );
 
-  if (!result) {
-    // Either not found or already in a terminal state — both are fine
-    return;
+  if (campaignResult) {
+    logger.info('[messaging-webhook] Campaign message status updated', {
+      hotelId:    hotelObjId.toString(),
+      campaignId: String(campaignResult.campaignId),
+      phone,
+      newStatus,
+      requestId,
+    });
   }
 
-  logger.info('[messaging-webhook] Status updated', {
-    hotelId:    hotelObjId.toString(),
-    campaignId: String(result.campaignId),
-    phone,
-    newStatus,
-    requestId,
-  });
+  // Update WhatsAppReceipt records (transactional receipt path)
+  // Lookup by requestId + normalizedPhone + hotelId — all three required for hotel isolation.
+  const receiptResult = await WhatsAppReceipt.findOneAndUpdate(
+    {
+      requestId,
+      normalizedPhone: phone,
+      hotelId:         hotelObjId,
+      ...(doNotOverwrite.length > 0 ? { status: { $nin: doNotOverwrite } } : {}),
+    },
+    { $set: setFields },
+    { new: false },
+  );
+
+  if (receiptResult) {
+    logger.info('[messaging-webhook] WhatsApp receipt status updated', {
+      hotelId:   hotelObjId.toString(),
+      receiptId: String(receiptResult._id),
+      phone,
+      newStatus,
+      requestId,
+    });
+  }
 }
 
 export default router;

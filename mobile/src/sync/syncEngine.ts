@@ -11,10 +11,17 @@ import {
 import * as api from '../services/api';
 import { flushCustomerOrderQueue } from '../services/api';
 import {
-  getPendingOrders as getCashierPendingOrders,
-  markSynced       as markCashierSynced,
-  markFailed       as markCashierFailed,
+  nextQueued,
+  claimForSync,
+  markSynced as cashierMarkSynced,
+  markRetry,
+  markFailed as cashierMarkFailed,
+  resetStaleSyncing,
+  pruneSynced,
+  backoffDelayMs,
+  MAX_RETRIES,
 } from '../database/cashierOrderQueueDao';
+import { getAuthCache } from '../database/authDao';
 
 export type SyncStatus = 'offline' | 'online' | 'syncing' | 'synced' | 'error';
 export type SyncListener = (status: SyncStatus, pendingCount: number, lastSyncAt: Date | null, error?: string) => void;
@@ -48,24 +55,68 @@ const deriveStatus = (): SyncStatus => {
   return 'online';
 };
 
+// ── Error classification ──────────────────────────────────────────────────────
+
+type SyncErrorKind = 'retryable' | 'auth' | 'permanent';
+
+interface ClassifiedError {
+  kind: SyncErrorKind;
+  code: string;
+  reason: string;
+}
+
+const INTERNAL_DETAIL = /E11000|mongo|ObjectId|Cast to|stack|\bat \S+ \(|ECONN|ValidationError:/i;
+
+function readableReason(message: string | undefined, fallback: string): string {
+  const firstLine = String(message ?? '').split('\n')[0].trim();
+  if (!firstLine || INTERNAL_DETAIL.test(firstLine) || /^HTTP \d{3}$/.test(firstLine)) return fallback;
+  return firstLine.length > 160 ? `${firstLine.slice(0, 157)}…` : firstLine;
+}
+
+function classifyError(error: unknown): ClassifiedError {
+  const status = (error as { status?: number })?.status;
+  const name   = (error as { name?: string })?.name;
+  const message = String((error as { message?: string })?.message ?? error ?? '');
+
+  if (status === 401) {
+    return { kind: 'auth', code: 'auth_required', reason: 'Login required to send saved bills.' };
+  }
+  if (status === 403 && /TRIAL_EXPIRED|PLAN_EXPIRED/.test(String((error as { code?: string })?.code ?? ''))) {
+    return { kind: 'auth', code: 'subscription_expired', reason: 'Subscription expired. Renew to send saved bills.' };
+  }
+  if (status && (status === 408 || status === 425 || status === 429 || status >= 500)) {
+    return { kind: 'retryable', code: `http_${status}`, reason: 'Server temporarily unavailable. Will retry.' };
+  }
+  if (status && status >= 400 && status < 500) {
+    return {
+      kind: 'permanent',
+      code: `http_${status}`,
+      reason: readableReason(message, 'The server refused this bill.'),
+    };
+  }
+  if (name === 'AbortError' || name === 'TimeoutError') {
+    return { kind: 'retryable', code: 'timeout', reason: 'Server took too long to answer. Will retry.' };
+  }
+  if (
+    error instanceof TypeError ||
+    /failed to fetch|networkerror|network request failed|load failed|offline/i.test(message)
+  ) {
+    return { kind: 'retryable', code: 'network', reason: 'No connection to server. Will retry.' };
+  }
+  return { kind: 'retryable', code: 'unknown', reason: 'Could not send this bill. Will retry.' };
+}
+
 // ── Per-order sync — idempotent via offlineId ─────────────────────────────────
 
 const SYNC_CONCURRENCY = 3; // parallel API calls per batch
 
 const syncOneOrder = async (item: QueuedOrder): Promise<{ synced: boolean; error?: string }> => {
-  // Write 'syncing' to SQLite BEFORE the API call.
-  // On crash, resetSyncingOrders() (called in startSyncEngine) resets it to
-  // 'pending'. The server's offlineId unique index prevents duplicate orders.
   markSyncing(item.id);
-
   try {
-    // Attach offlineId to payload — server uses it as idempotency key.
     const payload = { ...(item.payload as object), offlineId: item.id };
     const result  = await api.createOrder(payload as any) as any;
     markSynced(item.id);
 
-    // Apply per-order stock updates returned by server so local cache stays
-    // accurate without waiting for the next full cache refresh cycle.
     if (Array.isArray(result.stockUpdates)) {
       for (const { productId, newStock } of result.stockUpdates as { productId: string; newStock: number }[]) {
         updateLocalProductStock(productId, newStock);
@@ -92,9 +143,8 @@ export const syncNow = async (): Promise<{ synced: number; failed: number }> => 
   let failed = 0;
 
   try {
-    // 1. Flush offline order queue → MongoDB (batched, 3 concurrent per batch)
+    // 1. Flush offline order queue → server (batched, 3 concurrent per batch)
     const pending = getPendingOrders();
-
     for (let i = 0; i < pending.length; i += SYNC_CONCURRENCY) {
       const batch   = pending.slice(i, i + SYNC_CONCURRENCY);
       const results = await Promise.all(batch.map(syncOneOrder));
@@ -103,7 +153,10 @@ export const syncNow = async (): Promise<{ synced: number; failed: number }> => 
       }
     }
 
-    // 2. Pull fresh data from MongoDB → local SQLite cache
+    // 2. Flush cashier offline queue (FIFO, with backoff + afterCreate)
+    await _flushCashierQueue();
+
+    // 3. Pull fresh data → local SQLite cache
     await _refreshCache();
 
     _lastSyncAt = new Date();
@@ -114,7 +167,6 @@ export const syncNow = async (): Promise<{ synced: number; failed: number }> => 
 
     if (_syncedTimer) clearTimeout(_syncedTimer);
     _syncedTimer = setTimeout(() => notifyListeners(deriveStatus()), 3000);
-
   } catch (err: any) {
     _lastError = err?.message || 'Sync failed';
     _isSyncing = false;
@@ -127,9 +179,10 @@ export const syncNow = async (): Promise<{ synced: number; failed: number }> => 
 // ── Cache refresh ──────────────────────────────────────────────────────────────
 
 const _refreshCache = async (): Promise<void> => {
+  const hotelId = getAuthCache()?.hotelId ?? '';
   const results = await Promise.allSettled([
-    api.getProducts().then(saveProducts),
-    api.getCategories().then(saveCategories),
+    api.getProducts().then(prods => saveProducts(hotelId, prods)),
+    api.getCategories().then(cats => saveCategories(hotelId, cats)),
     api.getTables().then(saveTables),
     api.getSettings().then(saveLocalSettings),
     api.getCustomers().then(cs => saveCustomers(cs.customers ?? cs)),
@@ -143,42 +196,87 @@ const _refreshCache = async (): Promise<void> => {
 
 export const refreshCache = _refreshCache;
 
-// ── Cashier offline-queue flush ────────────────────────────────────────────────
-// Orders queued via BillingScreen while the device had no connectivity are
-// stored in cashier_order_queue. This function pushes them to the server
-// sequentially; the server's offlineId unique index prevents duplicates on retry.
+// ── Cashier offline-queue flush (FIFO + backoff + afterCreate) ─────────────────
+// Orders queued via BillingScreen while offline are stored in cashier_order_queue.
+// Strict FIFO: the oldest pending order is attempted first; a backoff hold stops
+// the entire queue behind it. The server's offlineId unique index prevents
+// duplicates if a request completed before a crash.
 
-// M-09: guard against concurrent calls from the reconnect handler and the
-// NetInfo.fetch probe firing nearly simultaneously.
 let _cashierFlushing = false;
 
-export const flushCashierOrderQueue = async (): Promise<void> => {
+const _flushCashierQueue = async (): Promise<void> => {
   if (_cashierFlushing) return;
   _cashierFlushing = true;
+
+  const hotelId = getAuthCache()?.hotelId;
+  if (!hotelId) { _cashierFlushing = false; return; }
+
   try {
-    const pending = getCashierPendingOrders();
-    for (const queued of pending) {
+    resetStaleSyncing(hotelId);
+
+    for (let guard = 0; guard < 10_000; guard++) {
+      const now  = Date.now();
+      const next = nextQueued(hotelId, now);
+      if (!next) break;
+
+      // FIFO: if the oldest order is in backoff, the whole queue waits.
+      if (next.nextAttemptAt !== null && next.nextAttemptAt > now) break;
+
+      const claimed = claimForSync(hotelId, next.offlineId);
+      if (!claimed) continue;
+
       try {
-        await api.createOrder({ ...(queued.payload as object), offlineId: queued.offlineId } as any);
-        markCashierSynced(queued.offlineId);
-      } catch (e: any) {
-        markCashierFailed(queued.offlineId, e?.message || 'unknown');
+        const order = await api.createOrder({
+          ...(next.payload as object),
+          offlineId: next.offlineId,
+        } as any) as any;
+
+        const serverId = String(order._id);
+
+        // afterCreate: replay the steps that would have run in the online path.
+        if (next.afterCreate.markServed) {
+          try { await api.updateOrderStatus(serverId, 'served'); } catch { /* best-effort */ }
+        }
+        if (next.afterCreate.complete) {
+          try { await (api as any).markOrderCompleteCashier(serverId); } catch { /* best-effort */ }
+        }
+
+        cashierMarkSynced(hotelId, next.offlineId, serverId, order.orderNumber ?? null);
+      } catch (err: unknown) {
+        const { kind, code, reason } = classifyError(err);
+        const newRetryCount = next.retryCount + 1;
+
+        if (kind === 'permanent' || newRetryCount >= MAX_RETRIES) {
+          cashierMarkFailed(hotelId, next.offlineId, reason, code);
+        } else {
+          markRetry(
+            hotelId, next.offlineId, reason, code,
+            Date.now() + backoffDelayMs(newRetryCount),
+          );
+        }
+
+        // Auth errors stop the run entirely — no point retrying other orders.
+        if (kind !== 'retryable') break;
+        // For retryable errors, first order is in backoff: stop to avoid hammering.
+        break;
       }
     }
+
+    pruneSynced(hotelId);
   } finally {
     _cashierFlushing = false;
   }
 };
 
+export const flushCashierOrderQueue = _flushCashierQueue;
+
 // ── Daily maintenance ─────────────────────────────────────────────────────────
 
-// Prune synced rows older than 7 days once per 24 h. Prevents unbounded table
-// growth at 1000+ orders/day. Uses sync_meta to track when last pruned.
 const _maybePrune = (): void => {
   const lastPrune = getSyncMeta('last_prune');
   if (lastPrune) {
     const age = Date.now() - new Date(lastPrune).getTime();
-    if (age < 86_400_000) return; // pruned within last 24 h
+    if (age < 86_400_000) return;
   }
   pruneOldSyncedOrders(7);
   setSyncMeta('last_prune', new Date().toISOString());
@@ -189,21 +287,17 @@ const _maybePrune = (): void => {
 let _netUnsubscribe: (() => void) | null = null;
 
 export const startSyncEngine = (): void => {
-  // Guard against double-start (e.g. SyncProvider remounting in dev)
   if (_netUnsubscribe) {
     _netUnsubscribe();
     _netUnsubscribe = null;
   }
 
-  // Restore last sync timestamp from SQLite
   const stored = getSyncMeta('last_sync');
   if (stored) _lastSyncAt = new Date(stored);
 
-  // Crash recovery: any row left in 'syncing' from a previous session means
-  // the app died mid-sync. Reset to 'pending' — server offlineId index handles dedup.
+  // Crash recovery: order_queue rows left in 'syncing' from a previous session.
   resetSyncingOrders();
 
-  // Daily pruning of old synced rows
   _maybePrune();
 
   _netUnsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
@@ -211,16 +305,11 @@ export const startSyncEngine = (): void => {
     _isConnected = !!(state.isConnected && state.isInternetReachable !== false);
 
     if (!wasConnected && _isConnected) {
-      // Random jitter 0–30 s before syncing on reconnect.
-      // Prevents all ~1 000 devices across 500 hotels from hammering the server
-      // simultaneously after a shared network outage (thundering herd).
-      // Orders remain safely queued in SQLite — max 30 s delay is acceptable.
+      // Random jitter 0–30 s prevents all devices hammering the server at once.
       const jitterMs = Math.floor(Math.random() * 30_000);
       setTimeout(() => syncNow(), jitterMs);
-      // Customer + cashier orders queued during offline — flush immediately
-      // (no jitter needed; these are per-device and small in number)
       flushCustomerOrderQueue().catch(() => {});
-      flushCashierOrderQueue().catch(() => {});
+      _flushCashierQueue().catch(() => {});
     } else if (!_isConnected) {
       _lastError = null;
       notifyListeners('offline');
@@ -229,13 +318,12 @@ export const startSyncEngine = (): void => {
     }
   });
 
-  // Probe current state (event listener misses the initial state on some devices)
   NetInfo.fetch().then((state: NetInfoState) => {
     _isConnected = !!(state.isConnected && state.isInternetReachable !== false);
     notifyListeners(deriveStatus());
     if (_isConnected && getPendingCount() > 0) syncNow();
     if (_isConnected) flushCustomerOrderQueue().catch(() => {});
-    if (_isConnected) flushCashierOrderQueue().catch(() => {});
+    if (_isConnected) _flushCashierQueue().catch(() => {});
   });
 };
 

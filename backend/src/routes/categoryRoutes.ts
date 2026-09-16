@@ -1,5 +1,8 @@
 import { Router, Response } from 'express';
+import mongoose from 'mongoose';
 import Category from '../models/Category';
+import CategoryConfig from '../models/CategoryConfig';
+import Hotel from '../models/Hotel';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
@@ -10,8 +13,35 @@ router.use(authMiddleware);
 // requireAdmin is applied per write-route only — all authenticated roles can read categories
 
 // GET all categories for this hotel
+// For multiBranch branches: fetches org categories and applies CategoryConfig overlay.
+// Default semantics: no config row = category visible; enabled:false = hidden.
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
+    // Check if caller is a multiBranch branch
+    const hotel = await Hotel.findById(req.hotelId)
+      .select('parentHotelId features')
+      .lean();
+
+    if (hotel?.parentHotelId && hotel.features?.multiBranch) {
+      const orgHotelId   = hotel.parentHotelId;
+      const branchObjId  = new mongoose.Types.ObjectId(req.hotelId!);
+
+      // Fetch org categories + disabled configs for this branch in parallel
+      const [categories, disabledConfigs] = await Promise.all([
+        Category.find({ hotelId: orgHotelId, isActive: true, isDeleted: false })
+          .sort({ sortOrder: 1 })
+          .lean(),
+        CategoryConfig.find({ orgHotelId, branchHotelId: branchObjId, enabled: false })
+          .select('categoryId')
+          .lean(),
+      ]);
+
+      const disabledIds = new Set(disabledConfigs.map(c => c.categoryId.toString()));
+      const visible = categories.filter(cat => !disabledIds.has(cat._id.toString()));
+      res.json(visible);
+      return;
+    }
+
     const categories = await Category.find({
       hotelId: req.hotelId,
       isActive: true,

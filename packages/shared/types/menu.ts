@@ -51,6 +51,9 @@ export interface FeatureFlags {
   digitalReceipts?:        boolean;
   customerOrderHistory?:   boolean;
   marketingCampaigns?:     boolean;
+  multiBranch?:            boolean;
+  orgLoyalty?:             boolean;
+  orgLoyaltyEnabled?:      boolean;
 }
 
 export interface Category {

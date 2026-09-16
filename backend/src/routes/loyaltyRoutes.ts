@@ -30,7 +30,8 @@ import Settings from '../models/Settings';
 import CustomerProfile from '../models/CustomerProfile';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
 import DailyCounter from '../models/DailyCounter';
-import { getLoyaltyConfig, adjustPoints, calculateMaxRedeemablePoints, calculateRedeemValue, calculateTier } from '../utils/loyaltyUtils';
+import { getLoyaltyConfig, adjustPoints, calculateMaxRedeemablePoints, calculateRedeemValue, calculateTier, resolveOrgLoyalty } from '../utils/loyaltyUtils';
+import OrganizationCustomer from '../models/OrganizationCustomer';
 import { normalizePhone } from '../utils/phoneUtils';
 import LoyaltyOtp from '../models/LoyaltyOtp';
 import crypto from 'crypto';
@@ -401,7 +402,7 @@ router.get('/customers/lookup', requireCashierOrAdmin, async (req: AuthRequest, 
       hotelId: hotelObjId,
       phone:   e164,
       status:  { $ne: 'merged' },
-    }).select('customerId name phone loyaltyBalance loyaltyOptOut status lifetimeSpend').lean();
+    }).select('customerId name phone loyaltyBalance loyaltyOptOut status lifetimeSpend orgCustomerId').lean();
 
     if (!customer) {
       res.status(404).json({ message: 'No loyalty profile found for this phone number' });
@@ -413,8 +414,13 @@ router.get('/customers/lookup', requireCashierOrAdmin, async (req: AuthRequest, 
       return;
     }
 
-    const config      = await getLoyaltyConfig(req.hotelId!);
     const lifetimeSpend = (customer as any).lifetimeSpend ?? 0;
+    // Resolve org loyalty context for this customer
+    const lookupOrgCtx = await resolveOrgLoyalty(customer as any, req.hotelId!);
+    const config = lookupOrgCtx
+      ? lookupOrgCtx.hqConfig
+      : await getLoyaltyConfig(req.hotelId!);
+
     const tier         = calculateTier(lifetimeSpend, config.tierThresholds);
 
     if ((customer as any).loyaltyOptOut) {
@@ -424,6 +430,7 @@ router.get('/customers/lookup', requireCashierOrAdmin, async (req: AuthRequest, 
           name:          (customer as any).name,
           phone:         (customer as any).phone,
           loyaltyBalance: (customer as any).loyaltyBalance,
+          orgLoyaltyBalance: lookupOrgCtx ? lookupOrgCtx.orgCustomer!.orgLoyaltyBalance : undefined,
           loyaltyOptOut: true,
           tier,
         },
@@ -435,7 +442,9 @@ router.get('/customers/lookup', requireCashierOrAdmin, async (req: AuthRequest, 
     }
 
     const billAmount   = parseFloat(amount) || 0;
-    const balance      = (customer as any).loyaltyBalance ?? 0;
+    const balance      = lookupOrgCtx
+      ? (lookupOrgCtx.orgCustomer!.orgLoyaltyBalance ?? 0)
+      : ((customer as any).loyaltyBalance ?? 0);
     const redeemable   = billAmount > 0 && config.enabled
       ? calculateMaxRedeemablePoints(billAmount, balance, balance, config)
       : 0;
@@ -446,7 +455,8 @@ router.get('/customers/lookup', requireCashierOrAdmin, async (req: AuthRequest, 
         customerId:    (customer as any).customerId,
         name:          (customer as any).name,
         phone:         (customer as any).phone,
-        loyaltyBalance: balance,
+        loyaltyBalance: (customer as any).loyaltyBalance,
+        orgLoyaltyBalance: lookupOrgCtx ? lookupOrgCtx.orgCustomer!.orgLoyaltyBalance : undefined,
         loyaltyOptOut: false,
         tier,
       },
@@ -963,7 +973,7 @@ router.post('/otp/verify', requireCashierOrAdmin, async (req: AuthRequest, res: 
       phone:   e164,
       status:  'active',
       loyaltyOptOut: { $ne: true },
-    }).select('_id customerId name loyaltyBalance').lean();
+    }).select('_id customerId name loyaltyBalance orgCustomerId').lean();
 
     if (!customer) {
       res.status(404).json({ message: 'No active loyalty profile found' });
@@ -1013,7 +1023,10 @@ router.post('/otp/verify', requireCashierOrAdmin, async (req: AuthRequest, res: 
 
     // OTP is verified — compute the discount preview without deducting points.
     // Actual deduction happens atomically inside the order transaction (orderRoutes.ts).
-    const config = await getLoyaltyConfig(req.hotelId!);
+    const verifyOrgCtx = await resolveOrgLoyalty(customer as any, req.hotelId!);
+    const config = verifyOrgCtx
+      ? verifyOrgCtx.hqConfig
+      : await getLoyaltyConfig(req.hotelId!);
     const discountValue = calculateRedeemValue(Math.round(points), config);
 
     res.json({
@@ -1024,6 +1037,7 @@ router.post('/otp/verify', requireCashierOrAdmin, async (req: AuthRequest, res: 
         customerId:    (customer as any).customerId,
         name:          (customer as any).name,
         loyaltyBalance: (customer as any).loyaltyBalance,
+        orgLoyaltyBalance: verifyOrgCtx ? verifyOrgCtx.orgCustomer!.orgLoyaltyBalance : undefined,
       },
     });
   } catch (err: any) {

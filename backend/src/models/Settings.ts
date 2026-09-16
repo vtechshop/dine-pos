@@ -18,6 +18,24 @@ export interface ILoyaltySettings {
   };
 }
 
+// ── WhatsApp Receipts settings sub-document ─────────────────────────────────
+export interface IWhatsAppReceiptSettings {
+  /** Master switch — admin must explicitly enable */
+  autoSend:         boolean;
+  /** Meta-approved template name registered through MSG91 */
+  templateName:     string;
+  /** BCP-47 language code, e.g. 'en', 'hi' */
+  templateLanguage: string;
+  /**
+   * Ordered list of variable names for template body substitution.
+   * Index 0 → {{1}}, index 1 → {{2}}, etc.
+   * Supported names: customerName, restaurantName, orderNumber, grandTotal,
+   * paymentMethod, tableNumber, orderDate, orderTime, itemCount,
+   * subtotal, taxTotal, discountAmount
+   */
+  templateVars:     string[];
+}
+
 export interface ISettings extends Document {
   hotelId: Types.ObjectId;
   hotelName: string;
@@ -54,6 +72,8 @@ export interface ISettings extends Document {
   qrGuestTimeoutMinutes: number;   // idle QR guests expire after this many minutes
   // ── Loyalty (Architecture v1.1) ─────────────────────────────────────────
   loyaltySettings: ILoyaltySettings;
+  // ── WhatsApp Receipts ────────────────────────────────────────────────────
+  whatsappReceipts: IWhatsAppReceiptSettings;
   updatedAt: Date;
 }
 
@@ -159,6 +179,14 @@ const SettingsSchema: Schema = new Schema(
 
     // ── QR Session Timeout (Architecture v1.1) ────────────────────────────
     qrGuestTimeoutMinutes:  { type: Number, default: 15, min: 1, max: 180 },
+
+    // ── WhatsApp Receipts ─────────────────────────────────────────────────
+    whatsappReceipts: {
+      autoSend:         { type: Boolean, default: false },
+      templateName:     { type: String, default: '', maxlength: 200 },
+      templateLanguage: { type: String, default: 'en', maxlength: 10 },
+      templateVars:     { type: [String], default: [] },
+    },
 
     // ── Loyalty Settings (Architecture v1.1) ─────────────────────────────
     loyaltySettings: {

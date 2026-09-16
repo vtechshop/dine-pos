@@ -23,7 +23,7 @@ import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/const
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import UnreadBadge from '../components/UnreadBadge';
 import { printReceipt } from '../utils/receipt';
-import { getPendingCount as getCashierQueueCount } from '../database/cashierOrderQueueDao';
+import { getCashierQueueCount } from '../database/cashierOrderQueueDao';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CashierDashboard'>;
 

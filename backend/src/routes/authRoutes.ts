@@ -181,6 +181,12 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       trialEndDate: hotel.trialEndDate,
       subscriptionPlan: hotel.subscriptionPlan,
       features: hotel.features,
+      // Multi-branch fields — present for all hotels; null/false = standalone
+      isHeadquarters: hotel.isHeadquarters ?? false,
+      parentHotelId:  hotel.parentHotelId  ?? null,
+      branchCode:     hotel.branchCode     ?? '',
+      branchName:     hotel.branchName     || hotel.hotelName,
+      maxBranches:    hotel.maxBranches    ?? 1,
     });
   } catch (error) {
     return sendError(res, 500, 'Server error during login', error);

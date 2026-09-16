@@ -1,5 +1,7 @@
 import { apiFetch } from './client';
 
+const AUTH_API_BASE = (import.meta as any).env?.VITE_API_URL ?? 'http://localhost:5000/api';
+
 export interface LoginResponse {
   token:         string;
   refreshToken?: string;
@@ -46,4 +48,23 @@ export async function logoutApi(refreshToken: string): Promise<void> {
     method: 'POST',
     body:   JSON.stringify({ refreshToken }),
   });
+}
+
+export interface RefreshResponse {
+  token:        string;
+  refreshToken: string;
+}
+
+// Direct refresh call — intentionally bypasses apiFetch and its H-03 retry logic
+// so it can be used with the HQ refresh token (pos_org_refresh_token) during switchToOrg.
+export async function refreshTokenApi(refreshToken: string): Promise<RefreshResponse> {
+  const res = await fetch(`${AUTH_API_BASE}/auth/refresh`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ refreshToken }),
+  });
+  if (!res.ok) {
+    throw new Error(`HQ token refresh failed: ${res.status}`);
+  }
+  return res.json() as Promise<RefreshResponse>;
 }

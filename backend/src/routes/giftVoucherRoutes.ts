@@ -21,6 +21,7 @@ import {
 import { requireActiveStaff } from '../middleware/staffAuth';
 import { sendError } from '../utils/sendError';
 import GiftVoucher from '../models/GiftVoucher';
+import Hotel from '../models/Hotel';
 import Order from '../models/Order';
 import { logAudit } from '../utils/audit';
 
@@ -238,9 +239,25 @@ router.get('/:code/check', checkLimiter, requireCashierOrAdmin, async (req: Auth
     const hotelId = new mongoose.Types.ObjectId(req.hotelId);
     const code    = String(req.params.code).trim().toUpperCase();
 
-    const voucher = await GiftVoucher.findOne({ hotelId, voucherCode: code, isDeleted: false })
-      .select('voucherCode balance originalAmount issuedToName issuedToPhone expiresAt isActive')
+    // Try branch voucher first (existing behavior)
+    let voucher = await GiftVoucher.findOne({ hotelId, voucherCode: code, isDeleted: false })
+      .select('voucherCode balance originalAmount issuedToName issuedToPhone expiresAt isActive scope')
       .lean();
+
+    // Fallback: try org-scoped voucher for multiBranch branches
+    if (!voucher) {
+      const callerHotel = await Hotel.findById(req.hotelId).select('parentHotelId features').lean();
+      if (callerHotel?.parentHotelId && callerHotel.features?.multiBranch) {
+        voucher = await GiftVoucher.findOne({
+          orgHotelId: callerHotel.parentHotelId,
+          scope:      'organization',
+          voucherCode: code,
+          isDeleted:  false,
+        })
+          .select('voucherCode balance originalAmount issuedToName issuedToPhone expiresAt isActive scope')
+          .lean();
+      }
+    }
 
     if (!voucher) { res.status(404).json({ valid: false, message: 'Voucher not found' }); return; }
     if (!voucher.isActive) { res.status(400).json({ valid: false, message: 'Voucher is inactive' }); return; }
@@ -273,12 +290,31 @@ router.post('/redeem', redeemLimiter, requireCashierOrAdmin, requireActiveStaff,
     const voucherCode = String(code).trim().toUpperCase();
     const redeemAmt   = Number(amount);
 
+    // Resolve the voucher (branch-scoped first, then org-scoped for multiBranch)
+    // We need the voucher's _id and match filter for the atomic update.
+    let voucherFilter: Record<string, any> = { hotelId, voucherCode };
+    const branchVoucherExists = await GiftVoucher.findOne({ hotelId, voucherCode, isDeleted: false }).select('_id').lean();
+    if (!branchVoucherExists) {
+      const callerHotel = await Hotel.findById(req.hotelId).select('parentHotelId features').lean();
+      if (callerHotel?.parentHotelId && callerHotel.features?.multiBranch) {
+        const orgVoucher = await GiftVoucher.findOne({
+          orgHotelId:  callerHotel.parentHotelId,
+          scope:       'organization',
+          voucherCode,
+          isDeleted:   false,
+        }).select('_id').lean();
+        if (orgVoucher) {
+          // Match by _id for org vouchers (hotelId belongs to HQ, not this branch)
+          voucherFilter = { _id: orgVoucher._id };
+        }
+      }
+    }
+
     // Idempotency: if orderId provided and this orderId was already redeemed, return success
     if (orderId && mongoose.isValidObjectId(orderId)) {
       const orderObjId = new mongoose.Types.ObjectId(orderId);
       const alreadyRedeemed = await GiftVoucher.findOne({
-        hotelId,
-        voucherCode,
+        ...voucherFilter,
         transactions: { $elemMatch: { type: 'redeem', orderId: orderObjId } },
       }).select('balance voucherCode').lean();
       if (alreadyRedeemed) {
@@ -306,8 +342,7 @@ router.post('/redeem', redeemLimiter, requireCashierOrAdmin, requireActiveStaff,
     // Atomic: guard balance, deduct, push transaction, deactivate if drained — one round-trip
     const voucher = await GiftVoucher.findOneAndUpdate(
       {
-        hotelId,
-        voucherCode,
+        ...voucherFilter,
         isActive:  true,
         isDeleted: false,
         $or: [{ expiresAt: null }, { expiresAt: { $gte: now } }],
@@ -330,7 +365,7 @@ router.post('/redeem', redeemLimiter, requireCashierOrAdmin, requireActiveStaff,
       { new: true },
     );
     if (!voucher) {
-      const v = await GiftVoucher.findOne({ hotelId, voucherCode, isDeleted: false })
+      const v = await GiftVoucher.findOne({ ...voucherFilter, isDeleted: false })
         .select('isActive balance expiresAt').lean();
       if (!v || !v.isActive) { res.status(404).json({ message: 'Voucher not found or inactive' }); return; }
       if (v.expiresAt && v.expiresAt < now) { res.status(400).json({ message: 'Voucher has expired' }); return; }

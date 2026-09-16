@@ -26,6 +26,8 @@ export interface IGiftVoucher extends Document {
   isDeleted:          boolean;
   transactions:       IVoucherTransaction[];
   createdBy:          string;
+  scope:              'branch' | 'organization';
+  orgHotelId:         mongoose.Types.ObjectId | null;
   createdAt:          Date;
   updatedAt:          Date;
 }
@@ -57,6 +59,8 @@ const GiftVoucherSchema = new Schema<IGiftVoucher>(
     isDeleted:          { type: Boolean, default: false },
     transactions:       [VoucherTransactionSchema],
     createdBy:          { type: String, default: '' },
+    scope:              { type: String, enum: ['branch', 'organization'], default: 'branch' },
+    orgHotelId:         { type: Schema.Types.ObjectId, ref: 'Hotel', default: null },
   },
   { timestamps: true },
 );
@@ -65,5 +69,7 @@ GiftVoucherSchema.index({ hotelId: 1, voucherCode: 1 }, { unique: true });
 GiftVoucherSchema.index({ hotelId: 1, isActive: 1, balance: -1 });
 GiftVoucherSchema.index({ issuedToCustomerId: 1 }, { sparse: true });
 GiftVoucherSchema.index({ expiresAt: 1 }, { sparse: true });
+// Org-scoped voucher lookup: sparse so null orgHotelId (branch vouchers) doesn't bloat the index
+GiftVoucherSchema.index({ orgHotelId: 1, scope: 1, voucherCode: 1 }, { sparse: true });
 
 export default mongoose.model<IGiftVoucher>('GiftVoucher', GiftVoucherSchema);

@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
+import Hotel from '../models/Hotel';
 import Order from '../models/Order';
 import Settings from '../models/Settings';
 import GiftVoucher from '../models/GiftVoucher';
@@ -513,5 +514,203 @@ router.get('/vendor-procurement', async (req: AuthRequest, res: Response) => {
     sendError(res, 500, 'Failed to generate vendor procurement report', err);
   }
 });
+
+// ── Multi-Branch: Organization Summary ───────────────────────────────────────
+
+// GET /api/reports/org-summary?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Aggregates order totals across the calling hotel's organization (HQ + all branches).
+// Only available to HQ admins with multiBranch feature enabled.
+router.get('/org-summary', async (req: AuthRequest, res: Response) => {
+  try {
+    const { from, to } = req.query as { from?: string; to?: string };
+    if (from && !isValidDateParam(from)) return res.status(400).json({ message: 'Invalid from date. Use YYYY-MM-DD.' });
+    if (to   && !isValidDateParam(to))   return res.status(400).json({ message: 'Invalid to date. Use YYYY-MM-DD.' });
+
+    // Determine org root — if caller is a branch, use its parent; if HQ, use self
+    const callerHotel = await Hotel.findById(req.hotelId!)
+      .select('parentHotelId features hotelName isHeadquarters')
+      .lean() as any;
+    if (!callerHotel) return res.status(404).json({ message: 'Hotel not found' });
+
+    const orgHotelId: string = callerHotel.parentHotelId
+      ? callerHotel.parentHotelId.toString()
+      : req.hotelId!;
+
+    // Verify multiBranch is enabled at the org level
+    const orgHotel = callerHotel.parentHotelId
+      ? await Hotel.findById(orgHotelId).select('hotelName features').lean() as any
+      : callerHotel;
+    if (!orgHotel?.features?.multiBranch) {
+      return res.status(403).json({ code: 'FEATURE_DISABLED', message: "Multi-branch feature is not enabled." });
+    }
+
+    const fromStr  = from || thisMonthStartISTStr();
+    const toStr    = to   || nowISTDateStr();
+    const fromDate = istDay(fromStr, false);
+    const toDate   = istDay(toStr, true);
+
+    // Collect all hotel IDs in this org (HQ + all branches)
+    const branchDocs = await Hotel.find({ parentHotelId: new mongoose.Types.ObjectId(orgHotelId) })
+      .select('_id hotelName branchName branchCode status')
+      .lean() as any[];
+    const allHotelIds = [
+      new mongoose.Types.ObjectId(orgHotelId),
+      ...branchDocs.map(b => b._id),
+    ];
+
+    // Aggregate completed orders per hotel
+    const [salesRows, cancelRows] = await Promise.all([
+      Order.aggregate([
+        {
+          $match: {
+            hotelId: { $in: allHotelIds },
+            status: 'completed',
+            createdAt: { $gte: fromDate, $lte: toDate },
+          },
+        },
+        {
+          $group: {
+            _id: '$hotelId',
+            totalSales:  { $sum: '$grandTotal' },
+            orderCount:  { $sum: 1 },
+            avgOrder:    { $avg: '$grandTotal' },
+            cashTotal:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, '$grandTotal', 0] } },
+            upiTotal:    { $sum: { $cond: [{ $in: ['$paymentMethod', ['upi', 'upi_intent', 'upi_qr', 'upi_collect']] }, '$grandTotal', 0] } },
+            cardTotal:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card'] }, '$grandTotal', 0] } },
+            razorTotal:  { $sum: { $cond: [{ $in: ['$paymentMethod', ['razorpay', 'online']] }, '$grandTotal', 0] } },
+          },
+        },
+      ]).option({ maxTimeMS: 15_000 }),
+      Order.aggregate([
+        {
+          $match: {
+            hotelId: { $in: allHotelIds },
+            status: 'cancelled',
+            createdAt: { $gte: fromDate, $lte: toDate },
+          },
+        },
+        { $group: { _id: '$hotelId', cancelledCount: { $sum: 1 } } },
+      ]).option({ maxTimeMS: 15_000 }),
+    ]);
+
+    // Build a quick lookup map
+    const salesMap = new Map(salesRows.map((r: any) => [r._id.toString(), r]));
+    const cancelMap = new Map(cancelRows.map((r: any) => [r._id.toString(), r]));
+
+    // Compose per-branch breakdown
+    const branchBreakdown = [
+      // HQ's own sales
+      {
+        hotelId:     orgHotelId,
+        hotelName:   orgHotel.hotelName,
+        branchCode:  '',
+        isHQ:        true,
+        status:      'active',
+        ...extractSales(salesMap.get(orgHotelId)),
+        cancelledCount: cancelMap.get(orgHotelId)?.cancelledCount ?? 0,
+      },
+      // All branches
+      ...branchDocs.map((b: any) => {
+        const bid = b._id.toString();
+        return {
+          hotelId:     bid,
+          hotelName:   b.branchName || b.hotelName,
+          branchCode:  b.branchCode || '',
+          isHQ:        false,
+          status:      b.status,
+          ...extractSales(salesMap.get(bid)),
+          cancelledCount: cancelMap.get(bid)?.cancelledCount ?? 0,
+        };
+      }),
+    ];
+
+    // Compute org totals
+    const totals = branchBreakdown.reduce((acc, b) => ({
+      totalSales:  +(acc.totalSales  + b.totalSales).toFixed(2),
+      orderCount:  acc.orderCount  + b.orderCount,
+      cashTotal:   +(acc.cashTotal  + b.cashTotal).toFixed(2),
+      upiTotal:    +(acc.upiTotal   + b.upiTotal).toFixed(2),
+      cardTotal:   +(acc.cardTotal  + b.cardTotal).toFixed(2),
+      razorTotal:  +(acc.razorTotal + b.razorTotal).toFixed(2),
+      cancelledCount: acc.cancelledCount + b.cancelledCount,
+    }), { totalSales: 0, orderCount: 0, cashTotal: 0, upiTotal: 0, cardTotal: 0, razorTotal: 0, cancelledCount: 0 });
+
+    // Optional product-level breakdown: ?includeProducts=true
+    let productBreakdown: any[] | undefined;
+    if (req.query.includeProducts === 'true') {
+      const productRows = await Order.aggregate([
+        {
+          $match: {
+            hotelId: { $in: allHotelIds },
+            status:  'completed',
+            createdAt: { $gte: fromDate, $lte: toDate },
+          },
+        },
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: {
+              hotelId:     '$hotelId',
+              productId:   '$items.productId',
+              productName: '$items.name',
+            },
+            qty:      { $sum: '$items.quantity' },
+            revenue:  { $sum: { $multiply: ['$items.price', '$items.quantity'] } },
+          },
+        },
+        { $sort: { revenue: -1 } },
+        {
+          $group: {
+            _id:      '$_id.hotelId',
+            products: {
+              $push: {
+                productId:   '$_id.productId',
+                productName: '$_id.productName',
+                qty:         '$qty',
+                revenue:     { $round: ['$revenue', 2] },
+              },
+            },
+          },
+        },
+      ]).option({ maxTimeMS: 30_000 });
+
+      // Attach branch names
+      const hotelNameMap = new Map<string, string>([
+        [orgHotelId, orgHotel.hotelName],
+        ...branchDocs.map((b: any) => [b._id.toString(), b.branchName || b.hotelName] as [string, string]),
+      ]);
+      productBreakdown = productRows.map((r: any) => ({
+        hotelId:   r._id.toString(),
+        hotelName: hotelNameMap.get(r._id.toString()) || r._id.toString(),
+        products:  r.products,
+      }));
+    }
+
+    return res.json({
+      orgHotelId,
+      orgHotelName: orgHotel.hotelName,
+      from: fromStr,
+      to:   toStr,
+      branches: branchBreakdown,
+      totals,
+      ...(productBreakdown ? { productBreakdown } : {}),
+    });
+  } catch (err) {
+    sendError(res, 500, 'Failed to generate org summary report', err);
+  }
+});
+
+function extractSales(row: any) {
+  if (!row) return { totalSales: 0, orderCount: 0, avgOrder: 0, cashTotal: 0, upiTotal: 0, cardTotal: 0, razorTotal: 0 };
+  return {
+    totalSales: +((row.totalSales ?? 0).toFixed(2)),
+    orderCount: row.orderCount  ?? 0,
+    avgOrder:   +((row.avgOrder  ?? 0).toFixed(2)),
+    cashTotal:  +((row.cashTotal ?? 0).toFixed(2)),
+    upiTotal:   +((row.upiTotal  ?? 0).toFixed(2)),
+    cardTotal:  +((row.cardTotal ?? 0).toFixed(2)),
+    razorTotal: +((row.razorTotal ?? 0).toFixed(2)),
+  };
+}
 
 export default router;

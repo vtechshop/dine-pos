@@ -126,4 +126,33 @@ if (dbVersion < 1) {
   db.execSync('PRAGMA user_version = 1');
 }
 
+if (dbVersion < 2) {
+  // v2: hotel isolation + full sync-state machine on cashier_order_queue;
+  //     hotel_id scoping on local_products, local_categories, cart_snapshot.
+  // try/catch on every ALTER: safe to re-run on fresh installs.
+
+  // cashier_order_queue additions
+  try { db.execSync("ALTER TABLE cashier_order_queue ADD COLUMN hotel_id TEXT NOT NULL DEFAULT ''"); } catch {}
+  try { db.execSync('ALTER TABLE cashier_order_queue ADD COLUMN next_attempt_at INTEGER'); } catch {}
+  try { db.execSync(`ALTER TABLE cashier_order_queue ADD COLUMN after_create TEXT NOT NULL DEFAULT '{"markServed":true,"complete":true}'`); } catch {}
+  try { db.execSync('ALTER TABLE cashier_order_queue ADD COLUMN server_id TEXT'); } catch {}
+  try { db.execSync('ALTER TABLE cashier_order_queue ADD COLUMN server_order_number TEXT'); } catch {}
+  try { db.execSync('ALTER TABLE cashier_order_queue ADD COLUMN synced_at TEXT'); } catch {}
+  try { db.execSync('ALTER TABLE cashier_order_queue ADD COLUMN error_code TEXT'); } catch {}
+
+  // product / category cache hotel scoping
+  try { db.execSync("ALTER TABLE local_products ADD COLUMN hotel_id TEXT NOT NULL DEFAULT ''"); } catch {}
+  try { db.execSync("ALTER TABLE local_categories ADD COLUMN hotel_id TEXT NOT NULL DEFAULT ''"); } catch {}
+
+  // cart snapshot hotel scoping
+  try { db.execSync("ALTER TABLE cart_snapshot ADD COLUMN hotel_id TEXT NOT NULL DEFAULT ''"); } catch {}
+
+  // indexes for the new columns
+  try { db.execSync('CREATE INDEX IF NOT EXISTS idx_coq_hotel_status ON cashier_order_queue(hotel_id, status, next_attempt_at)'); } catch {}
+  try { db.execSync('CREATE INDEX IF NOT EXISTS idx_lp_hotel ON local_products(hotel_id)'); } catch {}
+  try { db.execSync('CREATE INDEX IF NOT EXISTS idx_lc_hotel ON local_categories(hotel_id)'); } catch {}
+
+  db.execSync('PRAGMA user_version = 2');
+}
+
 export { db };

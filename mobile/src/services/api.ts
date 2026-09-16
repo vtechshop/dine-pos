@@ -2709,3 +2709,146 @@ export const addCashMovement = async (
   if (!res.ok) throw new Error(data.message || 'Failed to record movement');
   return data.movement;
 };
+
+// ── WhatsApp Auto-Receipts ────────────────────────────────────────────────────
+
+export type WARStatus = 'queued' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed' | 'skipped';
+
+export interface WhatsAppReceiptRecord {
+  _id:            string;
+  orderId?:       string | null;
+  guestId?:       string | null;
+  maskedPhone:    string;
+  status:         WARStatus;
+  attemptCount:   number;
+  maxAttempts:    number;
+  sentAt?:        string | null;
+  deliveredAt?:   string | null;
+  readAt?:        string | null;
+  failedAt?:      string | null;
+  failureReason?: string | null;
+  purpose:        string;
+  createdAt:      string;
+  updatedAt:      string;
+}
+
+export interface WhatsAppReceiptConfig {
+  autoSend:         boolean;
+  templateName:     string;
+  templateLanguage: string;
+  templateVars:     string[];
+}
+
+export const fetchWhatsAppReceiptSettings = async (): Promise<{
+  config:   WhatsAppReceiptConfig;
+  provider: { configured: boolean; providerType?: string; integratedNumber?: string };
+}> => fetchAPI('/settings/whatsapp-receipts');
+
+export const saveWhatsAppReceiptSettings = async (
+  data: Partial<WhatsAppReceiptConfig>,
+): Promise<{ config: WhatsAppReceiptConfig }> =>
+  fetchAPI('/settings/whatsapp-receipts', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+export const fetchWhatsAppReceipts = async (params?: {
+  page?: number; limit?: number; status?: WARStatus; orderId?: string;
+}): Promise<{ receipts: WhatsAppReceiptRecord[]; total: number; page: number; pages: number }> => {
+  const qs = new URLSearchParams();
+  if (params?.page)    qs.set('page',    String(params.page));
+  if (params?.limit)   qs.set('limit',   String(params.limit));
+  if (params?.status)  qs.set('status',  params.status);
+  if (params?.orderId) qs.set('orderId', params.orderId);
+  return fetchAPI(`/whatsapp-receipts?${qs}`);
+};
+
+export const retryWhatsAppReceipt = async (
+  id: string,
+): Promise<{ success: boolean; message: string }> =>
+  fetchAPI(`/whatsapp-receipts/${id}/retry`, { method: 'POST' });
+
+// ── Tally Direct Sync ─────────────────────────────────────────────────────────
+
+export interface TallyLedgerMap {
+  salesLedger:       string;
+  cgstLedger:        string;
+  sgstLedger:        string;
+  cashLedger:        string;
+  bankLedger:        string;
+  discountLedger:    string;
+  roundOffLedger:    string;
+  expenseLedger:     string;
+  purchaseLedger:    string;
+  stockInHandLedger: string;
+  walletLedger:      string;
+}
+
+export interface TallyConfig {
+  _id?:                string;
+  enabled:             boolean;
+  companyName:         string;
+  connectorTokenSet:   boolean;
+  connectorLastSeenAt: string | null;
+  ledgerMap:           Partial<TallyLedgerMap>;
+  syncSales:           boolean;
+  syncPurchases:       boolean;
+  syncExpenses:        boolean;
+  syncCancellations:   boolean;
+}
+
+export type TallySyncStatus = 'pending' | 'syncing' | 'synced' | 'failed' | 'skipped';
+export type TallyEntityType = 'order' | 'cancellation' | 'purchase_invoice' | 'expense';
+
+export interface TallySyncJob {
+  _id:               string;
+  entityType:        TallyEntityType;
+  entityId:          string;
+  operation:         string;
+  status:            TallySyncStatus;
+  idempotencyKey:    string;
+  attemptCount:      number;
+  lastAttemptAt:     string | null;
+  nextAttemptAt:     string | null;
+  syncedAt:          string | null;
+  externalReference: string;
+  voucherNumber:     string;
+  errorCode:         string;
+  errorReason:       string;
+  createdAt:         string;
+}
+
+export const fetchTallyConfig = (): Promise<TallyConfig> =>
+  fetchAPI('/integrations/tally/config');
+
+export const saveTallyConfig = (
+  data: Partial<Omit<TallyConfig, '_id' | 'connectorTokenSet' | 'connectorLastSeenAt'>>,
+): Promise<TallyConfig> =>
+  fetchAPI('/integrations/tally/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+export const fetchTallyJobs = (params?: {
+  status?:     TallySyncStatus;
+  entityType?: TallyEntityType;
+  page?:       number;
+  limit?:      number;
+}): Promise<{ jobs: TallySyncJob[]; total: number; page: number; pages: number }> => {
+  const qs = new URLSearchParams();
+  if (params?.status)     qs.set('status',     params.status);
+  if (params?.entityType) qs.set('entityType', params.entityType);
+  if (params?.page)       qs.set('page',       String(params.page));
+  if (params?.limit)      qs.set('limit',      String(params.limit));
+  return fetchAPI(`/integrations/tally/jobs?${qs}`);
+};
+
+export const retryTallyJob = (
+  jobId: string,
+): Promise<{ message: string }> =>
+  fetchAPI(`/integrations/tally/jobs/${jobId}/retry`, { method: 'POST' });
+
+export const fetchTallyStats = (): Promise<Record<TallySyncStatus, number>> =>
+  fetchAPI('/integrations/tally/stats');

@@ -13,8 +13,8 @@ import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { OfflineBanner } from '../components/cashier/OfflineBanner';
-import { getQueue } from '../utils/offlineQueue';
-import { createOrder, completeOrder } from '../api/orders';
+import { syncNow } from '../sync/syncEngine';
+import { useOrderSyncStatus } from '../hooks/useOrderSyncStatus';
 import { fetchDailyReport, fetchPrinterDevices } from '../api/dashboard';
 import { NewOrderPanel }          from '../components/cashier/NewOrderPanel';
 import { PendingBillsPanel }      from '../components/cashier/PendingBillsPanel';
@@ -234,49 +234,14 @@ export function CashierPage() {
 
   const identity = getCashierIdentity();
 
-  // ── Offline queue sync ─────────────────────────────────────────────────────
-  const [queueLen, setQueueLen] = useState(0);
-  const [syncing, setSyncing]   = useState(false);
-  // Ref guards concurrent runs without adding `syncing` to useCallback deps,
-  // which would cause a new syncQueue reference on every setSyncing call and
-  // trigger an infinite effect→syncQueue→setState→effect loop.
-  const syncingRef = useRef(false);
+  // ── Offline order queue (IndexedDB) and sync engine ────────────────────────
+  // The engine owns retries, backoff and the single sync lock; this page only shows its state.
+  const orderSync = useOrderSyncStatus(hotelId);
 
+  // Reconnect-triggered sync, as before — through the same global lock as every other trigger.
   useEffect(() => {
-    setQueueLen(hotelId ? getQueue(hotelId).length : 0);
-  }, [hotelId, activeTab]);
-
-  const syncQueue = useCallback(async () => {
-    if (!hotelId || syncingRef.current) return;
-    const { removeFromQueue } = await import('../utils/offlineQueue');
-    const queue = getQueue(hotelId);
-    if (queue.length === 0) { setQueueLen(0); return; }
-    syncingRef.current = true;
-    setSyncing(true);
-    let remaining = queue.length;
-    for (const entry of queue) {
-      try {
-        const payload = entry.payload as Parameters<typeof createOrder>[0];
-        const created = await createOrder({ ...payload, offlineId: entry.id });
-        if (payload.orderSource !== 'dine-in') {
-          await completeOrder(created._id);
-        }
-        removeFromQueue(hotelId, entry.id);
-        remaining--;
-      } catch { /* leave in queue, will retry next sync */ }
-    }
-    setQueueLen(remaining);
-    syncingRef.current = false;
-    setSyncing(false);
-  }, [hotelId]);
-
-  // Auto-sync when socket reconnects
-  useEffect(() => {
-    if (socketConnected && hotelId) {
-      const q = getQueue(hotelId);
-      if (q.length > 0) void syncQueue();
-    }
-  }, [socketConnected, hotelId, syncQueue]);
+    if (socketConnected && hotelId) void syncNow(hotelId);
+  }, [socketConnected, hotelId]);
 
   // Header data
   const [report, setReport]     = useState<DailyReport | null>(null);
@@ -417,9 +382,10 @@ export function CashierPage() {
       <div className="shrink-0 px-4 pt-2">
         <OfflineBanner
           socketConnected={socketConnected}
-          queueLength={queueLen}
-          onRetrySync={() => void syncQueue()}
-          syncing={syncing}
+          summary={orderSync.summary}
+          syncing={orderSync.syncing}
+          onSyncNow={orderSync.syncNow}
+          onRetryFailed={id => void orderSync.retryFailed(id)}
         />
       </div>
 

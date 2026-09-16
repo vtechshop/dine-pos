@@ -7,7 +7,7 @@ import {
   useMemo,
 } from 'react';
 import type { ReactNode } from 'react';
-import { loginApi, logoutApi, decodeJwtPayload, loginCashierApi } from '../api/auth';
+import { loginApi, logoutApi, decodeJwtPayload, loginCashierApi, refreshTokenApi } from '../api/auth';
 import { configureAuth } from '../api/client';
 import { saLogin } from '../api/superAdmin';
 
@@ -17,6 +17,18 @@ interface AuthState {
   hotelName:       string | null;
   role:            string | null;
   isAuthenticated: boolean;
+  // Non-null when operating inside a branch context (HQ admin switched to a branch)
+  orgHotelId:      string | null;
+  orgHotelName:    string | null;
+}
+
+export interface SwitchBranchParams {
+  branchToken:        string;
+  branchRefreshToken: string;
+  branchId:           string;
+  branchName:         string;
+  orgHotelId:         string;
+  orgHotelName:       string;
 }
 
 interface AuthContextType extends AuthState {
@@ -25,6 +37,12 @@ interface AuthContextType extends AuthState {
   loginSuperAdmin(userId: string, password: string): Promise<void>;
   logout(): void;
   setHotelName(name: string): void;
+  /** Switch to a branch context. Saves the current HQ token for restoration. */
+  switchToBranch(params: SwitchBranchParams): void;
+  /** Restore the original HQ context, refreshing HQ token proactively. */
+  switchToOrg(): Promise<void>;
+  /** True when operating inside a branch (not HQ context). */
+  isInBranchContext: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -35,6 +53,14 @@ const KEYS = {
   hotelId:      'pos_hotel_id',
   hotelName:    'pos_hotel_name',
   role:         'pos_role',
+} as const;
+
+// Saved HQ context — set when switching into a branch; cleared on switchToOrg/logout
+const ORG_KEYS = {
+  orgToken:     'pos_org_token',
+  orgRefToken:  'pos_org_refresh_token',
+  orgHotelId:   'pos_org_hotel_id',
+  orgHotelName: 'pos_org_hotel_name',
 } as const;
 
 // Both keys survive logout — they describe the POS terminal itself, not the session.
@@ -53,6 +79,8 @@ function readStorage(): AuthState {
     hotelName:       localStorage.getItem(KEYS.hotelName),
     role,
     isAuthenticated: !!token,
+    orgHotelId:      localStorage.getItem(ORG_KEYS.orgHotelId),
+    orgHotelName:    localStorage.getItem(ORG_KEYS.orgHotelName),
   };
 }
 
@@ -77,7 +105,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // A 401 on a hotel endpoint while logged in as SA is expected — ignore it.
         if (localStorage.getItem(KEYS.role) === 'superadmin') return;
         Object.values(KEYS).forEach(k => localStorage.removeItem(k));
-        setState({ token: null, hotelId: null, hotelName: null, role: null, isAuthenticated: false });
+        Object.values(ORG_KEYS).forEach(k => localStorage.removeItem(k));
+        setState({ token: null, hotelId: null, hotelName: null, role: null, isAuthenticated: false, orgHotelId: null, orgHotelName: null });
       },
     });
   }, []);
@@ -115,6 +144,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hotelName:       res.hotelName ?? null,
       role,
       isAuthenticated: true,
+      orgHotelId:      null,
+      orgHotelName:    null,
     });
   }, []);
 
@@ -134,6 +165,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hotelName:       null,
       role:            'cashier',
       isAuthenticated: true,
+      orgHotelId:      null,
+      orgHotelName:    null,
     });
   }, []);
 
@@ -147,6 +180,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hotelName:       null,
       role:            'superadmin',
       isAuthenticated: true,
+      orgHotelId:      null,
+      orgHotelName:    null,
     });
   }, []);
 
@@ -157,9 +192,96 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (rt) {
       logoutApi(rt).catch(() => {});
     }
+    // Also revoke the org token's refresh if we're in branch context
+    const orgRt = localStorage.getItem(ORG_KEYS.orgRefToken);
+    if (orgRt) {
+      logoutApi(orgRt).catch(() => {});
+    }
     localStorage.removeItem('sa_token');
     Object.values(KEYS).forEach(k => localStorage.removeItem(k));
-    setState({ token: null, hotelId: null, hotelName: null, role: null, isAuthenticated: false });
+    Object.values(ORG_KEYS).forEach(k => localStorage.removeItem(k));
+    setState({ token: null, hotelId: null, hotelName: null, role: null, isAuthenticated: false, orgHotelId: null, orgHotelName: null });
+  }, []);
+
+  const switchToBranch = useCallback((params: SwitchBranchParams) => {
+    const { branchToken, branchRefreshToken, branchId, branchName, orgHotelId, orgHotelName } = params;
+
+    // Save the HQ context the first time we enter branch mode (don't overwrite if already in a branch)
+    if (!localStorage.getItem(ORG_KEYS.orgToken)) {
+      const currentToken   = localStorage.getItem(KEYS.token)        || '';
+      const currentRefresh = localStorage.getItem(KEYS.refreshToken)  || '';
+      const currentHotelId = localStorage.getItem(KEYS.hotelId)       || '';
+      const currentName    = localStorage.getItem(KEYS.hotelName)     || '';
+      if (currentToken)   localStorage.setItem(ORG_KEYS.orgToken,     currentToken);
+      if (currentRefresh) localStorage.setItem(ORG_KEYS.orgRefToken,  currentRefresh);
+      if (currentHotelId) localStorage.setItem(ORG_KEYS.orgHotelId,   currentHotelId);
+      if (currentName)    localStorage.setItem(ORG_KEYS.orgHotelName, currentName);
+    } else {
+      // Already in branch context (switching between branches) — ensure org identity is current
+      localStorage.setItem(ORG_KEYS.orgHotelId,   orgHotelId);
+      localStorage.setItem(ORG_KEYS.orgHotelName, orgHotelName);
+    }
+
+    localStorage.setItem(KEYS.token,        branchToken);
+    localStorage.setItem(KEYS.refreshToken, branchRefreshToken);
+    localStorage.setItem(KEYS.hotelId,      branchId);
+    localStorage.setItem(KEYS.hotelName,    branchName);
+
+    setState(s => ({
+      ...s,
+      token:        branchToken,
+      hotelId:      branchId,
+      hotelName:    branchName,
+      orgHotelId,
+      orgHotelName,
+      isAuthenticated: true,
+    }));
+  }, []);
+
+  const switchToOrg = useCallback(async () => {
+    const orgToken    = localStorage.getItem(ORG_KEYS.orgToken);
+    const orgRefToken = localStorage.getItem(ORG_KEYS.orgRefToken);
+    const orgHotelId  = localStorage.getItem(ORG_KEYS.orgHotelId);
+    const orgName     = localStorage.getItem(ORG_KEYS.orgHotelName);
+    if (!orgToken || !orgHotelId) return; // not in branch context
+
+    let activeOrgToken    = orgToken;
+    let activeOrgRefToken = orgRefToken;
+
+    // Proactively refresh the HQ access token to avoid operating with a
+    // stale token after a long branch session.
+    if (orgRefToken) {
+      try {
+        const refreshed = await refreshTokenApi(orgRefToken);
+        activeOrgToken    = refreshed.token;
+        activeOrgRefToken = refreshed.refreshToken;
+      } catch {
+        // HQ refresh token is invalid or expired — cannot restore HQ context safely.
+        // Clear all auth state and require re-login.
+        Object.values(KEYS).forEach(k => localStorage.removeItem(k));
+        Object.values(ORG_KEYS).forEach(k => localStorage.removeItem(k));
+        setState({ token: null, hotelId: null, hotelName: null, role: null, isAuthenticated: false, orgHotelId: null, orgHotelName: null });
+        return;
+      }
+    }
+
+    localStorage.setItem(KEYS.token,   activeOrgToken);
+    if (activeOrgRefToken) localStorage.setItem(KEYS.refreshToken, activeOrgRefToken);
+    else                   localStorage.removeItem(KEYS.refreshToken);
+    localStorage.setItem(KEYS.hotelId,   orgHotelId);
+    if (orgName) localStorage.setItem(KEYS.hotelName, orgName);
+
+    Object.values(ORG_KEYS).forEach(k => localStorage.removeItem(k));
+
+    setState(s => ({
+      ...s,
+      token:        activeOrgToken,
+      hotelId:      orgHotelId,
+      hotelName:    orgName,
+      orgHotelId:   null,
+      orgHotelName: null,
+      isAuthenticated: true,
+    }));
   }, []);
 
   const setHotelName = useCallback((name: string) => {
@@ -168,8 +290,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ ...state, login, loginCashier, loginSuperAdmin, logout, setHotelName }),
-    [state, login, loginCashier, loginSuperAdmin, logout, setHotelName],
+    () => ({
+      ...state,
+      login, loginCashier, loginSuperAdmin, logout, setHotelName,
+      switchToBranch, switchToOrg,
+      isInBranchContext: state.orgHotelId !== null,
+    }),
+    [state, login, loginCashier, loginSuperAdmin, logout, setHotelName, switchToBranch, switchToOrg],
   );
 
   return (

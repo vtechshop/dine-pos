@@ -6,6 +6,12 @@ import {
   SyncStatus, refreshCache,
 } from '../sync/syncEngine';
 import { getPendingCount, getFailedCount, resetFailedOrders } from '../database/orderQueueDao';
+import {
+  getPendingCount as getCashierPendingCount,
+  getFailedCount as getCashierFailedCount,
+  resetFailedOrders as resetCashierFailedOrders,
+} from '../database/cashierOrderQueueDao';
+import { getAuthCache } from '../database/authDao';
 
 interface SyncContextType {
   status: SyncStatus;
@@ -30,40 +36,49 @@ const SyncContext = createContext<SyncContextType>({
 });
 
 export const SyncProvider = ({ children }: { children: ReactNode }) => {
-  const [status, setStatus]           = useState<SyncStatus>('offline');
+  const [status, setStatus]             = useState<SyncStatus>('offline');
   const [pendingCount, setPendingCount] = useState(0);
-  const [failedCount, setFailedCount]  = useState(0);
-  const [lastSyncAt, setLastSyncAt]   = useState<Date | null>(null);
-  const [syncError, setSyncError]     = useState<string | undefined>();
+  const [failedCount, setFailedCount]   = useState(0);
+  const [lastSyncAt, setLastSyncAt]     = useState<Date | null>(null);
+  const [syncError, setSyncError]       = useState<string | undefined>();
+
+  const refreshCounts = useCallback(() => {
+    const hotelId = getAuthCache()?.hotelId ?? '';
+    // Total pending = general queue + cashier queue
+    const pending = getPendingCount() + (hotelId ? getCashierPendingCount(hotelId) : 0);
+    const failed  = getFailedCount()  + (hotelId ? getCashierFailedCount(hotelId)  : 0);
+    setPendingCount(pending);
+    setFailedCount(failed);
+  }, []);
 
   useEffect(() => {
     startSyncEngine();
 
-    const unsub = addSyncListener((s, pending, last, err) => {
+    const unsub = addSyncListener((s, _pending, last, err) => {
       setStatus(s);
-      setPendingCount(pending);
       setLastSyncAt(last);
       setSyncError(err);
-      setFailedCount(getFailedCount());
+      refreshCounts();
     });
 
     return () => {
       unsub();
       stopSyncEngine();
     };
-  }, []);
+  }, [refreshCounts]);
 
   const triggerSync = useCallback(async () => {
     await syncNow();
-    setFailedCount(getFailedCount());
-  }, []);
+    refreshCounts();
+  }, [refreshCounts]);
 
   const resetFailed = useCallback(() => {
+    const hotelId = getAuthCache()?.hotelId ?? '';
     resetFailedOrders();
-    setFailedCount(0);
-    setPendingCount(getPendingCount());
+    if (hotelId) resetCashierFailedOrders(hotelId);
+    refreshCounts();
     triggerSync();
-  }, [triggerSync]);
+  }, [triggerSync, refreshCounts]);
 
   const refreshLocalCache = useCallback(async () => {
     await refreshCache();

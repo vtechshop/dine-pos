@@ -46,6 +46,7 @@ export interface ICustomerProfile extends Document {
   firstVisitAt: Date;
   status: CustomerStatus;
   mergedIntoId: mongoose.Types.ObjectId | null;  // set when status='merged'
+  orgCustomerId: mongoose.Types.ObjectId | null; // org-level identity link (explicit only, never auto)
   notes: string;
   createdAt: Date;
   updatedAt: Date;
@@ -94,6 +95,7 @@ const CustomerProfileSchema: Schema = new Schema(
     firstVisitAt:   { type: Date, default: () => new Date() },
     status:         { type: String, enum: ['active', 'blocked', 'merged'], default: 'active' },
     mergedIntoId:   { type: Schema.Types.ObjectId, ref: 'CustomerProfile', default: null },
+    orgCustomerId:  { type: Schema.Types.ObjectId, ref: 'OrganizationCustomer', default: null },
     notes:          { type: String, default: '', maxlength: 1000 },
   },
   { timestamps: true }

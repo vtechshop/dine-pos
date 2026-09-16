@@ -87,6 +87,7 @@ const ForecastPage          = lazy(() => import('./pages/ai/ForecastPage').then(
 const AlertsPage            = lazy(() => import('./pages/ai/AlertsPage').then(m => ({ default: m.AlertsPage })));
 const RecommendationsPage   = lazy(() => import('./pages/ai/RecommendationsPage').then(m => ({ default: m.RecommendationsPage })));
 const PurchaseAssistantPage = lazy(() => import('./pages/ai/PurchaseAssistantPage').then(m => ({ default: m.PurchaseAssistantPage })));
+const BranchAdminPage       = lazy(() => import('./pages/BranchAdminPage').then(m => ({ default: m.default })));
 
 function PageFallback() {
   return (
@@ -214,6 +215,7 @@ export function App() {
                     <Route path="/ai/recommendations" element={<AdminOnly><Suspense fallback={<PageFallback />}><RecommendationsPage /></Suspense></AdminOnly>} />
                     <Route path="/ai/purchase"     element={<AdminOnly><Suspense fallback={<PageFallback />}><PurchaseAssistantPage /></Suspense></AdminOnly>} />
 
+                    <Route path="/branches"    element={<AdminOnly><Suspense fallback={<PageFallback />}><BranchAdminPage /></Suspense></AdminOnly>} />
                     <Route path="/waiter"   element={<Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Route>

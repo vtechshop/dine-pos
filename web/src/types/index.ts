@@ -57,6 +57,8 @@ export interface Settings {
   premiumExpiry?: string | null;
   trialEndsAt?: string | null;
   features?: import('@dinepos/shared/types').FeatureFlags;
+  isOrgBranch?: boolean;
+  _inheritedFromOrg?: string[];
 }
 
 // ── Tables ────────────────────────────────────────────────────────────────────

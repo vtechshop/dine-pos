@@ -20,9 +20,10 @@ import { Colors, Spacing, FontSize, BorderRadius, Shadows, UPI_ID, UPI_NAME } fr
 import { applyCloudinaryTransform } from '../utils/cloudinary';
 import { SelectedModifier, ModifierGroup } from '../types';
 import RazorpayCheckout from 'react-native-razorpay';
-import { getLocalCategories, getLocalProducts, saveCategories, saveProducts, saveTables, getLocalTables } from '../database/localCacheDao';
+import { getLocalCategories, getLocalProducts, saveCategories, saveProducts, saveTables, getLocalTables, getSyncMeta } from '../database/localCacheDao';
 import { enqueueOrder as enqueueCashierOrder } from '../database/cashierOrderQueueDao';
 import { isConnected } from '../sync/syncEngine';
+import { getAuthCache } from '../database/authDao';
 import { printKOT } from '../utils/receipt';
 import { KOTOrderInput } from '../types';
 
@@ -88,6 +89,8 @@ const BillingScreen: React.FC = () => {
   const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null);
   const [modifierPicker, setModifierPicker] = useState<{ product: Product; effectivePrice: number; variantId?: string; variantName?: string } | null>(null);
   const [modSelections, setModSelections] = useState<Record<string, string[]>>({});
+  const [servedFromCache, setServedFromCache] = useState(false);
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
 
   // Promo state
   const [couponCode,     setCouponCode]     = useState('');
@@ -167,6 +170,7 @@ const BillingScreen: React.FC = () => {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    const hotelId = getAuthCache()?.hotelId ?? '';
     try {
       const [cats, prods, tbls] = await Promise.all([api.getCategories(), api.getProducts(), api.getTables()]);
       setCategories(cats);
@@ -174,19 +178,22 @@ const BillingScreen: React.FC = () => {
       setFiltered(prods);
       setSelectedCat(null);
       setTables(tbls.filter(t => t.status !== 'inactive'));
-      saveCategories(cats);
-      saveProducts(prods);
+      saveCategories(hotelId, cats);
+      saveProducts(hotelId, prods);
       saveTables(tbls.filter(t => t.status !== 'inactive')); // H12: persist tables for offline use
+      setServedFromCache(false);
     } catch {
       // Offline: load from SQLite cache
-      const cachedCats  = getLocalCategories();
-      const cachedProds = getLocalProducts();
+      const cachedCats  = getLocalCategories(hotelId);
+      const cachedProds = getLocalProducts(hotelId);
       const cachedTbls  = getLocalTables(); // H12: restore tables from SQLite when offline
       if (cachedProds.length > 0) {
         setCategories(cachedCats);
         setProducts(cachedProds);
         setFiltered(cachedProds);
         setSelectedCat(null);
+        setServedFromCache(true);
+        setLastSynced(getSyncMeta('last_sync'));
       } else {
         showAlert('Offline', 'No cached menu data. Connect to the internet to load products.');
       }
@@ -351,6 +358,8 @@ Thank you for dining with us! 🍽️`;
                           : orderSource === 'takeaway' ? 'Takeaway'
                           : cart.tableNumber;
       const offlineId     = `cashier_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const hotelIdOff    = getAuthCache()?.hotelId ?? '';
+      // Server-authoritative: strip client-computed totals; server recalculates from items.
       const offlinePayload = {
         items: cart.items.map(item => ({
           product:           item.product._id,
@@ -364,9 +373,6 @@ Thank you for dining with us! 🍽️`;
           taxAmount:         item.taxAmount,
           total:             item.total,
         })),
-        subtotal:        cart.subtotal,
-        taxTotal:        cart.taxTotal,
-        grandTotal:      grandTotalOff,
         discountAmount:  manDiscOff + walletOff,
         couponCode:      appliedCoupon?.code || undefined,
         giftVoucherCode: appliedVoucher?.voucherCode || undefined,
@@ -377,7 +383,6 @@ Thank you for dining with us! 🍽️`;
         notes:           cart.notes,
         isParcel:        isParcelOff,
         orderSource,
-        offlineId,
         localTimestamp:  new Date().toISOString(),
       };
 
@@ -406,7 +411,7 @@ Thank you for dining with us! 🍽️`;
           {
             text: 'Cash',
             onPress: () => {
-              enqueueCashierOrder(offlineId, { ...offlinePayload, paymentMethod: 'cash' });
+              enqueueCashierOrder(hotelIdOff, offlineId, { ...offlinePayload, paymentMethod: 'cash' });
               showAlert('Saved Offline', 'Cash order queued. Will sync when you reconnect.');
               resetCart();
               setPlacing(false);
@@ -415,7 +420,7 @@ Thank you for dining with us! 🍽️`;
           {
             text: 'Card',
             onPress: () => {
-              enqueueCashierOrder(offlineId, { ...offlinePayload, paymentMethod: 'card' });
+              enqueueCashierOrder(hotelIdOff, offlineId, { ...offlinePayload, paymentMethod: 'card' });
               showAlert('Saved Offline', 'Card order queued. Will sync when you reconnect.');
               resetCart();
               setPlacing(false);
@@ -794,6 +799,17 @@ Thank you for dining with us! 🍽️`;
 
   return (
     <View style={styles.container}>
+      {/* ── Offline cache banner ── */}
+      {servedFromCache && (
+        <View style={{ backgroundColor: '#92400E', paddingHorizontal: 12, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <MaterialIcons name="cloud-off" size={13} color="#FCD34D" />
+          <Text style={{ fontSize: 11, color: '#FCD34D', fontWeight: '600' }}>
+            {'Offline — showing cached menu'}
+            {lastSynced ? ` (Last synced: ${new Date(lastSynced).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : ''}
+          </Text>
+        </View>
+      )}
+
       {/* ── Header / Search — hidden when cart is open on mobile ── */}
       {(!showCart || (IS_TABLET && !tabletPortrait)) && (
         <View style={styles.header}>
@@ -1444,6 +1460,9 @@ Thank you for dining with us! 🍽️`;
                 <Text style={[styles.successPrintText, { color: Colors.warning }]}>Print KOT</Text>
               </TouchableOpacity>
             </View>
+            {!!customerPhone.trim() && (
+              <Text style={styles.waReceiptNote}>📲 WhatsApp receipt queued</Text>
+            )}
             <TouchableOpacity style={[styles.successDoneBtn, { width: '100%', marginTop: 8 }]} onPress={() => { setShowSuccess(null); setCustomerPhone(''); setOrderSource('dine-in'); setParcel(false); }}>
               <Text style={styles.successDoneText}>New Order</Text>
               <MaterialIcons name="add" size={18} color={Colors.white} />
@@ -1732,6 +1751,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12, borderRadius: BorderRadius.lg, backgroundColor: Colors.primary, ...Shadows.primary,
   },
   successDoneText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '800' },
+  waReceiptNote:   { fontSize: FontSize.xs, color: Colors.success, marginTop: 6, textAlign: 'center' },
 });
 
 export default BillingScreen;

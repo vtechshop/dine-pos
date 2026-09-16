@@ -11,6 +11,7 @@ import {
 import {
   listHeldBills, createHeldBill, deleteHeldBill as apiDeleteHeldBill,
 } from '../api/heldBills';
+import { saveCart, loadCart, clearCartDb } from '../db/cartPersistence';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -491,8 +492,9 @@ export function CashierProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('online', handler);
   }, [replayOfflineShift]);
 
-  // ── Cart (in-memory only) ─────────────────────────────────────────────────
+  // ── Cart (IndexedDB-persisted) ────────────────────────────────────────────
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartHydrated, setCartHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<CashierTab>('dashboard');
   const [orderPrefill, setOrderPrefill] = useState<OrderPrefill | null>(null);
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
@@ -526,7 +528,26 @@ export function CashierProvider({ children }: { children: ReactNode }) {
     setCart(prev => prev.map(i => i.id === id ? { ...i, notes } : i));
   }, []);
 
-  const clearCart = useCallback(() => setCart([]), []);
+  const clearCart = useCallback(() => {
+    setCart([]);
+    if (hotelId) void clearCartDb(hotelId);
+  }, [hotelId]);
+
+  // ── Cart hydration from IndexedDB ─────────────────────────────────────────
+  useEffect(() => {
+    if (!hotelId) { setCartHydrated(true); return; }
+    loadCart(hotelId)
+      .then(items => {
+        if (items.length > 0) setCart(items as CartItem[]);
+        setCartHydrated(true);
+      })
+      .catch(() => setCartHydrated(true));
+  }, [hotelId]);
+
+  useEffect(() => {
+    if (!cartHydrated || !hotelId) return;
+    void saveCart(hotelId, cart);
+  }, [cart, cartHydrated, hotelId]);
 
   // ── Shift actions ─────────────────────────────────────────────────────────
   const openShift = useCallback((data: Omit<ShiftState, 'id' | 'status'>) => {

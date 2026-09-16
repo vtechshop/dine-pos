@@ -15,6 +15,8 @@ import mongoose from 'mongoose';
 import Settings, { ILoyaltySettings } from '../models/Settings';
 import CustomerProfile from '../models/CustomerProfile';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
+import OrganizationCustomer from '../models/OrganizationCustomer';
+import Hotel from '../models/Hotel';
 import { resolveHotelStatus } from '../middleware/auth';
 
 export interface LoyaltyConfig extends ILoyaltySettings {
@@ -319,4 +321,288 @@ export async function adjustPoints(
   });
 
   return { newBalance: updated.loyaltyBalance, updatedDoc: updated };
+}
+
+// ── Org-Loyalty utilities (Sprint 2) ──────────────────────────────────────────
+//
+// All org-loyalty operations are server-authoritative.
+// Client-supplied orgHotelId, branchHotelId, and orgCustomerId are NEVER trusted.
+// All IDs are resolved from JWT (req.hotelId) and the authenticated CustomerProfile.
+
+/**
+ * Load the HQ hotel's loyalty config for org-loyalty operations.
+ * Uses the same structure as getLoyaltyConfig but reads the HQ hotel's Settings.
+ * The `enabled` flag reflects features.orgLoyalty on the HQ hotel document.
+ */
+export async function getOrgLoyaltyConfig(orgHotelId: string): Promise<LoyaltyConfig> {
+  const [hqHotel, settings] = await Promise.all([
+    Hotel.findById(orgHotelId).select('features').lean(),
+    Settings.findOne({ hotelId: new mongoose.Types.ObjectId(orgHotelId) })
+      .select('loyaltySettings')
+      .lean(),
+  ]);
+
+  const enabled = Boolean((hqHotel as any)?.features?.orgLoyalty);
+  const ls      = (settings as any)?.loyaltySettings ?? {};
+
+  return {
+    enabled,
+    rewardName:             ls.rewardName             ?? 'Points',
+    pointsPerHundredRupees: ls.pointsPerHundredRupees ?? 10,
+    minimumRedeemPoints:    ls.minimumRedeemPoints     ?? 100,
+    maximumRedeemPercent:   ls.maximumRedeemPercent    ?? 10,
+    pointValueInPaisa:      ls.pointValueInPaisa       ?? 100,
+    expiryDays:             ls.expiryDays              ?? 0,
+    roundingRule:           ls.roundingRule            ?? 'floor',
+    calculationBase:        ls.calculationBase         ?? 'before_gst',
+    maxEarnPointsPerBill:   ls.maxEarnPointsPerBill    ?? 0,
+    tierThresholds:         ls.tierThresholds           ?? undefined,
+  };
+}
+
+export interface OrgLoyaltyContext {
+  orgCustomer: InstanceType<typeof OrganizationCustomer> | null;
+  hqConfig:    LoyaltyConfig;
+}
+
+/**
+ * Determine whether org-loyalty is active for the given CustomerProfile at the given branch.
+ *
+ * Returns { orgCustomer, hqConfig } if all conditions are met, or null to fall back to
+ * branch loyalty.
+ *
+ * Conditions:
+ *  1. profile.orgCustomerId is set (customer is explicitly linked)
+ *  2. HQ hotel has features.orgLoyalty === true
+ *  3. Branch hotel has features.orgLoyaltyEnabled !== false
+ *  4. CustomerProfile.loyaltyOptOut is not true
+ *  5. OrganizationCustomer.status === 'active'
+ *
+ * NEVER trusts client-supplied IDs — all resolution is from the profile document.
+ */
+export async function resolveOrgLoyalty(
+  profile: { orgCustomerId?: mongoose.Types.ObjectId | null; loyaltyOptOut?: boolean },
+  branchHotelId: string,
+): Promise<OrgLoyaltyContext | null> {
+  if (!profile.orgCustomerId) return null;
+  if (profile.loyaltyOptOut) return null;
+
+  const branchHotel = await Hotel.findById(branchHotelId)
+    .select('parentHotelId features')
+    .lean();
+  if (!branchHotel || !branchHotel.parentHotelId) return null; // standalone, not a branch
+
+  // Branch must have orgLoyaltyEnabled !== false (default is true)
+  if ((branchHotel as any).features?.orgLoyaltyEnabled === false) return null;
+
+  const orgHotelId = branchHotel.parentHotelId.toString();
+  const hqConfig   = await getOrgLoyaltyConfig(orgHotelId);
+  if (!hqConfig.enabled) return null; // HQ master switch off
+
+  const orgCustomer = await OrganizationCustomer.findOne({
+    _id:       profile.orgCustomerId,
+    orgHotelId: new mongoose.Types.ObjectId(orgHotelId),
+    status:    'active',
+  });
+  if (!orgCustomer) return null;
+
+  return { orgCustomer, hqConfig };
+}
+
+/**
+ * Atomically increment OrganizationCustomer.orgLoyaltyBalance + append an immutable
+ * 'earn' LoyaltyTransaction with org context.
+ *
+ * Does NOT touch CustomerProfile.loyaltyBalance — org-loyalty earn only updates the org balance.
+ * Idempotency: callers must guard with Order.loyaltyEarnedAt before calling.
+ * Secondary guard: idempotencyKey unique index rejects duplicate creates.
+ */
+export async function earnOrgPoints(
+  orgCustomerId: mongoose.Types.ObjectId,
+  orgHotelId:    string,
+  branchHotelId: string,
+  customerId:    mongoose.Types.ObjectId,
+  points:        number,
+  config:        LoyaltyConfig,
+  ctx:           LoyaltyContext,
+): Promise<void> {
+  if (points <= 0) return;
+
+  const orgObjId    = new mongoose.Types.ObjectId(orgHotelId);
+  const branchObjId = new mongoose.Types.ObjectId(branchHotelId);
+
+  const updated = await OrganizationCustomer.findOneAndUpdate(
+    { _id: orgCustomerId, status: 'active' },
+    { $inc: { orgLoyaltyBalance: points } },
+    { new: true },
+  );
+  if (!updated) return; // suspended or deleted — skip silently
+
+  const idempotencyKey = ctx.orderId
+    ? `${orgCustomerId}:earn:${ctx.orderId}`
+    : ctx.guestId
+    ? `${orgCustomerId}:earn:guest:${ctx.guestId}`
+    : null;
+
+  // Set expiry date using HQ config's expiryDays (0 = never expires)
+  const orgExpiresAt = config.expiryDays > 0
+    ? new Date(Date.now() + config.expiryDays * 24 * 60 * 60 * 1000)
+    : null;
+
+  try {
+    await LoyaltyTransaction.create({
+      customerId,
+      hotelId:         branchObjId,
+      orgCustomerId,
+      branchHotelId:   branchObjId,
+      idempotencyKey,
+      sessionId:       ctx.sessionId  ? new mongoose.Types.ObjectId(ctx.sessionId)  : null,
+      guestId:         ctx.guestId    ? new mongoose.Types.ObjectId(ctx.guestId)    : null,
+      orderId:         ctx.orderId    ? new mongoose.Types.ObjectId(ctx.orderId)    : null,
+      paymentId:       ctx.paymentId  ? new mongoose.Types.ObjectId(ctx.paymentId)  : null,
+      transactionType: 'earn',
+      points,
+      balanceAfter:    updated.orgLoyaltyBalance,
+      expiresAt:       orgExpiresAt,
+      createdBy:       ctx.createdBy ?? 'system',
+      remarks:         ctx.remarks   ?? `Org earned ${points} ${config.rewardName}`,
+    });
+  } catch (err: any) {
+    if (err.code === 11000 && err.message?.includes('idempotencyKey')) {
+      // Duplicate idempotency key — already processed; skip silently
+      return;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Atomically decrement OrganizationCustomer.orgLoyaltyBalance + append an immutable
+ * 'redeem' LoyaltyTransaction with org context.
+ *
+ * Guards:
+ *   - status === 'active'
+ *   - orgLoyaltyBalance >= points  (atomic — no check-then-act race)
+ *   - Never produces negative balance
+ *
+ * Must be called inside a MongoDB session/transaction alongside the order save.
+ * Returns the rupee discount value.
+ */
+export async function redeemOrgPoints(
+  orgCustomerId: mongoose.Types.ObjectId,
+  orgHotelId:    string,
+  branchHotelId: string,
+  customerId:    mongoose.Types.ObjectId,
+  points:        number,
+  config:        LoyaltyConfig,
+  ctx:           LoyaltyContext,
+  txSession?:    mongoose.ClientSession,
+): Promise<number> {
+  if (points <= 0) return 0;
+
+  const branchObjId = new mongoose.Types.ObjectId(branchHotelId);
+
+  const updated = await OrganizationCustomer.findOneAndUpdate(
+    {
+      _id:               orgCustomerId,
+      orgHotelId:        new mongoose.Types.ObjectId(orgHotelId),
+      status:            'active',
+      orgLoyaltyBalance: { $gte: points },
+    },
+    { $inc: { orgLoyaltyBalance: -points } },
+    { new: true, session: txSession },
+  );
+  if (!updated) throw new Error('Insufficient org loyalty points or customer ineligible');
+
+  const discountAmount = calculateRedeemValue(points, config);
+
+  const idempotencyKey = ctx.orderId
+    ? `${orgCustomerId}:redeem:${ctx.orderId}`
+    : null;
+
+  try {
+    await LoyaltyTransaction.create(
+      [{
+        customerId,
+        hotelId:         branchObjId,
+        orgCustomerId,
+        branchHotelId:   branchObjId,
+        idempotencyKey,
+        sessionId:       ctx.sessionId  ? new mongoose.Types.ObjectId(ctx.sessionId)  : null,
+        guestId:         ctx.guestId    ? new mongoose.Types.ObjectId(ctx.guestId)    : null,
+        orderId:         ctx.orderId    ? new mongoose.Types.ObjectId(ctx.orderId)    : null,
+        paymentId:       ctx.paymentId  ? new mongoose.Types.ObjectId(ctx.paymentId)  : null,
+        transactionType: 'redeem',
+        points:          -points,
+        balanceAfter:    updated.orgLoyaltyBalance,
+        createdBy:       ctx.createdBy ?? 'system',
+        remarks:         `Org redeemed ${points} ${config.rewardName} for ₹${discountAmount} discount`,
+      }],
+      { session: txSession },
+    );
+  } catch (err: any) {
+    if (err.code === 11000 && err.message?.includes('idempotencyKey')) {
+      return discountAmount; // already processed — return value for caller
+    }
+    throw err;
+  }
+
+  return discountAmount;
+}
+
+/**
+ * Reverse org-earned points on cancellation/refund.
+ * Capped to current orgLoyaltyBalance — never goes below 0.
+ * Idempotency: callers must hold the earn-reversal claim before calling.
+ */
+export async function reverseOrgEarnedPoints(
+  orgCustomerId: mongoose.Types.ObjectId,
+  orgHotelId:    string,
+  branchHotelId: string,
+  customerId:    mongoose.Types.ObjectId,
+  points:        number,
+  config:        LoyaltyConfig,
+  ctx:           LoyaltyContext,
+): Promise<void> {
+  if (points <= 0) return;
+
+  const branchObjId = new mongoose.Types.ObjectId(branchHotelId);
+
+  // Deduct up to current balance — never goes below 0
+  const updated = await OrganizationCustomer.findOneAndUpdate(
+    { _id: orgCustomerId, orgHotelId: new mongoose.Types.ObjectId(orgHotelId) },
+    [
+      {
+        $set: {
+          orgLoyaltyBalance: {
+            $max: [0, { $subtract: ['$orgLoyaltyBalance', points] }],
+          },
+        },
+      },
+    ],
+    { new: false },
+  );
+  if (!updated) return;
+
+  const actualReversed = Math.min(points, updated.orgLoyaltyBalance);
+  if (actualReversed <= 0) return;
+
+  const newBalance = updated.orgLoyaltyBalance - actualReversed;
+
+  await LoyaltyTransaction.create({
+    customerId,
+    hotelId:         branchObjId,
+    orgCustomerId,
+    branchHotelId:   branchObjId,
+    idempotencyKey:  null,
+    sessionId:       ctx.sessionId  ? new mongoose.Types.ObjectId(ctx.sessionId)  : null,
+    guestId:         ctx.guestId    ? new mongoose.Types.ObjectId(ctx.guestId)    : null,
+    orderId:         ctx.orderId    ? new mongoose.Types.ObjectId(ctx.orderId)    : null,
+    paymentId:       ctx.paymentId  ? new mongoose.Types.ObjectId(ctx.paymentId)  : null,
+    transactionType: 'reverse',
+    points:          -actualReversed,
+    balanceAfter:    newBalance,
+    createdBy:       ctx.createdBy ?? 'system',
+    remarks:         ctx.remarks   ?? `Org earn reversed: ${actualReversed} ${config.rewardName}`,
+  });
 }

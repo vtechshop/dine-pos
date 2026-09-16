@@ -17,8 +17,10 @@ import GiftVoucher from '../models/GiftVoucher';
 import CustomerProfile from '../models/CustomerProfile';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
 import { guestLabel } from '../utils/guestLabel';
-import { getLoyaltyConfig, calculateEarnedPoints, calculateMaxRedeemablePoints, calculateRedeemValue, earnPoints, redeemPoints as redeemLoyaltyPts } from '../utils/loyaltyUtils';
+import { getLoyaltyConfig, calculateEarnedPoints, calculateMaxRedeemablePoints, calculateRedeemValue, earnPoints, redeemPoints as redeemLoyaltyPts, resolveOrgLoyalty, earnOrgPoints, redeemOrgPoints as redeemOrgLoyaltyPts, reverseOrgEarnedPoints, getOrgLoyaltyConfig, type OrgLoyaltyContext } from '../utils/loyaltyUtils';
+import OrganizationCustomer from '../models/OrganizationCustomer';
 import { scheduleReceiptPrint } from '../utils/printUtils';
+import { createWhatsAppReceiptJobForGuest } from '../services/whatsappReceiptService';
 
 // mergeParams: true — inherits :sessionId from the parent sessionRoutes mount
 const router = Router({ mergeParams: true });
@@ -257,13 +259,26 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
       let loyaltyCfgPrecomputed: any = null;
       let loyaltyToRedeem  = 0;
       let loyaltyDiscount  = 0;
+      let guestOrgCtx: OrgLoyaltyContext | null = null;
 
       if (wantsLoyalty) {
         try {
-          loyaltyCfgPrecomputed = await getLoyaltyConfig(req.hotelId!);
+          const _profFull = await CustomerProfile.findById(guest.customerId).select('loyaltyBalance orgCustomerId loyaltyOptOut').lean();
+          guestOrgCtx = _profFull ? await resolveOrgLoyalty(_profFull as any, req.hotelId!) : null;
+
+          if (guestOrgCtx) {
+            loyaltyCfgPrecomputed = guestOrgCtx.hqConfig;
+          } else {
+            loyaltyCfgPrecomputed = await getLoyaltyConfig(req.hotelId!);
+          }
+
           if (loyaltyCfgPrecomputed.enabled && (redeemPoints as number) >= loyaltyCfgPrecomputed.minimumRedeemPoints) {
-            const _prof = await CustomerProfile.findById(guest.customerId).select('loyaltyBalance').lean();
-            const _bal  = (_prof as any)?.loyaltyBalance ?? 0;
+            let _bal: number;
+            if (guestOrgCtx) {
+              _bal = guestOrgCtx.orgCustomer!.orgLoyaltyBalance ?? 0;
+            } else {
+              _bal = (_profFull as any)?.loyaltyBalance ?? 0;
+            }
             loyaltyToRedeem = calculateMaxRedeemablePoints(
               guest.totalAmount, _bal, redeemPoints as number, loyaltyCfgPrecomputed,
             );
@@ -377,23 +392,44 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
           let toRedeem = loyaltyToRedeem;
 
           if (!cfg || toRedeem === 0) {
-            cfg = await getLoyaltyConfig(req.hotelId!);
+            const profFallback = await CustomerProfile.findById(guest.customerId).select('loyaltyBalance orgCustomerId loyaltyOptOut').lean();
+            const fallbackOrgCtx = profFallback ? await resolveOrgLoyalty(profFallback as any, req.hotelId!) : null;
+            if (fallbackOrgCtx) {
+              cfg      = fallbackOrgCtx.hqConfig;
+              guestOrgCtx = fallbackOrgCtx;
+            } else {
+              cfg = await getLoyaltyConfig(req.hotelId!);
+            }
             if (cfg.enabled && (redeemPoints as number) >= cfg.minimumRedeemPoints) {
-              const prof = await CustomerProfile.findById(guest.customerId).select('loyaltyBalance').lean();
-              const bal  = (prof as any)?.loyaltyBalance ?? 0;
-              toRedeem   = calculateMaxRedeemablePoints(guest.totalAmount, bal, redeemPoints as number, cfg);
+              const bal = guestOrgCtx
+                ? (guestOrgCtx.orgCustomer!.orgLoyaltyBalance ?? 0)
+                : ((profFallback as any)?.loyaltyBalance ?? 0);
+              toRedeem = calculateMaxRedeemablePoints(guest.totalAmount, bal, redeemPoints as number, cfg);
             }
           }
 
           if (cfg && toRedeem > 0) {
             const actorId = req.cashierId ? `cashier:${req.cashierId}` : `admin:${req.hotelId}`;
-            const discount = await redeemLoyaltyPts(
-              guest.customerId as mongoose.Types.ObjectId,
-              req.hotelId!,
-              toRedeem,
-              cfg,
-              { sessionId: String(session._id), guestId: String(guest._id), createdBy: actorId },
-            );
+            let discount: number;
+            if (guestOrgCtx) {
+              discount = await redeemOrgLoyaltyPts(
+                guestOrgCtx.orgCustomer!._id as mongoose.Types.ObjectId,
+                guestOrgCtx.orgCustomer!.orgHotelId.toString(),
+                req.hotelId!,
+                guest.customerId as mongoose.Types.ObjectId,
+                toRedeem,
+                cfg,
+                { sessionId: String(session._id), guestId: String(guest._id), createdBy: actorId },
+              );
+            } else {
+              discount = await redeemLoyaltyPts(
+                guest.customerId as mongoose.Types.ObjectId,
+                req.hotelId!,
+                toRedeem,
+                cfg,
+                { sessionId: String(session._id), guestId: String(guest._id), createdBy: actorId },
+              );
+            }
             updateFields.loyaltyPointsRedeemed = toRedeem;
             updateFields.loyaltyDiscountAmount  = discount;
             const afterLoyalty = await Guest.findByIdAndUpdate(
@@ -434,7 +470,9 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         if (!updated.loyaltyEarnedAt) {
           ;(async () => {
             try {
-              const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+              const earnProfileDoc = await CustomerProfile.findById(guest.customerId).select('_id orgCustomerId loyaltyOptOut').lean();
+              const earnOrgCtx = earnProfileDoc ? await resolveOrgLoyalty(earnProfileDoc as any, req.hotelId!) : null;
+              const loyaltyCfg = earnOrgCtx ? earnOrgCtx.hqConfig : await getLoyaltyConfig(req.hotelId!);
               if (loyaltyCfg.enabled) {
                 let earnBase = guest.totalAmount;
                 if (loyaltyCfg.calculationBase === 'before_gst') {
@@ -447,13 +485,25 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
                 const earnableBase = Math.max(0, earnBase - (updateFields.loyaltyDiscountAmount ?? 0));
                 const pts = calculateEarnedPoints(earnableBase, loyaltyCfg);
                 if (pts > 0) {
-                  await earnPoints(
-                    guest.customerId as mongoose.Types.ObjectId,
-                    req.hotelId!,
-                    pts,
-                    loyaltyCfg,
-                    { sessionId: String(session._id), guestId: String(guest._id), createdBy: 'system' },
-                  );
+                  if (earnOrgCtx) {
+                    await earnOrgPoints(
+                      earnOrgCtx.orgCustomer!._id as mongoose.Types.ObjectId,
+                      earnOrgCtx.orgCustomer!.orgHotelId.toString(),
+                      req.hotelId!,
+                      guest.customerId as mongoose.Types.ObjectId,
+                      pts,
+                      loyaltyCfg,
+                      { sessionId: String(session._id), guestId: String(guest._id), createdBy: 'system' },
+                    );
+                  } else {
+                    await earnPoints(
+                      guest.customerId as mongoose.Types.ObjectId,
+                      req.hotelId!,
+                      pts,
+                      loyaltyCfg,
+                      { sessionId: String(session._id), guestId: String(guest._id), createdBy: 'system' },
+                    );
+                  }
                   // Stamp idempotency guard so a replay can't double-earn
                   await Guest.updateOne(
                     { _id: updated._id, loyaltyEarnedAt: null },
@@ -476,6 +526,12 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         paymentMethod,
         loyaltyDiscountAmount: updateFields.loyaltyDiscountAmount,
       }).catch(() => {});
+
+      // WhatsApp receipt for dine-in — fire-and-forget; failure NEVER rolls back billing
+      void createWhatsAppReceiptJobForGuest(req.hotelId!, {
+        _id:        guest._id,
+        customerId: guest.customerId,
+      });
 
       // D-10: Await order sync — fire-and-forget left reports and kitchen display stale.
       // Any failure is surfaced to the caller so the billing inconsistency is visible.
@@ -993,22 +1049,52 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
         // 1. Restore redeemed points
         const redeemed = (guest as any).loyaltyPointsRedeemed as number | undefined;
         if (redeemed && redeemed > 0) {
-          const afterRestore = await CustomerProfile.findByIdAndUpdate(
-            guest.customerId,
-            { $inc: { loyaltyBalance: redeemed } },
-            { new: true },
-          );
-          if (afterRestore) {
-            await LoyaltyTransaction.create({
-              customerId:      guest.customerId,
-              hotelId:         hotelObjId,
-              guestId:         guest._id,
-              transactionType: 'adjust',
-              points:          redeemed,
-              balanceAfter:    afterRestore.loyaltyBalance,
-              createdBy,
-              remarks:         `Reversal: guest reopened — restored ${redeemed} redeemed points`,
-            });
+          // Check if original redemption was an org-loyalty transaction
+          const redeemTx = await LoyaltyTransaction.findOne({
+            guestId:         guest._id,
+            hotelId:         hotelObjId,
+            transactionType: 'redeem',
+          }).sort({ createdAt: -1 });
+
+          if (redeemTx?.orgCustomerId) {
+            // Org-loyalty redemption: restore to orgLoyaltyBalance.
+            // Do NOT pass guestId — it would generate idempotency key
+            // "${orgCustomerId}:earn:guest:${guestId}", colliding with the original
+            // earn transaction from guest billing and causing the restore to be silently
+            // rejected. The outer reopen guard (guest.status === 'billed') provides
+            // idempotency. Remarks carry the audit trail.
+            const orgDoc = await OrganizationCustomer.findById(redeemTx.orgCustomerId);
+            if (orgDoc) {
+              const orgCfg = await getOrgLoyaltyConfig(orgDoc.orgHotelId.toString());
+              await earnOrgPoints(
+                orgDoc._id as mongoose.Types.ObjectId,
+                orgDoc.orgHotelId.toString(),
+                req.hotelId!,
+                guest.customerId as mongoose.Types.ObjectId,
+                redeemed,
+                orgCfg,
+                { createdBy, remarks: `Reversal: guest reopened (${String(guest._id)}) — restored ${redeemed} redeemed points` },
+              );
+            }
+          } else {
+            // Branch-loyalty redemption: restore to CustomerProfile.loyaltyBalance
+            const afterRestore = await CustomerProfile.findByIdAndUpdate(
+              guest.customerId,
+              { $inc: { loyaltyBalance: redeemed } },
+              { new: true },
+            );
+            if (afterRestore) {
+              await LoyaltyTransaction.create({
+                customerId:      guest.customerId,
+                hotelId:         hotelObjId,
+                guestId:         guest._id,
+                transactionType: 'adjust',
+                points:          redeemed,
+                balanceAfter:    afterRestore.loyaltyBalance,
+                createdBy,
+                remarks:         `Reversal: guest reopened — restored ${redeemed} redeemed points`,
+              });
+            }
           }
         }
 
@@ -1020,28 +1106,46 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
         }).sort({ createdAt: -1 });
 
         if (earnTx && earnTx.points > 0) {
-          const afterDeduct = await CustomerProfile.findOneAndUpdate(
-            { _id: guest.customerId, loyaltyBalance: { $gte: earnTx.points } },
-            { $inc: { loyaltyBalance: -earnTx.points } },
-            { new: true },
-          );
-          if (afterDeduct) {
-            await LoyaltyTransaction.create({
-              customerId:      guest.customerId,
-              hotelId:         hotelObjId,
-              guestId:         guest._id,
-              transactionType: 'adjust',
-              points:          -earnTx.points,
-              balanceAfter:    afterDeduct.loyaltyBalance,
-              createdBy,
-              remarks:         `Reversal: guest reopened — reversed ${earnTx.points} earned points`,
-            });
+          if (earnTx.orgCustomerId) {
+            // Org-loyalty earn: deduct from orgLoyaltyBalance
+            const orgEarnDoc = await OrganizationCustomer.findById(earnTx.orgCustomerId);
+            if (orgEarnDoc) {
+              const orgCfg = await getOrgLoyaltyConfig(orgEarnDoc.orgHotelId.toString());
+              await reverseOrgEarnedPoints(
+                orgEarnDoc._id as mongoose.Types.ObjectId,
+                orgEarnDoc.orgHotelId.toString(),
+                req.hotelId!,
+                guest.customerId as mongoose.Types.ObjectId,
+                earnTx.points,
+                orgCfg,
+                { guestId: String(guest._id), createdBy, remarks: `Reversal: guest reopened — reversed ${earnTx.points} earned points` },
+              );
+            }
           } else {
-            logger.warn('Loyalty reopen: insufficient balance to reverse earned points — partial reversal skipped', {
-              hotelId:     req.hotelId,
-              guestId:     String(guest._id),
-              earnedPoints: earnTx.points,
-            });
+            // Branch-loyalty earn: deduct from CustomerProfile.loyaltyBalance
+            const afterDeduct = await CustomerProfile.findOneAndUpdate(
+              { _id: guest.customerId, loyaltyBalance: { $gte: earnTx.points } },
+              { $inc: { loyaltyBalance: -earnTx.points } },
+              { new: true },
+            );
+            if (afterDeduct) {
+              await LoyaltyTransaction.create({
+                customerId:      guest.customerId,
+                hotelId:         hotelObjId,
+                guestId:         guest._id,
+                transactionType: 'adjust',
+                points:          -earnTx.points,
+                balanceAfter:    afterDeduct.loyaltyBalance,
+                createdBy,
+                remarks:         `Reversal: guest reopened — reversed ${earnTx.points} earned points`,
+              });
+            } else {
+              logger.warn('Loyalty reopen: insufficient balance to reverse earned points — partial reversal skipped', {
+                hotelId:     req.hotelId,
+                guestId:     String(guest._id),
+                earnedPoints: earnTx.points,
+              });
+            }
           }
         }
       } catch (loyaltyErr: any) {

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Link, Link2Off, RefreshCw, Copy, Check,
   AlertCircle, Zap, Clock, MessageSquare, FlaskConical, Eye, EyeOff,
+  Send, ToggleLeft, ToggleRight, Info, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import {
   fetchIntegrations,
@@ -20,6 +21,21 @@ import {
   deleteMessagingProvider,
 } from '../api/messagingProviders';
 import type { MessagingProviderConfig, MessagingChannel } from '../api/messagingProviders';
+import {
+  fetchWhatsAppReceiptSettings,
+  saveWhatsAppReceiptSettings,
+  testWhatsAppReceipt,
+  fetchAvailableVars,
+  fetchWhatsAppReceiptStats,
+} from '../api/whatsappReceipts';
+import type { WhatsAppReceiptConfig, WhatsAppProviderStatus, AvailableVar } from '../api/whatsappReceipts';
+import {
+  fetchTallyConfig,
+  saveTallyConfig,
+  generateConnectorToken,
+  fetchTallyStats,
+} from '../api/tallySync';
+import type { TallyConfig, TallyLedgerMap } from '../api/tallySync';
 import { Spinner } from '../components/ui/Spinner';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1091,6 +1107,609 @@ function MessagingProviderCard({ config, loading, onSaved, onRemoved, onToast }:
   );
 }
 
+// ── WhatsApp Receipts Settings Card ───────────────────────────────────────────
+
+interface WhatsAppReceiptsCardProps {
+  onToast: (type: Toast['type'], msg: string) => void;
+}
+
+function WhatsAppReceiptsCard({ onToast }: WhatsAppReceiptsCardProps) {
+  const [config,   setConfig]   = useState<WhatsAppReceiptConfig | null>(null);
+  const [provider, setProvider] = useState<WhatsAppProviderStatus | null>(null);
+  const [stats,    setStats]    = useState<{ total: number; sent: number; delivered: number; read: number; failed: number; queued: number } | null>(null);
+  const [vars,     setVars]     = useState<AvailableVar[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState(false);
+  const [testPhone,  setTestPhone]  = useState('');
+  const [testing,    setTesting]    = useState(false);
+  const [showVarsHelp, setShowVarsHelp] = useState(false);
+
+  const [form, setForm] = useState<WhatsAppReceiptConfig>({
+    autoSend:         false,
+    templateName:     '',
+    templateLanguage: 'en',
+    templateVars:     [],
+  });
+
+  useEffect(() => {
+    void (async () => {
+      setLoading(true);
+      try {
+        const [settingsRes, statsRes, varsRes] = await Promise.allSettled([
+          fetchWhatsAppReceiptSettings(),
+          fetchWhatsAppReceiptStats(),
+          fetchAvailableVars(),
+        ]);
+        if (settingsRes.status === 'fulfilled') {
+          setConfig(settingsRes.value.config);
+          setProvider(settingsRes.value.provider);
+          setForm(settingsRes.value.config);
+        }
+        if (statsRes.status === 'fulfilled') setStats(statsRes.value);
+        if (varsRes.status === 'fulfilled')  setVars(varsRes.value);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await saveWhatsAppReceiptSettings(form);
+      setConfig(res.config);
+      setForm(res.config);
+      onToast('success', 'WhatsApp receipt settings saved.');
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTest() {
+    if (!testPhone.trim()) {
+      onToast('error', 'Enter a phone number to test.');
+      return;
+    }
+    setTesting(true);
+    try {
+      const res = await testWhatsAppReceipt(testPhone.trim());
+      onToast(res.success ? 'success' : 'error', res.message);
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  function setVarAtIndex(idx: number, value: string) {
+    setForm(prev => {
+      const next = [...prev.templateVars];
+      next[idx] = value;
+      return { ...prev, templateVars: next };
+    });
+  }
+
+  function addVar() {
+    setForm(prev => ({ ...prev, templateVars: [...prev.templateVars, ''] }));
+  }
+
+  function removeVar(idx: number) {
+    setForm(prev => ({
+      ...prev,
+      templateVars: prev.templateVars.filter((_, i) => i !== idx),
+    }));
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-border bg-surface p-6 flex items-center gap-3 text-ink/50">
+        <Spinner size="sm" />
+        <span className="text-sm">Loading WhatsApp receipt settings…</span>
+      </div>
+    );
+  }
+
+  const isConfigured = provider?.configured ?? false;
+
+  return (
+    <div className="rounded-xl border border-border bg-surface">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/30">
+            <Send size={16} className="text-green-600 dark:text-green-400" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-ink">WhatsApp Auto-Receipts</p>
+            <p className="text-xs text-ink/50">Send order receipts to customers via WhatsApp</p>
+          </div>
+        </div>
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+          isConfigured
+            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+            : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+        }`}>
+          {isConfigured ? 'Provider connected' : 'No provider configured'}
+        </span>
+      </div>
+
+      {/* Provider info */}
+      {isConfigured && provider?.integratedNumber && (
+        <div className="border-b border-border px-5 py-3 text-xs text-ink/60 flex items-center gap-2">
+          <Info size={12} />
+          Sending from <span className="font-mono font-semibold ml-1">{provider.integratedNumber}</span>
+          {provider.providerType && <span className="ml-1">via {provider.providerType}</span>}
+        </div>
+      )}
+
+      {!isConfigured && (
+        <div className="border-b border-border bg-amber-50 dark:bg-amber-900/10 px-5 py-3 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2">
+          <AlertCircle size={12} />
+          Configure MSG91 credentials in the Messaging Provider section above to enable WhatsApp receipts.
+        </div>
+      )}
+
+      <form onSubmit={e => void handleSave(e)} className="divide-y divide-border">
+        {/* Auto-send toggle */}
+        <div className="flex items-center justify-between px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-ink">Auto-send receipts</p>
+            <p className="text-xs text-ink/50">Automatically send a WhatsApp receipt after every completed order</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setForm(prev => ({ ...prev, autoSend: !prev.autoSend }))}
+            className="ml-4 shrink-0 text-ink/40 hover:text-ink/70"
+          >
+            {form.autoSend
+              ? <ToggleRight size={28} className="text-green-500" />
+              : <ToggleLeft size={28} />
+            }
+          </button>
+        </div>
+
+        {/* Template settings */}
+        <div className="space-y-4 px-5 py-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-ink/70">
+                Template Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.templateName}
+                onChange={e => setForm(prev => ({ ...prev, templateName: e.target.value }))}
+                placeholder="e.g. order_receipt_v1"
+                maxLength={200}
+                className="w-full rounded-lg border border-border bg-mist px-3 py-2 text-sm text-ink placeholder-ink/30 focus:border-brand focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-ink/40">Must match a Meta-approved template in your MSG91 account</p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-ink/70">
+                Template Language
+              </label>
+              <input
+                type="text"
+                value={form.templateLanguage}
+                onChange={e => setForm(prev => ({ ...prev, templateLanguage: e.target.value }))}
+                placeholder="en"
+                maxLength={10}
+                className="w-full rounded-lg border border-border bg-mist px-3 py-2 text-sm text-ink placeholder-ink/30 focus:border-brand focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-ink/40">BCP-47 code, e.g. en, hi, en_US</p>
+            </div>
+          </div>
+
+          {/* Template variables */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-xs font-semibold text-ink/70">Template Variables (ordered)</label>
+              <button
+                type="button"
+                onClick={() => setShowVarsHelp(v => !v)}
+                className="flex items-center gap-1 text-xs text-brand hover:underline"
+              >
+                Available vars {showVarsHelp ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+            </div>
+
+            {showVarsHelp && vars.length > 0 && (
+              <div className="mb-3 rounded-lg border border-border bg-mist/50 p-3 grid gap-1 sm:grid-cols-2">
+                {vars.map(v => (
+                  <div key={v.name} className="flex items-baseline gap-2 text-xs">
+                    <code className="rounded bg-border/60 px-1 py-0.5 font-mono text-ink">{v.name}</code>
+                    <span className="text-ink/50">{v.description}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="mb-2 text-xs text-ink/40">
+              Each entry maps to a body variable: index 0 → body_1, index 1 → body_2, etc.
+            </p>
+            <div className="space-y-2">
+              {form.templateVars.map((v, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <span className="w-6 shrink-0 text-right text-xs text-ink/40">{idx + 1}.</span>
+                  <input
+                    type="text"
+                    value={v}
+                    onChange={e => setVarAtIndex(idx, e.target.value)}
+                    placeholder="variable name"
+                    className="flex-1 rounded-lg border border-border bg-mist px-3 py-1.5 text-sm text-ink placeholder-ink/30 focus:border-brand focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeVar(idx)}
+                    className="rounded px-2 py-1 text-xs text-ink/40 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addVar}
+                className="mt-1 text-xs text-brand hover:underline"
+              >
+                + Add variable
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats */}
+        {stats && stats.total > 0 && (
+          <div className="px-5 py-3">
+            <p className="mb-2 text-xs font-semibold text-ink/50">Last 30 days</p>
+            <div className="flex flex-wrap gap-3 text-xs">
+              {[
+                { label: 'Sent',      value: stats.sent,      color: 'text-blue-600' },
+                { label: 'Delivered', value: stats.delivered, color: 'text-green-600' },
+                { label: 'Read',      value: stats.read,      color: 'text-violet-600' },
+                { label: 'Failed',    value: stats.failed,    color: 'text-red-600' },
+                { label: 'Queued',   value: stats.queued,    color: 'text-amber-600' },
+              ].map(s => (
+                <span key={s.label} className="flex items-center gap-1">
+                  <span className={`font-bold tabular-nums ${s.color}`}>{s.value}</span>
+                  <span className="text-ink/40">{s.label}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Test send */}
+        <div className="flex flex-wrap items-end gap-3 px-5 py-4">
+          <div className="flex-1 min-w-[180px]">
+            <label className="mb-1.5 block text-xs font-semibold text-ink/70">Test — send to phone</label>
+            <input
+              type="tel"
+              value={testPhone}
+              onChange={e => setTestPhone(e.target.value)}
+              placeholder="+91 98765 43210"
+              className="w-full rounded-lg border border-border bg-mist px-3 py-2 text-sm text-ink placeholder-ink/30 focus:border-brand focus:outline-none"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleTest()}
+            disabled={testing || !isConfigured || !form.templateName}
+            className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {testing ? <Spinner size="sm" /> : <FlaskConical size={14} />}
+            Send test
+          </button>
+        </div>
+
+        {/* Save */}
+        <div className="flex justify-end px-5 py-4">
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex items-center gap-2 rounded-lg bg-brand px-5 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving ? <Spinner size="sm" /> : <Check size={14} />}
+            Save settings
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ── Tally Direct Sync Card ────────────────────────────────────────────────────
+
+interface TallyCardProps { onToast: (type: Toast['type'], msg: string) => void }
+
+const DEFAULT_LEDGER_MAP: TallyLedgerMap = {
+  salesLedger:       'Sales',
+  cgstLedger:        'Output CGST',
+  sgstLedger:        'Output SGST',
+  cashLedger:        'Cash',
+  bankLedger:        'Bank',
+  discountLedger:    'Discount Allowed',
+  roundOffLedger:    'Round Off',
+  expenseLedger:     'Indirect Expenses',
+  purchaseLedger:    'Purchases',
+  stockInHandLedger: 'Stock-in-Hand',
+  walletLedger:      'Customer Wallet',
+};
+
+function TallyCard({ onToast }: TallyCardProps) {
+  const [cfg,     setCfg]     = useState<TallyConfig | null>(null);
+  const [stats,   setStats]   = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [genning, setGenning] = useState(false);
+  const [newToken, setNewToken] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    enabled:          false,
+    companyName:      '',
+    syncSales:        true,
+    syncPurchases:    true,
+    syncExpenses:     true,
+    syncCancellations:true,
+    ledgerMap:        DEFAULT_LEDGER_MAP,
+  });
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [c, s] = await Promise.allSettled([fetchTallyConfig(), fetchTallyStats()]);
+        if (c.status === 'fulfilled') {
+          const d = c.value;
+          setCfg(d);
+          setForm({
+            enabled:           d.enabled,
+            companyName:       d.companyName,
+            syncSales:         d.syncSales,
+            syncPurchases:     d.syncPurchases,
+            syncExpenses:      d.syncExpenses,
+            syncCancellations: d.syncCancellations,
+            ledgerMap:         { ...DEFAULT_LEDGER_MAP, ...(d.ledgerMap ?? {}) },
+          });
+        }
+        if (s.status === 'fulfilled') setStats(s.value as any);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const updated = await saveTallyConfig(form);
+      setCfg(updated);
+      onToast('success', 'Tally settings saved');
+    } catch (err: any) {
+      onToast('error', err.message ?? 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleGenerateToken() {
+    if (!confirm('This will invalidate the current connector token. Continue?')) return;
+    setGenning(true);
+    setNewToken(null);
+    try {
+      const { token } = await generateConnectorToken();
+      setNewToken(token);
+      setCfg(prev => prev ? { ...prev, connectorTokenSet: true } : prev);
+      onToast('success', 'New connector token generated — copy it now');
+    } catch (err: any) {
+      onToast('error', err.message ?? 'Token generation failed');
+    } finally {
+      setGenning(false);
+    }
+  }
+
+  function setLedger(key: keyof TallyLedgerMap, value: string) {
+    setForm(prev => ({ ...prev, ledgerMap: { ...prev.ledgerMap, [key]: value } }));
+  }
+
+  if (loading) return (
+    <div className="rounded-xl border border-border bg-surface px-5 py-6 flex items-center gap-3 text-ink/50">
+      <Spinner size="sm" />
+      <span className="text-sm">Loading Tally settings…</span>
+    </div>
+  );
+
+  const synced  = stats.synced  ?? 0;
+  const pending = stats.pending ?? 0;
+  const failed  = stats.failed  ?? 0;
+
+  const LEDGER_LABELS: { key: keyof TallyLedgerMap; label: string }[] = [
+    { key: 'salesLedger',       label: 'Sales ledger' },
+    { key: 'cgstLedger',        label: 'Output CGST ledger' },
+    { key: 'sgstLedger',        label: 'Output SGST ledger' },
+    { key: 'cashLedger',        label: 'Cash ledger' },
+    { key: 'bankLedger',        label: 'Bank / UPI ledger' },
+    { key: 'discountLedger',    label: 'Discount ledger' },
+    { key: 'expenseLedger',     label: 'Expense ledger' },
+    { key: 'purchaseLedger',    label: 'Purchase ledger' },
+    { key: 'walletLedger',      label: 'Customer wallet ledger' },
+  ];
+
+  return (
+    <div className="rounded-xl border border-border bg-surface">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
+            <Zap size={16} className="text-blue-600 dark:text-blue-400" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-ink">Tally Direct Sync</p>
+            <p className="text-xs text-ink/50">Sync sales, purchases &amp; expenses to TallyPrime via Local Bridge</p>
+          </div>
+        </div>
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+          cfg?.connectorTokenSet
+            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+            : 'bg-ink/10 text-ink/50'
+        }`}>
+          {cfg?.connectorTokenSet ? 'Connector configured' : 'Not configured'}
+        </span>
+      </div>
+
+      {/* Architecture notice */}
+      <div className="border-b border-border bg-blue-50 dark:bg-blue-900/10 px-5 py-3 text-xs text-blue-700 dark:text-blue-400 flex items-start gap-2">
+        <Info size={12} className="mt-0.5 shrink-0" />
+        <span>
+          Requires the <strong>DinePOS Tally Bridge Connector</strong> installed on the same computer as TallyPrime.
+          The connector polls this cloud API and pushes vouchers to TallyPrime localhost:9000.
+          Your Tally port is never exposed to the internet.
+        </span>
+      </div>
+
+      <form onSubmit={e => void handleSave(e)} className="divide-y divide-border">
+        {/* Enable toggle */}
+        <div className="flex items-center justify-between px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-ink">Enable Tally sync</p>
+            <p className="text-xs text-ink/50">Queue vouchers for all completed orders</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setForm(prev => ({ ...prev, enabled: !prev.enabled }))}
+            className="ml-4 shrink-0 text-ink/40 hover:text-ink/70"
+          >
+            {form.enabled
+              ? <ToggleRight size={28} className="text-blue-500" />
+              : <ToggleLeft size={28} />}
+          </button>
+        </div>
+
+        {/* Company + sync scopes */}
+        <div className="space-y-4 px-5 py-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-ink/70">
+              TallyPrime Company Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={form.companyName}
+              onChange={e => setForm(prev => ({ ...prev, companyName: e.target.value }))}
+              placeholder="e.g. Raj Restaurant Pvt Ltd"
+              maxLength={200}
+              className="w-full rounded-lg border border-border bg-mist px-3 py-2 text-sm text-ink placeholder-ink/30 focus:border-brand focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-ink/40">Must match the company name exactly as it appears in TallyPrime</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {([
+              { key: 'syncSales',         label: 'Sales'        },
+              { key: 'syncPurchases',     label: 'Purchases'    },
+              { key: 'syncExpenses',      label: 'Expenses'     },
+              { key: 'syncCancellations', label: 'Cancellations'},
+            ] as const).map(({ key, label }) => (
+              <label key={key} className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={form[key]}
+                  onChange={e => setForm(prev => ({ ...prev, [key]: e.target.checked }))}
+                  className="h-4 w-4 rounded accent-brand"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Ledger mapping */}
+        <div className="px-5 py-4">
+          <p className="mb-3 text-xs font-semibold text-ink/70">Ledger Mapping</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {LEDGER_LABELS.map(({ key, label }) => (
+              <div key={key}>
+                <label className="mb-1 block text-xs text-ink/60">{label}</label>
+                <input
+                  type="text"
+                  value={form.ledgerMap[key] ?? ''}
+                  onChange={e => setLedger(key, e.target.value)}
+                  placeholder={DEFAULT_LEDGER_MAP[key]}
+                  className="w-full rounded-lg border border-border bg-mist px-3 py-1.5 text-sm text-ink placeholder-ink/30 focus:border-brand focus:outline-none"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Connector token */}
+        <div className="px-5 py-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-ink">Connector Token</p>
+              <p className="text-xs text-ink/50">
+                {cfg?.connectorTokenSet
+                  ? `Token set · last seen: ${fmtElapsed(cfg.connectorLastSeenAt)}`
+                  : 'No token generated yet'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleGenerateToken()}
+              disabled={genning}
+              className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-ink hover:bg-mist disabled:opacity-50"
+            >
+              {genning ? <Spinner size="sm" /> : <RefreshCw size={12} />}
+              {cfg?.connectorTokenSet ? 'Regenerate' : 'Generate token'}
+            </button>
+          </div>
+          {newToken && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 p-3">
+              <p className="mb-1 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                Copy this token now — it will not be shown again
+              </p>
+              <code className="block break-all rounded bg-amber-100 dark:bg-amber-900/40 px-2 py-1.5 text-xs font-mono text-amber-800 dark:text-amber-300">
+                {newToken}
+              </code>
+            </div>
+          )}
+        </div>
+
+        {/* Sync stats */}
+        {(synced + pending + failed) > 0 && (
+          <div className="px-5 py-3">
+            <p className="mb-2 text-xs font-semibold text-ink/50">Sync queue</p>
+            <div className="flex flex-wrap gap-3 text-xs">
+              {[
+                { label: 'Synced',  value: synced,  color: 'text-green-600' },
+                { label: 'Pending', value: pending,  color: 'text-amber-600' },
+                { label: 'Failed',  value: failed,   color: 'text-red-600' },
+              ].map(s => (
+                <span key={s.label} className="flex items-center gap-1">
+                  <span className={`font-bold tabular-nums ${s.color}`}>{s.value}</span>
+                  <span className="text-ink/40">{s.label}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Save */}
+        <div className="flex justify-end px-5 py-4">
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex items-center gap-2 rounded-lg bg-brand px-5 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving ? <Spinner size="sm" /> : <Check size={14} />}
+            Save settings
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function IntegrationsPage() {
@@ -1180,6 +1799,24 @@ export function IntegrationsPage() {
           onRemoved={() => setMessagingConfig(null)}
           onToast={toast}
         />
+      </div>
+
+      {/* WhatsApp Auto-Receipts */}
+      <div>
+        <div className="mb-3 flex items-center gap-2">
+          <Send size={16} className="text-green-600" />
+          <h2 className="text-base font-bold text-ink">WhatsApp Auto-Receipts</h2>
+        </div>
+        <WhatsAppReceiptsCard onToast={toast} />
+      </div>
+
+      {/* Tally Direct Sync */}
+      <div>
+        <div className="mb-3 flex items-center gap-2">
+          <Zap size={16} className="text-blue-600" />
+          <h2 className="text-base font-bold text-ink">Tally Direct Sync</h2>
+        </div>
+        <TallyCard onToast={toast} />
       </div>
 
       {/* Webhook logs — self-contained with search, filter, pagination, CSV */}

@@ -21,6 +21,7 @@ import { requireActiveStaff } from '../middleware/staffAuth';
 import { sendError } from '../utils/sendError';
 import Coupon from '../models/Coupon';
 import CouponRedemption from '../models/CouponRedemption';
+import Hotel from '../models/Hotel';
 import { logAudit } from '../utils/audit';
 
 const router = Router();
@@ -183,15 +184,39 @@ router.post('/validate', requireCashierOrAdmin, requireActiveStaff, async (req: 
       return;
     }
 
-    const hotelId = new mongoose.Types.ObjectId(req.hotelId);
-    const now     = new Date();
+    const hotelId      = new mongoose.Types.ObjectId(req.hotelId);
+    const normalizedCode = String(code).trim().toUpperCase();
+    const now            = new Date();
 
-    const coupon = await Coupon.findOne({
+    // Try branch coupon first (existing behavior)
+    let coupon = await Coupon.findOne({
       hotelId,
-      code:      String(code).trim().toUpperCase(),
+      code:      normalizedCode,
       isActive:  true,
       isDeleted: false,
     }).lean();
+
+    // If not found, try org-scoped coupon for multiBranch branches
+    if (!coupon) {
+      const callerHotel = await Hotel.findById(req.hotelId).select('parentHotelId features').lean();
+      if (callerHotel?.parentHotelId && callerHotel.features?.multiBranch) {
+        const orgHotelId = callerHotel.parentHotelId;
+        const orgCoupon = await Coupon.findOne({
+          orgHotelId,
+          scope:     'organization',
+          code:      normalizedCode,
+          isActive:  true,
+          isDeleted: false,
+        }).lean();
+        if (orgCoupon) {
+          // Check selectedBranchIds restriction
+          const branchAllowed =
+            !orgCoupon.selectedBranchIds?.length ||
+            orgCoupon.selectedBranchIds.some(id => id.toString() === req.hotelId);
+          if (branchAllowed) coupon = orgCoupon;
+        }
+      }
+    }
 
     if (!coupon) {
       res.status(404).json({ valid: false, message: 'Invalid or inactive coupon code' });

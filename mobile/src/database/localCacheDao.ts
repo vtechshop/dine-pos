@@ -5,20 +5,22 @@ const now = () => new Date().toISOString();
 
 // ── Products ─────────────────────────────────────────────────────────────────
 
-export const saveProducts = (products: Product[]): void => {
+export const saveProducts = (hotelId: string, products: Product[]): void => {
   db.withTransactionSync(() => {
-    db.runSync('DELETE FROM local_products');
+    db.runSync('DELETE FROM local_products WHERE hotel_id = ?', [hotelId]);
     for (const p of products) {
       db.runSync(
-        'INSERT INTO local_products (id, data, synced_at) VALUES (?, ?, ?)',
-        [p._id, JSON.stringify(p), now()],
+        'INSERT INTO local_products (id, hotel_id, data, synced_at) VALUES (?, ?, ?, ?)',
+        [p._id, hotelId, JSON.stringify(p), now()],
       );
     }
   });
 };
 
-export const getLocalProducts = (): Product[] => {
-  const rows = db.getAllSync<{ data: string }>('SELECT data FROM local_products');
+export const getLocalProducts = (hotelId: string): Product[] => {
+  const rows = db.getAllSync<{ data: string }>(
+    'SELECT data FROM local_products WHERE hotel_id = ?', [hotelId],
+  );
   return rows.map(r => JSON.parse(r.data) as Product);
 };
 
@@ -38,21 +40,22 @@ export const updateLocalProductStock = (productId: string, newStock: number): vo
 
 // ── Categories ───────────────────────────────────────────────────────────────
 
-export const saveCategories = (categories: Category[]): void => {
+export const saveCategories = (hotelId: string, categories: Category[]): void => {
   db.withTransactionSync(() => {
-    db.runSync('DELETE FROM local_categories');
+    db.runSync('DELETE FROM local_categories WHERE hotel_id = ?', [hotelId]);
     for (const c of categories) {
       db.runSync(
-        'INSERT INTO local_categories (id, data, synced_at) VALUES (?, ?, ?)',
-        [c._id, JSON.stringify(c), now()],
+        'INSERT INTO local_categories (id, hotel_id, data, synced_at) VALUES (?, ?, ?, ?)',
+        [c._id, hotelId, JSON.stringify(c), now()],
       );
     }
   });
 };
 
-export const getLocalCategories = (): Category[] => {
+export const getLocalCategories = (hotelId: string): Category[] => {
   const rows = db.getAllSync<{ data: string }>(
-    'SELECT data FROM local_categories ORDER BY json_extract(data, "$.sortOrder") ASC',
+    'SELECT data FROM local_categories WHERE hotel_id = ? ORDER BY json_extract(data, "$.sortOrder") ASC',
+    [hotelId],
   );
   return rows.map(r => JSON.parse(r.data) as Category);
 };

@@ -40,6 +40,13 @@ const FEATURE_DEFAULTS: Record<BooleanFeatureKey, boolean> = {
   kiosk:       false,  // premium
   ai:          false,  // premium
   supplyChain: true,   // default ON — existing hotels keep access without migration
+  // ── Accounting Integrations v1.3 ───────────────────────────────────────
+  tally:       false,  // opt-in — roadmap/coming-soon for most hotels
+  // ── Multi-Branch v1.4 ─────────────────────────────────────────────────
+  multiBranch: false,  // opt-in enterprise feature; off by default for all hotels
+  // ── Multi-Branch Loyalty v1.5 ────────────────────────────────────────
+  orgLoyalty:        false, // HQ master switch — off until explicitly enabled
+  orgLoyaltyEnabled: true,  // per-branch opt-out; default true (branches participate when HQ enables)
 };
 
 /**

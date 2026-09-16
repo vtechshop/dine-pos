@@ -15,7 +15,14 @@ import { validateCoupon, type CouponValidateResult } from '../../api/coupons';
 import { checkGiftVoucher } from '../../api/giftVouchers';
 import { lookupCustomer } from '../../api/loyalty';
 import type { LoyaltyLookupResult } from '../../api/loyalty';
-import { enqueueOrder } from '../../utils/offlineQueue';
+import { enqueueOrder, newOfflineId, afterCreateFor } from '../../utils/offlineQueue';
+import { useIsOnline } from './OfflineBanner';
+import { classifySyncError } from '../../sync/syncEngine';
+import {
+  cacheProducts, cacheCategories,
+  getLocalProducts, getLocalCategories,
+  getSyncMeta, setSyncMeta,
+} from '../../db/productCache';
 import { fetchProductSalesReport } from '../../api/reports';
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
 import { useCashierPermissions } from '../../hooks/useCashierPermissions';
@@ -333,6 +340,7 @@ export function NewOrderPanel() {
   } = useCashier();
   const { settings } = useSettings();
   const { hotelId } = useAuth();
+  const isOnline = useIsOnline();
   const sym = settings?.currencySymbol ?? '₹';
   const perms = useCashierPermissions();
 
@@ -383,7 +391,15 @@ export function NewOrderPanel() {
   const [submitting, setSubmitting]   = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successOrder, setSuccessOrder] = useState<string | null>(null);
+  const [savedOffline, setSavedOffline] = useState(false);
+  const [waReceiptPhone, setWaReceiptPhone] = useState<string | null>(null);
+  // One offlineId per bill attempt: a resubmit of the SAME cart reuses it, so a response lost
+  // after the server saved the order can never produce a second order. Any cart change resets it.
+  const attemptIdRef = useRef<string | null>(null);
+  useEffect(() => { attemptIdRef.current = null; }, [cart]);
   const [prodError, setProdError]     = useState<string | null>(null);
+  const [servedFromCache, setServedFromCache] = useState(false);
+  const [lastSynced, setLastSynced]   = useState<string | null>(null);
 
   // ── Coupon state ───────────────────────────────────────────────────────────
   const [couponInput, setCouponInput]       = useState('');
@@ -467,13 +483,45 @@ export function NewOrderPanel() {
       fetchProductSalesReport(today),
     ]);
     if (!cancelled) {
-      if (catRes.status === 'fulfilled') setCategories(catRes.value);
+      if (catRes.status === 'fulfilled') {
+        setCategories(catRes.value);
+        if (hotelId) void cacheCategories(hotelId, catRes.value);
+      } else if (hotelId) {
+        const cached = await getLocalCategories(hotelId);
+        if (cached.length > 0) setCategories(cached);
+      }
+
       if (prodRes.status === 'fulfilled') {
         setProducts(prodRes.value);
         setProdError(null);
+        setServedFromCache(false);
+        setLastSynced(null);
+        if (hotelId) {
+          void cacheProducts(hotelId, prodRes.value);
+          void setSyncMeta(hotelId, 'products');
+        }
+      } else if (hotelId) {
+        const [cached, syncedAt] = await Promise.all([
+          getLocalProducts(hotelId),
+          getSyncMeta(hotelId, 'products'),
+        ]);
+        if (cached.length > 0) {
+          setProducts(cached);
+          const timeStr = syncedAt
+            ? new Date(syncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : null;
+          setServedFromCache(true);
+          setLastSynced(timeStr);
+          setProdError(null);
+        } else {
+          setProdError('Failed to load products. Tap the search bar or refresh to retry.');
+          setServedFromCache(false);
+        }
       } else {
         setProdError('Failed to load products. Tap the search bar or refresh to retry.');
+        setServedFromCache(false);
       }
+
       if (tableRes.status === 'fulfilled') setTables(tableRes.value.filter((t: Table) => t.status === 'available'));
       if (topRes.status === 'fulfilled') {
         setTopToday(
@@ -485,7 +533,7 @@ export function NewOrderPanel() {
       setProdLoading(false);
     }
     return () => { cancelled = true; };
-  }, []);
+  }, [hotelId]);
 
   useEffect(() => {
     void loadProducts();
@@ -705,6 +753,20 @@ export function NewOrderPanel() {
     setSubmitError(null);
 
     let pendingPayload: Parameters<typeof createOrder>[0] | undefined;
+    if (!attemptIdRef.current) attemptIdRef.current = newOfflineId();
+    const offlineId = attemptIdRef.current;
+
+    const resetCheckout = () => {
+      clearCart();
+      setDiscount('');
+      setAppliedCoupon(null); setCouponInput(''); setCouponError(null);
+      setAppliedVoucher(null); setVoucherInput(''); setVoucherError(null);
+      setShowPayment(false);
+      setCashGiven('');
+      setSplitCash(''); setSplitUpi(''); setSplitCard('');
+      setLoyaltyInfo(null); setLoyaltyRedemption(0);
+    };
+
     try {
       const items = cart.map(i => ({
         product: i.productId,
@@ -737,6 +799,7 @@ export function NewOrderPanel() {
         giftVoucherCode: appliedVoucher?.code || undefined,
         paymentMethod: payMethod,
         ...(splitDetails ? { splitDetails } : {}),
+        offlineId,
       };
 
       if (orderType === 'dine-in') {
@@ -799,24 +862,45 @@ export function NewOrderPanel() {
         await completeOrder(created._id);
       }
 
+      setSavedOffline(false);
+      setWaReceiptPhone(
+        orderType === 'dine-in'  ? (dineIn.phone   || null) :
+        orderType === 'takeaway' ? (takeAway.phone  || null) :
+                                   (delivery.phone  || null),
+      );
       setSuccessOrder(created.orderNumber);
-      clearCart();
-      setDiscount('');
-      setAppliedCoupon(null); setCouponInput(''); setCouponError(null);
-      setAppliedVoucher(null); setVoucherInput(''); setVoucherError(null);
-      setShowPayment(false);
-      setCashGiven('');
-      setSplitCash(''); setSplitUpi(''); setSplitCard('');
-      setLoyaltyInfo(null); setLoyaltyRedemption(0);
+      resetCheckout();
 
-      setTimeout(() => setSuccessOrder(null), 3000);
+      setTimeout(() => { setSuccessOrder(null); setWaReceiptPhone(null); }, 3000);
 
       if (orderType === 'dine-in') {
         setActiveTab('pending');
       }
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Failed to place order');
-      if (hotelId && pendingPayload) enqueueOrder(hotelId, pendingPayload);
+      // Only a connection failure is saved for later. A refusal from the server (validation,
+      // stock, permissions) is shown as it is — queueing it would resubmit an invalid bill.
+      const failure = classifySyncError(err);
+      if (failure.kind === 'retryable' && hotelId && pendingPayload) {
+        try {
+          await enqueueOrder(hotelId, pendingPayload, {
+            offlineId,
+            afterCreate: afterCreateFor(pendingPayload.orderSource),
+          });
+          setSavedOffline(true);
+          setWaReceiptPhone(
+            orderType === 'dine-in'  ? (dineIn.phone   || null) :
+            orderType === 'takeaway' ? (takeAway.phone  || null) :
+                                       (delivery.phone  || null),
+          );
+          setSuccessOrder(offlineId);
+          resetCheckout();
+          setTimeout(() => { setSuccessOrder(null); setSavedOffline(false); setWaReceiptPhone(null); }, 3000);
+        } catch (queueErr) {
+          setSubmitError(queueErr instanceof Error ? queueErr.message : 'Could not save the bill offline');
+        }
+      } else {
+        setSubmitError(err instanceof Error ? err.message : 'Failed to place order');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -839,9 +923,19 @@ export function NewOrderPanel() {
         <div className="rounded-full bg-emerald-100 p-4">
           <Check size={32} className="text-emerald-600" />
         </div>
-        <p className="text-lg font-bold text-ink">Order Placed!</p>
-        <p className="text-sm text-ink/60">Order #{successOrder}</p>
+        <p className="text-lg font-bold text-ink">{savedOffline ? 'Saved Offline' : 'Order Placed!'}</p>
+        <p className="text-sm text-ink/60">
+          {savedOffline ? 'This bill will be sent automatically when the connection returns.' : `Order #${successOrder}`}
+        </p>
         <p className="text-xs text-ink/40">Redirecting…</p>
+        {waReceiptPhone && (
+          <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+            <span>📲</span>
+            {savedOffline
+              ? 'WhatsApp receipt will send after sync'
+              : `WhatsApp receipt queued`}
+          </p>
+        )}
       </div>
     );
   }
@@ -1013,11 +1107,15 @@ export function NewOrderPanel() {
                   }`}>{loyaltyInfo.customer.tier}</span>
                 </div>
                 <span className="text-[11px] font-bold tabular-nums text-brand">
-                  {loyaltyInfo.customer.loyaltyBalance.toLocaleString()} pts
+                  {(loyaltyInfo.customer as any).orgLoyaltyBalance !== undefined
+                    ? <>{((loyaltyInfo.customer as any).orgLoyaltyBalance as number).toLocaleString()} org pts</>
+                    : <>{loyaltyInfo.customer.loyaltyBalance.toLocaleString()} pts</>}
                 </span>
               </div>
               {loyaltyInfo.customer.loyaltyOptOut ? (
                 <p className="text-[10px] text-ink/40">Customer opted out of loyalty</p>
+              ) : !isOnline && loyaltyInfo.redeemablePoints > 0 ? (
+                <p className="text-[10px] text-amber-600">Loyalty redemption requires an internet connection</p>
               ) : loyaltyInfo.redeemablePoints > 0 && loyaltyInfo.config ? (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[10px] text-ink/50">
@@ -1032,6 +1130,7 @@ export function NewOrderPanel() {
                     value={loyaltyRedemption}
                     onChange={e => setLoyaltyRedemption(Number(e.target.value))}
                     className="w-full accent-brand"
+                    disabled={!isOnline}
                   />
                   {loyaltyRedemption > 0 && (
                     <div className="flex items-center justify-between rounded-lg bg-brand/10 px-2 py-1">
@@ -1045,7 +1144,11 @@ export function NewOrderPanel() {
               ) : (
                 <p className="text-[10px] text-ink/40">
                   {loyaltyInfo.redeemablePoints === 0
-                    ? `Balance: ${loyaltyInfo.customer.loyaltyBalance} pts (below minimum redeem threshold)`
+                    ? (() => {
+                        const orgBal = (loyaltyInfo.customer as any).orgLoyaltyBalance;
+                        const bal = orgBal !== undefined ? orgBal : loyaltyInfo.customer.loyaltyBalance;
+                        return `Balance: ${bal} pts (below minimum redeem threshold)`;
+                      })()
                     : 'Loyalty not enabled'}
                 </p>
               )}
@@ -1155,6 +1258,15 @@ export function NewOrderPanel() {
         )}
 
         {/* Product grid */}
+        {servedFromCache && !prodLoading && (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+            <AlertCircle size={13} className="text-amber-500" />
+            <p className="text-xs text-amber-700">
+              Offline — showing cached products
+              {lastSynced ? ` (Last synced: ${lastSynced})` : ''}
+            </p>
+          </div>
+        )}
         {prodError && !prodLoading && (
           <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
             <AlertCircle size={13} className="text-red-500" />

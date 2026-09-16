@@ -57,6 +57,8 @@ import loyaltyRoutes  from './routes/loyaltyRoutes';
 import campaignRoutes from './routes/campaignRoutes';
 import messagingProviderRoutes from './routes/messagingProviderRoutes';
 import messagingWebhookRoutes from './routes/messagingWebhookRoutes';
+import whatsappSettingsRoutes from './routes/whatsappSettingsRoutes';
+import whatsappReceiptRoutes  from './routes/whatsappReceiptRoutes';
 import printRoutes from './routes/printRoutes';
 import inquiryRoutes from './routes/inquiryRoutes';
 import modifierRoutes from './routes/modifierRoutes';
@@ -86,7 +88,13 @@ import aiOcrRoutes from './routes/aiOcrRoutes';
 import aiAnalyticsRoutes from './routes/aiAnalyticsRoutes';
 import morningBriefRoutes from './routes/morningBriefRoutes';
 import shiftRoutes from './routes/shiftRoutes';
+import tallyRoutes from './routes/tallyRoutes';
+import tallyConnectorRoutes from './routes/tallyConnectorRoutes';
 import heldBillRoutes from './routes/heldBillRoutes';
+import branchRoutes from './routes/branchRoutes';
+import catalogRoutes from './routes/catalogRoutes';
+import orgCustomerRoutes from './routes/orgCustomerRoutes';
+import categoryConfigRoutes from './routes/categoryConfigRoutes';
 import { startScheduler, stopScheduler } from './services/scheduler';
 import { startOcrWorker, stopOcrWorker } from './workers/ocrWorker';
 import { RazorpayGateway } from './services/payment/providers/RazorpayGateway';
@@ -378,9 +386,22 @@ app.use('/api/held-bills', heldBillRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/loyalty',              loyaltyRoutes);
-app.use('/api/campaigns',            campaignRoutes);
-app.use('/api/messaging-providers',  messagingProviderRoutes);
-app.use('/api/messaging-webhooks',   messagingWebhookRoutes);
+app.use('/api/campaigns',                    campaignRoutes);
+app.use('/api/messaging-providers',          messagingProviderRoutes);
+app.use('/api/messaging-webhooks',           messagingWebhookRoutes);
+app.use('/api/settings/whatsapp-receipts',   whatsappSettingsRoutes);
+app.use('/api/whatsapp-receipts',            whatsappReceiptRoutes);
+// Tally Direct Sync — admin config + sync history + manual retry
+app.use('/api/integrations/tally',           tallyRoutes);
+// Tally Bridge Connector polling API — authenticated via hotel-scoped connector token
+app.use('/api/integrations/tally/connector', tallyConnectorRoutes);
+// Multi-Branch — HQ admin manages branch Hotels under their organization
+app.use('/api/branches',                     branchRoutes);
+// Multi-Branch Sprint 3 — Shared product catalog + branch pricing configuration
+app.use('/api/catalog',                      catalogRoutes);
+// Multi-Branch Sprint 4 — Org customer identity + category visibility config
+app.use('/api/org-customers',                orgCustomerRoutes);
+app.use('/api/category-config',              categoryConfigRoutes);
 app.use('/api/print-jobs', printRoutes);
 app.use('/api/inquiries', inquiryRoutes);
 app.use('/api/modifiers', _rl(60, 60_000));

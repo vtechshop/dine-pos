@@ -4,11 +4,12 @@ import {
   Settings, CalendarDays, ChefHat, CreditCard, Truck, Link2, RefreshCw, Layers,
   Store, ShoppingBag, ClipboardList, Wallet, TrendingUp, Sparkles, X, Bot, Sunrise, RotateCcw,
   FileBarChart, FileText, MessageSquare, Bell, Lightbulb, ScanLine, Tag, Gift, Shield,
-  Plus, PauseCircle, Search, Printer, UserCircle, History,
+  Plus, PauseCircle, Search, Printer, UserCircle, History, Building2,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCashier, type CashierTab } from '../../context/CashierContext';
+import { BranchSwitcher } from '../BranchSwitcher';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -76,11 +77,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     heading: 'Finance & Admin',
     items: [
-      { to: '/reports',      icon: BarChart2,  label: 'Reports'      },
-      { to: '/payments',     icon: CreditCard, label: 'Payments'     },
-      { to: '/subscription', icon: RefreshCw,  label: 'Subscription' },
-      { to: '/audit-logs',   icon: Shield,     label: 'Audit Logs'   },
-      { to: '/settings',     icon: Settings,   label: 'Settings'     },
+      { to: '/reports',      icon: BarChart2,   label: 'Reports'      },
+      { to: '/payments',     icon: CreditCard,  label: 'Payments'     },
+      { to: '/branches',     icon: Building2,   label: 'Branches'     },
+      { to: '/subscription', icon: RefreshCw,   label: 'Subscription' },
+      { to: '/audit-logs',   icon: Shield,      label: 'Audit Logs'   },
+      { to: '/settings',     icon: Settings,    label: 'Settings'     },
     ],
   },
   {
@@ -298,6 +300,9 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
             <X size={15} />
           </button>
         </div>
+
+        {/* Branch context switcher — only visible when multi-branch is active */}
+        {role === 'admin' && <div className="pt-2"><BranchSwitcher /></div>}
 
         {navContent}
 

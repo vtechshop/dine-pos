@@ -2,6 +2,8 @@ import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Product from '../models/Product';
+import Hotel from '../models/Hotel';
+import BranchProductConfig from '../models/BranchProductConfig';
 import Ingredient from '../models/Ingredient';
 import ModifierGroup from '../models/ModifierGroup';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
@@ -24,9 +26,79 @@ const router = Router();
 router.use(authMiddleware);
 // requireAdmin is applied per write-route only — all authenticated roles can read products
 
-// GET all products for this hotel
+// GET all products for this hotel.
+// For branches with multiBranch enabled: returns org products filtered by BranchProductConfig,
+// with branch-specific pricing applied. Standalone hotels are unaffected.
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
+    // ── Branch catalog overlay ────────────────────────────────────────────────
+    // Only activate when the authenticated hotel is a branch (parentHotelId set)
+    // AND the org has multiBranch enabled. For every other hotel the original
+    // query runs unchanged for backward compatibility.
+    const hotel = await Hotel.findById(req.hotelId)
+      .select('parentHotelId features')
+      .lean();
+
+    if (hotel?.parentHotelId && hotel.features?.multiBranch) {
+      const orgHotelId  = hotel.parentHotelId.toString();
+      const orgObjId    = new mongoose.Types.ObjectId(orgHotelId);
+      const branchObjId = new mongoose.Types.ObjectId(req.hotelId!);
+
+      // Fetch enabled configs for this branch
+      const configs = await BranchProductConfig.find({
+        orgHotelId:    orgObjId,
+        branchHotelId: branchObjId,
+        enabled:       true,
+      }).lean();
+
+      if (configs.length === 0) {
+        return res.json([]);
+      }
+
+      const configByProduct = new Map(configs.map(c => [c.productId.toString(), c]));
+      const enabledProductIds = configs.map(c => c.productId);
+
+      const filter: any = {
+        hotelId:   orgObjId,
+        _id:       { $in: enabledProductIds },
+        isDeleted: false,
+      };
+      if (req.query.available === 'true') filter.isAvailable = true;
+      if (req.query.category)      filter.category      = req.query.category;
+      if (req.query.kitchenStation) filter.kitchenStation = req.query.kitchenStation;
+      if (req.query.search) {
+        const escaped = (req.query.search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        filter.name = { $regex: escaped, $options: 'i' };
+      }
+
+      const orgProducts = await Product.find(filter)
+        .populate('category', 'name color')
+        .populate('kitchenStation', 'name isActive')
+        .populate({ path: 'modifierGroups', match: { isDeleted: false } })
+        .populate({ path: 'recipe.ingredient', select: 'name unit costPerUnit' })
+        .lean();
+
+      // Apply branch-specific price override (sellingPrice on BranchProductConfig)
+      const products = orgProducts.map(p => {
+        const cfg = configByProduct.get(p._id.toString());
+        if (cfg?.sellingPrice != null) {
+          return { ...p, price: cfg.sellingPrice, _branchPriceOverride: true };
+        }
+        return p;
+      });
+
+      // Sort by BranchProductConfig.displayOrder (if set) then by name
+      products.sort((a, b) => {
+        const da = configByProduct.get(a._id.toString())?.displayOrder ?? 9999;
+        const db = configByProduct.get(b._id.toString())?.displayOrder ?? 9999;
+        if (da !== db) return da - db;
+        return (a.name as string).localeCompare(b.name as string);
+      });
+
+      return res.json(products);
+    }
+
+    // ── Original single-branch / standalone query (unchanged) ────────────────
     const filter: any = { hotelId: req.hotelId, isDeleted: false };
     if (req.query.available === 'true') filter.isAvailable = true;
     if (req.query.category) filter.category = req.query.category;
@@ -70,6 +142,54 @@ router.get('/barcode/:code', async (req: AuthRequest, res: Response) => {
     const normalized = String(req.params.code).trim().toUpperCase();
     if (!normalized) return res.status(400).json({ found: false, message: 'Barcode is required' });
 
+    // ── Multi-branch overlay ──────────────────────────────────────────────────
+    // For branches: product master lives under the org hotel, not the branch hotel.
+    // Verify BranchProductConfig.enabled and apply branch price override.
+    // req.hotelId is always from the JWT — never from client body/query.
+    const hotel = await Hotel.findById(req.hotelId).select('parentHotelId features').lean();
+    if (hotel?.parentHotelId && hotel.features?.multiBranch) {
+      const orgHotelId  = hotel.parentHotelId;
+      const branchObjId = new mongoose.Types.ObjectId(req.hotelId!);
+
+      const orgProduct = await Product.findOne({
+        hotelId:   orgHotelId,
+        barcode:   normalized,
+        isDeleted: false,
+      })
+        .populate('category', 'name color')
+        .populate('kitchenStation', 'name isActive')
+        .populate({ path: 'modifierGroups', match: { isDeleted: false } })
+        .lean();
+
+      if (!orgProduct) {
+        return res.status(404).json({ found: false, message: 'Product not found for this barcode' });
+      }
+
+      // Branch must have an enabled config row for this product (default-DISABLED)
+      const config = await BranchProductConfig.findOne({
+        orgHotelId,
+        branchHotelId: branchObjId,
+        productId:     orgProduct._id,
+        enabled:       true,
+      }).lean();
+
+      if (!config) {
+        return res.status(404).json({ found: false, message: 'Product not found for this barcode' });
+      }
+
+      if (!(orgProduct as any).isAvailable) {
+        return res.status(404).json({ found: false, inactive: true, message: 'Product is currently unavailable' });
+      }
+
+      // Apply branch-specific price override when configured; otherwise inherit org price
+      const product = config.sellingPrice != null
+        ? { ...orgProduct, price: config.sellingPrice, _branchPriceOverride: true }
+        : orgProduct;
+
+      return res.json({ found: true, product });
+    }
+
+    // ── Original standalone / single-branch path (unchanged) ─────────────────
     const product = await Product.findOne({
       hotelId:   req.hotelId,
       barcode:   normalized,
@@ -95,6 +215,44 @@ router.get('/barcode/:code', async (req: AuthRequest, res: Response) => {
 // GET single product
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
+    // ── Multi-branch overlay ──────────────────────────────────────────────────
+    // For branch hotels, product masters live under the org hotel.
+    // Verify BranchProductConfig.enabled and apply branch price override.
+    // req.hotelId is always from the JWT — never from client params/body/query.
+    const hotel = await Hotel.findById(req.hotelId).select('parentHotelId features').lean();
+    if (hotel?.parentHotelId && hotel.features?.multiBranch) {
+      const orgHotelId  = hotel.parentHotelId;
+      const branchObjId = new mongoose.Types.ObjectId(req.hotelId!);
+
+      const orgProduct = await Product.findOne({
+        _id:     req.params.id,
+        hotelId: orgHotelId,
+      })
+        .populate('category', 'name color')
+        .populate('kitchenStation', 'name isActive')
+        .populate({ path: 'modifierGroups', match: { isDeleted: false } })
+        .populate({ path: 'recipe.ingredient', select: 'name unit costPerUnit' })
+        .lean();
+
+      if (!orgProduct) return res.status(404).json({ message: 'Product not found' });
+
+      // Branch must have an enabled config row for this product (default-DISABLED)
+      const config = await BranchProductConfig.findOne({
+        orgHotelId,
+        branchHotelId: branchObjId,
+        productId:     orgProduct._id,
+        enabled:       true,
+      }).lean();
+
+      if (!config) return res.status(404).json({ message: 'Product not found' });
+
+      if (config.sellingPrice != null) {
+        return res.json({ ...orgProduct, price: config.sellingPrice, _branchPriceOverride: true });
+      }
+      return res.json(orgProduct);
+    }
+
+    // ── Original standalone / single-branch path (unchanged) ─────────────────
     const product = await Product.findOne({ _id: req.params.id, hotelId: req.hotelId })
       .populate('category', 'name color')
       .populate('kitchenStation', 'name isActive')

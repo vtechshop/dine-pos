@@ -25,6 +25,10 @@ export interface ILoyaltyTransaction extends Document {
   expiresAt: Date | null; // set for 'earn' entries when hotel configures point expiry
   createdBy: string;      // "system" | "cashier:Raj" | "admin"
   createdAt: Date;
+  // Org-loyalty context (null for single-branch transactions)
+  orgCustomerId:  mongoose.Types.ObjectId | null;
+  branchHotelId:  mongoose.Types.ObjectId | null;
+  idempotencyKey: string | null;
   // Intentionally no updatedAt: this collection is append-only / immutable
 }
 
@@ -45,6 +49,9 @@ const LoyaltyTransactionSchema: Schema = new Schema(
     balanceAfter: { type: Number, required: true },
     remarks:      { type: String, default: '', maxlength: 500 },
     expiresAt:    { type: Date, default: null },
+    orgCustomerId:  { type: Schema.Types.ObjectId, ref: 'OrganizationCustomer', default: null },
+    branchHotelId:  { type: Schema.Types.ObjectId, ref: 'Hotel', default: null },
+    idempotencyKey: { type: String, default: null, maxlength: 200 },
     createdBy:    { type: String, default: 'system', maxlength: 100 },
   },
   {
@@ -64,5 +71,11 @@ LoyaltyTransactionSchema.index({ hotelId: 1, createdAt: -1 });
 LoyaltyTransactionSchema.index({ orderId: 1 }, { sparse: true });
 // Expiry batch / lazy-expiry sweep
 LoyaltyTransactionSchema.index({ expiresAt: 1 }, { sparse: true });
+// Org-loyalty customer history
+LoyaltyTransactionSchema.index({ orgCustomerId: 1, createdAt: -1 }, { sparse: true });
+// HQ branch-by-branch breakdown
+LoyaltyTransactionSchema.index({ orgCustomerId: 1, branchHotelId: 1, createdAt: -1 }, { sparse: true });
+// Idempotency key — unique and sparse
+LoyaltyTransactionSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model<ILoyaltyTransaction>('LoyaltyTransaction', LoyaltyTransactionSchema);

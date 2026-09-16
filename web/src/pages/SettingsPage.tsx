@@ -6,8 +6,10 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
-import { updateSettings, fetchSubscription } from '../api/settings';
+import { updateSettings, fetchSubscription, updateOrgLoyaltySetting, updateBranchOrgLoyaltyEnabled } from '../api/settings';
 import type { SubscriptionInfo } from '../api/settings';
+import { fetchBranches } from '../api/branches';
+import type { Branch } from '../api/branches';
 import {
   fetchCashiers, toggleCashier, deleteCashier,
   fetchWaiters, toggleWaiter, deleteWaiter,
@@ -39,13 +41,44 @@ function F({ label, children }: { label: string; children: React.ReactNode }) {
   );
 }
 
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionCard({ title, children, badge }: { title: string; children: React.ReactNode; badge?: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-border bg-canvas p-6">
-      <h3 className="mb-5 text-sm font-semibold text-ink">{title}</h3>
+      <div className="mb-5 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-ink">{title}</h3>
+        {badge}
+      </div>
       {children}
     </div>
   );
+}
+
+function InheritedBadge({ onReset }: { onReset?: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
+      Inherited from Organization
+      {onReset && (
+        <button
+          onClick={onReset}
+          className="ml-1 underline hover:text-blue-800"
+          title="Override with branch-specific value"
+        >
+          Override
+        </button>
+      )}
+    </span>
+  );
+}
+
+function isInherited(settings: Settings, field: string): boolean {
+  return Array.isArray(settings._inheritedFromOrg) && settings._inheritedFromOrg.includes(field);
+}
+
+async function resetInheritedFields(fields: string[]): Promise<void> {
+  await apiFetch('/api/settings/reset-fields', {
+    method: 'POST',
+    body: JSON.stringify({ fields }),
+  });
 }
 
 function SaveRow({ onSave, saving, msg }: { onSave: () => void; saving: boolean; msg: string | null }) {
@@ -142,6 +175,9 @@ function ProfileSection({ settings, refresh }: { settings: Settings; refresh: ()
     reader.readAsDataURL(file);
   };
 
+  const inherited = (field: string) => isInherited(settings, field);
+  const resetField = async (field: string) => { await resetInheritedFields([field]); await refresh(); };
+
   return (
     <div className="space-y-5">
       <SectionCard title="Hotel Identity">
@@ -152,7 +188,11 @@ function ProfileSection({ settings, refresh }: { settings: Settings; refresh: ()
           <F label="Owner Name">
             <input value={d.ownerName} onChange={e => setD(p => ({ ...p, ownerName: e.target.value }))} className={inp} />
           </F>
-          <F label="Business Type">
+          <div>
+            <div className="mb-1 flex items-center gap-2">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">Business Type</label>
+              {inherited('businessType') && <InheritedBadge onReset={() => void resetField('businessType')} />}
+            </div>
             <select
               value={d.businessType ?? ''}
               onChange={e => setD(p => ({ ...p, businessType: (e.target.value || undefined) as Settings['businessType'] }))}
@@ -163,13 +203,21 @@ function ProfileSection({ settings, refresh }: { settings: Settings; refresh: ()
               <option value="non-veg">Non-Vegetarian</option>
               <option value="both">Veg &amp; Non-Veg</option>
             </select>
-          </F>
-          <F label="Currency Symbol">
+          </div>
+          <div>
+            <div className="mb-1 flex items-center gap-2">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">Currency Symbol</label>
+              {inherited('currencySymbol') && <InheritedBadge onReset={() => void resetField('currencySymbol')} />}
+            </div>
             <input value={d.currencySymbol} onChange={e => setD(p => ({ ...p, currencySymbol: e.target.value }))} maxLength={3} className={inp} />
-          </F>
-          <F label="Default Tax %">
+          </div>
+          <div>
+            <div className="mb-1 flex items-center gap-2">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">Default Tax %</label>
+              {inherited('defaultTaxPercent') && <InheritedBadge onReset={() => void resetField('defaultTaxPercent')} />}
+            </div>
             <input type="number" min={0} max={28} step={0.5} value={d.defaultTaxPercent} onChange={e => setD(p => ({ ...p, defaultTaxPercent: Number(e.target.value) }))} className={inp} />
-          </F>
+          </div>
           <F label="QR Session Timeout (min)">
             <input type="number" min={1} max={180} value={d.qrGuestTimeoutMinutes} onChange={e => setD(p => ({ ...p, qrGuestTimeoutMinutes: Number(e.target.value) }))} className={inp} />
           </F>
@@ -199,9 +247,13 @@ function ProfileSection({ settings, refresh }: { settings: Settings; refresh: ()
           </F>
         </div>
         <div className="mt-4">
-          <F label="Receipt Footer Text">
+          <div>
+            <div className="mb-1 flex items-center gap-2">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">Receipt Footer Text</label>
+              {inherited('footerText') && <InheritedBadge onReset={() => void resetField('footerText')} />}
+            </div>
             <input value={d.footerText} onChange={e => setD(p => ({ ...p, footerText: e.target.value }))} placeholder="Thank you for dining with us!" className={inp} />
-          </F>
+          </div>
         </div>
       </SectionCard>
 
@@ -716,6 +768,131 @@ const LOYALTY_DEFAULTS: LoyaltySettings = {
   tierThresholds: { silver: 5000, gold: 15000, platinum: 30000 },
 };
 
+function OrgLoyaltyCard({ settings, refresh }: { settings: Settings; refresh: () => Promise<void> }) {
+  const [orgLoyalty, setOrgLoyalty] = useState<boolean>(settings.features?.orgLoyalty ?? false);
+  const [toggling, setToggling] = useState(false);
+  const [toggleMsg, setToggleMsg] = useState<string | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchLoading, setBranchLoading] = useState(false);
+  const [branchSaving, setBranchSaving] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setOrgLoyalty(settings.features?.orgLoyalty ?? false);
+  }, [settings.features?.orgLoyalty]);
+
+  useEffect(() => {
+    setBranchLoading(true);
+    fetchBranches()
+      .then(r => setBranches(r.branches))
+      .catch(() => setBranches([]))
+      .finally(() => setBranchLoading(false));
+  }, []);
+
+  const handleOrgLoyaltyToggle = async () => {
+    setToggling(true);
+    setToggleMsg(null);
+    try {
+      const next = !orgLoyalty;
+      await updateOrgLoyaltySetting(next);
+      setOrgLoyalty(next);
+      await refresh();
+      setToggleMsg('Saved ✓');
+      setTimeout(() => setToggleMsg(null), 2500);
+    } catch (e) {
+      setToggleMsg(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  const handleBranchToggle = async (branchId: string, current: boolean) => {
+    setBranchSaving(p => ({ ...p, [branchId]: true }));
+    try {
+      await updateBranchOrgLoyaltyEnabled(branchId, !current);
+      setBranches(prev => prev.map(b =>
+        b._id === branchId
+          ? { ...b, features: { ...b.features, orgLoyaltyEnabled: !current } }
+          : b,
+      ));
+    } catch {
+      // silent — UI stays at previous state
+    } finally {
+      setBranchSaving(p => ({ ...p, [branchId]: false }));
+    }
+  };
+
+  return (
+    <SectionCard title="Organization Loyalty">
+      <p className="mb-4 text-xs text-ink/60">
+        These settings control loyalty earning and redemption across participating branches.
+      </p>
+
+      {/* Master toggle */}
+      <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
+        <div>
+          <p className="text-sm font-medium text-ink">Enable Organization Loyalty</p>
+          <p className="mt-0.5 text-[11px] text-ink/50">
+            Master switch — disabling this stops all org-loyalty earning and redemption at every branch.
+          </p>
+        </div>
+        <button
+          onClick={() => void handleOrgLoyaltyToggle()}
+          disabled={toggling}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-40 ${orgLoyalty ? 'bg-brand' : 'bg-border'}`}
+          aria-label={orgLoyalty ? 'Disable organization loyalty' : 'Enable organization loyalty'}
+        >
+          <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ${orgLoyalty ? 'translate-x-5' : 'translate-x-0'}`} />
+        </button>
+      </div>
+      {toggleMsg && (
+        <p className={`mt-1 text-xs font-medium ${toggleMsg.startsWith('Saved') ? 'text-green-600' : 'text-red-500'}`}>
+          {toggleMsg}
+        </p>
+      )}
+
+      {/* Per-branch participation */}
+      <div className="mt-4">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ink/40">Branch Participation</p>
+        {branchLoading ? (
+          <p className="text-xs text-ink/40">Loading branches…</p>
+        ) : branches.length === 0 ? (
+          <p className="text-xs text-ink/40">No branches found.</p>
+        ) : (
+          <div className="space-y-2">
+            {branches.map(b => {
+              const participating = b.features?.orgLoyaltyEnabled !== false;
+              const isSaving = branchSaving[b._id] ?? false;
+              return (
+                <div key={b._id} className="flex items-center justify-between rounded-lg border border-border px-4 py-2.5">
+                  <div>
+                    <p className="text-sm font-medium text-ink">{b.branchName || b.hotelName}</p>
+                    {b.branchCode && (
+                      <p className="text-[10px] text-ink/40">{b.branchCode}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => void handleBranchToggle(b._id, participating)}
+                    disabled={isSaving || !orgLoyalty}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-40 ${participating ? 'bg-brand' : 'bg-border'}`}
+                    aria-label={participating ? `Disable org loyalty for ${b.branchName}` : `Enable org loyalty for ${b.branchName}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ${participating ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {!orgLoyalty && branches.length > 0 && (
+          <p className="mt-2 text-[11px] text-amber-600">
+            Enable organization loyalty above to allow branches to participate.
+          </p>
+        )}
+      </div>
+    </SectionCard>
+  );
+}
+
 function LoyaltySection({ settings, refresh }: { settings: Settings; refresh: () => Promise<void> }) {
   const [d, setD] = useState<LoyaltySettings>({ ...LOYALTY_DEFAULTS, ...(settings.loyaltySettings ?? {}) });
   const { save, saving, msg } = useSave(refresh);
@@ -723,6 +900,9 @@ function LoyaltySection({ settings, refresh }: { settings: Settings; refresh: ()
   useEffect(() => setD({ ...LOYALTY_DEFAULTS, ...(settings.loyaltySettings ?? {}) }), [settings]);
 
   const enabled = settings.features?.loyaltyProgram;
+  const loyaltyInherited = isInherited(settings, 'loyaltySettings');
+  const resetLoyalty = async () => { await resetInheritedFields(['loyaltySettings']); await refresh(); };
+  const isHQ = settings.features?.multiBranch && !settings.isOrgBranch;
 
   return (
     <div className="space-y-5">
@@ -731,7 +911,10 @@ function LoyaltySection({ settings, refresh }: { settings: Settings; refresh: ()
           Loyalty Program is not enabled. Contact your Super Admin to activate it. You can pre-configure settings below.
         </div>
       )}
-      <SectionCard title="Loyalty Program Settings">
+      <SectionCard
+        title="Loyalty Program Settings"
+        badge={loyaltyInherited ? <InheritedBadge onReset={() => void resetLoyalty()} /> : undefined}
+      >
         <div className="grid grid-cols-2 gap-4">
           <F label="Reward Name">
             <input value={d.rewardName} onChange={e => setD(p => ({ ...p, rewardName: e.target.value }))} placeholder="Points" className={inp} />
@@ -784,6 +967,8 @@ function LoyaltySection({ settings, refresh }: { settings: Settings; refresh: ()
         </div>
         <SaveRow onSave={() => void save({ loyaltySettings: d })} saving={saving} msg={msg} />
       </SectionCard>
+
+      {isHQ && <OrgLoyaltyCard settings={settings} refresh={refresh} />}
     </div>
   );
 }

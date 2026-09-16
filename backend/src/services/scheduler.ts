@@ -1,15 +1,19 @@
 import { runHourlyAggregation } from '../workers/hourlyAggregator';
 import { dispatchDailySnapshots } from '../workers/dailySnapshotBuilder';
 import { dispatchMorningBriefs } from '../workers/morningBriefWorker';
-import { runLoyaltyExpiry } from '../workers/loyaltyExpiryWorker';
+import { runLoyaltyExpiry, runOrgLoyaltyExpiry } from '../workers/loyaltyExpiryWorker';
 import { dispatchScheduledCampaigns } from '../workers/campaignWorker';
 import { runMenuSyncWorker } from '../workers/menuSyncWorker';
 import { runRazorpayTokenRefreshWorker } from '../workers/razorpayTokenRefreshWorker';
+import { processQueuedWhatsAppReceipts } from '../workers/whatsappReceiptWorker';
+import { recoverStaleTallySyncJobs } from '../workers/tallySyncWorker';
 import { logger } from '../utils/logger';
 
 let hourlyTimer:             ReturnType<typeof setTimeout>  | null = null;
 let hourlyTick:              ReturnType<typeof setInterval> | null = null;
 let dailyTick:               ReturnType<typeof setInterval> | null = null;
+let waReceiptTick:           ReturnType<typeof setInterval> | null = null;
+let tallyRecoveryTick:       ReturnType<typeof setInterval> | null = null;
 let expiryLastDate         = -1;
 let menuSyncLastRun        = 0;   // epoch ms — checked every 5 minutes
 let tokenRefreshLastRun    = 0;   // epoch ms — checked every 4 hours
@@ -73,6 +77,9 @@ function scheduleDailyDispatch(): void {
       void runLoyaltyExpiry().catch((err) =>
         logger.error('[scheduler] loyalty expiry error', { err: String(err) }),
       );
+      void runOrgLoyaltyExpiry().catch((err) =>
+        logger.error('[scheduler] org loyalty expiry error', { err: String(err) }),
+      );
     }
 
     // Campaign scheduling sweep — every minute, checks for campaigns past their scheduledAt
@@ -103,6 +110,24 @@ function scheduleDailyDispatch(): void {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+function scheduleWhatsAppReceiptSweep(): void {
+  // Sweep every 30 seconds: low latency for transactional receipts, low overhead
+  waReceiptTick = setInterval(() => {
+    void processQueuedWhatsAppReceipts().catch((err) =>
+      logger.error('[scheduler] whatsapp receipt sweep error', { err: String(err) }),
+    );
+  }, 30 * 1000);
+}
+
+function scheduleTallyRecovery(): void {
+  // Recover stale Tally syncing jobs every 5 minutes
+  tallyRecoveryTick = setInterval(() => {
+    void recoverStaleTallySyncJobs().catch((err) =>
+      logger.error('[scheduler] tally recovery error', { err: String(err) }),
+    );
+  }, 5 * 60 * 1000);
+}
+
 export function startScheduler(): void {
   if (hourlyTimer !== null || hourlyTick !== null || dailyTick !== null) {
     logger.warn('[scheduler] already running — ignoring duplicate startScheduler() call');
@@ -111,12 +136,16 @@ export function startScheduler(): void {
   logger.info('[scheduler] starting');
   scheduleHourly();
   scheduleDailyDispatch();
+  scheduleWhatsAppReceiptSweep();
+  scheduleTallyRecovery();
 }
 
 export function stopScheduler(): void {
   logger.info('[scheduler] stopping');
-  if (hourlyTimer) { clearTimeout(hourlyTimer);   hourlyTimer  = null; }
-  if (hourlyTick)  { clearInterval(hourlyTick);   hourlyTick   = null; }
-  if (dailyTick)   { clearInterval(dailyTick);    dailyTick    = null; }
+  if (hourlyTimer)       { clearTimeout(hourlyTimer);           hourlyTimer       = null; }
+  if (hourlyTick)        { clearInterval(hourlyTick);           hourlyTick        = null; }
+  if (dailyTick)         { clearInterval(dailyTick);            dailyTick         = null; }
+  if (waReceiptTick)     { clearInterval(waReceiptTick);        waReceiptTick     = null; }
+  if (tallyRecoveryTick) { clearInterval(tallyRecoveryTick);    tallyRecoveryTick = null; }
   expiryLastDate = -1;
 }
