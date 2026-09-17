@@ -2852,3 +2852,214 @@ export const retryTallyJob = (
 
 export const fetchTallyStats = (): Promise<Record<TallySyncStatus, number>> =>
   fetchAPI('/integrations/tally/stats');
+
+// ── Modifier Groups ───────────────────────────────────────────────────────────
+
+export const getModifierGroups = (params?: { active?: boolean; search?: string; page?: number; limit?: number }): Promise<{
+  groups: ModifierGroup[]; total: number; page: number; pages: number;
+}> => {
+  const qs = new URLSearchParams();
+  if (params?.active !== undefined) qs.set('active', String(params.active));
+  if (params?.search) qs.set('search', params.search);
+  if (params?.page)  qs.set('page',   String(params.page));
+  if (params?.limit) qs.set('limit',  String(params.limit));
+  return fetchAPI(`/modifiers?${qs}`);
+};
+
+export const getModifierGroup = (id: string): Promise<ModifierGroup> =>
+  fetchAPI(`/modifiers/${id}`);
+
+export const createModifierGroup = (data: {
+  name: string; description?: string; isRequired?: boolean;
+  selectionType?: 'single' | 'multi'; minSelections?: number; maxSelections?: number;
+}): Promise<ModifierGroup> =>
+  fetchAPI('/modifiers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+export const updateModifierGroup = (id: string, data: Partial<{
+  name: string; description: string; isActive: boolean; isRequired: boolean;
+  selectionType: 'single' | 'multi'; minSelections: number; maxSelections: number; displayOrder: number;
+}>): Promise<ModifierGroup> =>
+  fetchAPI(`/modifiers/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+export const deleteModifierGroup = (id: string): Promise<{ message: string }> =>
+  fetchAPI(`/modifiers/${id}`, { method: 'DELETE' });
+
+export const addModifierOption = (groupId: string, data: {
+  name: string; price: number; sku?: string;
+}): Promise<ModifierGroup> =>
+  fetchAPI(`/modifiers/${groupId}/options`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+export const updateModifierOption = (groupId: string, optId: string, data: Partial<{
+  name: string; price: number; sku: string; isActive: boolean; displayOrder: number;
+}>): Promise<ModifierGroup> =>
+  fetchAPI(`/modifiers/${groupId}/options/${optId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+export const deleteModifierOption = (groupId: string, optId: string): Promise<ModifierGroup> =>
+  fetchAPI(`/modifiers/${groupId}/options/${optId}`, { method: 'DELETE' });
+
+// ── Campaigns ─────────────────────────────────────────────────────────────────
+
+export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'cancelled' | 'failed';
+export type CampaignChannel = 'whatsapp' | 'sms';
+export type AudienceSegment = 'all' | 'loyalty' | 'frequent' | 'inactive' | 'custom';
+
+export interface Campaign {
+  _id:            string;
+  name:           string;
+  channel:        CampaignChannel;
+  status:         CampaignStatus;
+  audience:       AudienceSegment;
+  templateName?:  string;
+  message?:       string;
+  scheduledAt?:   string | null;
+  sentAt?:        string | null;
+  recipientCount: number;
+  deliveredCount: number;
+  failedCount:    number;
+  createdAt:      string;
+  updatedAt:      string;
+}
+
+export const fetchCampaigns = (params?: { status?: CampaignStatus; page?: number; limit?: number }): Promise<{
+  campaigns: Campaign[]; total: number; page: number; pages: number;
+}> => {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.page)   qs.set('page',   String(params.page));
+  if (params?.limit)  qs.set('limit',  String(params.limit));
+  return fetchAPI(`/campaigns?${qs}`);
+};
+
+export const createCampaign = (data: {
+  name: string; channel: CampaignChannel; audience: AudienceSegment;
+  templateName?: string; message?: string; scheduledAt?: string;
+}): Promise<Campaign> =>
+  fetchAPI('/campaigns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+export const updateCampaign = (id: string, data: Partial<Campaign>): Promise<Campaign> =>
+  fetchAPI(`/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+export const deleteCampaign = (id: string): Promise<{ message: string }> =>
+  fetchAPI(`/campaigns/${id}`, { method: 'DELETE' });
+
+export const sendCampaign = (id: string): Promise<{ message: string; recipientCount: number }> =>
+  fetchAPI(`/campaigns/${id}/send`, { method: 'POST' });
+
+export const testSendCampaign = (id: string, phone: string): Promise<{ message: string }> =>
+  fetchAPI(`/campaigns/${id}/test-send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
+
+export const fetchCampaignMessages = (id: string, params?: { page?: number; limit?: number }): Promise<{
+  messages: { _id: string; phone: string; status: string; sentAt?: string; deliveredAt?: string; failedAt?: string }[];
+  total: number; page: number; pages: number;
+}> => {
+  const qs = new URLSearchParams();
+  if (params?.page)  qs.set('page',  String(params.page));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  return fetchAPI(`/campaigns/${id}/messages?${qs}`);
+};
+
+export const fetchCampaignAudienceCount = (audience: AudienceSegment): Promise<{ count: number }> =>
+  fetchAPI(`/campaigns/audience-count?audience=${audience}`);
+
+// ── Vendor Returns ────────────────────────────────────────────────────────────
+
+export type VendorReturnStatus = 'draft' | 'approved' | 'completed' | 'cancelled';
+
+export interface VendorReturn {
+  _id:        string;
+  vendorId:   string | { _id: string; name: string };
+  grnId?:     string | null;
+  status:     VendorReturnStatus;
+  items:      { productName: string; quantity: number; unitCost: number; reason: string }[];
+  totalValue: number;
+  notes?:     string;
+  createdAt:  string;
+  updatedAt:  string;
+}
+
+export const fetchVendorReturns = (params?: {
+  vendorId?: string; status?: VendorReturnStatus; from?: string; to?: string; page?: number; limit?: number;
+}): Promise<{ returns: VendorReturn[]; total: number; page: number; pages: number }> => {
+  const qs = new URLSearchParams();
+  if (params?.vendorId) qs.set('vendorId', params.vendorId);
+  if (params?.status)   qs.set('status',   params.status);
+  if (params?.from)     qs.set('from',     params.from);
+  if (params?.to)       qs.set('to',       params.to);
+  if (params?.page)     qs.set('page',     String(params.page));
+  if (params?.limit)    qs.set('limit',    String(params.limit));
+  return fetchAPI(`/vendor-returns?${qs}`);
+};
+
+export const createVendorReturn = (data: {
+  vendorId: string; grnId?: string; items: { productName: string; quantity: number; unitCost: number; reason: string }[]; notes?: string;
+}): Promise<VendorReturn> =>
+  fetchAPI('/vendor-returns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+export const approveVendorReturn  = (id: string): Promise<VendorReturn> => fetchAPI(`/vendor-returns/${id}/approve`,  { method: 'POST' });
+export const completeVendorReturn = (id: string): Promise<VendorReturn> => fetchAPI(`/vendor-returns/${id}/complete`, { method: 'POST' });
+export const cancelVendorReturn   = (id: string): Promise<VendorReturn> => fetchAPI(`/vendor-returns/${id}/cancel`,   { method: 'POST' });
+
+// ── Audit Logs ────────────────────────────────────────────────────────────────
+
+export interface AuditLogEntry {
+  _id:        string;
+  action:     string;
+  actorId?:   string;
+  actorName?: string;
+  actorRole?: string;
+  targetType?: string;
+  targetId?:  string;
+  details?:   Record<string, unknown>;
+  ip?:        string;
+  createdAt:  string;
+}
+
+export const fetchAuditLogs = (params?: {
+  action?: string; actorRole?: string; targetType?: string; from?: string; to?: string; page?: number; limit?: number;
+}): Promise<{ logs: AuditLogEntry[]; total: number; page: number; pages: number }> => {
+  const qs = new URLSearchParams();
+  if (params?.action)     qs.set('action',     params.action);
+  if (params?.actorRole)  qs.set('actorRole',  params.actorRole);
+  if (params?.targetType) qs.set('targetType', params.targetType);
+  if (params?.from)       qs.set('from',       params.from);
+  if (params?.to)         qs.set('to',         params.to);
+  if (params?.page)       qs.set('page',       String(params.page));
+  if (params?.limit)      qs.set('limit',      String(params.limit));
+  return fetchAPI(`/audit?${qs}`);
+};
+
+// ── Branch Admin ──────────────────────────────────────────────────────────────
+
+export type BranchStatus = 'active' | 'suspended' | 'pending';
+
+export interface Branch {
+  _id:        string;
+  branchCode: string;
+  name:       string;
+  address?:   string;
+  city?:      string;
+  phone?:     string;
+  timezone?:  string;
+  status:     BranchStatus;
+  isHQ:       boolean;
+  orgLoyaltyEnabled: boolean;
+  createdAt:  string;
+}
+
+export const fetchBranches = (): Promise<{ branches: Branch[]; total: number; maxBranches: number }> =>
+  fetchAPI('/branches');
+
+export const createBranch = (data: {
+  name: string; branchCode: string; address?: string; city?: string; phone?: string; adminId?: string;
+}): Promise<Branch> =>
+  fetchAPI('/branches', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+export const updateBranch = (id: string, data: Partial<{ name: string; address: string; city: string; phone: string; timezone: string }>): Promise<Branch> =>
+  fetchAPI(`/branches/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+export const deactivateBranch  = (id: string): Promise<{ message: string }> => fetchAPI(`/branches/${id}/deactivate`,  { method: 'POST' });
+export const reactivateBranch  = (id: string): Promise<{ message: string }> => fetchAPI(`/branches/${id}/reactivate`,  { method: 'POST' });
+export const switchBranchContext = (branchId: string): Promise<{ token: string }> =>
+  fetchAPI('/branches/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branchId }) });
+export const toggleBranchOrgLoyalty = (id: string, enabled: boolean): Promise<{ message: string }> =>
+  fetchAPI(`/branches/${id}/org-loyalty-enabled`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });

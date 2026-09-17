@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { RefreshCw, Search, ChevronLeft, ChevronRight, Calendar, X, Banknote, CreditCard, Smartphone, CheckCircle2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { RefreshCw, Search, ChevronLeft, ChevronRight, Calendar, X, Banknote, CreditCard, Smartphone, CheckCircle2, Plus } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import type { OrderListItem } from '../types';
 import { fetchOrders, updateOrderStatus } from '../api/orders';
@@ -592,6 +593,14 @@ export function OrdersPage() {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/cashier"
+            data-testid="new-order-btn"
+            className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand/90"
+          >
+            <Plus size={13} />
+            New Order
+          </Link>
           <div className="flex overflow-hidden rounded-lg border border-border">
             {RANGE_OPTIONS.map(r => (
               <button

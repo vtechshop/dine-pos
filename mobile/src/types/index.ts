@@ -964,6 +964,14 @@ export type RootStackParamList = {
   CashDrawerScreen: undefined;
   BillHistory: undefined;
   RazorpayOAuth: { status?: string; error?: string } | undefined;
+  WhatsAppReceipts: undefined;
+  TallyConfig: undefined;
+  ModifierGroups: undefined;
+  WasteLog: undefined;
+  Campaigns: undefined;
+  VendorReturns: undefined;
+  AuditLogs: undefined;
+  BranchAdmin: undefined;
 };
 
 export type TabParamList = {

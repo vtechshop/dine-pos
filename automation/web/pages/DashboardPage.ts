@@ -34,8 +34,9 @@ export class DashboardPage {
   }
 
   async logout(): Promise<void> {
-    await this.page.locator('button:has-text("Logout"), button:has-text("Sign Out"), [data-testid="logout"]').first().click();
-    await this.page.waitForURL(/login/, { timeout: 5000 });
+    await this.page.locator('[data-testid="logout-btn"]').first().click();
+    await this.page.locator('[data-testid="logout-confirm-btn"]').first().click();
+    await this.page.waitForURL(/login/, { timeout: 8000 });
   }
 
   async getNotificationBadgeCount(): Promise<number> {

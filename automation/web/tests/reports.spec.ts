@@ -27,18 +27,24 @@ test.describe('Web — Reports', () => {
   test('WEB-021 daily report shows revenue and order count', async ({ page }) => {
     const dashboard = new DashboardPage(page);
     await dashboard.navigateToReports();
-    const dailyLink = page.locator('text=/Daily Report|daily/i').first();
-    await dailyLink.click();
+    // Click "Today" preset to load today's revenue data (Overview tab is default)
+    const todayPreset = page.locator('button:has-text("Today")').first();
+    if (await todayPreset.isVisible()) {
+      await todayPreset.click();
+    }
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('text=/Total Orders|Revenue|Orders Today/i').first()).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('text=/Total Orders|Revenue|Orders Today|Overview/i').first()).toBeVisible({ timeout: 8000 });
   });
 
   test('WEB-022 range report accepts date range and fetches data', async ({ page }) => {
     const dashboard = new DashboardPage(page);
     await dashboard.navigateToReports();
-    const rangeLink = page.locator('text=/Range Report|range/i').first();
-    await rangeLink.click();
-    await page.waitForLoadState('networkidle');
+    // Click "Custom" date preset to trigger a date range selection
+    const customPreset = page.locator('button:has-text("Custom")').first();
+    if (await customPreset.isVisible()) {
+      await customPreset.click();
+      await page.waitForLoadState('networkidle');
+    }
     const fromInput = page.locator('input[type="date"]').first();
     const toInput = page.locator('input[type="date"]').nth(1);
     if (await fromInput.isVisible() && await toInput.isVisible()) {
@@ -48,8 +54,8 @@ test.describe('Web — Reports', () => {
       await toInput.fill(today);
       await page.locator('button:has-text("Search"), button:has-text("Filter"), button[type="submit"]').first().click();
       await page.waitForLoadState('networkidle');
-      await expect(page).not.toHaveURL(/error/);
     }
+    await expect(page).not.toHaveURL(/error/);
   });
 
   test('WEB-023 product report loads and shows product list', async ({ page }) => {

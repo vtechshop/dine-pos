@@ -35,7 +35,6 @@ export class LoginPage {
   }
 
   async expectInvalidCredentialsError(): Promise<void> {
-    const text = await this.page.locator('text=/invalid|incorrect|wrong|unauthorized/i').first();
-    await expect(text).toBeVisible({ timeout: 5000 });
+    await expect(this.page.locator('[data-testid="login-error"]').first()).toBeVisible({ timeout: 5000 });
   }
 }

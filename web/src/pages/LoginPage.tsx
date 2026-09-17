@@ -245,7 +245,7 @@ export function LoginPage() {
 
             {/* Error */}
             {error && (
-              <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+              <div data-testid="login-error" className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
                 {error}
               </div>
             )}

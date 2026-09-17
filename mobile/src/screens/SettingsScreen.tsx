@@ -1186,6 +1186,14 @@ const SettingsScreen: React.FC = () => {
               { label: 'Gift Vouchers',         sub: 'Issue & redeem gift vouchers',      icon: 'card-giftcard'           as const, nav: 'GiftVouchers'             as const },
               { label: 'Purchase Invoices',     sub: 'Track supplier invoices & payments', icon: 'receipt-long'            as const, nav: 'PurchaseInvoices'         as const },
               { label: 'Payment Settings',      sub: 'Gateways, transactions & refunds',  icon: 'credit-card'             as const, nav: 'PaymentSettings'         as const },
+              { label: 'WhatsApp Receipts',     sub: 'Auto-send receipts via WhatsApp',   icon: 'message'                 as const, nav: 'WhatsAppReceipts'        as const },
+              { label: 'Tally Accounting',      sub: 'Direct sync to TallyPrime',         icon: 'sync'                    as const, nav: 'TallyConfig'             as const },
+              { label: 'Modifier Groups',       sub: 'Add-ons, spice levels & combos',    icon: 'tune'                    as const, nav: 'ModifierGroups'          as const },
+              { label: 'Waste Log',             sub: 'Track & log ingredient waste',      icon: 'delete-outline'          as const, nav: 'WasteLog'               as const },
+              { label: 'Campaigns',             sub: 'WhatsApp & SMS marketing',          icon: 'campaign'                as const, nav: 'Campaigns'              as const },
+              { label: 'Vendor Returns',        sub: 'Returns to suppliers',              icon: 'assignment-return'       as const, nav: 'VendorReturns'          as const },
+              { label: 'Audit Logs',            sub: 'Staff activity & security trail',   icon: 'security'                as const, nav: 'AuditLogs'              as const },
+              { label: 'Branch Admin',          sub: 'Multi-branch management',           icon: 'account-tree'            as const, nav: 'BranchAdmin'            as const },
             ].map((item) => (
               <TouchableOpacity
                 key={item.nav}

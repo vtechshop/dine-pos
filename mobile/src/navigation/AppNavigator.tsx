@@ -88,6 +88,14 @@ import ShiftScreen from '../screens/ShiftScreen';
 import CashDrawerScreen from '../screens/CashDrawerScreen';
 import BillHistoryScreen from '../screens/BillHistoryScreen';
 import RazorpayOAuthScreen from '../screens/RazorpayOAuthScreen';
+import WhatsAppReceiptsScreen from '../screens/WhatsAppReceiptsScreen';
+import TallyConfigScreen from '../screens/TallyConfigScreen';
+import ModifierGroupsScreen from '../screens/ModifierGroupsScreen';
+import WasteLogScreen from '../screens/WasteLogScreen';
+import CampaignsScreen from '../screens/CampaignsScreen';
+import VendorReturnsScreen from '../screens/VendorReturnsScreen';
+import AuditLogsScreen from '../screens/AuditLogsScreen';
+import BranchAdminScreen from '../screens/BranchAdminScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<TabParamList>();
@@ -350,6 +358,14 @@ const AppNavigator = () => {
             <Stack.Screen name="AIMenuImport"      component={AIMenuImportScreen}      options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="BulkImageAssign"  component={BulkImageAssignScreen}  options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="RazorpayOAuth"    component={RazorpayOAuthScreen}    options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="WhatsAppReceipts" component={WhatsAppReceiptsScreen} options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="TallyConfig"      component={TallyConfigScreen}      options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="ModifierGroups"   component={ModifierGroupsScreen}   options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="WasteLog"         component={WasteLogScreen}         options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="Campaigns"        component={CampaignsScreen}        options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="VendorReturns"    component={VendorReturnsScreen}    options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="AuditLogs"        component={AuditLogsScreen}        options={{ contentStyle: safeTop, headerShown: false }} />
+            <Stack.Screen name="BranchAdmin"      component={BranchAdminScreen}      options={{ contentStyle: safeTop, headerShown: false }} />
             <Stack.Screen name="Coupons"        component={CouponScreen}       options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'Coupons',       headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="GiftVouchers"      component={GiftVoucherScreen}      options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'Gift Vouchers',      headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />
             <Stack.Screen name="PurchaseInvoices"  component={PurchaseInvoiceScreen}  options={{ contentStyle: noTopPad, headerShown: true, headerTitle: 'Purchase Invoices', headerStyle: { backgroundColor: Colors.surface }, headerTintColor: Colors.text }} />

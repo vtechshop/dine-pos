@@ -72,6 +72,7 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             </div>
             <span className="hidden text-sm text-white/70 sm:block">{roleLabel}</span>
             <button
+              data-testid="logout-btn"
               onClick={() => setConfirmLogout(true)}
               aria-label="Sign out"
               className="ml-1 rounded-lg p-1.5 text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white/80"
@@ -98,6 +99,7 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
                 Cancel
               </button>
               <button
+                data-testid="logout-confirm-btn"
                 onClick={logout}
                 className="flex-1 rounded-xl bg-brand py-2.5 text-sm font-bold text-white transition-colors hover:bg-brand/90"
               >
