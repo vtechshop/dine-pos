@@ -52,7 +52,7 @@ test.describe('Web — Reports', () => {
       const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
       await fromInput.fill(yesterday);
       await toInput.fill(today);
-      await page.locator('button:has-text("Search"), button:has-text("Filter"), button[type="submit"]').first().click();
+      // Reports page auto-applies date range on change — no submit button needed
       await page.waitForLoadState('networkidle');
     }
     await expect(page).not.toHaveURL(/error/);

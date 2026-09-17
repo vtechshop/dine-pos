@@ -88,7 +88,10 @@ export async function apiFetch<T>(path: string, init: ExtendedInit = {}): Promis
 
   if (!res.ok) {
     // ── H-03: 401 interception — attempt silent refresh then retry once ─────
-    if (res.status === 401 && !_isRetry) {
+    // Skip interception for auth endpoints: a 401 there is "wrong credentials",
+    // not an expired session, so the page-reload redirect must not fire.
+    const isAuthEndpoint = path === '/auth/login' || path === '/auth/cashier';
+    if (res.status === 401 && !_isRetry && !isAuthEndpoint) {
       const refreshed = await silentRefresh();
       if (refreshed) {
         // Retry the original request with the new token now in localStorage
