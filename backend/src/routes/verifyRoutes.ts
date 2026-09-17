@@ -1,8 +1,17 @@
 import { Router, Request, Response } from 'express';
 import https from 'https';
 import http from 'http';
+import { makeRateLimiter } from '../utils/rateLimiter';
 
 const router = Router();
+
+// 30 lookups per minute per IP — prevents quota exhaustion on the upstream public APIs
+const verifyLimiter = makeRateLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { message: 'Too many verification requests. Please slow down.' },
+});
 
 // Helper: HTTP GET fetch
 const fetchJson = (url: string): Promise<any> => {
@@ -19,8 +28,8 @@ const fetchJson = (url: string): Promise<any> => {
   });
 };
 
-// ── IFSC verification (Razorpay free API) ─────────────────────────────────
-router.get('/ifsc/:ifsc', async (req: Request, res: Response) => {
+// ── IFSC verification (Razorpay free API) — rate-limited ──────────────────
+router.get('/ifsc/:ifsc', verifyLimiter, async (req: Request, res: Response) => {
   const { ifsc } = req.params;
 
   // Format check first
@@ -48,7 +57,7 @@ router.get('/ifsc/:ifsc', async (req: Request, res: Response) => {
 });
 
 // ── Pincode verification (India Post free API) ─────────────────────────────
-router.get('/pincode/:pincode', async (req: Request, res: Response) => {
+router.get('/pincode/:pincode', verifyLimiter, async (req: Request, res: Response) => {
   const { pincode } = req.params;
 
   if (!/^\d{6}$/.test(pincode)) {

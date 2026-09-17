@@ -1298,6 +1298,15 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Security: payment_pending orders (QR/kiosk-Razorpay) may only be cancelled by staff.
+    // Any other status transition bypasses the payment verification gate.
+    // Payment release happens exclusively through qr-verify or Razorpay webhook.
+    if (existing.status === 'payment_pending' && status !== 'cancelled') {
+      return res.status(400).json({
+        message: "Payment-pending orders can only be cancelled. Payment must complete through the normal payment flow.",
+      });
+    }
+
     // H-04: atomic cancellation — status change and stock restore in a single transaction.
     // findOneAndUpdate is inside the transaction so an order cannot end up permanently
     // cancelled if the stock restoration write fails and the transaction rolls back.
@@ -1620,8 +1629,10 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     // (receipt print + socket emit), preventing duplicate receipts from two
     // concurrent cashier taps on the same order.
     if (status === 'completed') {
-      // M13: Razorpay orders must have a verified Payment record before completion
-      if (paymentMethod === 'razorpay') {
+      // M13: Razorpay orders must have a verified Payment record before completion.
+      // Check BOTH the stored paymentMethod (e.g. QR orders already stored as 'razorpay')
+      // AND the client-supplied paymentMethod — either triggers the guard.
+      if (paymentMethod === 'razorpay' || existing.paymentMethod === 'razorpay') {
         const razorpayPmt = await Payment.findOne({
           orderId: existing._id,
           hotelId: req.hotelId,
@@ -1647,7 +1658,18 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       if (req.body.transactionId) completionFields.transactionId = req.body.transactionId;
       if (req.body.upiApp)        completionFields.upiApp        = req.body.upiApp;
       if (req.body.payments)      completionFields.payments      = req.body.payments;
-      if (req.body.splitDetails)  completionFields.splitDetails  = req.body.splitDetails;
+      if (req.body.splitDetails) {
+        // M5 (status path): validate split totals match order total within ±₹1
+        // Mirrors the same check in PATCH /:id/payment to keep audit trail consistent.
+        const sd = req.body.splitDetails as { cash?: number; upi?: number; card?: number };
+        const splitTotal = (Number(sd.cash) || 0) + (Number(sd.upi) || 0) + (Number(sd.card) || 0);
+        if (splitTotal > 0 && Math.abs(splitTotal - existing.grandTotal) > 1) {
+          return res.status(400).json({
+            message: `Split payment total (${splitTotal.toFixed(2)}) must equal order total (${existing.grandTotal.toFixed(2)})`,
+          });
+        }
+        completionFields.splitDetails = sd;
+      }
 
       const completableStatuses = isQuickService
         ? ['served', 'ready', 'pending']

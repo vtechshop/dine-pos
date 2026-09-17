@@ -5,7 +5,7 @@ import { runLoyaltyExpiry, runOrgLoyaltyExpiry } from '../workers/loyaltyExpiryW
 import { dispatchScheduledCampaigns } from '../workers/campaignWorker';
 import { runMenuSyncWorker } from '../workers/menuSyncWorker';
 import { runRazorpayTokenRefreshWorker } from '../workers/razorpayTokenRefreshWorker';
-import { processQueuedWhatsAppReceipts } from '../workers/whatsappReceiptWorker';
+import { processQueuedWhatsAppReceipts, recoverStaleWhatsAppSendingJobs } from '../workers/whatsappReceiptWorker';
 import { recoverStaleTallySyncJobs } from '../workers/tallySyncWorker';
 import { logger } from '../utils/logger';
 
@@ -13,6 +13,7 @@ let hourlyTimer:             ReturnType<typeof setTimeout>  | null = null;
 let hourlyTick:              ReturnType<typeof setInterval> | null = null;
 let dailyTick:               ReturnType<typeof setInterval> | null = null;
 let waReceiptTick:           ReturnType<typeof setInterval> | null = null;
+let waReceiptRecoveryTick:   ReturnType<typeof setInterval> | null = null;
 let tallyRecoveryTick:       ReturnType<typeof setInterval> | null = null;
 let expiryLastDate         = -1;
 let menuSyncLastRun        = 0;   // epoch ms — checked every 5 minutes
@@ -119,6 +120,15 @@ function scheduleWhatsAppReceiptSweep(): void {
   }, 30 * 1000);
 }
 
+function scheduleWhatsAppReceiptRecovery(): void {
+  // Recover receipts stuck in 'sending' after worker crash — every 5 minutes
+  waReceiptRecoveryTick = setInterval(() => {
+    void recoverStaleWhatsAppSendingJobs().catch((err) =>
+      logger.error('[scheduler] whatsapp stale recovery error', { err: String(err) }),
+    );
+  }, 5 * 60 * 1000);
+}
+
 function scheduleTallyRecovery(): void {
   // Recover stale Tally syncing jobs every 5 minutes
   tallyRecoveryTick = setInterval(() => {
@@ -137,6 +147,7 @@ export function startScheduler(): void {
   scheduleHourly();
   scheduleDailyDispatch();
   scheduleWhatsAppReceiptSweep();
+  scheduleWhatsAppReceiptRecovery();
   scheduleTallyRecovery();
 }
 
@@ -145,7 +156,8 @@ export function stopScheduler(): void {
   if (hourlyTimer)       { clearTimeout(hourlyTimer);           hourlyTimer       = null; }
   if (hourlyTick)        { clearInterval(hourlyTick);           hourlyTick        = null; }
   if (dailyTick)         { clearInterval(dailyTick);            dailyTick         = null; }
-  if (waReceiptTick)     { clearInterval(waReceiptTick);        waReceiptTick     = null; }
-  if (tallyRecoveryTick) { clearInterval(tallyRecoveryTick);    tallyRecoveryTick = null; }
+  if (waReceiptTick)         { clearInterval(waReceiptTick);            waReceiptTick         = null; }
+  if (waReceiptRecoveryTick) { clearInterval(waReceiptRecoveryTick);    waReceiptRecoveryTick = null; }
+  if (tallyRecoveryTick)     { clearInterval(tallyRecoveryTick);        tallyRecoveryTick     = null; }
   expiryLastDate = -1;
 }

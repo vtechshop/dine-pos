@@ -264,7 +264,7 @@ router.post('/:id/close', requireCashierOrAdmin, async (req: AuthRequest, res: R
       },
     ]).session(session);
 
-    const actual = Number(actualCash) || 0;
+    const actual = Math.max(0, Number(actualCash) || 0);
     // M3: include cash portions from split payments in expected cash calculation
     const totalCashSales = (orderAgg?.cashSales ?? 0) + (orderAgg?.splitCashSales ?? 0);
     const expected = shift.openingCash + totalCashSales + shift.cashIn - shift.cashOut;

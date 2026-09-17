@@ -22,6 +22,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { timingSafeEqual } from 'crypto';
 import mongoose from 'mongoose';
 import { decrypt } from '../utils/encryption';
 import MessagingProviderConfig from '../models/MessagingProviderConfig';
@@ -30,6 +31,11 @@ import WhatsAppReceipt         from '../models/WhatsAppReceipt';
 import { logger }              from '../utils/logger';
 
 const router = Router();
+
+function _maskPhone(phone: string): string {
+  if (!phone || phone.length <= 4) return '****';
+  return phone.slice(0, Math.max(phone.length - 4, 2)) + '****';
+}
 
 // ── POST /api/messaging-webhooks/:provider/:hotelId ───────────────────────────
 
@@ -68,7 +74,11 @@ router.post('/:provider/:hotelId', async (req: Request, res: Response): Promise<
     }
     const storedSecret = decrypt(cfg.webhookSecretEnc);
     const headerSecret = String(req.headers['x-dinepos-secret'] ?? '');
-    if (headerSecret !== storedSecret) {
+    // Timing-safe comparison to prevent secret enumeration via response-time side-channel
+    const storedBuf = Buffer.from(storedSecret);
+    const headerBuf = Buffer.alloc(storedBuf.length);
+    Buffer.from(headerSecret).copy(headerBuf);
+    if (!timingSafeEqual(storedBuf, headerBuf) || headerSecret !== storedSecret) {
       logger.warn('[messaging-webhook] Invalid secret header', { hotelId, provider });
       res.status(401).json({ error: 'Unauthorized' });
       return;
@@ -114,7 +124,7 @@ async function _processEvent(
   const eventName = String(body.eventName ?? body.event ?? '').toLowerCase();
 
   if (!requestId || !phone || !eventName) {
-    logger.warn('[messaging-webhook] Incomplete payload', { requestId, phone, eventName });
+    logger.warn('[messaging-webhook] Incomplete payload', { requestId, phone: _maskPhone(phone), eventName });
     return;
   }
 
@@ -168,7 +178,7 @@ async function _processEvent(
     logger.info('[messaging-webhook] Campaign message status updated', {
       hotelId:    hotelObjId.toString(),
       campaignId: String(campaignResult.campaignId),
-      phone,
+      phone:      _maskPhone(phone),
       newStatus,
       requestId,
     });
@@ -191,7 +201,7 @@ async function _processEvent(
     logger.info('[messaging-webhook] WhatsApp receipt status updated', {
       hotelId:   hotelObjId.toString(),
       receiptId: String(receiptResult._id),
-      phone,
+      phone:     _maskPhone(phone),
       newStatus,
       requestId,
     });

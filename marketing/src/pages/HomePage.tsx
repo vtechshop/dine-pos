@@ -776,17 +776,19 @@ function FeatureGrid() {
 // ── Integrations ──────────────────────────────────────────────────────────────
 
 const INTEGRATIONS = [
-  { name: 'Razorpay',  cat: 'Payments',     badge: 'Live' },
-  { name: 'UPI / QR',  cat: 'Payments',     badge: 'Live' },
-  { name: 'Swiggy',    cat: 'Aggregators',  badge: 'Beta' },
-  { name: 'Zomato',    cat: 'Aggregators',  badge: 'Beta' },
+  { name: 'Razorpay',          cat: 'Payments',       badge: 'Live' },
+  { name: 'UPI / QR',          cat: 'Payments',       badge: 'Live' },
+  { name: 'Swiggy',            cat: 'Aggregators',    badge: 'Beta' },
+  { name: 'Zomato',            cat: 'Aggregators',    badge: 'Beta' },
+  { name: 'Tally Direct Sync', cat: 'Accounting',     badge: 'Beta' },
+  { name: 'WhatsApp Receipts', cat: 'Notifications',  badge: 'Beta' },
 ];
 
-const COMING_SOON = ['WhatsApp Auto-Receipts', 'Tally Direct Sync'];
-
 const CAT_COLOR: Record<string, string> = {
-  Payments:    'bg-blue-50 text-blue-600',
-  Aggregators: 'bg-orange-50 text-orange-600',
+  Payments:      'bg-blue-50 text-blue-600',
+  Aggregators:   'bg-orange-50 text-orange-600',
+  Accounting:    'bg-purple-50 text-purple-600',
+  Notifications: 'bg-green-50 text-green-600',
 };
 
 function Integrations() {
@@ -816,18 +818,6 @@ function Integrations() {
               <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold ${badge === 'Beta' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>{badge}</span>
             </div>
           ))}
-        </div>
-
-        {/* Coming soon */}
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-6 text-center">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400">Coming soon</p>
-          <div className="flex flex-wrap justify-center gap-3">
-            {COMING_SOON.map(name => (
-              <span key={name} className="rounded-full border border-gray-200 bg-gray-50 px-4 py-1.5 text-sm font-medium text-gray-500">
-                {name}
-              </span>
-            ))}
-          </div>
         </div>
 
         <p className="mt-6 text-center text-sm text-gray-400">Hardware: Epson, TVS, Posiflex printers · Bluetooth thermal printers · Cash drawers</p>

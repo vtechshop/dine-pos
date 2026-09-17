@@ -288,9 +288,12 @@ router.post('/qr-verify', publicPaymentLimiter, async (req: Request, res: Respon
       : config;
     const gateway = GatewayFactory.create(effectiveConfig);
 
+    // Use server-stored gatewayOrderId for cross-check, not the client-supplied value.
+    // For OAuth-connected gateways (no HMAC), this prevents replaying a captured payment
+    // from one transaction against a new unpaid order.
     const result = await gateway.verifyPayment({
       gatewayTransactionId: razorpay_payment_id,
-      gatewayOrderId:       razorpay_order_id,
+      gatewayOrderId:       pay.gatewayOrderId || razorpay_order_id,
       signature:            razorpay_signature,
     });
 

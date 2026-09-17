@@ -13,6 +13,14 @@ const registrationLimiter = makeRateLimiter({
   message: { message: 'Too many registration attempts. Please try again after an hour.' },
 });
 
+// 3 reset requests per hour per IP — prevents super-admin panel spam
+const resetRequestLimiter = makeRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { message: 'Too many reset requests. Please try again after an hour.' },
+});
+
 const JWT_SECRET = process.env.JWT_SECRET!;
 
 // Verifies JWT only — does NOT enforce subscription status.
@@ -155,7 +163,7 @@ router.put('/resubmit/:phone', registrationLimiter, async (req: Request, res: Re
 });
 
 // POST /api/hotels/reset-request — Hotel requests credential reset
-router.post('/reset-request', async (req: Request, res: Response) => {
+router.post('/reset-request', resetRequestLimiter, async (req: Request, res: Response) => {
   try {
     const { phone } = req.body;
     if (!phone) return res.status(400).json({ message: 'Phone number required' });

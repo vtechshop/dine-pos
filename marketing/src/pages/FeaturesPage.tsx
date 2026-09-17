@@ -338,6 +338,18 @@ const BETA_FEATURES: BetaBlock[] = [
     desc: 'DinePOS accepts Swiggy and Zomato orders via webhook. Accept, reject, and mark dispatched directly from your POS dashboard. Menu sync back to the platform is supported. Requires webhook URL registration with each aggregator — contact us to enable it for your outlet.',
     note: 'Beta · Requires aggregator partner setup',
   },
+  {
+    icon: BarChart2,
+    title: 'Tally Direct Sync',
+    desc: 'Every sale, cancellation, purchase invoice, and expense is automatically pushed to your TallyPrime ledger as a voucher — no manual data entry. The on-premise TallyPrime connector polls your DinePOS server securely. Requires TallyPrime installed on a Windows machine at your outlet.',
+    note: 'Beta · Requires TallyPrime connector validation',
+  },
+  {
+    icon: MessageSquare,
+    title: 'WhatsApp Auto-Receipts',
+    desc: 'Send a branded WhatsApp receipt to the customer\'s phone automatically when an order is completed. Uses your hotel\'s MSG91 WhatsApp Business credentials. Receipts are queued and retried on failure; WhatsApp delivery never blocks billing.',
+    note: 'Beta · Requires MSG91 WhatsApp Business credentials',
+  },
 ];
 
 // ── Genuinely coming soon ──────────────────────────────────────────────────────
