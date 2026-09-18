@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io, Socket } from 'socket.io-client';
 import { useSettings } from '../context/SettingsContext';
 import { executePrintJob, PrintJobEvent } from '../services/PrintService';
-import { getSocketUrl, getToken, getKitchenToken, getCashierToken, getStoredHotelId, getBaseUrl } from '../services/api';
+import { getSocketUrl, getToken, getKitchenToken, getCashierToken, getStoredHotelId, getBaseUrl, reportPrintJobStatus } from '../services/api';
 import type { Settings } from '../types';
 
 const DEVICE_ID_KEY = '@dine_device_id';
@@ -16,28 +16,8 @@ async function getOrCreateDeviceId(): Promise<string> {
   return id;
 }
 
-async function reportPrintStatus(
-  jobId:   string,
-  status:  'success' | 'failed',
-  error?:  string,
-): Promise<void> {
-  try {
-    const [base, kitchenTok, cashierTok, adminTok] = await Promise.all([
-      getBaseUrl(), getKitchenToken(), getCashierToken(), getToken(),
-    ]);
-    const token = kitchenTok || cashierTok || adminTok;
-    await fetch(`${base}/print-jobs/${jobId}/status`, {
-      method:  'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization:  `Bearer ${token || ''}`,
-      },
-      body: JSON.stringify({ status, errorMessage: error }),
-    });
-  } catch {
-    // Status reporting is best-effort; never blocks the UI
-  }
-}
+// Status reporting goes through fetchAPI (auto-refreshes expired tokens).
+const reportPrintStatus = reportPrintJobStatus;
 
 // ── Socket print-job deduplication ───────────────────────────────────────────
 // Prevents the same server-assigned jobId from being executed twice in the event

@@ -3063,3 +3063,16 @@ export const switchBranchContext = (branchId: string): Promise<{ token: string }
   fetchAPI('/branches/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branchId }) });
 export const toggleBranchOrgLoyalty = (id: string, enabled: boolean): Promise<{ message: string }> =>
   fetchAPI(`/branches/${id}/org-loyalty-enabled`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
+
+// Best-effort status update for print jobs — goes through fetchAPI so expired tokens
+// are silently refreshed. Never throws; never blocks the print flow.
+export const reportPrintJobStatus = (
+  jobId:   string,
+  status:  'success' | 'failed',
+  error?:  string,
+): Promise<void> =>
+  fetchAPI(`/print-jobs/${jobId}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status, errorMessage: error }),
+  }).catch(() => {});
