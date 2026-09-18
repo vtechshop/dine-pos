@@ -3,7 +3,7 @@ import {
   BarChart2, Printer, Users, Shield, Sparkles, Sliders,
   Globe, Monitor, Smartphone, Image,
   CreditCard, Truck, Clock, ShoppingBag, Wifi,
-  TrendingUp, Brain, DollarSign, MessageSquare, Megaphone,
+  TrendingUp, Brain, DollarSign, MessageSquare, Megaphone, Building2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePageSEO } from '../hooks/usePageSEO';
@@ -297,6 +297,20 @@ const LIVE_FEATURES: FeatureBlock[] = [
       'Z-Report: full shift breakdown with print support',
       'Shift history with pagination',
       'Long-shift reminder after 7.5 hours',
+    ],
+  },
+  // ── Multi-Branch ──────────────────────────────────────────────────────────
+  {
+    icon: Building2,
+    title: 'Multi-Branch Management',
+    desc: 'Run multiple outlets from one account — create branches, switch context, and control loyalty sharing per branch.',
+    bullets: [
+      'Add and manage multiple branches from a single admin login',
+      'Branch status control — active or suspended',
+      'Per-branch org-wide loyalty enable/disable',
+      'Branch context switcher in the sidebar',
+      'Branch-level staff and access isolation',
+      'Available on web and Android app',
     ],
   },
   // ── People & Security ─────────────────────────────────────────────────────
