@@ -21,6 +21,7 @@ export interface KOTPayload {
 
 export interface ReceiptPayload {
   templateType:          'receipt';
+  orderNumber:           string;
   hotelName:             string;
   address?:              string;
   phone?:                string;
@@ -257,6 +258,7 @@ export async function scheduleOrderReceiptPrint(
 
   const payload: ReceiptPayload = {
     templateType:  'receipt',
+    orderNumber:   order.orderNumber,
     hotelName:     s?.hotelName  ?? 'Hotel',
     address:       s?.address    || undefined,
     phone:         s?.phone      || undefined,
@@ -309,6 +311,7 @@ export async function scheduleOrderReceiptPrint(
 export interface ReceiptPrintInput {
   guestId:                string;
   sessionId?:             string;
+  orderNumber?:           string;
   tableNumber:            string;
   guestLabel:             string;
   totalAmount:            number;
@@ -363,6 +366,7 @@ export async function scheduleReceiptPrint(
 
   const payload: ReceiptPayload = {
     templateType:          'receipt',
+    orderNumber:           input.orderNumber ?? `RCPT-${input.tableNumber}`,
     hotelName:             s?.hotelName          ?? 'Hotel',
     address:               s?.address            || undefined,
     phone:                 s?.phone              || undefined,

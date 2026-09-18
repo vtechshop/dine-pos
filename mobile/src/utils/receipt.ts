@@ -283,10 +283,9 @@ export const printReceipt = async (
     return;
   }
 
-  // Dual mode: receipt → cashier printer; single mode: use paired BT printer
-  if (settings.printerMode === 'dual' && settings.cashierPrinterAddress) {
-    await connectPrinter(settings.cashierPrinterAddress);
-    await printReceiptBluetooth(order, settings);
+  // Dual mode: receipt routing is handled server-side via socket → registered cashier device.
+  // Direct BT print here would duplicate the server-pushed job and cause a double print.
+  if (settings.printerMode === 'dual') {
     return;
   }
   const savedPrinter = await AsyncStorage.getItem(BT_PRINTER_KEY);
@@ -404,10 +403,9 @@ export const printKOT = async (
     return;
   }
 
-  // Dual mode: KOT → kitchen printer; single mode: use paired BT printer
-  if (settings.printerMode === 'dual' && settings.kitchenPrinterAddress) {
-    await connectPrinter(settings.kitchenPrinterAddress);
-    await printKOTBluetooth(order, settings);
+  // Dual mode: KOT routing is handled server-side via socket → registered kitchen device.
+  // Falling through to savedPrinter here would send KOT to the cashier printer (wrong device).
+  if (settings.printerMode === 'dual') {
     return;
   }
   const savedPrinter = await AsyncStorage.getItem(BT_PRINTER_KEY);

@@ -16,6 +16,7 @@ export interface KOTPayload {
 
 export interface ReceiptPayload {
   templateType:          'receipt';
+  orderNumber?:          string;
   hotelName:             string;
   address?:              string;
   phone?:                string;
@@ -81,7 +82,7 @@ class BluetoothPrintDriver implements PrintDriver {
     // Build a minimal Order-shaped object from the payload
     const mockOrder: Order = {
       _id:           '',
-      orderNumber:   `RCPT-${payload.tableNumber}`,
+      orderNumber:   payload.orderNumber ?? `RCPT-${payload.tableNumber}`,
       items:         payload.items.map(i => ({
         product:    '',
         productName: i.productName,
