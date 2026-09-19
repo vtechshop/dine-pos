@@ -7,7 +7,7 @@ export interface PlanLimits {
 export const PLAN_LIMITS: Record<string, PlanLimits> = {
   trial:        { devices: 2,  pricePerMonth: 0,     pricePerYear: 0       },
   standard:     { devices: -1, pricePerMonth: 1000,  pricePerYear: 12000   }, // DinePOS SaaS — ₹12,000/year, unlimited devices
-  starter:      { devices: 2,  pricePerMonth: 999,   pricePerYear: 11988   },
+  starter:      { devices: 3,  pricePerMonth: 999,   pricePerYear: 11988   },
   professional: { devices: 5,  pricePerMonth: 4999,  pricePerYear: 59988   },
   enterprise:   { devices: -1, pricePerMonth: 9999,  pricePerYear: 119988  },
   none:         { devices: 1,  pricePerMonth: 0,     pricePerYear: 0       },
