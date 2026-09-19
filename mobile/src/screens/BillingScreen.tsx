@@ -57,7 +57,7 @@ const BillingScreen: React.FC = () => {
     cart, addItem, removeItem, increment, decrement, clearCart,
     itemCount, setCustomer, setTable, setNotes, setParcel, setDiscount,
   } = useCart();
-  const { settings } = useSettings();
+  const { settings, refreshSettings } = useSettings();
   const { bottom } = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -624,9 +624,12 @@ Thank you for dining with us! 🍽️`;
       const tokenNum = order.orderNumber.split('-').pop() || '1';
       setShowSuccess({ orderNumber: order.orderNumber, token: tokenNum, ...cartSnapshot, discountAmount: (order.discountAmount || 0) + (order.couponDiscount || 0), grandTotal: order.grandTotal, kot: { orderNumber: order.orderNumber, ...kotSnapshot } });
       Vibration.vibrate([0, 100, 80, 200]);
+      // Fetch fresh settings so stale SQLite cache can't misroute KOT to wrong printer.
+      let freshSettingsB = settings;
+      try { const f = await refreshSettings(); if (f) freshSettingsB = f; } catch {}
       // Dual mode: server socket handles KOT. Single mode: server suppresses KOT, client prints.
-      if (settings.printerMode !== 'dual') {
-        printKOT({ orderNumber: order.orderNumber, ...kotSnapshot }, settings).catch(() => {});
+      if (freshSettingsB.printerMode !== 'dual') {
+        printKOT({ orderNumber: order.orderNumber, ...kotSnapshot }, freshSettingsB).catch(() => {});
       }
       clearCart();
       setDiscountInput('');

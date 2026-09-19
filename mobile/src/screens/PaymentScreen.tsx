@@ -54,7 +54,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'PaymentScreen'>;
 
 const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const { mode, orderId, orderNumber, grandTotal, promos } = route.params;
-  const { settings } = useSettings();
+  const { settings, refreshSettings } = useSettings();
   const { clearCart } = useCart();
   const sym = settings.currencySymbol || '₹';
 
@@ -276,6 +276,14 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       let completedOrder: Order | null = null;
 
+      // Fetch authoritative settings before any print decision — prevents stale SQLite
+      // cache (default printerMode='single') from routing receipts to the wrong printer.
+      let freshSettings = settings;
+      try {
+        const fetched = await refreshSettings();
+        if (fetched) freshSettings = fetched;
+      } catch {}
+
       if (mode === 'billing') {
         // Create order, then confirm payment. KOT only fires on payment success.
         const payload = pendingOrderRef.current;
@@ -303,8 +311,8 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         };
         // Dual mode: server socket handles KOT (scheduleKOTPrint → kitchen device).
         // Single mode: server suppresses KOT, so client must print directly.
-        if (settings.printerMode !== 'dual') {
-          printKOT(kotInput, settings).catch(() => {});
+        if (freshSettings.printerMode !== 'dual') {
+          printKOT(kotInput, freshSettings).catch(() => {});
         }
         // Order successfully created — UPI pending record is no longer needed
         clearPendingUpiPayment();
@@ -324,8 +332,8 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       // Dual mode: server socket handles receipt (scheduleOrderReceiptPrint → cashier device).
       // Single mode: server dispatches to cashier socket, but if not registered client prints directly.
       // Dedup in printReceiptBluetooth (module-level Set, 60 s) catches any duplicate from the socket.
-      if (completedOrder && settings.printerMode !== 'dual') {
-        printReceipt(completedOrder, settings).catch(() => {});
+      if (completedOrder && freshSettings.printerMode !== 'dual') {
+        printReceipt(completedOrder, freshSettings).catch(() => {});
       }
 
       // Clear cart in billing mode

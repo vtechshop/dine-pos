@@ -6,7 +6,7 @@ import { getLocalSettings, saveLocalSettings } from '../database/localCacheDao';
 interface SettingsContextType {
   settings: Settings;
   loading: boolean;
-  refreshSettings: () => Promise<void>;
+  refreshSettings: () => Promise<Settings | null>;
   saveSettings: (data: Partial<Settings>) => Promise<void>;
 }
 
@@ -48,7 +48,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [loading, setLoading]   = useState(true);
 
-  const refreshSettings = useCallback(async () => {
+  const refreshSettings = useCallback(async (): Promise<Settings | null> => {
     // 1. Load SQLite cache first (instant, works offline)
     const cached = getLocalSettings();
     if (cached) setSettings({ ...defaultSettings, ...cached });
@@ -58,8 +58,10 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
       const data = await api.getSettings();
       setSettings(data);
       saveLocalSettings(data);
+      return data;
     } catch {
       // Offline — keep SQLite cache; already set above
+      return null;
     } finally {
       setLoading(false);
     }
