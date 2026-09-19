@@ -301,7 +301,11 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
             ),
           })),
         };
-        printKOT(kotInput, settings).catch(() => {});
+        // Dual mode: server socket handles KOT (scheduleKOTPrint → kitchen device).
+        // Single mode: server suppresses KOT, so client must print directly.
+        if (settings.printerMode !== 'dual') {
+          printKOT(kotInput, settings).catch(() => {});
+        }
         // Order successfully created — UPI pending record is no longer needed
         clearPendingUpiPayment();
         // Fire promo deductions fire-and-forget — non-blocking, non-fatal
@@ -317,8 +321,10 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         completedOrder = await completeOrderPayment(orderId!, method, details);
       }
 
-      // Print receipt
-      if (completedOrder) {
+      // Dual mode: server socket handles receipt (scheduleOrderReceiptPrint → cashier device).
+      // Single mode: server dispatches to cashier socket, but if not registered client prints directly.
+      // Dedup in printReceiptBluetooth (module-level Set, 60 s) catches any duplicate from the socket.
+      if (completedOrder && settings.printerMode !== 'dual') {
         printReceipt(completedOrder, settings).catch(() => {});
       }
 

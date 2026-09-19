@@ -624,8 +624,10 @@ Thank you for dining with us! 🍽️`;
       const tokenNum = order.orderNumber.split('-').pop() || '1';
       setShowSuccess({ orderNumber: order.orderNumber, token: tokenNum, ...cartSnapshot, discountAmount: (order.discountAmount || 0) + (order.couponDiscount || 0), grandTotal: order.grandTotal, kot: { orderNumber: order.orderNumber, ...kotSnapshot } });
       Vibration.vibrate([0, 100, 80, 200]);
-      // H11: Auto-print KOT after Razorpay payment (cash/card/UPI paths do this in PaymentScreen)
-      printKOT({ orderNumber: order.orderNumber, ...kotSnapshot }, settings).catch(() => {});
+      // Dual mode: server socket handles KOT. Single mode: server suppresses KOT, client prints.
+      if (settings.printerMode !== 'dual') {
+        printKOT({ orderNumber: order.orderNumber, ...kotSnapshot }, settings).catch(() => {});
+      }
       clearCart();
       setDiscountInput('');
       setDiscount({ type: 'percent', value: 0 });

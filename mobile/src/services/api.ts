@@ -3064,15 +3064,31 @@ export const switchBranchContext = (branchId: string): Promise<{ token: string }
 export const toggleBranchOrgLoyalty = (id: string, enabled: boolean): Promise<{ message: string }> =>
   fetchAPI(`/branches/${id}/org-loyalty-enabled`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
 
-// Best-effort status update for print jobs — goes through fetchAPI so expired tokens
-// are silently refreshed. Never throws; never blocks the print flow.
-export const reportPrintJobStatus = (
+// Best-effort status update for print jobs.
+// Uses raw fetch + silent token refresh so a 401 never triggers session-expired logout.
+export const reportPrintJobStatus = async (
   jobId:   string,
   status:  'success' | 'failed',
   error?:  string,
-): Promise<void> =>
-  fetchAPI(`/print-jobs/${jobId}/status`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status, errorMessage: error }),
-  }).catch(() => {});
+): Promise<void> => {
+  try {
+    const [base, token] = await Promise.all([getBaseUrl(), getToken()]);
+    const doReq = (tok: string | null) =>
+      fetch(`${base}/print-jobs/${jobId}/status`, {
+        method:  'PATCH',
+        headers: {
+          'Content-Type':  'application/json',
+          ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+        },
+        body: JSON.stringify({ status, errorMessage: error }),
+      });
+    const res = await doReq(token);
+    if (res.status === 401) {
+      // Silently try one token refresh — never call emitSessionExpired here
+      const refreshed = await tryRefreshTokens().catch(() => false);
+      if (refreshed) await doReq(await getToken());
+    }
+  } catch {
+    // Best-effort — never blocks the UI or triggers logout
+  }
+};
