@@ -246,22 +246,15 @@ export async function scheduleOrderReceiptPrint(
     .select('printerMode kitchenPrinterAddress cashierPrinterAddress hotelName address phone gstNumber footerText upiId printerWidth defaultTaxPercent currencySymbol')
     .lean();
 
-  const s              = settings as any;
-  const mode           = s?.printerMode           ?? 'single';
-  const cashierAddr    = s?.cashierPrinterAddress ?? '';
+  const s           = settings as any;
+  const mode        = s?.printerMode            ?? 'single';
+  const kitchenAddr = s?.kitchenPrinterAddress  ?? '';
+  const cashierAddr = s?.cashierPrinterAddress  ?? '';
 
-  // Single-printer mode: receipt is printed client-side by the billing device.
-  // Dispatching via socket in single mode causes a second print on the kitchen
-  // printer (the only registered cashier device address) every time the cashier
-  // dashboard is open on a second device.
-  if (mode === 'single') {
-    logger.info('[scheduleOrderReceiptPrint] Skipping — printerMode=single, receipt handled client-side', { hotelId, orderId: String(order._id) });
-    return;
-  }
-
-  // Dual mode: dispatch to the dedicated cashier device.
   const printerTarget  = 'cashier' as const;
-  const printerAddress = cashierAddr;
+  // Single mode: fall back to kitchenAddr if cashierAddr not set (only one printer configured).
+  // Dual mode: use the dedicated cashier address.
+  const printerAddress = mode === 'dual' ? cashierAddr : (cashierAddr || kitchenAddr);
 
   const payload: ReceiptPayload = {
     templateType:  'receipt',
@@ -301,6 +294,16 @@ export async function scheduleOrderReceiptPrint(
       : (order.createdAt ?? new Date().toISOString()),
   };
 
+  // Single-printer mode: create the PrintJob for audit trail but do NOT dispatch
+  // via socket — the billing device already prints client-side, and dispatching
+  // here causes a second print when CashierDashboard is open on a second device.
+  if (mode === 'single') {
+    logger.info('[scheduleOrderReceiptPrint] single mode — audit job only, no socket dispatch', { hotelId, orderId: String(order._id) });
+    await dispatchPrintJob(hotelId, 'receipt', printerTarget, printerAddress, mode, false, payload, { orderId: String(order._id) });
+    return;
+  }
+
+  // Dual mode: dispatch to the dedicated cashier device via socket.
   await dispatchPrintJob(
     hotelId,
     'receipt',
