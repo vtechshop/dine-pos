@@ -628,14 +628,15 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: FontSize.md, color: Colors.text, paddingVertical: 0 },
 
   // ── Date filter chips ───────────────────────────────────────────────────────
-  filterRow: { marginTop: Spacing.sm },
-  filterRowContent: { gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: 4 },
+  filterRow: { marginTop: Spacing.sm, flexGrow: 0, flexShrink: 0 },
+  filterRowContent: { gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: 4, alignItems: 'center' },
   filterChip: {
     paddingHorizontal: 14, paddingVertical: 7, borderRadius: BorderRadius.round,
-    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.surface, borderWidth: 1.5, borderColor: Colors.border,
+    alignSelf: 'center',
   },
   filterChipActive: { backgroundColor: Colors.infoBg, borderColor: Colors.info },
-  filterChipText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.textSecondary },
+  filterChipText: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   filterChipTextActive: { color: Colors.info },
 
   // ── Status tabs ─────────────────────────────────────────────────────────────
