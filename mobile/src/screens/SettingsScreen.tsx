@@ -264,6 +264,14 @@ const SettingsScreen: React.FC = () => {
       }
       setBtDevices([]);
       setSelectingRole(null);
+      // Auto-save to server immediately so the backend uses the correct BT address
+      // when dispatching print jobs — without this the address only lives in local state
+      // until the user presses the main Save button.
+      await saveSettings(
+        role === 'cashier'
+          ? { cashierPrinterAddress: device.address }
+          : { kitchenPrinterAddress: device.address }
+      );
       showAlert('Connected', `${device.name} set as ${role === 'cashier' ? 'cashier' : 'kitchen'} printer`);
     } catch (e: any) {
       showAlert('Connection Failed', e.message || 'Could not connect to printer');
