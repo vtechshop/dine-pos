@@ -921,10 +921,10 @@ const styles = StyleSheet.create({
   filterChipRowContent: { gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: 4 },
   filterChip: {
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100,
-    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.surface, borderWidth: 1.5, borderColor: Colors.border,
   },
   filterChipActive: { backgroundColor: Colors.infoBg, borderColor: Colors.info },
-  filterChipText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.textSecondary },
+  filterChipText: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   filterChipTextActive: { color: Colors.info },
   emptyWrap: { alignItems: 'center', paddingTop: 80, gap: Spacing.md },
   emptyText: { fontSize: FontSize.lg, color: Colors.textMuted },
