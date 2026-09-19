@@ -400,6 +400,15 @@ export async function scheduleReceiptPrint(
 
   const printerTarget = 'cashier' as const;
 
+  if (mode === 'single') {
+    logger.info('[scheduleReceiptPrint] single mode — audit job only, no socket dispatch', { hotelId, guestId: input.guestId });
+    await dispatchPrintJob(hotelId, 'receipt', printerTarget, printerAddress, mode, false, payload, {
+      guestId:   input.guestId,
+      sessionId: input.sessionId,
+    });
+    return;
+  }
+
   await dispatchPrintJob(
     hotelId,
     'receipt',
