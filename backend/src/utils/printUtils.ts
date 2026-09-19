@@ -248,13 +248,20 @@ export async function scheduleOrderReceiptPrint(
 
   const s              = settings as any;
   const mode           = s?.printerMode           ?? 'single';
-  const kitchenAddr    = s?.kitchenPrinterAddress ?? '';
   const cashierAddr    = s?.cashierPrinterAddress ?? '';
-  // Receipts always target the 'cashier' printer in both modes.
-  // Dual: dedicated cashier device. Single: the one 'cashier' device handles KOT + receipts.
-  // Address: in single mode fall back to kitchenAddr in case only that field is configured.
-  const printerTarget = 'cashier' as const;
-  const printerAddress = mode === 'dual' ? cashierAddr : (cashierAddr || kitchenAddr);
+
+  // Single-printer mode: receipt is printed client-side by the billing device.
+  // Dispatching via socket in single mode causes a second print on the kitchen
+  // printer (the only registered cashier device address) every time the cashier
+  // dashboard is open on a second device.
+  if (mode === 'single') {
+    logger.info('[scheduleOrderReceiptPrint] Skipping — printerMode=single, receipt handled client-side', { hotelId, orderId: String(order._id) });
+    return;
+  }
+
+  // Dual mode: dispatch to the dedicated cashier device.
+  const printerTarget  = 'cashier' as const;
+  const printerAddress = cashierAddr;
 
   const payload: ReceiptPayload = {
     templateType:  'receipt',
