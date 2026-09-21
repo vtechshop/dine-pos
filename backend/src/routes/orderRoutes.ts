@@ -1208,10 +1208,14 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       grandTotal:    order.grandTotal,
       itemCount:     order.items.length,
       orderSource:   order.orderSource,
+      notes:         (order as any).notes || undefined,
+      createdAt:     (order as any).createdAt,
       items:         order.items.map((i: any) => ({
-        productName: i.productName,
-        quantity:    i.quantity,
-        price:       i.price,
+        productName:   i.productName,
+        quantity:      i.quantity,
+        price:         i.price,
+        variantName:   i.variantName   || undefined,
+        modifierNames: (i.selectedModifiers || []).map((m: any) => m.modifierOptionName).filter(Boolean),
       })),
     });
 

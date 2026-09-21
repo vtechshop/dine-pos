@@ -673,10 +673,14 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
           orderSource:   validSource,
           sessionId:     String(guest.sessionId),
           guestId:       String(guest._id),
+          notes:         (order as any).notes || undefined,
+          createdAt:     (order as any).createdAt,
           items:         order.items.map((i: any) => ({
-            productName: i.productName,
-            quantity:    i.quantity,
-            price:       i.price,
+            productName:   i.productName,
+            quantity:      i.quantity,
+            price:         i.price,
+            variantName:   i.variantName   || undefined,
+            modifierNames: (i.selectedModifiers || []).map((m: any) => m.modifierOptionName).filter(Boolean),
           })),
         });
       } catch (emitErr: any) {
