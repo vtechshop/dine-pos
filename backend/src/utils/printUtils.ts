@@ -207,13 +207,15 @@ export async function scheduleKOTPrint(
       : (order.createdAt ?? new Date().toISOString()),
   };
 
+  // Dual mode: kitchen device is dedicated — always dispatch regardless of kotAutoPrint.
+  // Single mode: respect kotAutoPrint (user may not want KOT on a shared printer).
   await dispatchPrintJob(
     hotelId,
     'kot',
     printerTarget,
     kotAddress,
     mode,
-    kotAutoPrint,
+    mode === 'dual' ? true : kotAutoPrint,
     payload,
     {
       orderId:   String(order._id),
