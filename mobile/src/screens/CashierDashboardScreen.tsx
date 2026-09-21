@@ -22,7 +22,7 @@ import { NotificationSvc, orderLabel } from '../services/NotificationService';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import UnreadBadge from '../components/UnreadBadge';
-import { printReceipt, printKOT } from '../utils/receipt';
+import { printReceipt } from '../utils/receipt';
 import { getCashierQueueCount } from '../database/cashierOrderQueueDao';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CashierDashboard'>;
@@ -275,19 +275,6 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
         if (ev) showToast(ev);
         setNewOrderCount(c => c + 1);
         loadOrders();
-        // Single-mode KOT auto-print: server suppresses KOT in single mode, so the
-        // billing device must print it here when a QR/kiosk order arrives.
-        if (settings?.printerMode === 'single' && settings?.kotAutoPrint && data.orderNumber && data.items?.length) {
-          printKOT({
-            orderNumber: data.orderNumber,
-            tableNumber: data.tableNumber ?? '',
-            customerName: data.customerName,
-            items: data.items,
-            notes: data.notes,
-            orderSource: data.orderSource ?? 'qr',
-            createdAt: data.createdAt ?? new Date().toISOString(),
-          }, settings).catch(() => {});
-        }
       });
 
       socket.on('order_completed',    () => { if (mountedRef.current) loadOrders(); });

@@ -1003,14 +1003,6 @@ process.on('SIGINT', shutdown);
   try {
     await connectDB();
 
-    // Correct legacy kotAutoPrint=false documents written when model default was wrong.
-    // Web Settings UI has always shown true; this fixes hotels that never saved settings.
-    try {
-      await Settings.updateMany({ kotAutoPrint: { $ne: true } }, { $set: { kotAutoPrint: true } });
-    } catch (e) {
-      logger.warn('kotAutoPrint migration failed (non-fatal)', { err: String(e) });
-    }
-
     await connectRedis();
 
     // Attach Redis adapter to Socket.IO if Redis is available.

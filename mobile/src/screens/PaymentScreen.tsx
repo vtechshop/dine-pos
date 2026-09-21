@@ -25,7 +25,6 @@ import {
   savePendingUpiPayment, loadPendingUpiPayment, clearPendingUpiPayment,
 } from '../utils/paymentBridge';
 import { printReceipt } from '../utils/receipt';
-import { printKOT } from '../utils/receipt';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -295,24 +294,6 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           // Payment confirmation failed — cancel the just-created order so it does not orphan
           cancelOrderAdmin(created._id).catch(() => {});
           throw payErr;
-        }
-        // KOT fires only after payment is confirmed — never on a failed payment.
-        // Map selectedModifiers (SelectedModifier[]) → modifiers (string[]) so the
-        // KOT printer receives the modifier names rather than raw objects.
-        const kotInput = {
-          ...created,
-          orderNumber: created.orderNumber,
-          items: (created.items || []).map((item: any) => ({
-            ...item,
-            modifiers: (item.selectedModifiers || []).map(
-              (m: any) => m.modifierOptionName || m.name || String(m)
-            ),
-          })),
-        };
-        // Dual mode: server socket handles KOT (scheduleKOTPrint → kitchen device).
-        // Single mode: server suppresses KOT, so client must print directly.
-        if (freshSettings.printerMode !== 'dual') {
-          printKOT(kotInput, freshSettings).catch(() => {});
         }
         // Order successfully created — UPI pending record is no longer needed
         clearPendingUpiPayment();

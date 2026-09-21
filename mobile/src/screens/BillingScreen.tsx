@@ -627,10 +627,6 @@ Thank you for dining with us! 🍽️`;
       // Fetch fresh settings so stale SQLite cache can't misroute KOT to wrong printer.
       let freshSettingsB = settings;
       try { const f = await refreshSettings(); if (f) freshSettingsB = f; } catch {}
-      // Dual mode: server socket handles KOT. Single mode: server suppresses KOT, client prints.
-      if (freshSettingsB.printerMode !== 'dual') {
-        printKOT({ orderNumber: order.orderNumber, ...kotSnapshot }, freshSettingsB).catch(() => {});
-      }
       clearCart();
       setDiscountInput('');
       setDiscount({ type: 'percent', value: 0 });
