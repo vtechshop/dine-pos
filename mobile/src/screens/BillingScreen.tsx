@@ -24,7 +24,7 @@ import { getLocalCategories, getLocalProducts, saveCategories, saveProducts, sav
 import { enqueueOrder as enqueueCashierOrder } from '../database/cashierOrderQueueDao';
 import { isConnected } from '../sync/syncEngine';
 import { getAuthCache } from '../database/authDao';
-import { printKOT } from '../utils/receipt';
+import { printKOT, printReceipt } from '../utils/receipt';
 import { KOTOrderInput } from '../types';
 
 const CAT_W  = 100; // tablet landscape vertical sidebar width
@@ -620,13 +620,22 @@ Thank you for dining with us! 🍽️`;
         response.razorpay_signature,
       );
 
-      // 5. Success
+      // 5. Complete order — transitions to 'completed', triggers scheduleOrderReceiptPrint server-side.
+      // Server M13 guard confirms Payment.status==='success' before allowing completion.
+      const completedOrder = await api.completeOrderWithDetails(order._id, 'razorpay');
+
+      // 6. Success
       const tokenNum = order.orderNumber.split('-').pop() || '1';
       setShowSuccess({ orderNumber: order.orderNumber, token: tokenNum, ...cartSnapshot, discountAmount: (order.discountAmount || 0) + (order.couponDiscount || 0), grandTotal: order.grandTotal, kot: { orderNumber: order.orderNumber, ...kotSnapshot } });
       Vibration.vibrate([0, 100, 80, 200]);
-      // Fetch fresh settings so stale SQLite cache can't misroute KOT to wrong printer.
+      // Fetch fresh settings so stale SQLite cache can't misroute receipt to wrong printer.
       let freshSettingsB = settings;
       try { const f = await refreshSettings(); if (f) freshSettingsB = f; } catch {}
+      // Single mode: server creates audit PrintJob only (autoEmit=false); client prints directly.
+      // Dual mode: server dispatches receipt to cashier device socket — skip client print.
+      if (freshSettingsB.printerMode !== 'dual') {
+        printReceipt(completedOrder, freshSettingsB).catch(() => {});
+      }
       clearCart();
       setDiscountInput('');
       setDiscount({ type: 'percent', value: 0 });
