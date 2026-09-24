@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://dinepos.com/sitemap.xml
+Sitemap: https://dinepos.happya.in/sitemap.xml
