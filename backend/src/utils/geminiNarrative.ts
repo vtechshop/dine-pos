@@ -19,7 +19,7 @@ async function getModel(): Promise<GenerativeModel | null> {
     logger.error('[Gemini] No usable model resolved — check GEMINI_API_KEY validity and quota. Set GEMINI_MODEL env var to override.');
     return null;
   }
-  cachedModel = gemini.getGenerativeModel({ model }, { apiVersion: 'v1' });
+  cachedModel = gemini.getGenerativeModel({ model }, { apiVersion: 'v1beta' });
   return cachedModel;
 }
 
