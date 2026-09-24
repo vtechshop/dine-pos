@@ -128,10 +128,11 @@ export async function generateWithTools(
       return response.text() || null;
     }
 
-    // Append Gemini's function-call turn
+    // Append Gemini's full model turn — keep all parts (including thought_signature
+    // required by thinking models like gemini-3.6-flash; stripping to functionCall only breaks round 2+)
     contents.push({
       role: 'model',
-      parts: functionCalls.map((fc: any) => ({ functionCall: fc })),
+      parts: candidate.content.parts,
     });
 
     // Execute all function calls (max 5 per round to cap cost)
