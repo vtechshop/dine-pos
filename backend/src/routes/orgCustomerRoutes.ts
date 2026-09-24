@@ -90,6 +90,16 @@ router.get('/candidates/:profileId', async (req: AuthRequest, res: Response): Pr
       .lean();
     if (!profile) { res.status(404).json({ message: 'Customer profile not found' }); return; }
 
+    // Guard: verify this profile belongs to a hotel in this org (HQ or any branch).
+    // Without this check an admin from Org A could enumerate profiles from Org B.
+    const orgObjId = new mongoose.Types.ObjectId(ctx.orgHotelId);
+    const orgBranches = await Hotel.find({ parentHotelId: orgObjId }).select('_id').lean();
+    const validHotelIds = new Set([ctx.orgHotelId, ...orgBranches.map(b => b._id.toString())]);
+    if (!validHotelIds.has(profile.hotelId?.toString())) {
+      res.status(403).json({ message: 'Profile does not belong to this organization' });
+      return;
+    }
+
     if (profile.orgCustomerId) {
       res.json({ alreadyLinked: true, orgCustomerId: profile.orgCustomerId, candidates: [] });
       return;
@@ -110,7 +120,6 @@ router.get('/candidates/:profileId', async (req: AuthRequest, res: Response): Pr
       return;
     }
 
-    const orgObjId = new mongoose.Types.ObjectId(ctx.orgHotelId);
     const candidates = await OrganizationCustomer.find({
       orgHotelId: orgObjId,
       $or: conditions,

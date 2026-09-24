@@ -15,6 +15,10 @@ async function getModel(): Promise<GenerativeModel | null> {
   if (cachedModel) return cachedModel;
   if (!gemini) gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const model = await resolveGeminiModel(process.env.GEMINI_API_KEY);
+  if (!model) {
+    logger.error('[Gemini] No usable model resolved — check GEMINI_API_KEY validity and quota. Set GEMINI_MODEL env var to override.');
+    return null;
+  }
   cachedModel = gemini.getGenerativeModel({ model }, { apiVersion: 'v1' });
   return cachedModel;
 }

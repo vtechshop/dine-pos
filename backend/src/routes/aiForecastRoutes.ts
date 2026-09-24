@@ -73,7 +73,7 @@ router.get('/forecast/inventory', async (req: AuthRequest, res: Response) => {
 // ─── GET /api/ai/forecast/purchase ───────────────────────────────────────────
 // Returns data-driven purchase suggestions based on current stock + thresholds.
 
-router.get('/purchase', requireAdmin, async (req: AuthRequest, res: Response) => {
+router.get('/forecast/purchase', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const hotelId = req.hotelId!;
     const { buildPurchaseSuggestions } = await import('../services/purchaseSuggestion');
