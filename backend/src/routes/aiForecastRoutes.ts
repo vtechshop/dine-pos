@@ -78,7 +78,21 @@ router.get('/forecast/purchase', requireAdmin, async (req: AuthRequest, res: Res
     const hotelId = req.hotelId!;
     const { buildPurchaseSuggestions } = await import('../services/purchaseSuggestion');
     const result = await buildPurchaseSuggestions(hotelId);
-    return res.json(result);
+    return res.json({
+      suggestions: result.suggestions.map(s => ({
+        itemName:      s.name,
+        currentStock:  s.currentStock,
+        unit:          s.unit,
+        urgency:       s.urgency,
+        suggestedQty:  s.suggestedQty,
+        estimatedCost: s.estimatedCost ?? undefined,
+        hasPendingPO:  s.hasPendingPO,
+        reason:        s.reason,
+      })),
+      totalEstimatedCost: result.totalEstimatedCost ?? 0,
+      limitations:        result.dataLimitations,
+      generatedAt:        new Date().toISOString(),
+    });
   } catch (err) {
     sendError(res, 500, 'Failed to build purchase suggestions', err);
   }
