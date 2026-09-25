@@ -379,7 +379,7 @@ const COMING_SOON: ComingSoonBlock[] = [
 
 export function FeaturesPage() {
   usePageSEO(
-    'Features — Dine POS',
+    'Restaurant POS Features — Billing, KOT, QR & AI | Dine POS',
     'All Dine POS features: AI analytics, loyalty & CRM, vendor management, inventory intelligence, expense tracking, QR ordering, kiosk, kitchen display, Android POS, and more.',
   );
   return (

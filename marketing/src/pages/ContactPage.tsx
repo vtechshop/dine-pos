@@ -15,7 +15,7 @@ const BLANK: FormState = { name: '', email: '', phone: '', restaurant: '', messa
 
 export function ContactPage() {
   usePageSEO(
-    'Contact — Dine POS',
+    'Contact Dine POS — Restaurant POS Support India',
     'Get in touch with Dine POS. Call, email, or send a message — we reply within one business day. Coimbatore, Tamil Nadu, India.',
   );
   const [form, setForm]           = useState<FormState>(BLANK);

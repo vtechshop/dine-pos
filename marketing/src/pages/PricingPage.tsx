@@ -110,7 +110,7 @@ const FAQ_ITEMS = [
 
 export function PricingPage() {
   usePageSEO(
-    'Pricing — Dine POS',
+    'Restaurant POS Pricing India — ₹12,000/year | Dine POS',
     'Dine POS annual pricing — ₹12,000/year per outlet. No monthly charges. Includes AI menu import, kiosk ordering, Android POS app, free dual thermal printer, free installation, and training.',
   );
   return (

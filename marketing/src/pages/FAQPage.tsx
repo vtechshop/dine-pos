@@ -140,7 +140,7 @@ const FAQ_SCHEMA = {
 
 export function FAQPage() {
   usePageSEO(
-    'FAQ — Dine POS',
+    'Dine POS FAQ — POS Setup, Pricing & Features Explained',
     'Frequently asked questions about Dine POS: setup, features, pricing, kitchen printing, offline mode, GST billing and more.',
   );
   useEffect(() => {

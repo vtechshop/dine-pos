@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { usePageSEO } from '../hooks/usePageSEO';
 
 export function NotFoundPage() {
-  usePageSEO('Page Not Found — Dine POS', 'The page you are looking for does not exist. Return to Dine POS home.');
+  usePageSEO('Page Not Found — Dine POS', 'The page you are looking for does not exist. Return to Dine POS home.', { noindex: true });
   return (
     <div className="flex flex-col items-center justify-center px-5 py-32 text-center">
       <p className="mb-2 text-7xl font-black text-[#E8380D]">404</p>

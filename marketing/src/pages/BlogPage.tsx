@@ -53,6 +53,7 @@ export function BlogPage() {
   usePageSEO(
     'Blog — Dine POS',
     'Restaurant operations, technology, and growth tips — written for Indian restaurant owners by the team at Dine POS.',
+    { noindex: true },
   );
   return (
     <div>

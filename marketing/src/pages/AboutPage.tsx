@@ -45,7 +45,7 @@ const ROADMAP = [
 
 export function AboutPage() {
   usePageSEO(
-    'About — Dine POS',
+    'About Dine POS — Restaurant POS by Happya Softech',
     'Dine POS is built for Indian restaurant owners who need fast billing, real-time kitchen operations, AI-powered menu import, and full inventory visibility — without a large IT team.',
   );
   return (

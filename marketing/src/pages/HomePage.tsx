@@ -946,8 +946,8 @@ function CTABanner() {
 
 export function HomePage() {
   usePageSEO(
-    'Dine POS — Restaurant POS System',
-    'The complete point-of-sale system for modern Indian restaurants. AI menu import, QR ordering, kiosk, kitchen display, and Android POS — all in one. 14-day free trial.',
+    'Restaurant POS Software for India | Dine POS',
+    'Cloud POS software for Indian restaurants — billing, KOT, QR ordering, inventory, loyalty, and AI analytics. 14-day free trial. ₹0 setup fee.',
   );
   return (
     <>
