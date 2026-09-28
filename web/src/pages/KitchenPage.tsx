@@ -242,16 +242,16 @@ const OrderCard = memo(function OrderCard({
                 <button
                   onClick={() => onAccept(order._id, order.platformOrderId ?? '', order.orderSource ?? '')}
                   disabled={acting}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
                 >
-                  <Check size={12} /> Accept
+                  <Check size={14} /> Accept
                 </button>
                 <button
                   onClick={() => setShowReject(true)}
                   disabled={acting}
-                  className="flex items-center justify-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-red-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
                 >
-                  <X size={12} /> Reject
+                  <X size={14} /> Reject
                 </button>
               </div>
             )}
@@ -261,7 +261,7 @@ const OrderCard = memo(function OrderCard({
               <button
                 onClick={() => onAction(order._id, 'preparing')}
                 disabled={acting}
-                className="w-full rounded-lg bg-amber-500 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
+                className="w-full rounded-lg bg-amber-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
               >
                 Start Preparing
               </button>
@@ -272,9 +272,9 @@ const OrderCard = memo(function OrderCard({
               <button
                 onClick={() => onAction(order._id, 'ready')}
                 disabled={acting}
-                className="w-full rounded-lg bg-blue-600 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 py-2.5 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
               >
-                Mark Ready
+                <Check size={14} /> Food is Ready
               </button>
             )}
 
@@ -283,9 +283,9 @@ const OrderCard = memo(function OrderCard({
               <button
                 onClick={() => onAction(order._id, 'served')}
                 disabled={acting}
-                className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
               >
-                <Check size={12} /> Mark Served
+                <Check size={14} /> Mark Served
               </button>
             )}
 
@@ -294,9 +294,9 @@ const OrderCard = memo(function OrderCard({
               <button
                 onClick={() => onDispatch(order._id, order.platformOrderId ?? '', order.orderSource ?? '')}
                 disabled={acting}
-                className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-purple-600 py-2 text-xs font-semibold text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-purple-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
               >
-                <Truck size={12} /> Mark Dispatched
+                <Truck size={14} /> Mark Dispatched
               </button>
             )}
           </>

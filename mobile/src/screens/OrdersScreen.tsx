@@ -55,7 +55,7 @@ const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
 
 const NEXT_LABEL: Partial<Record<OrderStatus, string>> = {
   pending:   'Start Cooking',
-  preparing: 'Mark Ready',
+  preparing: 'Food is Ready',
   ready:     'Mark Served',
   served:    'Mark Completed',
 };

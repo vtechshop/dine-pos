@@ -1440,14 +1440,14 @@ Thank you for dining with us! 🍽️`;
             {/* WhatsApp + UPI QR row */}
             <View style={styles.successActions}>
               <TouchableOpacity
-                style={[styles.successPrintBtn, { flex: 1 }]}
+                style={[styles.successPrintBtn, { flex: 1, borderColor: Colors.success }]}
                 onPress={() => { if (showSuccess) sendWhatsApp(showSuccess); }}
               >
                 <MaterialIcons name="chat" size={18} color={Colors.success} />
                 <Text style={[styles.successPrintText, { color: Colors.success }]}>WhatsApp</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.successPrintBtn, { flex: 1 }]}
+                style={[styles.successPrintBtn, { flex: 1, borderColor: Colors.upi }]}
                 onPress={() => {
                   if (!(settings.upiId || UPI_ID)) {
                     showAlert('UPI Not Configured', 'Configure your UPI ID in Settings to accept UPI payments.');
@@ -1460,7 +1460,7 @@ Thank you for dining with us! 🍽️`;
                 <Text style={[styles.successPrintText, { color: Colors.upi }]}>UPI QR</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.successPrintBtn, { flex: 1 }]}
+                style={[styles.successPrintBtn, { flex: 1, borderColor: Colors.warning }]}
                 onPress={() => { if (showSuccess) handlePrintKOT(showSuccess); }}
                 disabled={printingKot}
               >

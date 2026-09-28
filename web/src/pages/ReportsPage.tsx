@@ -172,12 +172,12 @@ function fmtCur(value: number, sym: string): string {
 }
 
 function KPICard({
-  label, value, sub, accent = false,
+  label, value, sub, accent = false, stripe,
 }: {
-  label: string; value: string; sub?: string; accent?: boolean;
+  label: string; value: string; sub?: string; accent?: boolean; stripe?: string;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-canvas px-5 py-4">
+    <div className={`rounded-xl border border-border bg-canvas px-5 py-4 ${stripe ? `border-l-4 ${stripe}` : ''}`}>
       <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">
         {label}
       </p>
@@ -982,16 +982,19 @@ export function ReportsPage() {
                     value={fmtCur(sales.totalSales, sym)}
                     sub={`${sales.totalOrders} orders`}
                     accent
+                    stripe="border-l-brand"
                   />
                   <KPICard
                     label="Tax Collected"
                     value={fmtCur(sales.totalTax, sym)}
                     sub="GST total"
+                    stripe="border-l-blue-500"
                   />
                   <KPICard
                     label="Discounts"
                     value={fmtCur(sales.totalDiscount, sym)}
                     sub="Total given"
+                    stripe="border-l-purple-500"
                   />
                   <KPICard
                     label="Avg Order"
@@ -1001,12 +1004,14 @@ export function ReportsPage() {
                         : `${sym}0`
                     }
                     sub={`${sales.parcelOrders} parcels`}
+                    stripe="border-l-green-500"
                   />
                   {(sales.cancelledOrders ?? 0) > 0 && (
                     <KPICard
                       label="Cancelled"
                       value={String(sales.cancelledOrders)}
                       sub="orders voided"
+                      stripe="border-l-red-500"
                     />
                   )}
                 </div>

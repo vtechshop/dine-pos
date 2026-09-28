@@ -382,13 +382,13 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: Colors.border,
   },
   stepDotCurrent: { borderWidth: 2.5 },
-  stepLabel: { fontSize: 9, color: Colors.textMuted, fontWeight: '500', textAlign: 'center' },
+  stepLabel: { fontSize: 10.5, color: Colors.textMuted, fontWeight: '500', textAlign: 'center' },
   connector: {
-    flex: 0,
-    width: 20, height: 2,
+    flex: 1,
+    minWidth: 8, height: 2,
     backgroundColor: Colors.border,
     alignSelf: 'center',
-    marginBottom: 20,
+    marginBottom: 22,
   },
 
   tokenRow: { flexDirection: 'row', gap: Spacing.md },
