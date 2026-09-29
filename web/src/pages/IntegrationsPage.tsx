@@ -920,10 +920,10 @@ function MessagingProviderCard({ config, loading, onSaved, onRemoved, onToast }:
             <p className="font-semibold text-ink">MSG91 — WhatsApp & SMS</p>
             <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
               isConnected
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                : 'bg-ink/5 border-ink/10 text-ink/40'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-700/50 dark:text-emerald-400'
+                : 'bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-900/30 dark:border-orange-700/50 dark:text-orange-400'
             }`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-ink/30'}`} />
+              <span className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-orange-500'}`} />
               {isConnected ? 'Connected' : 'Not configured'}
             </span>
           </div>
@@ -1225,10 +1225,10 @@ function WhatsAppReceiptsCard({ onToast }: WhatsAppReceiptsCardProps) {
             <p className="text-xs text-ink/50">Send order receipts to customers via WhatsApp</p>
           </div>
         </div>
-        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold border ${
           isConfigured
-            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-            : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+            ? 'bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700/50'
+            : 'bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-700/50'
         }`}>
           {isConfigured ? 'Provider connected' : 'No provider configured'}
         </span>
