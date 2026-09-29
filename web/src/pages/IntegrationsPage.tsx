@@ -308,12 +308,12 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
   return (
     <div className="rounded-2xl border border-border bg-canvas shadow-sm">
       {pendingConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-neutral-800 rounded-lg p-6 max-w-sm mx-4 shadow-xl">
-            <p className="mb-4 text-sm">{pendingConfirm.msg}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-canvas rounded-lg p-6 max-w-sm mx-4 shadow-xl border border-border">
+            <p className="mb-4 text-sm text-ink">{pendingConfirm.msg}</p>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setPendingConfirm(null)} className="px-4 py-2 text-sm border border-border rounded">Cancel</button>
-              <button onClick={() => { pendingConfirm.onOk(); setPendingConfirm(null); }} className="px-4 py-2 text-sm bg-red-600 text-white rounded">Confirm</button>
+              <button onClick={() => setPendingConfirm(null)} className="px-4 py-2 text-sm border border-border rounded text-ink hover:bg-surface">Cancel</button>
+              <button onClick={() => { pendingConfirm.onOk(); setPendingConfirm(null); }} className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700">Confirm</button>
             </div>
           </div>
         </div>
@@ -900,12 +900,12 @@ function MessagingProviderCard({ config, loading, onSaved, onRemoved, onToast }:
   return (
     <div className="rounded-2xl border border-border bg-canvas shadow-sm">
       {pendingConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-neutral-800 rounded-lg p-6 max-w-sm mx-4 shadow-xl">
-            <p className="mb-4 text-sm">{pendingConfirm.msg}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-canvas rounded-lg p-6 max-w-sm mx-4 shadow-xl border border-border">
+            <p className="mb-4 text-sm text-ink">{pendingConfirm.msg}</p>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setPendingConfirm(null)} className="px-4 py-2 text-sm border border-border rounded">Cancel</button>
-              <button onClick={() => { pendingConfirm.onOk(); setPendingConfirm(null); }} className="px-4 py-2 text-sm bg-red-600 text-white rounded">Confirm</button>
+              <button onClick={() => setPendingConfirm(null)} className="px-4 py-2 text-sm border border-border rounded text-ink hover:bg-surface">Cancel</button>
+              <button onClick={() => { pendingConfirm.onOk(); setPendingConfirm(null); }} className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700">Confirm</button>
             </div>
           </div>
         </div>
