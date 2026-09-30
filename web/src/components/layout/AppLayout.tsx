@@ -8,6 +8,7 @@ import { RightPanel } from './RightPanel';
 import { StatusBar } from './StatusBar';
 import { MaintenancePage } from '../../pages/MaintenancePage';
 import { getPublicRemoteConfig } from '../../api/remoteConfig';
+import { TrialBanner } from './TrialBanner';
 
 export function AppLayout() {
   const { isAuthenticated, logout } = useAuth();
@@ -58,6 +59,7 @@ export function AppLayout() {
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         <main className="flex flex-1 flex-col overflow-hidden bg-mist">
+          <TrialBanner />
           <Outlet />
         </main>
 

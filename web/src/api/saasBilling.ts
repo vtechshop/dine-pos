@@ -16,6 +16,9 @@ export interface SaasStatus {
   subscriptionPlan: string;
   subscriptionStartDate: string | null;
   subscriptionEndDate: string | null;
+  trialStartDate: string | null;
+  trialEndDate: string | null;
+  trialDaysRemaining: number | null; // null when not in trial; 0 = expires today
   annualPrice: number;               // INR
   rzpSubscriptionStatus: string;     // Razorpay subscription status
   rzpNextBillingAt: string | null;

@@ -7,6 +7,7 @@ import { runMenuSyncWorker } from '../workers/menuSyncWorker';
 import { runRazorpayTokenRefreshWorker } from '../workers/razorpayTokenRefreshWorker';
 import { processQueuedWhatsAppReceipts, recoverStaleWhatsAppSendingJobs } from '../workers/whatsappReceiptWorker';
 import { recoverStaleTallySyncJobs } from '../workers/tallySyncWorker';
+import { runTrialReminderWorker } from '../workers/trialReminderWorker';
 import { logger } from '../utils/logger';
 
 let hourlyTimer:             ReturnType<typeof setTimeout>  | null = null;
@@ -15,6 +16,7 @@ let dailyTick:               ReturnType<typeof setInterval> | null = null;
 let waReceiptTick:           ReturnType<typeof setInterval> | null = null;
 let waReceiptRecoveryTick:   ReturnType<typeof setInterval> | null = null;
 let tallyRecoveryTick:       ReturnType<typeof setInterval> | null = null;
+let trialReminderTick:       ReturnType<typeof setInterval> | null = null;
 let expiryLastDate         = -1;
 let menuSyncLastRun        = 0;   // epoch ms — checked every 5 minutes
 let tokenRefreshLastRun    = 0;   // epoch ms — checked every 4 hours
@@ -138,6 +140,16 @@ function scheduleTallyRecovery(): void {
   }, 5 * 60 * 1000);
 }
 
+function scheduleTrialReminders(): void {
+  // Check for trial hotels that need Day 7 / Day 12 expiry reminders — every 4 hours.
+  // Idempotent: Hotel.trialReminder7SentAt / trialReminder12SentAt guard against re-sends.
+  trialReminderTick = setInterval(() => {
+    void runTrialReminderWorker().catch((err) =>
+      logger.error('[scheduler] trial reminder error', { err: String(err) }),
+    );
+  }, 4 * 60 * 60 * 1000);
+}
+
 export function startScheduler(): void {
   if (hourlyTimer !== null || hourlyTick !== null || dailyTick !== null) {
     logger.warn('[scheduler] already running — ignoring duplicate startScheduler() call');
@@ -149,15 +161,17 @@ export function startScheduler(): void {
   scheduleWhatsAppReceiptSweep();
   scheduleWhatsAppReceiptRecovery();
   scheduleTallyRecovery();
+  scheduleTrialReminders();
 }
 
 export function stopScheduler(): void {
   logger.info('[scheduler] stopping');
-  if (hourlyTimer)       { clearTimeout(hourlyTimer);           hourlyTimer       = null; }
-  if (hourlyTick)        { clearInterval(hourlyTick);           hourlyTick        = null; }
-  if (dailyTick)         { clearInterval(dailyTick);            dailyTick         = null; }
-  if (waReceiptTick)         { clearInterval(waReceiptTick);            waReceiptTick         = null; }
-  if (waReceiptRecoveryTick) { clearInterval(waReceiptRecoveryTick);    waReceiptRecoveryTick = null; }
-  if (tallyRecoveryTick)     { clearInterval(tallyRecoveryTick);        tallyRecoveryTick     = null; }
+  if (hourlyTimer)           { clearTimeout(hourlyTimer);             hourlyTimer           = null; }
+  if (hourlyTick)            { clearInterval(hourlyTick);             hourlyTick            = null; }
+  if (dailyTick)             { clearInterval(dailyTick);              dailyTick             = null; }
+  if (waReceiptTick)         { clearInterval(waReceiptTick);          waReceiptTick         = null; }
+  if (waReceiptRecoveryTick) { clearInterval(waReceiptRecoveryTick);  waReceiptRecoveryTick = null; }
+  if (tallyRecoveryTick)     { clearInterval(tallyRecoveryTick);      tallyRecoveryTick     = null; }
+  if (trialReminderTick)     { clearInterval(trialReminderTick);      trialReminderTick     = null; }
   expiryLastDate = -1;
 }

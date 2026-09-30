@@ -143,6 +143,7 @@ router.get('/status', async (req: AuthRequest, res: Response) => {
     const hotel = await Hotel.findById(req.hotelId)
       .select(
         'status subscriptionType subscriptionPlan subscriptionStartDate subscriptionEndDate ' +
+        'trialStartDate trialEndDate ' +
         'saasAnnualPrice rzpSubscriptionId rzpSubscriptionStatus rzpNextBillingAt ' +
         'printerEntitlementGranted printerEntitlementFulfilledAt printerEntitlementSkipped',
       )
@@ -151,12 +152,22 @@ router.get('/status', async (req: AuthRequest, res: Response) => {
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
 
     const h = hotel as any;
+
+    let trialDaysRemaining: number | null = null;
+    if (h.status === 'trial' && h.trialEndDate) {
+      const msLeft = new Date(h.trialEndDate).getTime() - Date.now();
+      trialDaysRemaining = Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
+    }
+
     return res.json({
       status:                h.status,
       subscriptionType:      h.subscriptionType,
       subscriptionPlan:      h.subscriptionPlan,
       subscriptionStartDate: h.subscriptionStartDate,
       subscriptionEndDate:   h.subscriptionEndDate,
+      trialStartDate:        h.trialStartDate ?? null,
+      trialEndDate:          h.trialEndDate ?? null,
+      trialDaysRemaining,
       annualPrice:           h.saasAnnualPrice ?? SAAS_STANDARD_PRICE_INR,
       rzpSubscriptionStatus: h.rzpSubscriptionStatus,
       rzpNextBillingAt:      h.rzpNextBillingAt,

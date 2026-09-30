@@ -102,6 +102,8 @@ export interface IHotel extends Document {
   // Trial management
   trialStartDate: Date | null;
   trialEndDate: Date | null;
+  trialReminder7SentAt: Date | null;
+  trialReminder12SentAt: Date | null;
 
   // Subscription
   subscriptionPlan: 'none' | 'starter' | 'professional' | 'enterprise' | 'standard';
@@ -200,8 +202,10 @@ const HotelSchema: Schema = new Schema(
     resetFulfilledAt:   { type: Date, default: null },
 
     // Trial management
-    trialStartDate:     { type: Date, default: null },
-    trialEndDate:       { type: Date, default: null },
+    trialStartDate:       { type: Date, default: null },
+    trialEndDate:         { type: Date, default: null },
+    trialReminder7SentAt: { type: Date, default: null },
+    trialReminder12SentAt:{ type: Date, default: null },
 
     // Subscription (legacy)
     subscriptionPlan:   { type: String, enum: ['none', 'starter', 'professional', 'enterprise', 'standard'], default: 'none' },

@@ -42,6 +42,12 @@ export function RegisterPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!form.email.trim()) {
+      setError('Email address is required.');
+      return;
+    }
+
     setLoading(true);
     try {
       await registerHotel(form);
@@ -106,11 +112,11 @@ export function RegisterPage() {
                 />
               </div>
               <div>
-                <label htmlFor="email" className={labelCls}>Email</label>
+                <label htmlFor="email" className={labelCls}>Email *</label>
                 <input
-                  id="email" type="email"
+                  id="email" type="email" required
                   value={form.email} onChange={field('email')}
-                  placeholder="Optional"
+                  placeholder="you@example.com"
                   className={inputCls}
                 />
               </div>
