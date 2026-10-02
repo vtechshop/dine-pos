@@ -21,6 +21,8 @@ export interface IOrderItem {
   taxPercent: number;
   taxAmount: number;
   total: number;
+  hsnCode: string;
+  discountAllocated: number;
 }
 
 export interface IOrder extends Document {
@@ -79,6 +81,11 @@ export interface IOrder extends Document {
   walletAmount:     number;
   walletCustomerId: mongoose.Types.ObjectId | null;
   walletRestoredAt: Date | null;
+  // ── Refund (post-completion) ──────────────────────────────────────────────
+  refundedAt:     Date | null;
+  refundedBy:     string;
+  refundReason:   string;
+  refundAmount:   number;
   // ── Delivery / aggregator fields ─────────────────────────────────────────
   platformOrderId:     string;   // Swiggy/Zomato order ref
   deliveryAddress:     string;
@@ -136,6 +143,8 @@ const OrderItemSchema: Schema = new Schema({
     type: Number,
     required: true,
   },
+  hsnCode:           { type: String, default: '' },
+  discountAllocated: { type: Number, default: 0 },
 });
 
 const OrderSchema: Schema = new Schema(
@@ -251,6 +260,12 @@ const OrderSchema: Schema = new Schema(
     walletAmount:     { type: Number, default: 0, min: 0 },
     walletCustomerId: { type: Schema.Types.ObjectId, ref: 'CustomerProfile', default: null },
     walletRestoredAt: { type: Date, default: null },
+
+    // ── Refund (post-completion) ──────────────────────────────────────────
+    refundedAt:   { type: Date,   default: null },
+    refundedBy:   { type: String, default: '' },
+    refundReason: { type: String, default: '' },
+    refundAmount: { type: Number, default: 0 },
 
     // ── Delivery / aggregator fields ──────────────────────────────────────
     platformOrderId:     { type: String, default: '' },

@@ -152,6 +152,7 @@ export interface IHotel extends Document {
   branchName:     string;     // display name for this branch location
   isHeadquarters: boolean;    // true once the first child branch is created under this Hotel
   maxBranches:    number;     // subscription-enforced branch limit (default 1)
+  maxCashierDiscountPercent: number; // 0 = cashiers cannot discount; 1-100 = cap in % of subtotal
 
   createdAt: Date;
   updatedAt: Date;
@@ -282,8 +283,9 @@ const HotelSchema: Schema = new Schema(
     parentHotelId:  { type: Schema.Types.ObjectId, ref: 'Hotel', default: null },
     branchCode:     { type: String, default: '' },
     branchName:     { type: String, default: '' },
-    isHeadquarters: { type: Boolean, default: false },
-    maxBranches:    { type: Number, default: 1 },
+    isHeadquarters:            { type: Boolean, default: false },
+    maxBranches:               { type: Number, default: 1 },
+    maxCashierDiscountPercent: { type: Number, default: 0, min: 0, max: 100 },
 
     // Legacy premium fields (backwards compat)
     isPremium:          { type: Boolean, default: false },

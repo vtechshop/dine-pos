@@ -6,6 +6,7 @@ import type { OrderListItem } from '../types';
 import { fetchOrders, updateOrderStatus } from '../api/orders';
 import { Spinner } from '../components/ui/Spinner';
 import { useSettings } from '../context/SettingsContext';
+import { generateUpiUri } from '../utils/upiHelpers';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -388,7 +389,7 @@ function OrderDetailDrawer({ order, sym, upiId, hotelName, onClose, onUpdated }:
                     upiId ? (
                       <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-white p-4">
                         <QRCode
-                          value={`upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(hotelName)}&am=${order.grandTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Order ' + order.orderNumber)}`}
+                          value={generateUpiUri(upiId, hotelName, order.grandTotal, `Order ${order.orderNumber}`)}
                           size={160}
                           bgColor="#ffffff"
                           fgColor="#1a1a1a"

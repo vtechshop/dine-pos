@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import Order from '../models/Order';
+import Hotel from '../models/Hotel';
 import Product from '../models/Product';
 import ModifierGroup from '../models/ModifierGroup';
 import DailyCounter from '../models/DailyCounter';
@@ -61,7 +62,7 @@ function recalcOrderTotals(
       ...m,
       modifierTotal: Math.round((Number(m.modifierPrice) || 0) * qty * 100) / 100,
     }));
-    return { ...item, quantity: qty, taxAmount: taxAmt, total: lineTotal, selectedModifiers };
+    return { ...item, quantity: qty, lineBase, taxAmount: taxAmt, total: lineTotal, selectedModifiers };
   });
 
   subtotal = Math.round(subtotal * 100) / 100;
@@ -72,7 +73,26 @@ function recalcOrderTotals(
   const loyaltyDiscount  = Math.min(Math.max(0, Number(rawLoyaltyDiscount) || 0), available - discountAmount - couponDiscount);
   const grandTotal       = Math.max(0, Math.round((available - discountAmount - couponDiscount - loyaltyDiscount) * 100) / 100);
 
-  return { items, subtotal, taxTotal, discountAmount, couponDiscount, loyaltyDiscount, grandTotal };
+  // Proportional discount allocation across line items — for GST-compliant invoice printing.
+  // Distributes the manual bill-level discount by lineBase weight; last item absorbs the
+  // remainder so sum(discountAllocated) === discountAmount exactly (no floating paise drift).
+  // Does NOT change taxAmount or grandTotal — purely a per-line reporting field.
+  let allocatedSum = 0;
+  const finalItems = items.map((item: any, index: number) => {
+    let discountAllocated = 0;
+    if (discountAmount > 0 && subtotal > 0) {
+      if (index === items.length - 1) {
+        discountAllocated = Math.max(0, Math.round((discountAmount - allocatedSum) * 100) / 100);
+      } else {
+        discountAllocated = Math.round((item.lineBase / subtotal) * discountAmount * 100) / 100;
+        allocatedSum += discountAllocated;
+      }
+    }
+    const { lineBase: _lb, ...rest } = item;
+    return { ...rest, discountAllocated };
+  });
+
+  return { items: finalItems, subtotal, taxTotal, discountAmount, couponDiscount, loyaltyDiscount, grandTotal };
 }
 
 
@@ -202,6 +222,7 @@ async function validateAndEnrichItems(
       ...item,
       price:             serverUnitPrice,
       taxPercent:        Number(product.taxPercent) || 0,
+      hsnCode:           product.hsnCode || '',
       productName:       product.name,
       selectedModifiers: validatedModifiers,
     });
@@ -868,9 +889,19 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       verifiedLoyaltyDiscount = 0; // no points redeemed → zero loyalty discount allowed
     }
 
-    // RBAC: only admins may apply a manual discount (Gap 1 — discount gate)
+    // RBAC: discount gate — admin unrestricted; non-admin allowed only up to hotel's cap
     if (Number(req.body.discountAmount) > 0 && req.role !== 'admin') {
-      return res.status(403).json({ message: 'Only admins can apply discounts.' });
+      const hotelCap = await Hotel.findById(req.hotelId).select('maxCashierDiscountPercent').lean() as any;
+      const cap: number = hotelCap?.maxCashierDiscountPercent ?? 0;
+      if (cap === 0) {
+        return res.status(403).json({ message: 'Only admins can apply discounts.' });
+      }
+      const quickBase = validatedItems.reduce((s: number, i: any) =>
+        s + (Number(i.price) || 0) * Math.max(1, Math.floor(Number(i.quantity) || 1)), 0);
+      const pct = quickBase > 0 ? (Number(req.body.discountAmount) / quickBase * 100) : 0;
+      if (pct > cap) {
+        return res.status(403).json({ message: `Discount ${pct.toFixed(1)}% exceeds cashier limit of ${cap}%. Contact admin.` });
+      }
     }
 
     const recalc = recalcOrderTotals(
@@ -1925,9 +1956,17 @@ router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res
       update.tipAmount = rawTip;
     }
     if (additionalDiscount != null && Number(additionalDiscount) > 0) {
-      // RBAC: only admins may apply an additional discount (Gap 1 — discount gate)
+      // RBAC: discount gate for additional post-order discount
       if (req.role !== 'admin') {
-        return res.status(403).json({ message: 'Only admins can apply discounts.' });
+        const hotelCap2 = await Hotel.findById(req.hotelId).select('maxCashierDiscountPercent').lean() as any;
+        const cap2: number = hotelCap2?.maxCashierDiscountPercent ?? 0;
+        if (cap2 === 0) {
+          return res.status(403).json({ message: 'Only admins can apply discounts.' });
+        }
+        const addPct = order.grandTotal > 0 ? (Number(additionalDiscount) / order.grandTotal * 100) : 0;
+        if (addPct > cap2) {
+          return res.status(403).json({ message: `Discount ${addPct.toFixed(1)}% exceeds cashier limit of ${cap2}%. Contact admin.` });
+        }
       }
       const addDisc = Math.min(Number(additionalDiscount), order.grandTotal);
       update.additionalDiscount = addDisc;
@@ -1949,5 +1988,182 @@ router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res
     sendError(res, 500, 'Server error', error);
   }
 });
+
+// ── POST /api/orders/:id/refund — admin refund on a completed order ──────────
+// Creates a refund record on the order (refundedAt, refundedBy, refundReason,
+// refundAmount). Does NOT restore stock (food was served). Reverses loyalty,
+// wallet, voucher balances using the same path as order cancellation.
+router.post(
+  '/:id/refund',
+  authMiddleware, resolveHotelStatus, requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const order = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId });
+      if (!order) return res.status(404).json({ message: 'Order not found' });
+      if (order.status !== 'completed') {
+        return res.status(400).json({ message: `Only completed orders can be refunded (current status: ${order.status}).` });
+      }
+      if ((order as any).refundedAt) {
+        return res.status(409).json({ message: 'This order has already been refunded.' });
+      }
+
+      const reason = String(req.body.reason || '').trim();
+      if (!reason) return res.status(400).json({ message: 'refundReason is required.' });
+      const requestedAmount = Number(req.body.refundAmount) || order.grandTotal;
+      const refundAmount    = Math.min(Math.max(0, requestedAmount), order.grandTotal);
+
+      await Order.findOneAndUpdate(
+        { _id: order._id, hotelId: req.hotelId },
+        { $set: {
+          refundedAt:   new Date(),
+          refundedBy:   String((req as any).cashierId || (req as any).adminId || ''),
+          refundReason: reason,
+          refundAmount,
+        }},
+      );
+
+      logAudit(req, 'order.refunded', 'order', String(order._id), {
+        orderNumber: order.orderNumber,
+        refundAmount,
+        reason,
+      });
+
+      // ── Loyalty + wallet + voucher reversal (fire-and-forget) ────────────────
+      ;(async () => {
+        try {
+          const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
+          const customerPhone = order.customerPhone;
+          if (!customerPhone) return;
+          const refundProfile = await CustomerProfile.findOne({
+            hotelId: new mongoose.Types.ObjectId(req.hotelId),
+            phone:   customerPhone,
+            status:  { $ne: 'merged' },
+          }).select('_id orgCustomerId').lean();
+          if (!refundProfile) return;
+          const refundOrgCtx = await resolveOrgLoyalty(refundProfile as any, req.hotelId!);
+          const refundCfg    = refundOrgCtx ? refundOrgCtx.hqConfig : loyaltyCfg;
+          if (!refundCfg.enabled && !refundOrgCtx) return;
+          const profileId = (refundProfile as any)._id;
+          const orderId   = String(order._id);
+
+          // Reverse earned points (Razorpay path)
+          const earnedPay = await Payment.findOne({
+            orderId: order._id, hotelId: req.hotelId,
+            loyaltyEarnPoints: { $gt: 0 }, loyaltyReversedAt: null,
+          });
+          if (earnedPay) {
+            const claimed = await Payment.findOneAndUpdate(
+              { _id: earnedPay._id, loyaltyReversedAt: null },
+              { $set: { loyaltyReversedAt: new Date() } },
+            );
+            if (claimed) {
+              if (refundOrgCtx) {
+                await reverseOrgEarnedPoints(
+                  refundOrgCtx.orgCustomer!._id as mongoose.Types.ObjectId,
+                  refundOrgCtx.orgCustomer!.orgHotelId.toString(),
+                  req.hotelId!, profileId, claimed.loyaltyEarnPoints, refundCfg,
+                  { orderId, paymentId: String(claimed._id), createdBy: 'system:refund', remarks: `Earn reversal: Order #${order.orderNumber} refunded` },
+                );
+              } else {
+                await reverseEarnedPoints(profileId, req.hotelId!, claimed.loyaltyEarnPoints, refundCfg,
+                  { orderId, paymentId: String(claimed._id), createdBy: 'system:refund', remarks: `Earn reversal: Order #${order.orderNumber} refunded` },
+                );
+              }
+            }
+          } else {
+            // Reverse earned points (cash/UPI path)
+            const earnTx = await LoyaltyTransaction.findOne({
+              hotelId: new mongoose.Types.ObjectId(req.hotelId), customerId: profileId,
+              orderId: order._id, transactionType: 'earn',
+            }).sort({ createdAt: -1 }).lean();
+            if (earnTx && earnTx.points > 0) {
+              const claimedOrder = await Order.findOneAndUpdate(
+                { _id: order._id, loyaltyEarnedAt: { $ne: null } },
+                { $set: { loyaltyEarnedAt: null } },
+              );
+              if (claimedOrder) {
+                if (refundOrgCtx) {
+                  await reverseOrgEarnedPoints(
+                    refundOrgCtx.orgCustomer!._id as mongoose.Types.ObjectId,
+                    refundOrgCtx.orgCustomer!.orgHotelId.toString(),
+                    req.hotelId!, profileId, earnTx.points, refundCfg,
+                    { orderId, createdBy: 'system:refund', remarks: `Earn reversal: Order #${order.orderNumber} refunded` },
+                  );
+                } else {
+                  await reverseEarnedPoints(profileId, req.hotelId!, earnTx.points, refundCfg,
+                    { orderId, createdBy: 'system:refund', remarks: `Earn reversal: Order #${order.orderNumber} refunded` },
+                  );
+                }
+              }
+            }
+          }
+
+          // Restore redeemed loyalty points
+          const redeemedPts = (order as any).redeemedPoints ?? 0;
+          if (redeemedPts > 0) {
+            if (refundOrgCtx) {
+              await earnOrgPoints(
+                refundOrgCtx.orgCustomer!._id as mongoose.Types.ObjectId,
+                refundOrgCtx.orgCustomer!.orgHotelId.toString(),
+                req.hotelId!, profileId, redeemedPts, refundCfg,
+                { orderId, createdBy: 'system:refund', remarks: `Redemption restore: Order #${order.orderNumber} refunded` },
+              );
+            } else {
+              await earnPoints(profileId, req.hotelId!, redeemedPts, refundCfg,
+                { orderId, createdBy: 'system:refund', remarks: `Redemption restore: Order #${order.orderNumber} refunded` },
+              );
+            }
+          }
+        } catch (loyaltyErr) {
+          logger.error('[refund] loyalty reversal failed', { orderId: String(order._id), err: String(loyaltyErr) });
+        }
+
+        // Restore wallet
+        try {
+          const walletAmt = (order as any).walletAmount ?? 0;
+          if (walletAmt > 0 && order.walletCustomerId) {
+            const walletClaimed = await Order.findOneAndUpdate(
+              { _id: order._id, walletRestoredAt: null },
+              { $set: { walletRestoredAt: new Date() } },
+            );
+            if (walletClaimed) {
+              await WalletTransaction.create({
+                hotelId:    req.hotelId,
+                customerId: order.walletCustomerId,
+                type:       'credit',
+                amount:     walletAmt,
+                referenceId: String(order._id),
+                description: `Wallet restore: Order #${order.orderNumber} refunded`,
+              });
+              await CustomerProfile.findByIdAndUpdate(order.walletCustomerId, { $inc: { walletBalance: walletAmt } });
+            }
+          }
+        } catch (walletErr) {
+          logger.error('[refund] wallet restore failed', { orderId: String(order._id), err: String(walletErr) });
+        }
+
+        // Restore gift voucher
+        try {
+          const voucherAmt = (order as any).giftVoucherAmount ?? 0;
+          if (voucherAmt > 0 && order.giftVoucherId && !(order as any).giftVoucherRestoredAt) {
+            const voucherClaimed = await Order.findOneAndUpdate(
+              { _id: order._id, giftVoucherRestoredAt: null },
+              { $set: { giftVoucherRestoredAt: new Date() } },
+            );
+            if (voucherClaimed) {
+              await GiftVoucher.findByIdAndUpdate(order.giftVoucherId, { $inc: { balance: voucherAmt } });
+            }
+          }
+        } catch (voucherErr) {
+          logger.error('[refund] voucher restore failed', { orderId: String(order._id), err: String(voucherErr) });
+        }
+      })().catch(err => logger.error('[refund] reversal error', { orderId: String(order._id), err: String(err) }));
+
+      res.json({ message: 'Refund processed.', refundAmount, orderId: String(order._id) });
+    } catch (error) {
+      sendError(res, 500, 'Server error', error);
+    }
+  },
+);
 
 export default router;
