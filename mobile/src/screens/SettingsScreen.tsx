@@ -269,8 +269,8 @@ const SettingsScreen: React.FC = () => {
       // until the user presses the main Save button.
       await saveSettings(
         role === 'cashier'
-          ? { cashierPrinterAddress: device.address }
-          : { kitchenPrinterAddress: device.address }
+          ? { cashierPrinterAddress: device.address, printerMode }
+          : { kitchenPrinterAddress: device.address, printerMode }
       );
       showAlert('Connected', `${device.name} set as ${role === 'cashier' ? 'cashier' : 'kitchen'} printer`);
     } catch (e: any) {
