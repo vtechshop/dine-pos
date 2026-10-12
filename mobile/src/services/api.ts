@@ -2361,6 +2361,7 @@ export interface PublicGatewayInfo {
   gatewayType?:  string;
   isIntegrated?: boolean;
   displayName?:  string;
+  upiId?:        string;
 }
 
 export const getPublicGateway = (hotelId: string): Promise<PublicGatewayInfo> =>

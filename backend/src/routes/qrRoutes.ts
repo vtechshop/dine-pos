@@ -353,8 +353,9 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     if (!features) return;
 
     const validSource = isKiosk ? 'kiosk' : 'qr';
-    // Kiosk supports cash or Razorpay; QR is always Razorpay
-    const kioskWantsRazorpay = isKiosk && String(reqPaymentMethod || '').toLowerCase() === 'razorpay';
+    // Kiosk: cash or Razorpay; QR: cash, upi_qr, or Razorpay
+    const kioskWantsRazorpay = isKiosk  && String(reqPaymentMethod || '').toLowerCase() === 'razorpay';
+    const qrWantsRazorpay    = !isKiosk && String(reqPaymentMethod || '').toLowerCase() === 'razorpay';
 
     let guest: any;
     let rawGuestToken = '';
@@ -568,8 +569,8 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     const { validatedItems, subtotal, taxTotal } = itemResult;
     const grandTotal = +(subtotal + taxTotal).toFixed(2);
 
-    // ── QR always requires Razorpay; kiosk requires it only when Razorpay is selected ───
-    if (validSource === 'qr' || kioskWantsRazorpay) {
+    // ── Gateway required only for Razorpay payments (QR or kiosk) ──────────────
+    if (qrWantsRazorpay || kioskWantsRazorpay) {
       const gwConfig = await PaymentGatewayConfig.findOne({
         hotelId:   new mongoose.Types.ObjectId(String(hotelId)),
         isActive:  true,
@@ -612,8 +613,10 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       customerName:   guest.displayLabel,
       notes:          String(notes ?? '').slice(0, 200),
       orderSource:    validSource,
-      paymentMethod:  (validSource === 'qr' || kioskWantsRazorpay) ? 'razorpay' : 'cash',
-      status:         (validSource === 'qr' || kioskWantsRazorpay) ? 'payment_pending' : 'pending',
+      paymentMethod:  (qrWantsRazorpay || kioskWantsRazorpay)                              ? 'razorpay'
+                    : String(reqPaymentMethod || '').toLowerCase() === 'upi_qr'            ? 'upi_qr'
+                    : 'cash',
+      status:         (qrWantsRazorpay || kioskWantsRazorpay) ? 'payment_pending' : 'pending',
       sessionId:      guest.sessionId,
       guestId:        guest._id,
     };
@@ -693,7 +696,7 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       sessionId:   String(guest.sessionId),
       tableNumber: guest.tableNumber,
       grandTotal,
-      status:      (validSource === 'qr' || kioskWantsRazorpay) ? 'payment_pending' : 'pending',
+      status:      (qrWantsRazorpay || kioskWantsRazorpay) ? 'payment_pending' : 'pending',
     });
 
     // Always return guestToken so client can persist it for subsequent orders.

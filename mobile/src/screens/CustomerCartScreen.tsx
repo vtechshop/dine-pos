@@ -68,7 +68,7 @@ const CustomerCartScreen: React.FC = () => {
   const cur = settings.currencySymbol || '₹';
   const fmt = (n: number) => `${cur}${n.toFixed(0)}`;
   const buildUpiUrl = (amount: number, ref: string) => {
-    const pa = encodeURIComponent(settings.upiId || '');
+    const pa = encodeURIComponent(activeGateway?.upiId || settings.upiId || '');
     const pn = encodeURIComponent(settings.hotelName || 'Restaurant');
     const am = amount.toFixed(2);
     const tn = encodeURIComponent(`Order-${ref}`);
@@ -556,7 +556,7 @@ const CustomerCartScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {placedOrder.paymentMethod === 'upi_qr' && settings.upiId ? (
+          {placedOrder.paymentMethod === 'upi_qr' && (activeGateway?.upiId || settings.upiId) ? (
             <View style={styles.upiPaySection}>
               <Text style={styles.upiPayTitle}>Scan & Pay</Text>
               <Text style={styles.upiPayAmount}>{fmt(placedOrder.grandTotal)}</Text>
@@ -568,7 +568,7 @@ const CustomerCartScreen: React.FC = () => {
                   backgroundColor={Colors.white}
                 />
               </View>
-              <Text style={styles.upiPayId}>{settings.upiId}</Text>
+              <Text style={styles.upiPayId}>{activeGateway?.upiId || settings.upiId}</Text>
               <Text style={styles.upiPayHint}>Open any UPI app and scan to pay</Text>
             </View>
           ) : (
@@ -740,7 +740,7 @@ const CustomerCartScreen: React.FC = () => {
           </ScrollView>
 
           {/* Payment method choice (shown only when UPI is configured and no Razorpay active) */}
-          {settings.upiId && !(activeGateway?.active && activeGateway?.isIntegrated) && (
+          {(activeGateway?.upiId || settings.upiId) && !(activeGateway?.active && activeGateway?.isIntegrated) && (
             <View style={styles.payChoiceRow}>
               <TouchableOpacity
                 style={[styles.payChoiceBtn, payChoice === 'counter' && styles.payChoiceBtnActive]}

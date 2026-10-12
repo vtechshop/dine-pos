@@ -4,6 +4,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import Order from '../models/Order';
 import Payment from '../models/Payment';
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
+import Settings from '../models/Settings';
 import GatewayFactory from '../services/payment/GatewayFactory';
 import { ensureValidOAuthConfig } from '../services/payment/razorpayTokenRefresh';
 import { io } from '../server';
@@ -39,13 +40,14 @@ router.get('/gateway/:hotelId', async (req: Request, res: Response) => {
     return res.status(400).json({ message: 'Invalid hotelId' });
   }
   try {
-    const config = await PaymentGatewayConfig.findOne({
-      hotelId:   new mongoose.Types.ObjectId(hotelId),
-      isActive:  true,
-      isDeleted: false,
-    }).lean();
+    const hotelObjId = new mongoose.Types.ObjectId(hotelId);
+    const [config, settingsDoc] = await Promise.all([
+      PaymentGatewayConfig.findOne({ hotelId: hotelObjId, isActive: true, isDeleted: false }).lean(),
+      Settings.findOne({ hotelId: hotelObjId }).select('upiId').lean(),
+    ]);
+    const upiId: string = (settingsDoc as any)?.upiId || '';
 
-    if (!config) return res.json({ active: false });
+    if (!config) return res.json({ active: false, upiId });
 
     return res.json({
       active:       true,
@@ -54,6 +56,7 @@ router.get('/gateway/:hotelId', async (req: Request, res: Response) => {
         config.gatewayType as Parameters<typeof GatewayFactory.isRegistered>[0],
       ),
       displayName: config.displayName,
+      upiId,
     });
   } catch {
     return res.status(500).json({ message: 'Failed to fetch gateway info' });
