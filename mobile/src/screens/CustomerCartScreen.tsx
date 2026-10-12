@@ -739,86 +739,81 @@ const CustomerCartScreen: React.FC = () => {
             </View>
           </ScrollView>
 
-          {/* Payment method choice (shown only when UPI is configured and no Razorpay active) */}
-          {(activeGateway?.upiId || settings.upiId) && !(activeGateway?.active && activeGateway?.isIntegrated) && (
-            <View style={styles.payChoiceRow}>
-              <TouchableOpacity
-                style={[styles.payChoiceBtn, payChoice === 'counter' && styles.payChoiceBtnActive]}
-                onPress={() => setPayChoice('counter')}
-                activeOpacity={0.8}
-              >
-                <MaterialIcons name="payments" size={16} color={payChoice === 'counter' ? Colors.white : Colors.textSecondary} />
-                <Text style={[styles.payChoiceText, payChoice === 'counter' && styles.payChoiceTextActive]}>Pay at Counter</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.payChoiceBtn, payChoice === 'upi_qr' && styles.payChoiceBtnUpi]}
-                onPress={() => setPayChoice('upi_qr')}
-                activeOpacity={0.8}
-              >
-                <MaterialIcons name="qr-code" size={16} color={payChoice === 'upi_qr' ? Colors.white : Colors.textSecondary} />
-                <Text style={[styles.payChoiceText, payChoice === 'upi_qr' && styles.payChoiceTextActive]}>Pay via UPI</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+          {/* payChoiceRow removed — QR uses Razorpay only; kiosk has dedicated Pay via UPI / Pay at Counter buttons */}
 
           {/* Place order button(s) */}
           <View style={[styles.bottomBar, { paddingBottom: Spacing.md + bottom }]}>
-            {activeGateway?.active && activeGateway?.isIntegrated && activeGateway?.gatewayType === 'razorpay' && (
+            {isKioskDevice ? (
+              /* ── Kiosk: Pay via UPI (Razorpay) + Pay at Counter (cash) ── */
+              <>
+                {activeGateway?.active && activeGateway?.isIntegrated && activeGateway?.gatewayType === 'razorpay' && (
+                  <TouchableOpacity
+                    style={[styles.placeBtn, styles.rzpBtn, (razorpayBusy || placing) && { opacity: 0.7 }]}
+                    onPress={handleRazorpayPayment}
+                    disabled={razorpayBusy || placing}
+                    activeOpacity={0.88}
+                  >
+                    {razorpayBusy ? (
+                      <ActivityIndicator size="small" color={Colors.white} />
+                    ) : (
+                      <>
+                        <View>
+                          <Text style={styles.placeBtnText}>Pay via UPI</Text>
+                          <Text style={styles.placeBtnSub}>Scan & pay {fmt(cart.grandTotal)}</Text>
+                        </View>
+                        <MaterialIcons name="qr-code-2" size={22} color={Colors.white} />
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[
+                    styles.placeBtn,
+                    activeGateway?.active && activeGateway?.isIntegrated && styles.placeBtnSecondary,
+                    placing && { opacity: 0.7 },
+                  ]}
+                  onPress={handlePlaceOrder}
+                  disabled={placing || razorpayBusy}
+                  activeOpacity={0.88}
+                >
+                  {placing ? (
+                    <ActivityIndicator size="small" color={Colors.white} />
+                  ) : (
+                    <>
+                      <View>
+                        <Text style={[styles.placeBtnText, activeGateway?.active && activeGateway?.isIntegrated && styles.placeBtnTextDark]}>
+                          Pay at Counter
+                        </Text>
+                        <Text style={[styles.placeBtnSub, activeGateway?.active && activeGateway?.isIntegrated && styles.placeBtnTextDark]}>
+                          Pay {fmt(cart.grandTotal)} to staff
+                        </Text>
+                      </View>
+                      <MaterialIcons name="payments" size={22} color={activeGateway?.active && activeGateway?.isIntegrated ? Colors.text : Colors.white} />
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              /* ── QR scan: single Place Order button → Razorpay ── */
               <TouchableOpacity
                 style={[styles.placeBtn, styles.rzpBtn, (razorpayBusy || placing) && { opacity: 0.7 }]}
                 onPress={handleRazorpayPayment}
                 disabled={razorpayBusy || placing}
                 activeOpacity={0.88}
               >
-                {razorpayBusy ? (
+                {razorpayBusy || placing ? (
                   <ActivityIndicator size="small" color={Colors.white} />
                 ) : (
                   <>
                     <View>
-                      <Text style={styles.placeBtnText}>Pay Online</Text>
-                      <Text style={styles.placeBtnSub}>UPI · Cards · {fmt(cart.grandTotal)}</Text>
+                      <Text style={styles.placeBtnText}>Place Order</Text>
+                      <Text style={styles.placeBtnSub}>Pay {fmt(cart.grandTotal)} securely</Text>
                     </View>
-                    <MaterialIcons name="payment" size={22} color={Colors.white} />
+                    <MaterialIcons name="arrow-forward" size={22} color={Colors.white} />
                   </>
                 )}
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={[
-                styles.placeBtn,
-                activeGateway?.active && activeGateway?.isIntegrated && styles.placeBtnSecondary,
-                placing && { opacity: 0.7 },
-              ]}
-              onPress={handlePlaceOrder}
-              disabled={placing || razorpayBusy}
-              activeOpacity={0.88}
-            >
-              {placing ? (
-                <ActivityIndicator size="small" color={Colors.white} />
-              ) : (
-                <>
-                  <View>
-                    <Text style={[
-                      styles.placeBtnText,
-                      activeGateway?.active && activeGateway?.isIntegrated && styles.placeBtnTextDark,
-                    ]}>Place Order</Text>
-                    <Text style={[
-                      styles.placeBtnSub,
-                      activeGateway?.active && activeGateway?.isIntegrated && styles.placeBtnTextDark,
-                    ]}>
-                      {payChoice === 'upi_qr'
-                        ? `Scan QR & pay ${fmt(cart.grandTotal)} via UPI`
-                        : `Pay ${fmt(cart.grandTotal)} at counter`}
-                    </Text>
-                  </View>
-                  <MaterialIcons
-                    name="arrow-forward"
-                    size={22}
-                    color={activeGateway?.active && activeGateway?.isIntegrated ? Colors.text : Colors.white}
-                  />
-                </>
-              )}
-            </TouchableOpacity>
           </View>
         </>
       )}
