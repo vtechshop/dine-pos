@@ -151,6 +151,17 @@ const CustomerCartScreen: React.FC = () => {
     if (!cart.customerName.trim()) { setNameError(true); return; }
     if (cart.customerPhone.replace(/\D/g, '').length < 10) { setPhoneError(true); return; }
 
+    // Guard: prevent the API call if Razorpay is not configured for this hotel
+    if (!activeGateway?.active || !activeGateway?.isIntegrated || activeGateway?.gatewayType !== 'razorpay') {
+      showAlert(
+        'Payment Not Available',
+        isKioskDevice
+          ? 'Online payment is not configured. Please use "Pay at Counter".'
+          : 'Online payment is not available at this restaurant. Please contact staff.',
+      );
+      return;
+    }
+
     const hotelId = await getEffectiveHotelId();
     if (!hotelId) { showAlert('Error', 'Hotel not found. Scan the QR code again.'); return; }
 
@@ -235,7 +246,9 @@ const CustomerCartScreen: React.FC = () => {
         paymentMethod: 'cash' as const,
       });
     } catch (e: any) {
-      if (e?.code !== 'USER_CANCEL') {
+      if (e?.code === 'NO_PAYMENT_GATEWAY') {
+        showAlert('Payment Not Available', e?.message ?? 'Online payment is not configured. Please pay at the counter.');
+      } else if (e?.code !== 'USER_CANCEL') {
         showAlert('Payment Failed', e?.description ?? e?.message ?? 'Payment could not be completed. Please try again.');
       }
     } finally {
