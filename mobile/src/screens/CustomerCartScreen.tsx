@@ -15,6 +15,7 @@ import { showAlert } from '../utils/alert';
 import { applyCloudinaryTransform } from '../utils/cloudinary';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
+import { useAuth } from '../context/AuthContext';
 import * as api from '../services/api';
 import { getEffectiveHotelId, enqueueCustomerOrder, getSocketUrl, getKioskHotelId } from '../services/api';
 import type { PublicGatewayInfo } from '../services/api';
@@ -49,6 +50,7 @@ const CustomerCartScreen: React.FC = () => {
   const { bottom } = useSafeAreaInsets();
   const { cart, increment, decrement, removeItem, setCustomer, setPhone, setTable, setNotes, setParcel, clearCart, itemCount } = useCart();
   const { settings } = useSettings();
+  const { isLoggedIn } = useAuth();
   const navigation = useNavigation<NavProp>();
   const [placing, setPlacing] = useState(false);
   const [payChoice, setPayChoice] = useState<'counter' | 'upi_qr'>('counter');
@@ -155,7 +157,7 @@ const CustomerCartScreen: React.FC = () => {
     if (!activeGateway?.active || !activeGateway?.isIntegrated || activeGateway?.gatewayType !== 'razorpay') {
       showAlert(
         'Payment Not Available',
-        isKioskDevice
+        (isKioskDevice || isLoggedIn)
           ? 'Online payment is not configured. Please use "Pay at Counter".'
           : 'Online payment is not available at this restaurant. Please contact staff.',
       );
@@ -170,7 +172,7 @@ const CustomerCartScreen: React.FC = () => {
     const orderPayload = {
       hotel:         hotelId,
       source:        'dine-in' as const,
-      orderSource:   isKioskDevice ? 'kiosk' : 'qr',
+      orderSource:   (isKioskDevice || isLoggedIn) ? 'kiosk' : 'qr',
       items:         cart.items.map(item => ({
         product:           item.product._id,
         productName:       item.product.name,
@@ -269,7 +271,7 @@ const CustomerCartScreen: React.FC = () => {
     const orderPayload = {
       hotel: hotelId,
       source: 'dine-in' as const,
-      orderSource: isKioskDevice ? 'kiosk' : 'dine-in',
+      orderSource: (isKioskDevice || isLoggedIn) ? 'kiosk' : 'dine-in',
       items: cart.items.map(item => ({
         product:           item.product._id,
         productName:       item.product.name,
@@ -754,8 +756,8 @@ const CustomerCartScreen: React.FC = () => {
 
           {/* Payment buttons */}
           <View style={[styles.bottomBar, { paddingBottom: Spacing.md + bottom }]}>
-            {isKioskDevice ? (
-              /* ── Kiosk: Pay via UPI (if Razorpay configured) + Pay at Counter (always) ── */
+            {(isKioskDevice || isLoggedIn) ? (
+              /* ── Kiosk / staff login: Pay via UPI (if Razorpay configured) + Pay at Counter (always) ── */
               <>
                 {activeGateway?.active && activeGateway?.isIntegrated && activeGateway?.gatewayType === 'razorpay' && (
                   <TouchableOpacity
