@@ -16,7 +16,7 @@ export const applyCloudinaryTransform = (
   ) {
     return url.replace(
       '/upload/',
-      `/upload/w_${width},h_${height},c_fill,g_subject,q_auto,f_auto/`,
+      `/upload/w_${width},h_${height},c_fill,g_auto,q_auto,f_auto/`,
     );
   }
   return url;

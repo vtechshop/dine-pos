@@ -19,6 +19,13 @@ import { showAlert } from '../utils/alert';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
+// Image with automatic placeholder fallback on load error
+const ProductImage: React.FC<{ uri: string; imgStyle: any; placeholderStyle: any; iconSize: number }> = ({ uri, imgStyle, placeholderStyle, iconSize }) => {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <View style={placeholderStyle}><MaterialIcons name="fastfood" size={iconSize} color={Colors.textMuted} /></View>;
+  return <Image source={{ uri }} style={imgStyle} resizeMode="cover" onError={() => setFailed(true)} />;
+};
+
 const CustomerMenuScreen: React.FC = () => {
   const { addItem, increment, decrement, cart, itemCount, clearCart } = useCart();
   const { settings } = useSettings();
@@ -209,7 +216,12 @@ const CustomerMenuScreen: React.FC = () => {
         {/* Image */}
         <View style={styles.prodImgWrap}>
           {item.image && item.imageStatus !== 'placeholder'
-            ? <Image source={{ uri: applyCloudinaryTransform(item.image, 600, 600) ?? item.image }} style={[styles.prodImg, { height: IMG_H }]} resizeMode="cover" />
+            ? <ProductImage
+                uri={applyCloudinaryTransform(item.image, 600, 600) ?? item.image}
+                imgStyle={[styles.prodImg, { height: IMG_H }]}
+                placeholderStyle={[styles.prodImgPlaceholder, { height: IMG_H }]}
+                iconSize={Math.round(IMG_H * 0.28)}
+              />
             : <View style={[styles.prodImgPlaceholder, { height: IMG_H }]}><MaterialIcons name="fastfood" size={Math.round(IMG_H * 0.28)} color={Colors.textMuted} /></View>
           }
           {/* Non-veg warning badge only */}
@@ -292,7 +304,12 @@ const CustomerMenuScreen: React.FC = () => {
 
             {/* Product image */}
             {item.image && item.imageStatus !== 'placeholder'
-              ? <Image source={{ uri: applyCloudinaryTransform(item.image, 600, 600) ?? item.image }} style={styles.modalImage} resizeMode="contain" />
+              ? <ProductImage
+                  uri={applyCloudinaryTransform(item.image, 600, 600) ?? item.image}
+                  imgStyle={styles.modalImage}
+                  placeholderStyle={styles.modalImagePlaceholder}
+                  iconSize={64}
+                />
               : (
                 <View style={styles.modalImagePlaceholder}>
                   <MaterialIcons name="fastfood" size={64} color={Colors.textMuted} />
