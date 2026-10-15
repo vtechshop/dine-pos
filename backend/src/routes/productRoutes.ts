@@ -12,6 +12,14 @@ import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 import { makeRateLimiter } from '../utils/rateLimiter';
 import { ipKeyGenerator } from 'express-rate-limit';
+import { getRedisClient } from '../config/redis';
+
+const PRODUCT_CACHE_TTL = 300; // 5 minutes
+const productCacheKey = (hotelId: string) => `menu:products:${hotelId}`;
+
+const invalidateProductCache = (hotelId: string) => {
+  getRedisClient()?.del(productCacheKey(hotelId)).catch(() => {});
+};
 
 // Distributed rate limiter for AI image generation: 5 req/hotel/minute, Redis-backed
 const imgGenRateLimiter = makeRateLimiter({
@@ -30,6 +38,18 @@ router.use(authMiddleware);
 // For branches with multiBranch enabled: returns org products filtered by BranchProductConfig,
 // with branch-specific pricing applied. Standalone hotels are unaffected.
 router.get('/', async (req: AuthRequest, res: Response) => {
+  const hasFilter = req.query.search || req.query.category || req.query.kitchenStation || req.query.available;
+  const redis = getRedisClient();
+  const cacheKey = productCacheKey(req.hotelId!);
+
+  // Serve from Redis cache when no filters applied (billing screen full-load)
+  if (!hasFilter && redis) {
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) return res.json(JSON.parse(cached));
+    } catch { /* cache miss — fall through to DB */ }
+  }
+
   try {
     // ── Branch catalog overlay ────────────────────────────────────────────────
     // Only activate when the authenticated hotel is a branch (parentHotelId set)
@@ -95,6 +115,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         return (a.name as string).localeCompare(b.name as string);
       });
 
+      if (!hasFilter && redis) redis.setex(cacheKey, PRODUCT_CACHE_TTL, JSON.stringify(products)).catch(() => {});
       return res.json(products);
     }
 
@@ -114,6 +135,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       .populate({ path: 'modifierGroups', match: { isDeleted: false } })
       .populate({ path: 'recipe.ingredient', select: 'name unit costPerUnit' })
       .sort({ name: 1 });
+
+    if (!hasFilter && redis) redis.setex(cacheKey, PRODUCT_CACHE_TTL, JSON.stringify(products)).catch(() => {});
     res.json(products);
   } catch (error) {
     sendError(res, 500, 'Server error', error);
@@ -272,6 +295,7 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
     await product.save();
     const populated = await product.populate('category', 'name color');
     logAudit(req, 'product.created', 'product', String((product as any)._id), { name: (product as any).name });
+    invalidateProductCache(req.hotelId!);
     res.status(201).json(populated);
   } catch (error) {
     sendError(res, 400, 'Invalid data', error);
@@ -295,6 +319,7 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     const meta: Record<string, unknown> = { name: (product as any).name };
     if (req.body.price !== undefined) meta.newPrice = (product as any).price;
     logAudit(req, 'product.updated', 'product', req.params.id, meta);
+    invalidateProductCache(req.hotelId!);
     res.json(product);
   } catch (error) {
     sendError(res, 400, 'Invalid data', error);
@@ -311,6 +336,7 @@ router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     );
     if (!product) return res.status(404).json({ message: 'Product not found' });
     logAudit(req, 'product.deleted', 'product', req.params.id, { name: (product as any).name });
+    invalidateProductCache(req.hotelId!);
     res.json({ message: 'Product deleted' });
   } catch (error) {
     sendError(res, 500, 'Server error', error);

@@ -6,16 +6,32 @@ import Hotel from '../models/Hotel';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
+import { getRedisClient } from '../config/redis';
 
 const router = Router();
 
 router.use(authMiddleware);
-// requireAdmin is applied per write-route only — all authenticated roles can read categories
+
+const CATEGORY_CACHE_TTL = 300; // 5 minutes
+const categoryCacheKey = (hotelId: string) => `menu:categories:${hotelId}`;
+const invalidateCategoryCache = (hotelId: string) => {
+  getRedisClient()?.del(categoryCacheKey(hotelId)).catch(() => {});
+};
 
 // GET all categories for this hotel
 // For multiBranch branches: fetches org categories and applies CategoryConfig overlay.
 // Default semantics: no config row = category visible; enabled:false = hidden.
 router.get('/', async (req: AuthRequest, res: Response) => {
+  const redis = getRedisClient();
+  const cacheKey = categoryCacheKey(req.hotelId!);
+
+  if (redis) {
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) return res.json(JSON.parse(cached));
+    } catch { /* cache miss — fall through */ }
+  }
+
   try {
     // Check if caller is a multiBranch branch
     const hotel = await Hotel.findById(req.hotelId)
@@ -38,6 +54,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
       const disabledIds = new Set(disabledConfigs.map(c => c.categoryId.toString()));
       const visible = categories.filter(cat => !disabledIds.has(cat._id.toString()));
+      if (redis) redis.setex(cacheKey, CATEGORY_CACHE_TTL, JSON.stringify(visible)).catch(() => {});
       res.json(visible);
       return;
     }
@@ -46,7 +63,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       hotelId: req.hotelId,
       isActive: true,
       isDeleted: false,
-    }).sort({ sortOrder: 1 });
+    }).sort({ sortOrder: 1 }).lean();
+
+    if (redis) redis.setex(cacheKey, CATEGORY_CACHE_TTL, JSON.stringify(categories)).catch(() => {});
     res.json(categories);
   } catch (error) {
     sendError(res, 500, 'Failed to fetch categories', error);
@@ -70,6 +89,7 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response) => {
     const category = new Category({ ...req.body, hotelId: req.hotelId });
     await category.save();
     logAudit(req, 'category.created', 'category', String((category as any)._id), { name: (category as any).name });
+    invalidateCategoryCache(req.hotelId!);
     res.status(201).json(category);
   } catch (error) {
     sendError(res, 400, 'Invalid data', error);
@@ -93,6 +113,7 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     );
     if (!category) return res.status(404).json({ message: 'Category not found' });
     logAudit(req, 'category.updated', 'category', req.params.id, { name: (category as any).name });
+    invalidateCategoryCache(req.hotelId!);
     res.json(category);
   } catch (error) {
     sendError(res, 400, 'Invalid data', error);
@@ -109,6 +130,7 @@ router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     );
     if (!category) return res.status(404).json({ message: 'Category not found' });
     logAudit(req, 'category.deleted', 'category', req.params.id, { name: (category as any).name });
+    invalidateCategoryCache(req.hotelId!);
     res.json({ message: 'Category deleted' });
   } catch (error) {
     sendError(res, 500, 'Failed to delete category', error);

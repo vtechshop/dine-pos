@@ -168,8 +168,10 @@ const BillingScreen: React.FC = () => {
   const fmt = (n: number) => `${cur}${n.toFixed(2)}`;
   const isMaterialIcon = (name?: string) => !!name && /^[a-z0-9-_]+$/.test(name);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const productsLoadedRef = useRef(false);
+
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const hotelId = getAuthCache()?.hotelId ?? '';
     try {
       const [cats, prods, tbls] = await Promise.all([api.getCategories(), api.getProducts(), api.getTables()]);
@@ -182,6 +184,7 @@ const BillingScreen: React.FC = () => {
       saveProducts(hotelId, prods);
       saveTables(tbls.filter(t => t.status !== 'inactive')); // H12: persist tables for offline use
       setServedFromCache(false);
+      productsLoadedRef.current = true;
     } catch {
       // Offline: load from SQLite cache
       const cachedCats  = getLocalCategories(hotelId);
@@ -194,14 +197,17 @@ const BillingScreen: React.FC = () => {
         setSelectedCat(null);
         setServedFromCache(true);
         setLastSynced(getSyncMeta('last_sync'));
-      } else {
+        productsLoadedRef.current = true;
+      } else if (!productsLoadedRef.current && !silent) {
         showAlert('Offline', 'No cached menu data. Connect to the internet to load products.');
       }
       setTables(cachedTbls.filter(t => t.status !== 'inactive')); // H12: always restore tables
-    } finally { setLoading(false); }
+    } finally { if (!silent) setLoading(false); }
   }, []);
 
-  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
+  useFocusEffect(useCallback(() => {
+    fetchData(productsLoadedRef.current);
+  }, [fetchData]));
 
   const handleCategorySelect = useCallback((catId: string | null) => {
     setSelectedCat(catId);
