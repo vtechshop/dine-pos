@@ -60,6 +60,8 @@ const CustomerCartScreen: React.FC = () => {
   const [activeGateway, setActiveGateway] = useState<PublicGatewayInfo | null>(null);
   const [razorpayBusy, setRazorpayBusy] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const detailsSectionY = useRef(0);
   const [countdown, setCountdown] = useState(6);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [liveStatus, setLiveStatus] = useState<'received' | 'preparing' | 'ready' | 'served'>('received');
@@ -597,7 +599,7 @@ const CustomerCartScreen: React.FC = () => {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior="padding"
     >
       <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
 
@@ -631,7 +633,7 @@ const CustomerCartScreen: React.FC = () => {
         </View>
       ) : (
         <>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView ref={scrollViewRef} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* Items */}
             <View style={styles.section}>
               {cart.items.map(renderItem)}
@@ -661,7 +663,7 @@ const CustomerCartScreen: React.FC = () => {
             </View>
 
             {/* Your Details */}
-            <View style={styles.section}>
+            <View style={styles.section} onLayout={e => { detailsSectionY.current = e.nativeEvent.layout.y; }}>
               <Text style={styles.sectionTitle}>Your Details</Text>
 
               {/* Name — required */}
@@ -677,7 +679,7 @@ const CustomerCartScreen: React.FC = () => {
                   placeholderTextColor={nameError ? Colors.danger + '99' : Colors.textMuted}
                   value={cart.customerName}
                   onChangeText={(v) => { setCustomer(v); if (v.trim()) setNameError(false); }}
-                  autoFocus={!cart.customerName}
+                  onFocus={() => scrollViewRef.current?.scrollTo({ y: detailsSectionY.current, animated: true })}
                 />
               </View>
               {nameError && (
@@ -699,6 +701,7 @@ const CustomerCartScreen: React.FC = () => {
                   onChangeText={v => { setPhone(v); if (v.replace(/\D/g, '').length >= 10) setPhoneError(false); }}
                   keyboardType="phone-pad"
                   maxLength={15}
+                  onFocus={() => scrollViewRef.current?.scrollTo({ y: detailsSectionY.current, animated: true })}
                 />
               </View>
               {phoneError && (
