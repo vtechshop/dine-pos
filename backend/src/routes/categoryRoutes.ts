@@ -6,31 +6,22 @@ import Hotel from '../models/Hotel';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
-import { getRedisClient } from '../config/redis';
+import { menuCacheGet, menuCacheSet, menuCacheDel } from '../utils/menuCache';
 
 const router = Router();
 
 router.use(authMiddleware);
 
-const CATEGORY_CACHE_TTL = 300; // 5 minutes
-const categoryCacheKey = (hotelId: string) => `menu:categories:${hotelId}`;
-const invalidateCategoryCache = (hotelId: string) => {
-  getRedisClient()?.del(categoryCacheKey(hotelId)).catch(() => {});
-};
+const categoryCacheKey     = (hotelId: string) => `categories:${hotelId}`;
+const invalidateCategoryCache = (hotelId: string) => menuCacheDel(categoryCacheKey(hotelId));
 
 // GET all categories for this hotel
 // For multiBranch branches: fetches org categories and applies CategoryConfig overlay.
 // Default semantics: no config row = category visible; enabled:false = hidden.
 router.get('/', async (req: AuthRequest, res: Response) => {
-  const redis = getRedisClient();
   const cacheKey = categoryCacheKey(req.hotelId!);
-
-  if (redis) {
-    try {
-      const cached = await redis.get(cacheKey);
-      if (cached) return res.json(JSON.parse(cached));
-    } catch { /* cache miss — fall through */ }
-  }
+  const cached = menuCacheGet(cacheKey);
+  if (cached) return res.json(cached);
 
   try {
     // Check if caller is a multiBranch branch
@@ -54,9 +45,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
       const disabledIds = new Set(disabledConfigs.map(c => c.categoryId.toString()));
       const visible = categories.filter(cat => !disabledIds.has(cat._id.toString()));
-      if (redis) {
-        try { await redis.setex(cacheKey, CATEGORY_CACHE_TTL, JSON.stringify(visible)); } catch { /* non-critical */ }
-      }
+      menuCacheSet(cacheKey, visible);
       res.json(visible);
       return;
     }
@@ -67,9 +56,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       isDeleted: false,
     }).sort({ sortOrder: 1 }).lean();
 
-    if (redis) {
-      try { await redis.setex(cacheKey, CATEGORY_CACHE_TTL, JSON.stringify(categories)); } catch { /* non-critical */ }
-    }
+    menuCacheSet(cacheKey, categories);
     res.json(categories);
   } catch (error) {
     sendError(res, 500, 'Failed to fetch categories', error);

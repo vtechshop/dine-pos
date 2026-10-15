@@ -12,14 +12,10 @@ import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 import { makeRateLimiter } from '../utils/rateLimiter';
 import { ipKeyGenerator } from 'express-rate-limit';
-import { getRedisClient } from '../config/redis';
+import { menuCacheGet, menuCacheSet, menuCacheDel } from '../utils/menuCache';
 
-const PRODUCT_CACHE_TTL = 300; // 5 minutes
-const productCacheKey = (hotelId: string) => `menu:products:${hotelId}`;
-
-const invalidateProductCache = (hotelId: string) => {
-  getRedisClient()?.del(productCacheKey(hotelId)).catch(() => {});
-};
+const productCacheKey        = (hotelId: string) => `products:${hotelId}`;
+const invalidateProductCache = (hotelId: string) => menuCacheDel(productCacheKey(hotelId));
 
 // Distributed rate limiter for AI image generation: 5 req/hotel/minute, Redis-backed
 const imgGenRateLimiter = makeRateLimiter({
@@ -39,15 +35,12 @@ router.use(authMiddleware);
 // with branch-specific pricing applied. Standalone hotels are unaffected.
 router.get('/', async (req: AuthRequest, res: Response) => {
   const hasFilter = req.query.search || req.query.category || req.query.kitchenStation || req.query.available;
-  const redis = getRedisClient();
   const cacheKey = productCacheKey(req.hotelId!);
 
-  // Serve from Redis cache when no filters applied (billing screen full-load)
-  if (!hasFilter && redis) {
-    try {
-      const cached = await redis.get(cacheKey);
-      if (cached) return res.json(JSON.parse(cached));
-    } catch { /* cache miss — fall through to DB */ }
+  // Serve from in-process cache for unfiltered requests (billing screen full-load)
+  if (!hasFilter) {
+    const cached = menuCacheGet(cacheKey);
+    if (cached) return res.json(cached);
   }
 
   try {
@@ -115,9 +108,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         return (a.name as string).localeCompare(b.name as string);
       });
 
-      if (!hasFilter && redis) {
-        try { await redis.setex(cacheKey, PRODUCT_CACHE_TTL, JSON.stringify(products)); } catch { /* non-critical */ }
-      }
+      if (!hasFilter) menuCacheSet(cacheKey, products);
       return res.json(products);
     }
 
@@ -139,9 +130,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       .sort({ name: 1 })
       .lean();
 
-    if (!hasFilter && redis) {
-      try { await redis.setex(cacheKey, PRODUCT_CACHE_TTL, JSON.stringify(products)); } catch { /* non-critical */ }
-    }
+    if (!hasFilter) menuCacheSet(cacheKey, products);
     res.json(products);
   } catch (error) {
     sendError(res, 500, 'Server error', error);
