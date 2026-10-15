@@ -473,6 +473,27 @@ router.get('/kitchen', requireKitchenOrAdmin, async (req: AuthRequest, res: Resp
   }
 });
 
+// GET /api/orders/waiter/table-summary — active orders grouped by table (for waiter home screen)
+router.get('/waiter/table-summary', requireWaiterOrAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const orders = await Order.find(
+      { hotelId: req.hotelId, status: { $in: ['pending', 'preparing', 'ready'] }, isParcel: false },
+      { tableNumber: 1, status: 1 },
+    ).lean();
+    const grouped: Record<string, { tableNumber: string; orderCount: number; hasReady: boolean }> = {};
+    for (const o of orders as any[]) {
+      const t = String(o.tableNumber || '');
+      if (!t) continue;
+      if (!grouped[t]) grouped[t] = { tableNumber: t, orderCount: 0, hasReady: false };
+      grouped[t].orderCount++;
+      if (o.status === 'ready') grouped[t].hasReady = true;
+    }
+    res.json(Object.values(grouped));
+  } catch (err) {
+    sendError(res, 500, 'Failed to load table summary', err);
+  }
+});
+
 // GET /api/orders/waiter — ready orders waiting to be served, oldest first
 router.get('/waiter', requireWaiterOrAdmin, async (req: AuthRequest, res: Response) => {
   try {

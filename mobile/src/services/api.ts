@@ -1521,6 +1521,50 @@ export interface WaiterOrder {
   items: WaiterOrderItem[];
 }
 
+export const getWaiterTables = async (): Promise<Table[]> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getWaiterToken()]);
+  const res = await staffFetch(`${base}/tables`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return [];
+  return res.json();
+};
+
+export interface WaiterTableSummary { tableNumber: string; orderCount: number; hasReady: boolean }
+
+export const getWaiterTableSummary = async (): Promise<WaiterTableSummary[]> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getWaiterToken()]);
+  const res = await staffFetch(`${base}/orders/waiter/table-summary`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return [];
+  return res.json();
+};
+
+export interface WaiterOrderPayload {
+  tableNumber: string;
+  customerName: string;
+  customerPhone: string;
+  notes?: string;
+  items: Array<{
+    product: string;
+    productName: string;
+    quantity: number;
+    price: number;
+    taxPercent: number;
+    selectedModifiers?: any[];
+    variantId?: string;
+  }>;
+}
+
+export const createWaiterOrder = async (payload: WaiterOrderPayload): Promise<{ _id: string; orderNumber: string }> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getWaiterToken()]);
+  const res = await staffFetch(`${base}/orders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ ...payload, paymentMethod: 'counter', isParcel: false, orderSource: 'waiter' }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error((data as any).message || 'Failed to create order');
+  return data;
+};
+
 export const getWaiterOrders = async (): Promise<WaiterOrder[]> => {
   const [base, token] = await Promise.all([getBaseUrl(), getWaiterToken()]);
   const res = await staffFetch(`${base}/orders/waiter`, {

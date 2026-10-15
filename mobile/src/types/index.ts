@@ -918,6 +918,8 @@ export type RootStackParamList = {
   OnlineOrders: undefined;
   WaiterLogin: undefined;
   WaiterDisplay: undefined;
+  WaiterHome: undefined;
+  WaiterTakeOrder: { tableNumber: string; tableName?: string };
   WaiterManagement: undefined;
   CashierLogin: undefined;
   CashierDashboard: undefined;

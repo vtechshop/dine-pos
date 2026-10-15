@@ -44,6 +44,8 @@ import KitchenDisplayScreen from '../screens/KitchenDisplayScreen';
 import KitchenQueueScreen from '../screens/KitchenQueueScreen';
 import WaiterLoginScreen from '../screens/WaiterLoginScreen';
 import WaiterDisplayScreen from '../screens/WaiterDisplayScreen';
+import WaiterHomeScreen from '../screens/WaiterHomeScreen';
+import WaiterTakeOrderScreen from '../screens/WaiterTakeOrderScreen';
 import WaiterManagementScreen from '../screens/WaiterManagementScreen';
 import CashierLoginScreen from '../screens/CashierLoginScreen';
 import CashierDashboardScreen from '../screens/CashierDashboardScreen';
@@ -305,6 +307,8 @@ const AppNavigator = () => {
             <Stack.Screen name="KitchenDisplay"       component={(p: any) => <ErrorBoundary><KitchenDisplayScreen {...p} /></ErrorBoundary>}       options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="WaiterLogin"          component={WaiterLoginScreen}          options={{ contentStyle: safeTop }} />
             <Stack.Screen name="WaiterDisplay"        component={(p: any) => <ErrorBoundary><WaiterDisplayScreen {...p} /></ErrorBoundary>}        options={{ contentStyle: safeTop, gestureEnabled: false }} />
+            <Stack.Screen name="WaiterHome"           component={(p: any) => <ErrorBoundary><WaiterHomeScreen {...p} /></ErrorBoundary>}           options={{ contentStyle: safeTop, gestureEnabled: false }} />
+            <Stack.Screen name="WaiterTakeOrder"      component={(p: any) => <ErrorBoundary><WaiterTakeOrderScreen {...p} /></ErrorBoundary>}      options={{ contentStyle: safeTop }} />
             <Stack.Screen name="CashierLogin"         component={CashierLoginScreen}         options={{ contentStyle: safeTop }} />
             <Stack.Screen name="CashierDashboard"     component={(p: any) => <ErrorBoundary><CashierDashboardScreen {...p} /></ErrorBoundary>}     options={{ contentStyle: safeTop, gestureEnabled: false }} />
             <Stack.Screen name="KitchenQueue"         component={(p: any) => <ErrorBoundary><KitchenQueueScreen {...p} /></ErrorBoundary>}         options={{ contentStyle: safeTop }} />

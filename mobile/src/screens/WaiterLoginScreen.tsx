@@ -50,7 +50,7 @@ const WaiterLoginScreen: React.FC<Props> = ({ navigation }) => {
       const { token, waiter } = await waiterLogin(hotelId, employeeCode.trim().toUpperCase(), pin);
       await saveWaiterToken(token);
       await AsyncStorage.setItem(WAITER_PROFILE_KEY, JSON.stringify(waiter));
-      navigation.replace('WaiterDisplay');
+      navigation.replace('WaiterHome');
     } catch (e: any) {
       setError(e.message || 'Login failed. Check your code and PIN.');
     } finally {
