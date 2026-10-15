@@ -54,7 +54,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
       const disabledIds = new Set(disabledConfigs.map(c => c.categoryId.toString()));
       const visible = categories.filter(cat => !disabledIds.has(cat._id.toString()));
-      if (redis) redis.setex(cacheKey, CATEGORY_CACHE_TTL, JSON.stringify(visible)).catch(() => {});
+      if (redis) {
+        try { await redis.setex(cacheKey, CATEGORY_CACHE_TTL, JSON.stringify(visible)); } catch { /* non-critical */ }
+      }
       res.json(visible);
       return;
     }
@@ -65,7 +67,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       isDeleted: false,
     }).sort({ sortOrder: 1 }).lean();
 
-    if (redis) redis.setex(cacheKey, CATEGORY_CACHE_TTL, JSON.stringify(categories)).catch(() => {});
+    if (redis) {
+      try { await redis.setex(cacheKey, CATEGORY_CACHE_TTL, JSON.stringify(categories)); } catch { /* non-critical */ }
+    }
     res.json(categories);
   } catch (error) {
     sendError(res, 500, 'Failed to fetch categories', error);

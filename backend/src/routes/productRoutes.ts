@@ -115,7 +115,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         return (a.name as string).localeCompare(b.name as string);
       });
 
-      if (!hasFilter && redis) redis.setex(cacheKey, PRODUCT_CACHE_TTL, JSON.stringify(products)).catch(() => {});
+      if (!hasFilter && redis) {
+        try { await redis.setex(cacheKey, PRODUCT_CACHE_TTL, JSON.stringify(products)); } catch { /* non-critical */ }
+      }
       return res.json(products);
     }
 
@@ -134,9 +136,12 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       .populate('kitchenStation', 'name isActive')
       .populate({ path: 'modifierGroups', match: { isDeleted: false } })
       .populate({ path: 'recipe.ingredient', select: 'name unit costPerUnit' })
-      .sort({ name: 1 });
+      .sort({ name: 1 })
+      .lean();
 
-    if (!hasFilter && redis) redis.setex(cacheKey, PRODUCT_CACHE_TTL, JSON.stringify(products)).catch(() => {});
+    if (!hasFilter && redis) {
+      try { await redis.setex(cacheKey, PRODUCT_CACHE_TTL, JSON.stringify(products)); } catch { /* non-critical */ }
+    }
     res.json(products);
   } catch (error) {
     sendError(res, 500, 'Server error', error);
