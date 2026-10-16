@@ -205,6 +205,12 @@ const BillingScreen: React.FC = () => {
     } finally { if (!silent) setLoading(false); }
   }, []);
 
+  // If products are already in state (e.g. after OTA update or navigation re-mount),
+  // mark them as loaded so the Offline alert is never shown on a re-focus fetch.
+  useEffect(() => {
+    if (products.length > 0) productsLoadedRef.current = true;
+  }, [products]);
+
   useFocusEffect(useCallback(() => {
     fetchData(productsLoadedRef.current);
   }, [fetchData]));
