@@ -171,6 +171,12 @@ export const syncNow = async (): Promise<{ synced: number; failed: number }> => 
     _lastError = err?.message || 'Sync failed';
     _isSyncing = false;
     notifyListeners('error');
+    // Auto-retry after 60 s — recovers from transient 401s (token refresh races)
+    // without requiring manual tap or network reconnect.
+    if (_syncedTimer) clearTimeout(_syncedTimer);
+    _syncedTimer = setTimeout(() => {
+      if (_isConnected && !_isSyncing) syncNow();
+    }, 60_000);
   }
 
   return { synced, failed };
