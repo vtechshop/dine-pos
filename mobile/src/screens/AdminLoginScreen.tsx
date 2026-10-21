@@ -9,7 +9,7 @@ import { RootStackParamList } from '../types';
 import { showAlert } from '../utils/alert';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { adminLogin, getSettings, requestCredentialReset, checkResetStatus, registerDevice } from '../services/api';
+import { adminLogin, getSettings, requestCredentialReset, checkResetStatus, registerDevice, saveRefreshToken } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import { APP_VERSION } from '../utils/constants';
@@ -82,6 +82,8 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
         await AsyncStorage.removeItem('@dine_trial_days');
       }
 
+      // Save refresh token so tryRefreshTokens() can silently renew the 15-min admin JWT.
+      if (result.refreshToken) await saveRefreshToken(result.refreshToken);
       // Cache JWT + hotelId + hotelName; persist session if "remember device" is on.
       await login(result.token, result.hotelId, result.hotelName, remember);
 

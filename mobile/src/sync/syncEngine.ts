@@ -1,3 +1,4 @@
+import { AppState } from 'react-native';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import {
   getPendingOrders, markSyncing, markSynced, markFailed,
@@ -288,15 +289,24 @@ const _maybePrune = (): void => {
   setSyncMeta('last_prune', new Date().toISOString());
 };
 
-// ── NetInfo listener ───────────────────────────────────────────────────────────
+// ── NetInfo + AppState listeners ───────────────────────────────────────────────
 
 let _netUnsubscribe: (() => void) | null = null;
+let _appStateUnsub: { remove: () => void } | null = null;
 
 export const startSyncEngine = (): void => {
   if (_netUnsubscribe) {
     _netUnsubscribe();
     _netUnsubscribe = null;
   }
+  _appStateUnsub?.remove();
+  // Retry on foreground: Android can kill setTimeout in the background, so a
+  // stale error after a 60s retry that never fired is cleared when user returns.
+  _appStateUnsub = AppState.addEventListener('change', (next) => {
+    if (next === 'active' && _isConnected && _lastError && !_isSyncing) {
+      syncNow();
+    }
+  });
 
   const stored = getSyncMeta('last_sync');
   if (stored) _lastSyncAt = new Date(stored);
@@ -336,6 +346,8 @@ export const startSyncEngine = (): void => {
 export const stopSyncEngine = (): void => {
   _netUnsubscribe?.();
   _netUnsubscribe = null;
+  _appStateUnsub?.remove();
+  _appStateUnsub = null;
   if (_syncedTimer) clearTimeout(_syncedTimer);
 };
 
