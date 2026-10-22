@@ -187,8 +187,12 @@ const BillingScreen: React.FC = () => {
       productsLoadedRef.current = true;
     } catch (err: any) {
       // Offline: load from SQLite cache
-      const cachedCats  = getLocalCategories(hotelId);
-      const cachedProds = getLocalProducts(hotelId);
+      // Primary lookup by real hotelId; fall back to '' for caches written during a
+      // pre-1.5.11 cold-start race where hotelId was empty at save time.
+      let cachedProds = getLocalProducts(hotelId);
+      if (cachedProds.length === 0 && hotelId) cachedProds = getLocalProducts('');
+      const cachedCats = getLocalCategories(hotelId);
+      const cachedCatsResolved = cachedCats.length > 0 ? cachedCats : (hotelId ? getLocalCategories('') : []);
       const cachedTbls  = getLocalTables(); // H12: restore tables from SQLite when offline
       // SESSION_EXPIRED means token expired and refresh failed — auth flow already navigates
       // to login screen. Showing the Offline alert here is confusing and wrong.
@@ -197,7 +201,7 @@ const BillingScreen: React.FC = () => {
         return;
       }
       if (cachedProds.length > 0) {
-        setCategories(cachedCats);
+        setCategories(cachedCatsResolved);
         setProducts(cachedProds);
         setFiltered(cachedProds);
         setSelectedCat(null);

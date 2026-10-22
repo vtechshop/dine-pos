@@ -9,7 +9,7 @@ import {
   tryRefreshTokens,
   logout as apiLogout,
 } from '../services/api';
-import { registerSessionExpiredHandler } from '../utils/authEvents';
+import { registerSessionExpiredHandler, emitAuthReady } from '../utils/authEvents';
 
 // Persisted across restarts; cleared only on explicit logout.
 const AUTH_KEY            = '@hotel_pos_logged_in';
@@ -67,6 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const cache = getAuthCache();
             if (cache) setIsOfflineLogin(false);
             setIsLoggedIn(true);
+            emitAuthReady();
           } else {
             // Both tokens expired — clear session flags but keep REMEMBER_DEVICE_KEY
             // so SplashScreen knows to route directly to AdminLogin instead of RoleSelect.
@@ -116,6 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setIsOfflineLogin(false);
     setIsLoggedIn(true);
+    emitAuthReady();
   };
 
   return (

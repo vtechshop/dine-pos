@@ -23,6 +23,7 @@ import {
   MAX_RETRIES,
 } from '../database/cashierOrderQueueDao';
 import { getAuthCache } from '../database/authDao';
+import { registerAuthReadyHandler } from '../utils/authEvents';
 
 export type SyncStatus = 'offline' | 'online' | 'syncing' | 'synced' | 'error';
 export type SyncListener = (status: SyncStatus, pendingCount: number, lastSyncAt: Date | null, error?: string) => void;
@@ -186,7 +187,10 @@ export const syncNow = async (): Promise<{ synced: number; failed: number }> => 
 // ── Cache refresh ──────────────────────────────────────────────────────────────
 
 const _refreshCache = async (): Promise<void> => {
-  const hotelId = getAuthCache()?.hotelId ?? '';
+  // Guard: never save products under hotelId='' — that corrupts the cache and causes
+  // the Offline Alert in BillingScreen (subsequent lookups use the real hotelId).
+  const hotelId = getAuthCache()?.hotelId;
+  if (!hotelId) return;
   const results = await Promise.allSettled([
     api.getProducts().then(prods => saveProducts(hotelId, prods)),
     api.getCategories().then(cats => saveCategories(hotelId, cats)),
@@ -300,6 +304,16 @@ export const startSyncEngine = (): void => {
     _netUnsubscribe = null;
   }
   _appStateUnsub?.remove();
+
+  // After auth is confirmed (login or session refresh), run a fresh sync so the
+  // cache is always up-to-date and any pre-auth sync attempt (which skips saving
+  // to SQLite when hotelId is empty) is completed properly.
+  registerAuthReadyHandler(() => {
+    if (_isConnected && !_isSyncing) {
+      _lastError = null;
+      syncNow();
+    }
+  });
   // Retry on foreground: Android can kill setTimeout in the background, so a
   // stale error after a 60s retry that never fired is cleared when user returns.
   _appStateUnsub = AppState.addEventListener('change', (next) => {
