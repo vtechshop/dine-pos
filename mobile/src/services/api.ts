@@ -231,15 +231,22 @@ const _doRefresh = async (): Promise<boolean> => {
     const result = await fetchAPI<{ token: string; refreshToken: string }>(
       '/auth/refresh',
       { method: 'POST', body: JSON.stringify({ refreshToken }) },
-      true, // skipAuth — no Bearer header needed
-      0,    // no retries on the refresh call itself
+      true,   // skipAuth — no Bearer header needed
+      0,      // no retries on the refresh call itself
+      false,  // _isTokenRetry
+      55_000, // 55s timeout — Render free tier can take ~50s to cold-start
     );
     await Promise.all([saveToken(result.token), saveRefreshToken(result.refreshToken)]);
     const expMs = await getJwtExpiryMs();
     if (expMs) scheduleProactiveRefresh(expMs);
     return true;
-  } catch {
-    await Promise.all([clearToken(), clearRefreshToken()]);
+  } catch (err: any) {
+    // Only wipe tokens when the server explicitly rejected them (401/403).
+    // Network timeouts leave the tokens intact so the next API call can retry
+    // the refresh once the server has finished waking up (Render free-tier cold start).
+    if (err?.status === 401 || err?.status === 403) {
+      await Promise.all([clearToken(), clearRefreshToken()]);
+    }
     return false;
   }
 };
@@ -275,6 +282,7 @@ const fetchAPI = async <T>(
   skipAuth = false,
   retries = 2,
   _isTokenRetry = false,
+  timeoutMs = 12_000,
 ): Promise<T> => {
   const baseUrl = await getBaseUrl();
 
@@ -291,7 +299,7 @@ const fetchAPI = async <T>(
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(`${baseUrl}${endpoint}`, {
