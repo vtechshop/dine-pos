@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Hotel, LogOut, User, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -33,16 +34,23 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             <Menu size={18} />
           </button>
 
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand">
-            <Hotel size={14} className="text-white" />
-          </div>
-          <span className="text-base font-bold text-white tracking-tight">Dine POS</span>
-          {hotelName && (
-            <>
-              <span className="text-white/25">/</span>
-              <span className="max-w-48 truncate text-sm text-white/65" title={hotelName}>{hotelName}</span>
-            </>
-          )}
+          {/* Brand → home ("/" redirects to each role's start page) */}
+          <Link
+            to="/"
+            aria-label="Go to home"
+            className="flex items-center gap-2.5 rounded-lg transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+          >
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand">
+              <Hotel size={14} className="text-white" />
+            </div>
+            <span className="text-base font-bold text-white tracking-tight">Dine POS</span>
+            {hotelName && (
+              <>
+                <span className="text-white/25">/</span>
+                <span className="max-w-48 truncate text-sm text-white/65" title={hotelName}>{hotelName}</span>
+              </>
+            )}
+          </Link>
         </div>
 
         {/* Right controls */}
