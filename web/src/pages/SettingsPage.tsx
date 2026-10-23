@@ -402,6 +402,17 @@ function StaffTable({ members, role, confirmDelId, onAdd, onEdit, onToggle, onDe
                 <p className="truncate text-sm font-medium text-ink">{m.name}</p>
                 {m.mobile && <p className="text-[10px] text-ink/40">{m.mobile}</p>}
               </div>
+              {m.tablesToday !== undefined && (
+                <div
+                  className="shrink-0 text-right"
+                  title="Tables this waiter opened or served an order at"
+                >
+                  <p className="text-sm font-semibold tabular-nums text-ink">
+                    {m.tablesToday} <span className="text-[10px] font-normal text-ink/50">{m.tablesToday === 1 ? 'table' : 'tables'} today</span>
+                  </p>
+                  <p className="text-[10px] tabular-nums text-ink/40">{m.tables30d ?? 0} in last 30 days</p>
+                </div>
+              )}
               <button
                 onClick={() => onToggle(m._id)}
                 className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors ${

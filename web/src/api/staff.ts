@@ -9,6 +9,9 @@ export interface StaffMember {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Waiters only — distinct tables attended (opened or served). Absent if stats failed. */
+  tablesToday?: number;
+  tables30d?: number;
 }
 
 export interface StaffInput {
