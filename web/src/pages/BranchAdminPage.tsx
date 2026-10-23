@@ -338,10 +338,17 @@ export default function BranchAdminPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [list, count] = await Promise.all([fetchBranches(), fetchBranchCount()]);
-      setBranches(list.branches);
+      // GET /branches 403s (FEATURE_DISABLED) when multi-branch is off, so only
+      // fetch the list once /count says the feature is enabled.
+      const count = await fetchBranchCount();
       setMaxBranches(count.maxBranches);
       setMultiBranchEnabled(count.multiBranchEnabled);
+      if (count.multiBranchEnabled) {
+        const list = await fetchBranches();
+        setBranches(list.branches);
+      } else {
+        setBranches([]);
+      }
     } catch {
       addToast('error', 'Failed to load branches');
     } finally {
