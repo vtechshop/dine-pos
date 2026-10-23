@@ -46,15 +46,18 @@ interface KpiCardProps {
   value:   string;
   sub?:    string;
   accent?: boolean;
+  onClick?: () => void;
 }
 
-function KpiCard({ icon, label, value, sub, accent }: KpiCardProps) {
-  return (
-    <div className={`rounded-xl border p-4 transition-shadow hover:shadow-sm ${
-      accent
-        ? 'border-brand/20 bg-brand/5'
-        : 'border-border bg-canvas'
-    }`}>
+function KpiCard({ icon, label, value, sub, accent, onClick }: KpiCardProps) {
+  const className = `rounded-xl border p-4 text-left transition-shadow hover:shadow-sm ${
+    accent
+      ? 'border-brand/20 bg-brand/5'
+      : 'border-border bg-canvas'
+  } ${onClick ? 'cursor-pointer hover:border-brand/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40' : ''}`;
+
+  const content = (
+    <>
       <div className="mb-2.5 flex items-center gap-1.5">
         <span className={accent ? 'text-brand' : 'text-ink/60'}>{icon}</span>
         <span className="text-[10px] font-semibold uppercase tracking-wider text-ink/70">
@@ -63,8 +66,17 @@ function KpiCard({ icon, label, value, sub, accent }: KpiCardProps) {
       </div>
       <p className="text-2xl font-bold tabular-nums leading-none text-ink">{value}</p>
       {sub && <p className="mt-1 text-xs text-ink/65">{sub}</p>}
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {content}
+      </button>
+    );
+  }
+  return <div className={className}>{content}</div>;
 }
 
 // ── Skeleton: KPI card ────────────────────────────────────────────────────────
@@ -647,6 +659,7 @@ export function DashboardPage() {
                     : 'No active tables'
                 }
                 accent={isRushHour}
+                onClick={() => navigate('/tables')}
               />
             )}
 
@@ -666,6 +679,7 @@ export function DashboardPage() {
                       ? `incl. ${currencySymbol}${Math.round(report.totalTax).toLocaleString('en-IN')} tax`
                       : undefined
                   }
+                  onClick={role === 'admin' ? () => navigate('/reports') : undefined}
                 />
               )
             )}
@@ -682,6 +696,7 @@ export function DashboardPage() {
                       ? `${report.parcelOrders} parcel`
                       : undefined
                   }
+                  onClick={role === 'admin' ? () => navigate('/orders') : undefined}
                 />
               )
             )}
@@ -698,6 +713,7 @@ export function DashboardPage() {
                       : '—'
                   }
                   sub={report && report.totalOrders > 0 ? 'per order' : undefined}
+                  onClick={role === 'admin' ? () => navigate('/reports') : undefined}
                 />
               )
             )}
@@ -710,6 +726,7 @@ export function DashboardPage() {
                 value={String(kotCount)}
                 sub={kotCount === 0 ? 'All clear' : kotCount === 1 ? '1 order active' : `${kotCount} orders active`}
                 accent={kotCount >= 5}
+                onClick={() => navigate('/kitchen')}
               />
             )}
           </div>
