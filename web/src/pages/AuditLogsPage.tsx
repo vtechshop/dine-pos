@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { Fragment, useState, useEffect, useCallback } from 'react';
 import { Search, Shield, ChevronDown, Download } from 'lucide-react';
 import { fetchAuditLogs, type AuditLog } from '../api/audit';
+import { humanizeAction, fieldLabel, formatValue, metaEntries } from '../utils/auditFormat';
 
 const ACTOR_ROLES = ['', 'admin', 'cashier', 'waiter', 'kitchen', 'super_admin'];
 
@@ -24,7 +25,9 @@ function metaSummary(meta?: Record<string, unknown>): string {
   for (const [k, v] of Object.entries(meta)) {
     if (skip.has(k) || v == null) continue;
     if (typeof v === 'object') continue;
-    parts.push(`${k}: ${String(v)}`);
+    // Toggles already say activated/deactivated in the action label.
+    if (k === 'isActive') continue;
+    parts.push(`${fieldLabel(k)}: ${formatValue(v)}`);
     if (parts.length >= 3) break;
   }
   return parts.join(' · ');
@@ -97,7 +100,7 @@ export function AuditLogsPage() {
         formatTime(log.createdAt),
         log.actorRole,
         log.targetType,
-        log.action,
+        humanizeAction(log.action, log.metadata),
         String(log.targetId ?? ''),
         targetLabel(log.metadata),
         metaSummary(log.metadata),
@@ -234,9 +237,8 @@ export function AuditLogsPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {logs.map(log => (
-                  <>
+                  <Fragment key={log._id}>
                     <tr
-                      key={log._id}
                       className="hover:bg-mist/50 cursor-pointer"
                       onClick={() => setExpanded(prev => prev === log._id ? null : log._id)}
                     >
@@ -256,8 +258,8 @@ export function AuditLogsPage() {
                       <td className="px-4 py-3 text-xs font-medium text-ink/70 capitalize">
                         {log.targetType.replace(/_/g, ' ')}
                       </td>
-                      <td className="px-4 py-3 text-xs font-semibold text-ink">
-                        {log.action}
+                      <td className="px-4 py-3 text-xs font-semibold text-ink" title={log.action}>
+                        {humanizeAction(log.action, log.metadata)}
                       </td>
                       <td className="px-4 py-3 text-xs text-ink/50 max-w-xs truncate">
                         {targetLabel(log.metadata)
@@ -275,16 +277,27 @@ export function AuditLogsPage() {
                       </td>
                     </tr>
 
-                    {expanded === log._id && log.metadata && (
-                      <tr key={`${log._id}-meta`} className="bg-mist/60">
+                    {expanded === log._id && (
+                      <tr className="bg-mist/60">
                         <td colSpan={6} className="px-4 py-3">
-                          <pre className="overflow-x-auto rounded-lg bg-ink/5 p-3 text-[10px] leading-relaxed text-ink/70">
-                            {JSON.stringify(log.metadata, null, 2)}
-                          </pre>
+                          <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5 rounded-lg bg-ink/5 p-3 text-xs">
+                            {metaEntries(log.metadata).map(([label, value]) => (
+                              <Fragment key={label}>
+                                <dt className="text-ink/50">{label}</dt>
+                                <dd className="break-words text-ink/80">{value}</dd>
+                              </Fragment>
+                            ))}
+                            {log.targetId && (
+                              <>
+                                <dt className="text-ink/50">Record ID</dt>
+                                <dd className="font-mono text-[10px] text-ink/50">{String(log.targetId)}</dd>
+                              </>
+                            )}
+                          </dl>
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
