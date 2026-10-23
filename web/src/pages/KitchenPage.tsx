@@ -20,6 +20,22 @@ function elapsed(createdAt: string, now: number): string {
   return `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
 }
 
+// "2:15 pm · 25m ago" for today's orders, "18 Oct, 2:15 pm" for older ones
+function orderTime(createdAt: string, now: number): string {
+  const d     = new Date(createdAt);
+  const today = new Date(now);
+  const time  = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  if (d.toDateString() === today.toDateString()) {
+    return `${time} · ${elapsed(createdAt, now)}`;
+  }
+  const date = d.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    ...(d.getFullYear() !== today.getFullYear() && { year: 'numeric' }),
+  });
+  return `${date}, ${time}`;
+}
+
 function elapsedMinutes(createdAt: string, now: number): number {
   return Math.floor((now - new Date(createdAt).getTime()) / 60_000);
 }
@@ -157,9 +173,12 @@ const OrderCard = memo(function OrderCard({
         {/* Row 1: order number + elapsed time — never crowd each other */}
         <div className="flex items-center justify-between gap-2">
           <span className="font-mono text-sm font-bold text-ink truncate">{order.orderNumber}</span>
-          <div className="flex items-center gap-1 text-xs text-ink/50 shrink-0">
+          <div
+            className="flex items-center gap-1 text-xs text-ink/50 shrink-0"
+            title={`${new Date(order.createdAt).toLocaleString('en-IN')} (${elapsed(order.createdAt, now)})`}
+          >
             <Clock size={11} />
-            {elapsed(order.createdAt, now)}
+            {orderTime(order.createdAt, now)}
           </div>
         </div>
         {/* Row 2: badges — only when present */}
