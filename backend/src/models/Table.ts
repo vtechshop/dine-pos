@@ -11,7 +11,7 @@ export interface ITable extends Document {
   currentSessionId: mongoose.Types.ObjectId | null;  // null when table is available
   x: number;
   y: number;
-  shape: 'square' | 'round';
+  shape: 'square' | 'round' | 'rectangle' | 'oval';
 }
 
 const TableSchema: Schema = new Schema(
@@ -27,7 +27,7 @@ const TableSchema: Schema = new Schema(
     currentSessionId: { type: Schema.Types.ObjectId, ref: 'TableSession', default: null },
     x:              { type: Number, default: 0 },
     y:              { type: Number, default: 0 },
-    shape:          { type: String, enum: ['square', 'round'], default: 'square' },
+    shape:          { type: String, enum: ['square', 'round', 'rectangle', 'oval'], default: 'square' },
   },
   { timestamps: true }
 );

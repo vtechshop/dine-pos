@@ -70,8 +70,17 @@ export interface Table {
   capacity: number;
   status: 'available' | 'occupied' | 'reserved' | 'inactive';
   currentSessionId: string | null;
-  shape: 'square' | 'round';
+  shape: TableShape;
 }
+
+export type TableShape = 'square' | 'round' | 'rectangle' | 'oval';
+
+export const TABLE_SHAPES: { value: TableShape; label: string }[] = [
+  { value: 'square',    label: 'Square' },
+  { value: 'round',     label: 'Round' },
+  { value: 'rectangle', label: 'Rectangle' },
+  { value: 'oval',      label: 'Oval' },
+];
 
 // ── Sessions ──────────────────────────────────────────────────────────────────
 

@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, Pencil, Trash2, LayoutGrid, Circle, Users,
+  Plus, Pencil, Trash2, LayoutGrid, Users,
   RefreshCw, X, Check, Search, MoreHorizontal,
 } from 'lucide-react';
-import type { Table } from '../types';
+import { TABLE_SHAPES, type Table, type TableShape } from '../types';
 import { fetchTables, createTable, updateTable, deleteTable } from '../api/tables';
 import { Spinner } from '../components/ui/Spinner';
 import { StatusChip } from '../components/ui/StatusChip';
@@ -16,7 +16,23 @@ interface FormState {
   number:   string;
   name:     string;
   capacity: string;
-  shape:    'square' | 'round';
+  shape:    TableShape;
+}
+
+// Outline of the table's shape, drawn to scale-ish (no lucide icon for oval).
+const SHAPE_CLS: Record<TableShape, string> = {
+  square:    'h-3.5 w-3.5 rounded-[3px]',
+  round:     'h-3.5 w-3.5 rounded-full',
+  rectangle: 'h-3 w-5 rounded-[3px]',
+  oval:      'h-3 w-5 rounded-full',
+};
+
+function ShapeIcon({ shape }: { shape: TableShape }) {
+  return (
+    <span className="flex h-4 w-5 shrink-0 items-center justify-center" aria-hidden>
+      <span className={`border-2 border-brand ${SHAPE_CLS[shape] ?? SHAPE_CLS.square}`} />
+    </span>
+  );
 }
 
 const BLANK: FormState = { number: '', name: '', capacity: '4', shape: 'square' };
@@ -149,8 +165,9 @@ function TableDrawer({ table, onSave, onClose, saving, error }: TableDrawerProps
                 onChange={e => set('shape', e.target.value as FormState['shape'])}
                 className={INPUT}
               >
-                <option value="square">Square</option>
-                <option value="round">Round</option>
+                {TABLE_SHAPES.map(s => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -481,10 +498,9 @@ export function TablesPage() {
                   {/* Top: shape + name + status chip */}
                   <div className="mb-3 flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
-                      {table.shape === 'round'
-                        ? <Circle size={15} className="shrink-0 text-brand" />
-                        : <LayoutGrid size={15} className="shrink-0 text-brand" />
-                      }
+                      <span title={TABLE_SHAPES.find(s => s.value === table.shape)?.label}>
+                        <ShapeIcon shape={table.shape} />
+                      </span>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold text-ink">{label}</p>
                         <p className="text-[10px] text-ink/35">#{table.number}</p>
