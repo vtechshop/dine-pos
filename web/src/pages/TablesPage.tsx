@@ -541,7 +541,8 @@ export function TablesPage() {
                         {moreOpen === table._id && (
                           <div
                             role="menu"
-                            className="more-menu-root absolute right-0 top-full z-20 mt-1 min-w-[152px] overflow-hidden rounded-lg border border-border bg-canvas shadow-lg"
+                            // Opens upward: it's shorter than the card, so it never runs off the last row.
+                            className="more-menu-root absolute bottom-full right-0 z-20 mb-1 min-w-[152px] overflow-hidden rounded-lg border border-border bg-canvas shadow-lg"
                           >
                             <button
                               role="menuitem"
