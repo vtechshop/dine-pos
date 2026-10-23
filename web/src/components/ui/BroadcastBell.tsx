@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Bell, Info, AlertTriangle, Wrench, RefreshCw, CheckCheck, X } from 'lucide-react';
+import { Megaphone, Info, AlertTriangle, Wrench, RefreshCw, CheckCheck, X } from 'lucide-react';
 import { apiFetch } from '../../api/client';
 import { useSocket } from '../../context/SocketContext';
 
@@ -95,10 +95,11 @@ export function BroadcastBell() {
     <div className="relative" ref={panelRef}>
       <button
         onClick={() => setOpen(o => !o)}
-        aria-label="Broadcast notifications"
+        aria-label="Announcements"
+        title="Announcements"
         className="relative flex h-8 w-8 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/[0.08] hover:text-white"
       >
-        <Bell size={16} />
+        <Megaphone size={16} />
         {unread > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white leading-none">
             {unread > 9 ? '9+' : unread}
