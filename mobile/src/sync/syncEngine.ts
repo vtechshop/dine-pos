@@ -191,17 +191,24 @@ const _refreshCache = async (): Promise<void> => {
   // the Offline Alert in BillingScreen (subsequent lookups use the real hotelId).
   const hotelId = getAuthCache()?.hotelId;
   if (!hotelId) return;
+  // Use 55s timeout — same as /auth/refresh — so a Render cold start (~50s) doesn't
+  // abort the sync and leave the cache stale until the next 60s retry.
+  const T = 55_000;
   const results = await Promise.allSettled([
-    api.getProducts().then(prods => saveProducts(hotelId, prods)),
-    api.getCategories().then(cats => saveCategories(hotelId, cats)),
-    api.getTables().then(saveTables),
-    api.getSettings().then(saveLocalSettings),
-    api.getCustomers().then(cs => saveCustomers(cs.customers ?? cs)),
+    api.getProducts(undefined, undefined, T).then(prods => saveProducts(hotelId, prods)),   // [0] critical
+    api.getCategories(T).then(cats => saveCategories(hotelId, cats)),                       // [1] critical
+    api.getTables(T).then(saveTables),                                                       // [2] best-effort
+    api.getSettings(T).then(saveLocalSettings),                                             // [3] best-effort
+    api.getCustomers(undefined, T).then(cs => saveCustomers(cs.customers ?? cs)),           // [4] best-effort
   ]);
 
-  const firstError = results.find(r => r.status === 'rejected');
-  if (firstError?.status === 'rejected') {
-    throw new Error(firstError.reason?.message || 'Cache refresh failed');
+  // Only abort sync if the core menu data (products or categories) failed.
+  // Settings / customers / tables failures are non-fatal — menu still works.
+  const productsFailed  = results[0].status === 'rejected';
+  const categoriesFailed = results[1].status === 'rejected';
+  if (productsFailed || categoriesFailed) {
+    const err = (results[0].status === 'rejected' ? results[0] : results[1]) as PromiseRejectedResult;
+    throw new Error(err.reason?.message || 'Menu data unavailable');
   }
 };
 

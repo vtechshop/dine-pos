@@ -195,6 +195,7 @@ if (process.env.NODE_ENV === 'production' && !process.env.ALLOWED_ORIGINS?.trim(
 
 const app = express();
 app.set('trust proxy', 1); // H-01: trust Render/nginx hop so req.ip is the real client IP
+app.set('etag', false);    // Disable automatic ETag — React Native fetchAPI doesn't handle 304
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
 

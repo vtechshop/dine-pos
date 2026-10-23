@@ -834,9 +834,9 @@ Thank you for dining with us! 🍽️`;
       {/* ── Offline cache banner ── */}
       {servedFromCache && (
         <View style={{ backgroundColor: '#92400E', paddingHorizontal: 12, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <MaterialIcons name="cloud-off" size={13} color="#FCD34D" />
+          <MaterialIcons name="cloud-done" size={13} color="#FCD34D" />
           <Text style={{ fontSize: 11, color: '#FCD34D', fontWeight: '600' }}>
-            {'Offline — showing cached menu'}
+            {'Showing cached menu'}
             {lastSynced ? ` (Last synced: ${new Date(lastSynced).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : ''}
           </Text>
         </View>

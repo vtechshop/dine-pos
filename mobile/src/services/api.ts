@@ -311,6 +311,15 @@ const fetchAPI = async <T>(
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        // 304 Not Modified: server data unchanged. The app doesn't maintain an HTTP
+        // cache, so we can't substitute the previous body. Treat as retriable so the
+        // next attempt (without conditional headers) gets a full 200 response.
+        // This happens when Android's OkHttp layer adds If-None-Match automatically.
+        if (response.status === 304) {
+          lastError = new Error('Not Modified');
+          continue;
+        }
+
         const errBody = await response.json().catch(() => ({}));
 
         // 401: try refreshing tokens once (never on the refresh endpoint itself)
@@ -435,8 +444,8 @@ export const logout = async (): Promise<void> => {
 
 // ==================== CATEGORIES ====================
 
-export const getCategories = (): Promise<Category[]> => {
-  return fetchAPI<Category[]>('/categories');
+export const getCategories = (timeoutMs?: number): Promise<Category[]> => {
+  return fetchAPI<Category[]>('/categories', undefined, false, 2, false, timeoutMs ?? 12_000);
 };
 
 export const createCategory = (data: Partial<Category>): Promise<Category> => {
@@ -462,12 +471,12 @@ export const deleteCategory = (id: string): Promise<void> => {
 
 // ==================== PRODUCTS ====================
 
-export const getProducts = (categoryId?: string, onlyAvailable?: boolean): Promise<Product[]> => {
+export const getProducts = (categoryId?: string, onlyAvailable?: boolean, timeoutMs?: number): Promise<Product[]> => {
   const params: string[] = [];
   if (categoryId) params.push(`category=${categoryId}`);
   if (onlyAvailable) params.push('available=true');
   const query = params.length > 0 ? `?${params.join('&')}` : '';
-  return fetchAPI<Product[]>(`/products${query}`);
+  return fetchAPI<Product[]>(`/products${query}`, undefined, false, 2, false, timeoutMs ?? 12_000);
 };
 
 export const createProduct = (data: Partial<Product>): Promise<Product> => {
@@ -619,9 +628,9 @@ export const updateOrderStatus = (
 
 // ==================== CUSTOMERS ====================
 
-export const getCustomers = (params?: { from?: string; to?: string }): Promise<{ customers: Customer[]; total: number }> => {
+export const getCustomers = (params?: { from?: string; to?: string }, timeoutMs?: number): Promise<{ customers: Customer[]; total: number }> => {
   const query = params && params.from && params.to ? `?${new URLSearchParams(params).toString()}` : '';
-  return fetchAPI(`/orders/customers${query}`);
+  return fetchAPI(`/orders/customers${query}`, undefined, false, 2, false, timeoutMs ?? 12_000);
 };
 
 // ==================== REPORTS ====================
@@ -657,8 +666,8 @@ export const getGSTR1Json = (from: string, to: string): Promise<GSTR1Json> => {
 
 // ==================== SETTINGS ====================
 
-export const getSettings = (): Promise<Settings> => {
-  return fetchAPI<Settings>('/settings');
+export const getSettings = (timeoutMs?: number): Promise<Settings> => {
+  return fetchAPI<Settings>('/settings', undefined, false, 2, false, timeoutMs ?? 12_000);
 };
 
 export const updateSettings = (data: Partial<Settings>): Promise<Settings> => {
@@ -1014,8 +1023,8 @@ export const getBranchRevenue = (date?: string): Promise<{
 
 // ==================== TABLES ====================
 
-export const getTables = (): Promise<Table[]> =>
-  fetchAPI<Table[]>('/tables');
+export const getTables = (timeoutMs?: number): Promise<Table[]> =>
+  fetchAPI<Table[]>('/tables', undefined, false, 2, false, timeoutMs ?? 12_000);
 
 export const createTable = (data: Partial<Table>): Promise<Table> =>
   fetchAPI<Table>('/tables', { method: 'POST', body: JSON.stringify(data) });
