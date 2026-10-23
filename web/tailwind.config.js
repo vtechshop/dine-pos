@@ -1,5 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  // The app is light-only. Without this, Tailwind's default ('media') applies
+  // dark: variants whenever the OS is in dark mode, mixing dark-mode colours
+  // into light pages (e.g. yellow-on-beige TrialBanner).
+  darkMode: 'class',
   content: [
     './index.html',
     './src/**/*.{js,ts,jsx,tsx}',
