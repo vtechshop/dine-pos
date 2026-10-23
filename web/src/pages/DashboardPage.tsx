@@ -515,15 +515,22 @@ export function DashboardPage() {
       void load();
       setBillingSessionId(session._id);
     } catch (err) {
-      // 409 = race (table just became occupied) — refresh so grid reflects reality
+      // 409 = the table already has an open session (a race, or a session left
+      // open while the table was marked available). Open that session instead.
       void load();
-      if (!(err instanceof ApiError && err.status === 409)) {
+      if (err instanceof ApiError && err.status === 409) {
+        const tableNumber = String(tables.find(t => t._id === tableId)?.number ?? '');
+        try {
+          const existing = (await fetchOpenSessions()).find(s => s.tableNumber === tableNumber);
+          if (existing) setBillingSessionId(existing._id);
+        } catch { /* grid refresh above still shows the table as occupied */ }
+      } else {
         setError(err instanceof Error ? err.message : 'Failed to open table');
       }
     } finally {
       setOpeningTableId(null);
     }
-  }, [load]);
+  }, [load, tables]);
 
   // ── Build joined table grid items ────────────────────────────────────────────
 
@@ -575,11 +582,11 @@ export function DashboardPage() {
     <div className="flex h-full flex-col">
 
       {/* ── Page header ────────────────────────────────────────────────────── */}
-      <div className="flex shrink-0 items-center justify-between border-b border-border bg-canvas px-5 py-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border bg-canvas px-4 py-3 sm:px-5">
         <div className="flex items-center gap-3">
           <h1 className="text-base font-semibold text-ink">Dashboard</h1>
           {!loading && (
-            <div className="flex items-center gap-1 text-xs text-ink/55">
+            <div className="flex items-center gap-1 whitespace-nowrap text-xs text-ink/55">
               <span className="font-medium text-green-600">{occupiedCount} occupied</span>
               <span>·</span>
               <span>{availableCount} available</span>
@@ -587,9 +594,9 @@ export function DashboardPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Search — F1 focuses this */}
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <label htmlFor="table-search" className="sr-only">Search table</label>
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/40" />
             <input
@@ -598,7 +605,7 @@ export function DashboardPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search table… (F1)"
-              className="h-8 w-48 rounded-lg border border-border bg-mist pl-8 pr-3 text-xs text-ink placeholder:text-ink/40 outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20 transition-colors"
+              className="h-8 w-full rounded-lg sm:w-48 border border-border bg-mist pl-8 pr-3 text-xs text-ink placeholder:text-ink/40 outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20 transition-colors"
             />
           </div>
 
