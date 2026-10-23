@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { Table, SessionSummary } from '../types';
+import type { Table, TableShape, SessionSummary } from '../types';
 
 export async function fetchTables(): Promise<Table[]> {
   // GET /api/tables — returns array (not wrapped)
@@ -24,7 +24,7 @@ export async function createTable(body: {
   number: number;
   name: string;
   capacity: number;
-  shape: 'square' | 'round';
+  shape: TableShape;
 }): Promise<Table> {
   return apiFetch<Table>('/tables', {
     method: 'POST',
@@ -34,7 +34,7 @@ export async function createTable(body: {
 
 export async function updateTable(
   id: string,
-  body: Partial<{ number: number; name: string; capacity: number; shape: 'square' | 'round'; status: string }>,
+  body: Partial<{ number: number; name: string; capacity: number; shape: TableShape; status: string }>,
 ): Promise<Table> {
   return apiFetch<Table>(`/tables/${id}`, {
     method: 'PUT',
