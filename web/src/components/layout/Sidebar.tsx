@@ -18,6 +18,8 @@ interface NavItem {
   icon:  LucideIcon;
   label: string;
   hint?: string;
+  /** Only highlight on an exact path match (for parents of other nav items). */
+  end?:  boolean;
 }
 
 interface NavGroup {
@@ -102,7 +104,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     heading: 'AI Platform',
     items: [
-      { to: '/ai',                 icon: Bot,          label: 'AI Dashboard'    },
+      { to: '/ai',                 icon: Bot,          label: 'AI Dashboard', end: true },
       { to: '/ai/brief',           icon: Sunrise,      label: 'Morning Brief'   },
       { to: '/ai/reports',         icon: FileBarChart,  label: 'AI Reports'      },
       { to: '/ai/chat',            icon: MessageSquare, label: 'AI Chat'         },
@@ -154,10 +156,11 @@ interface SidebarProps {
 // ── Shared NavLink row ─────────────────────────────────────────────────────────
 
 function NavItemRow({ item }: { item: NavItem }) {
-  const { to, icon: Icon, label, hint } = item;
+  const { to, icon: Icon, label, hint, end } = item;
   return (
     <NavLink
       to={to}
+      end={end}
       className={({ isActive }) =>
         `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
           isActive
