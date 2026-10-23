@@ -19,7 +19,8 @@ function formatTime(iso: string): string {
 function metaSummary(meta?: Record<string, unknown>): string {
   if (!meta) return '';
   const parts: string[] = [];
-  const skip = new Set(['hotelId', '_id', 'createdAt', 'updatedAt', '__v']);
+  // name / employeeCode are shown as the target label instead (see targetLabel)
+  const skip = new Set(['hotelId', '_id', 'createdAt', 'updatedAt', '__v', 'name', 'employeeCode']);
   for (const [k, v] of Object.entries(meta)) {
     if (skip.has(k) || v == null) continue;
     if (typeof v === 'object') continue;
@@ -27,6 +28,14 @@ function metaSummary(meta?: Record<string, unknown>): string {
     if (parts.length >= 3) break;
   }
   return parts.join(' · ');
+}
+
+/** "prema (01)" when the entry recorded who it's about; older entries have only an id. */
+function targetLabel(meta?: Record<string, unknown>): string {
+  const name = typeof meta?.name === 'string' ? meta.name : '';
+  if (!name) return '';
+  const code = typeof meta?.employeeCode === 'string' ? meta.employeeCode : '';
+  return code ? `${name} (${code})` : name;
 }
 
 export function AuditLogsPage() {
@@ -83,13 +92,14 @@ export function AuditLogsPage() {
         from:       filters.from       || undefined,
         to:         filters.to         || undefined,
       });
-      const headers = ['Time', 'Role', 'Module', 'Action', 'Target ID', 'Details'];
+      const headers = ['Time', 'Role', 'Module', 'Action', 'Target ID', 'Target', 'Details'];
       const rows = res.logs.map(log => [
         formatTime(log.createdAt),
         log.actorRole,
         log.targetType,
         log.action,
         String(log.targetId ?? ''),
+        targetLabel(log.metadata),
         metaSummary(log.metadata),
       ]);
       const all = [headers, ...rows];
@@ -250,7 +260,9 @@ export function AuditLogsPage() {
                         {log.action}
                       </td>
                       <td className="px-4 py-3 text-xs text-ink/50 max-w-xs truncate">
-                        {log.targetId ? <span className="font-mono text-[10px]">{String(log.targetId).slice(-8)}</span> : null}
+                        {targetLabel(log.metadata)
+                          ? <span className="font-semibold text-ink/80">{targetLabel(log.metadata)}</span>
+                          : log.targetId ? <span className="font-mono text-[10px]">{String(log.targetId).slice(-8)}</span> : null}
                         {log.metadata && metaSummary(log.metadata) ? (
                           <span className="ml-2">{metaSummary(log.metadata)}</span>
                         ) : null}

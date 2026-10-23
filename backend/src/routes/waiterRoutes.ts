@@ -137,7 +137,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       { new: true, select: '-pin' }
     ).lean();
     if (!waiter) return res.status(404).json({ message: 'Waiter not found' });
-    logAudit(req, 'waiter.updated', 'waiter', req.params.id, { changes: update });
+    logAudit(req, 'waiter.updated', 'waiter', req.params.id, { name: waiter.name, employeeCode: waiter.employeeCode, changes: update });
     return res.json(waiter);
   } catch {
     return res.status(500).json({ message: 'Server error' });
@@ -158,7 +158,7 @@ router.patch('/:id/pin', async (req: AuthRequest, res: Response) => {
       { new: true, select: '-pin' }
     ).lean();
     if (!waiter) return res.status(404).json({ message: 'Waiter not found' });
-    logAudit(req, 'waiter.pin_reset', 'waiter', req.params.id);
+    logAudit(req, 'waiter.pin_reset', 'waiter', req.params.id, { name: waiter.name, employeeCode: waiter.employeeCode });
     return res.json({ message: 'PIN updated successfully' });
   } catch {
     return res.status(500).json({ message: 'Server error' });
@@ -172,7 +172,7 @@ router.patch('/:id/toggle', async (req: AuthRequest, res: Response) => {
     if (!waiter) return res.status(404).json({ message: 'Waiter not found' });
     waiter.isActive = !waiter.isActive;
     await waiter.save();
-    logAudit(req, 'waiter.toggled', 'waiter', req.params.id, { isActive: waiter.isActive });
+    logAudit(req, 'waiter.toggled', 'waiter', req.params.id, { name: waiter.name, employeeCode: waiter.employeeCode, isActive: waiter.isActive });
     return res.json({ isActive: waiter.isActive });
   } catch {
     return res.status(500).json({ message: 'Server error' });

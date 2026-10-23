@@ -57,7 +57,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       { new: true, select: '-pin' }
     ).lean();
     if (!cashier) return res.status(404).json({ message: 'Cashier not found' });
-    logAudit(req, 'cashier.updated', 'cashier', req.params.id, { updated: Object.keys(update) });
+    logAudit(req, 'cashier.updated', 'cashier', req.params.id, { name: cashier.name, employeeCode: cashier.employeeCode, updated: Object.keys(update) });
     return res.json(cashier);
   } catch {
     return res.status(500).json({ message: 'Server error' });
@@ -77,7 +77,7 @@ router.patch('/:id/pin', async (req: AuthRequest, res: Response) => {
       { new: true, select: '-pin' }
     ).lean();
     if (!cashier) return res.status(404).json({ message: 'Cashier not found' });
-    logAudit(req, 'cashier.pin_reset', 'cashier', req.params.id);
+    logAudit(req, 'cashier.pin_reset', 'cashier', req.params.id, { name: cashier.name, employeeCode: cashier.employeeCode });
     return res.json({ message: 'PIN updated successfully' });
   } catch {
     return res.status(500).json({ message: 'Server error' });
@@ -90,7 +90,7 @@ router.patch('/:id/toggle', async (req: AuthRequest, res: Response) => {
     if (!cashier) return res.status(404).json({ message: 'Cashier not found' });
     cashier.isActive = !cashier.isActive;
     await cashier.save();
-    logAudit(req, 'cashier.toggled', 'cashier', req.params.id, { isActive: cashier.isActive });
+    logAudit(req, 'cashier.toggled', 'cashier', req.params.id, { name: cashier.name, employeeCode: cashier.employeeCode, isActive: cashier.isActive });
     return res.json({ isActive: cashier.isActive });
   } catch {
     return res.status(500).json({ message: 'Server error' });
