@@ -2,13 +2,17 @@ import { useState } from 'react';
 import { Hotel, LogOut, User, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
+import { useSettings } from '../../context/SettingsContext';
 import { NotificationBell } from '../ui/NotificationBell';
+import { PlatformStatus } from './PlatformStatus';
 import { BroadcastBell } from '../ui/BroadcastBell';
 import { LiveBadge } from '../ui/LiveBadge';
 
 export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { hotelName, logout, role } = useAuth();
   const { connected, reconnecting } = useSocket();
+  const { settings } = useSettings();
+  const aggregatorEnabled = !!settings?.features?.aggregator;
   const [confirmLogout, setConfirmLogout] = useState(false);
 
   const roleLabel = role
@@ -43,6 +47,9 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
 
         {/* Right controls */}
         <div className="flex items-center gap-1">
+          {/* Swiggy / Zomato status — integrations API is admin-only + feature-gated */}
+          {role === 'admin' && aggregatorEnabled && <PlatformStatus />}
+
           {/* Notification bell — live orders (all roles) */}
           <NotificationBell />
           {/* Broadcast bell — SA announcements (admin only) */}
