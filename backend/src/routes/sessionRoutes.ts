@@ -138,6 +138,25 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       status: 'open',
     });
     if (existing) {
+      // Self-heal: the table was marked available (e.g. PATCH /tables/:id/status)
+      // while this session stayed open, hiding it from the grid. Re-link it so
+      // staff see the table as occupied and can bill / close the session.
+      if (table.status !== 'occupied' || String(table.currentSessionId ?? '') !== String(existing._id)) {
+        await Table.updateOne(
+          { _id: table._id, hotelId: req.hotelId },
+          { $set: { status: 'occupied', currentSessionId: existing._id } },
+        );
+        logger.warn('[sessions] re-linked table to orphaned open session', {
+          hotelId: req.hotelId, tableId, sessionId: String(existing._id), wasStatus: table.status,
+        });
+        io.to(`hotel_${req.hotelId}`).emit('session_opened', {
+          sessionId:   existing._id,
+          tableId,
+          tableNumber: existing.tableNumber,
+          openedBy:    existing.openedBy,
+          openedAt:    existing.openedAt,
+        });
+      }
       res.status(409).json({
         message: 'Table already has an open session',
         sessionId: existing._id,

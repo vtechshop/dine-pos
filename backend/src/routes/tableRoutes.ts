@@ -63,6 +63,20 @@ router.patch('/:id/status', requireWaiterOrCashierOrAdmin, async (req: AuthReque
   const allowed = ['available', 'occupied', 'reserved', 'inactive'];
   if (!allowed.includes(status)) return res.status(400).json({ message: 'Invalid status' });
   try {
+    // Freeing a table with an open session orphans the session: the table looks
+    // available but can't be opened (POST /sessions 409s). Close the session instead.
+    if (status === 'available') {
+      const openSession = await TableSession.findOne(
+        { tableId: req.params.id, hotelId: req.hotelId, status: 'open' }, '_id',
+      ).lean();
+      if (openSession) {
+        return res.status(409).json({
+          message: 'Table has an open session. Bill or close the session to free the table.',
+          sessionId: openSession._id,
+        });
+      }
+    }
+
     const update: any = { status };
     if (status === 'available') update.currentOrderId = null;
     if (currentOrderId) update.currentOrderId = currentOrderId;
