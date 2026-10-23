@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
+import { isStaleChunkError, reloadForStaleChunk } from '../../utils/staleChunkReload';
 
 interface Props {
   children: ReactNode;
@@ -23,6 +24,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    // Backstop for vite:preloadError: a stale tab after a deploy just reloads.
+    if (isStaleChunkError(error) && reloadForStaleChunk()) return;
+
     this.setState({ errorInfo: info });
 
     // Structured payload — ready for Sentry.captureException() when SDK is added

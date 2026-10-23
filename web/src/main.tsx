@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import { App } from './App';
+import { reloadForStaleChunk } from './utils/staleChunkReload';
 
 // F-01: Fail fast if API URL still points to localhost in a production build.
 // Set VITE_API_URL and VITE_SOCKET_URL in .env.production before running vite build.
@@ -25,6 +26,11 @@ if (import.meta.env.PROD) {
     throw new Error('[DinePOS] VITE_API_URL / VITE_SOCKET_URL not configured for production.');
   }
 }
+
+// Stale tab after a deploy → reload once instead of showing the error screen.
+window.addEventListener('vite:preloadError', (event) => {
+  if (reloadForStaleChunk()) event.preventDefault();
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
