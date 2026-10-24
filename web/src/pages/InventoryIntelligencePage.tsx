@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Trash2, TrendingUp, Tag, Package, Activity, RefreshCw, ShoppingCart,
   Download, AlertTriangle, ArrowUp, ArrowDown, Minus, Search, Filter,
@@ -44,26 +45,42 @@ function fmtDateTime(iso: string) {
 
 function KPICard({
   label, value, sub, accent = false, warn = false, danger = false,
-  icon: Icon,
+  icon: Icon, onClick, hint,
 }: {
   label: string; value: string; sub?: string;
   accent?: boolean; warn?: boolean; danger?: boolean;
   icon?: React.ElementType;
+  onClick?: () => void;
+  /** Hover text explaining how the number is worked out. */
+  hint?: string;
 }) {
   const border = danger ? 'border-red-200 bg-red-50/60'
     : warn   ? 'border-amber-200 bg-amber-50/60'
     : accent ? 'border-brand/20 bg-brand/5'
     :          'border-border bg-canvas';
   const textColor = danger ? 'text-red-700' : warn ? 'text-amber-700' : accent ? 'text-brand' : 'text-ink';
-  return (
-    <div className={`rounded-lg border p-3.5 flex flex-col gap-1 ${border}`}>
+  const content = (
+    <>
       <div className="flex items-center justify-between gap-1">
         <span className="text-[11px] text-ink/50 font-semibold uppercase tracking-wide">{label}</span>
         {Icon && <Icon size={13} className="text-ink/30" />}
       </div>
       <span className={`text-xl font-bold tabular-nums leading-tight ${textColor}`}>{value}</span>
       {sub && <span className="text-[11px] text-ink/40">{sub}</span>}
-    </div>
+    </>
+  );
+  const cls = `rounded-lg border p-3.5 flex flex-col gap-1 text-left ${border}`;
+  return onClick ? (
+    <button
+      type="button"
+      onClick={onClick}
+      title={hint}
+      className={`${cls} cursor-pointer transition-shadow hover:shadow-md hover:border-brand/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40`}
+    >
+      {content}
+    </button>
+  ) : (
+    <div className={cls} title={hint}>{content}</div>
   );
 }
 
@@ -227,6 +244,7 @@ const TABS: { key: Tab; label: string; Icon: React.ElementType }[] = [
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function InventoryIntelligencePage() {
+  const navigate = useNavigate();
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
   const cur = (n: number) => `${sym}${fmt0(n)}`;
@@ -479,20 +497,25 @@ export function InventoryIntelligencePage() {
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <KPICard label="Stock Value"     icon={Package}
                   value={cur(invValue?.summary.currentStockValue ?? 0)}
-                  sub={`${invValue?.summary.totalIngredients ?? 0} ingredients`} accent />
+                  sub={`${invValue?.summary.totalIngredients ?? 0} ingredients`} accent
+                  onClick={() => navigate('/inventory')} hint="Open the ingredient list" />
                 <KPICard label="Low Stock"       icon={AlertCircle}
                   value={String(invValue?.summary.lowStockCount ?? 0)}
-                  sub="needs reorder" warn={!!invValue?.summary.lowStockCount} />
+                  sub="needs reorder" warn={!!invValue?.summary.lowStockCount}
+                  onClick={() => navigate('/inventory')} hint="At or below the low-stock alert level — open the ingredient list" />
                 <KPICard label="Out of Stock"    icon={XCircle}
                   value={String(invValue?.summary.outOfStockCount ?? 0)}
-                  sub="immediate action" danger={!!invValue?.summary.outOfStockCount} />
+                  sub="immediate action" danger={!!invValue?.summary.outOfStockCount}
+                  onClick={() => navigate('/inventory')} hint="Stock is 0 — open the ingredient list" />
                 <KPICard label="Today Consumed"  icon={TrendingDown}
                   value={cur(todayConsumptionCost)}
-                  sub="recipe deductions" />
+                  sub="recipe deductions"
+                  onClick={() => setTab('consumption')} hint="Ingredients used today through product recipes — see Consumption" />
                 <KPICard label="Today Waste"     icon={Trash2}
                   value={cur(todayWaste?.summary.totalCost ?? 0)}
                   sub={`${todayWaste?.summary.itemCount ?? 0} incidents`}
-                  warn={!!todayWaste?.summary.totalCost} />
+                  warn={!!todayWaste?.summary.totalCost}
+                  onClick={() => setTab('waste')} hint="Waste logged today — see Waste" />
               </div>
 
               {loading && <Spinner />}
@@ -618,7 +641,8 @@ export function InventoryIntelligencePage() {
                     <KPICard label="Slow Moving" icon={Minus}
                       value={String(consumptionData.summary.slowMovingCount)} sub="ingredients" />
                     <KPICard label="Dead Stock"  icon={AlertTriangle}
-                      value={String(consumptionData.summary.deadStockCount)}  sub="not consumed" warn={!!consumptionData.summary.deadStockCount} />
+                      value={String(consumptionData.summary.deadStockCount)}  sub="unused this period" warn={!!consumptionData.summary.deadStockCount}
+                      hint="Has stock, but no order in this period used it through a product recipe. Items added during the period aren't counted — they haven't had time to be used." />
                     <KPICard label="Dead Value"  icon={Package}
                       value={cur(consumptionData.summary.deadStockValue)} />
                   </div>

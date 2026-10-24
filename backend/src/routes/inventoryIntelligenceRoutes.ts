@@ -442,13 +442,20 @@ router.get('/stock-movement', async (req: AuthRequest, res: Response) => {
         },
         { $sort: { totalConsumed: -1 } },
       ]).option({ maxTimeMS: 30_000 }),
-      Ingredient.find({ hotelId }).select('_id name unit currentStock costPerUnit').maxTimeMS(30_000).lean(),
+      Ingredient.find({ hotelId }).select('_id name unit currentStock costPerUnit createdAt').maxTimeMS(30_000).lean(),
     ]);
 
     const consumedIds = new Set(consumed.map((c: { _id: unknown }) => String(c._id)));
 
+    // Dead stock = has stock, existed for the whole period, and no order in the
+    // period used it (via product recipes). Ingredients added mid-period haven't
+    // had a chance to be used yet, so they aren't flagged.
     const deadStock = allIngredients
-      .filter(i => i.currentStock > 0 && !consumedIds.has(String(i._id)))
+      .filter(i =>
+        i.currentStock > 0 &&
+        !consumedIds.has(String(i._id)) &&
+        (!(i as { createdAt?: Date }).createdAt || new Date((i as { createdAt?: Date }).createdAt!) <= start),
+      )
       .map(i => ({
         ingredientId:        String(i._id),
         name:                i.name,
