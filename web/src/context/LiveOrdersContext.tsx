@@ -36,7 +36,17 @@ type Action =
   | { type: 'ADD'; order: LiveOrder }
   | { type: 'MARK_OLD'; id: string }
   | { type: 'MARK_READ' }
-  | { type: 'SEED'; orders: LiveOrder[] };
+  | { type: 'SEED'; orders: LiveOrder[] }
+  | { type: 'REMOVE'; id?: string; tableNumber?: string };
+
+// Live Orders lists active orders only — paid / cancelled ones drop off.
+const FINISHED_STATUSES = new Set(['completed', 'cancelled', 'rejected']);
+
+function isFinished(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return false;
+  const o = ('order' in raw ? (raw as { order: unknown }).order : raw) as Record<string, unknown> | null;
+  return !!o && FINISHED_STATUSES.has(String(o.status ?? ''));
+}
 
 interface State {
   orders: LiveOrder[];
@@ -69,6 +79,15 @@ function reducer(state: State, action: Action): State {
         ...state,
         orders: [...state.orders, ...fresh].slice(0, 50),
       };
+    }
+    case 'REMOVE': {
+      const orders = state.orders.filter(o =>
+        !(action.id && o.id === action.id) &&
+        !(action.tableNumber && o.tableNumber === action.tableNumber),
+      );
+      if (orders.length === state.orders.length) return state;
+      // Unread can't exceed what's still listed (bell badge follows the panel).
+      return { orders, unreadCount: Math.min(state.unreadCount, orders.length) };
     }
   }
 }
@@ -124,6 +143,7 @@ export function LiveOrdersProvider({ children }: { children: ReactNode }) {
     if (!socket) return;
 
     const handler = (data: unknown) => {
+      if (isFinished(data)) return; // e.g. kiosk order that arrives already paid
       const order = parseOrderEvent(data);
       if (!order) return;
 
@@ -143,9 +163,30 @@ export function LiveOrdersProvider({ children }: { children: ReactNode }) {
       fadeTimers.current.add(t);
     };
 
+    // Drop orders once they're paid, cancelled or their table's bill is closed.
+    const idOf = (d: Record<string, unknown>) => String(d.orderId ?? d._id ?? '');
+    const onCompleted = (d: Record<string, unknown>) => dispatch({ type: 'REMOVE', id: idOf(d) });
+    const onStatus = (d: Record<string, unknown>) => {
+      if (FINISHED_STATUSES.has(String(d.status ?? ''))) dispatch({ type: 'REMOVE', id: idOf(d) });
+    };
+    const onRejected = (d: Record<string, unknown>) => dispatch({ type: 'REMOVE', id: idOf(d) });
+    const onSessionClosed = (d: Record<string, unknown>) => {
+      if (d.tableNumber) dispatch({ type: 'REMOVE', tableNumber: String(d.tableNumber) });
+    };
+
     socket.on('new_order', handler);
+    socket.on('order_completed', onCompleted);
+    socket.on('order_status_update', onStatus);
+    socket.on('order_status_change', onStatus);
+    socket.on('order_rejected', onRejected);
+    socket.on('session_closed', onSessionClosed);
     return () => {
       socket.off('new_order', handler);
+      socket.off('order_completed', onCompleted);
+      socket.off('order_status_update', onStatus);
+      socket.off('order_status_change', onStatus);
+      socket.off('order_rejected', onRejected);
+      socket.off('session_closed', onSessionClosed);
       fadeTimers.current.forEach(t => clearTimeout(t));
       fadeTimers.current.clear();
     };
@@ -158,6 +199,7 @@ export function LiveOrdersProvider({ children }: { children: ReactNode }) {
     apiFetch<{ orders: unknown[] }>(`/orders?date=${today}&limit=50`)
       .then(res => {
         const seeded = (res.orders ?? [])
+          .filter(o => !isFinished(o))
           .map(parseOrderEvent)
           .filter((o): o is LiveOrder => o !== null);
         if (seeded.length > 0) dispatch({ type: 'SEED', orders: seeded });
