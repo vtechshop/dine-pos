@@ -6,6 +6,7 @@ import { createIngredient, updateIngredient, restockIngredient } from '../../api
 import { useShortcut } from '../../hooks/useShortcut';
 import { useSettings } from '../../context/SettingsContext';
 import { ErrorPopup } from '../ui/ErrorPopup';
+import { NumberInput } from '../ui/NumberInput';
 
 interface Props {
   ingredient: Ingredient | null;
@@ -220,28 +221,24 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
                     Current Stock
                   </label>
-                  <input
+                  <NumberInput
                     className={field}
-                    type="number"
                     min={0}
                     step={0.01}
-                    value={form.currentStock}
-                    onChange={e => set('currentStock', parseFloat(e.target.value) || 0)}
+                    value={form.currentStock ?? 0}
+                    onValueChange={n => set('currentStock', n)}
                   />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
                     Low Stock Alert
                   </label>
-                  <input
+                  <NumberInput
                     className={field}
-                    type="number"
                     min={0}
                     step={0.01}
-                    value={form.lowStockThreshold}
-                    onChange={e =>
-                      set('lowStockThreshold', parseFloat(e.target.value) || 0)
-                    }
+                    value={form.lowStockThreshold ?? 0}
+                    onValueChange={n => set('lowStockThreshold', n)}
                   />
                 </div>
               </div>
@@ -250,13 +247,12 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
                   Cost Per Unit ({sym})
                 </label>
-                <input
+                <NumberInput
                   className={field}
-                  type="number"
                   min={0}
                   step={0.01}
-                  value={form.costPerUnit}
-                  onChange={e => set('costPerUnit', parseFloat(e.target.value) || 0)}
+                  value={form.costPerUnit ?? 0}
+                  onValueChange={n => set('costPerUnit', n)}
                 />
               </div>
             </>

@@ -14,6 +14,7 @@ import type { KitchenStation } from '../../api/kitchenStations';
 import { useShortcut } from '../../hooks/useShortcut';
 import { useSettings } from '../../context/SettingsContext';
 import { ErrorPopup } from '../ui/ErrorPopup';
+import { NumberInput } from '../ui/NumberInput';
 
 // Ingredient type from the backend
 interface Ingredient {
@@ -569,11 +570,11 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={sectionLabel}>Price ({sym}) *</label>
-              <input className={field} type="number" min={0} step={0.01} value={form.price} onChange={e => set('price', parseFloat(e.target.value) || 0)} />
+              <NumberInput className={field} min={0} step={0.01} value={form.price} onValueChange={n => set('price', n)} />
             </div>
             <div>
               <label className={sectionLabel}>Tax %</label>
-              <input className={field} type="number" min={0} max={100} step={0.5} value={form.taxPercent} onChange={e => set('taxPercent', parseFloat(e.target.value) || 0)} />
+              <NumberInput className={field} min={0} max={100} step={0.5} value={form.taxPercent ?? 0} onValueChange={n => set('taxPercent', n)} />
             </div>
           </div>
 
@@ -644,7 +645,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
               </button>
             </div>
             {(form.stock ?? -1) >= 0 && (
-              <input className={field} type="number" min={0} value={form.stock ?? 0} onChange={e => set('stock', parseInt(e.target.value, 10) || 0)} placeholder="Current quantity" />
+              <NumberInput className={field} min={0} step={1} value={form.stock ?? 0} onValueChange={n => set('stock', Math.trunc(n))} placeholder="Current quantity" />
             )}
           </div>
 
@@ -672,8 +673,8 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                 <div key={v._id ?? `new-${i}`} className="flex items-center gap-2">
                   <input className={`${field} flex-1`} placeholder="Name (e.g. Large)" value={v.name}
                     onChange={e => setVariants(prev => prev.map((item, idx) => idx === i ? { ...item, name: e.target.value } : item))} />
-                  <input className={`${field} w-24`} type="number" min={0} step={0.01} placeholder="Price" value={v.price}
-                    onChange={e => setVariants(prev => prev.map((item, idx) => idx === i ? { ...item, price: parseFloat(e.target.value) || 0 } : item))} />
+                  <NumberInput className={`${field} w-24`} min={0} step={0.01} placeholder="Price" value={v.price}
+                    onValueChange={n => setVariants(prev => prev.map((item, idx) => idx === i ? { ...item, price: n } : item))} />
                   <button type="button" onClick={() => setVariants(prev => prev.filter((_, idx) => idx !== i))}
                     className="rounded-lg border border-red-100 p-2 text-red-400 hover:bg-red-50">
                     <Trash2 size={14} />
@@ -719,13 +720,12 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
                             <tr key={row.ingredient._id} className="border-b border-border last:border-0">
                               <td className="px-3 py-2 font-medium text-ink">{row.ingredient.name}</td>
                               <td className="px-3 py-2 text-center">
-                                <input
-                                  type="number"
+                                <NumberInput
                                   min={0}
                                   step={0.01}
                                   value={row.quantity}
-                                  onChange={e => setRecipe(prev =>
-                                    prev.map((r, idx) => idx === i ? { ...r, quantity: parseFloat(e.target.value) || 0 } : r)
+                                  onValueChange={n => setRecipe(prev =>
+                                    prev.map((r, idx) => idx === i ? { ...r, quantity: n } : r)
                                   )}
                                   className="w-16 rounded border border-border bg-canvas px-2 py-1 text-center text-xs outline-none focus:border-brand/50"
                                 />
