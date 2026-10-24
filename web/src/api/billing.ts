@@ -81,6 +81,14 @@ export async function transferGuest(
   });
 }
 
+/** Close without billing — server refuses while any guest is still active. */
+export async function closeSession(sessionId: string): Promise<void> {
+  await apiFetch<void>(`/sessions/${sessionId}/close`, {
+    method: 'PATCH',
+    body: JSON.stringify({}),
+  });
+}
+
 export async function markGuestLeft(
   sessionId: string,
   guestId: string,

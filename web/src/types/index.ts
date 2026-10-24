@@ -174,6 +174,8 @@ export interface BillingOrder {
   taxTotal: number;
   grandTotal: number;
   orderSource: string;
+  /** Present at runtime — the bill endpoint returns full order docs. */
+  status?: string;
   createdAt: string;
 }
 

@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, RefreshCw, Loader2, Users } from 'lucide-react';
+import { X, RefreshCw, Loader2, Users, Unlock } from 'lucide-react';
 import type { SessionBill, GuestBill, PaymentMethod, SessionSummary, BillingOrder } from '../../types';
-import { fetchSessionBill, billGuest, bulkBillAndClose } from '../../api/billing';
+import { fetchSessionBill, billGuest, bulkBillAndClose, markGuestLeft, closeSession } from '../../api/billing';
 import type { SplitDetails } from '../../api/billing';
+import { cancelOrder } from '../../api/orders';
+import { useAuth } from '../../context/AuthContext';
 import { GuestPanel } from './GuestPanel';
 import { PaymentPanel } from './PaymentPanel';
 import { ReceiptView } from './ReceiptView';
@@ -15,6 +17,9 @@ interface Props {
   currencySymbol: string;
   onClose: () => void;
 }
+
+// Orders that block billing/closing because they're still with the kitchen
+const KITCHEN_STATUSES = new Set(['pending', 'preparing', 'ready', 'payment_pending']);
 
 // Socket events that signal stale billing data for this session
 const BILLING_EVENTS = [
@@ -31,6 +36,7 @@ function elapsedLabel(openedAt: string): string {
 
 export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose }: Props) {
   const { socket } = useSocket();
+  const { role } = useAuth();
 
   const [bill, setBill]         = useState<SessionBill | null>(null);
   const [loading, setLoading]   = useState(true);
@@ -48,6 +54,8 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
   const [actionError, setActionError]         = useState<string | null>(null);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [closingTable, setClosingTable]         = useState(false);
+  const [showRelease, setShowRelease]           = useState(false);
+  const [releasing, setReleasing]               = useState(false);
 
   // Pulses the Confirm Payment button briefly after a guest is selected via Pay
   const [confirmFlash, setConfirmFlash] = useState(false);
@@ -134,9 +142,24 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
     ? bill.session.tableNumber
     : '…';
 
+  // Release (admin): for tables left open by mistake or with stale orders.
+  // Kitchen orders get cancelled; served-but-unpaid orders of active guests
+  // are written off as a walk-out (guest marked left), never deleted.
+  const releaseKitchenOrders = activeGuestBills.flatMap(gb => gb.orders)
+    .filter(o => KITCHEN_STATUSES.has(o.status ?? ''));
+  const releaseKitchenTotal  = releaseKitchenOrders.reduce((s, o) => s + o.grandTotal, 0);
+  const releaseUnpaidTotal   = activeGuestBills.flatMap(gb => gb.orders)
+    .filter(o => !KITCHEN_STATUSES.has(o.status ?? '') && o.status !== 'cancelled')
+    .reduce((s, o) => s + o.grandTotal, 0);
+  const canRelease = role === 'admin' && bill !== null && !isEmptyTable;
+
   // Keyboard shortcuts — declared after canConfirm so the enabled flag resolves correctly
-  useShortcut('Escape', () => { if (showCloseConfirm) setShowCloseConfirm(false); else onClose(); });
-  useShortcut('Enter', () => { void handleConfirm(); }, canConfirm && !confirming && !showCloseConfirm);
+  useShortcut('Escape', () => {
+    if (showRelease) setShowRelease(false);
+    else if (showCloseConfirm) setShowCloseConfirm(false);
+    else onClose();
+  });
+  useShortcut('Enter', () => { void handleConfirm(); }, canConfirm && !confirming && !showCloseConfirm && !showRelease);
 
   // Payment method key shortcuts (C/K/U/S/M) — not in KeyboardContext; drawer-scoped only
   useEffect(() => {
@@ -237,6 +260,33 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
     }
   }
 
+  // ── Release table (admin) ─────────────────────────────────────────────────
+  // Uses the normal endpoints so stock, loyalty, coupons etc. are reversed
+  // exactly as for a manual cancel. Safe to retry if a step fails midway.
+
+  async function handleRelease() {
+    setReleasing(true);
+    setActionError(null);
+    try {
+      for (const o of releaseKitchenOrders) await cancelOrder(o._id);
+      for (const gb of activeGuestBills) {
+        try {
+          await markGuestLeft(sessionId, gb.guest._id);
+        } catch (err) {
+          // 409 = already left/billed (e.g. a retry) — fine to continue
+          if (!(err instanceof Error && /already/i.test(err.message))) throw err;
+        }
+      }
+      await closeSession(sessionId);
+      onClose();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to release table');
+      setShowRelease(false);
+      setReleasing(false);
+      void load();
+    }
+  }
+
   // ── Guest select from panel ────────────────────────────────────────────────
 
   function handleBillGuest(guestId: string) {
@@ -269,6 +319,17 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
               )}
             </div>
           </div>
+
+          {canRelease && (
+            <button
+              onClick={() => setShowRelease(true)}
+              title="Free this table without billing — for tables left open by mistake"
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-white/60 hover:bg-white/10 hover:text-white"
+            >
+              <Unlock size={13} />
+              Release table
+            </button>
+          )}
 
           <button
             onClick={() => void load()}
@@ -432,6 +493,56 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
           </div>
         )}
       </div>
+
+      {/* Release confirmation dialog */}
+      {showRelease && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40" onClick={e => e.stopPropagation()}>
+          <div className="mx-4 w-full max-w-sm rounded-2xl bg-canvas p-6 shadow-2xl">
+            <h2 className="mb-1 text-base font-bold text-ink">Release Table {tableLabel}?</h2>
+            <p className="mb-4 text-xs text-ink/60">
+              Frees the table without taking payment. Use it for tables left open by mistake or with old orders. This can't be undone.
+            </p>
+            <div className="mb-5 space-y-2 rounded-xl border border-border bg-mist px-4 py-3 text-sm">
+              <div className="flex justify-between gap-3">
+                <span className="text-ink/50">Kitchen orders to cancel</span>
+                <span className="font-semibold tabular-nums text-ink">
+                  {releaseKitchenOrders.length}
+                  {releaseKitchenOrders.length > 0 && ` · ${currencySymbol}${releaseKitchenTotal.toLocaleString('en-IN')}`}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-ink/50">Unpaid guests marked left</span>
+                <span className="font-semibold tabular-nums text-ink">{activeGuestCount}</span>
+              </div>
+              {releaseUnpaidTotal > 0 && (
+                <div className="flex justify-between gap-3 border-t border-border pt-2">
+                  <span className="font-medium text-red-600">Served but unpaid (not collected)</span>
+                  <span className="font-bold tabular-nums text-red-600">
+                    {currencySymbol}{releaseUnpaidTotal.toLocaleString('en-IN')}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowRelease(false)}
+                disabled={releasing}
+                className="flex-1 rounded-xl border border-border bg-canvas py-2.5 text-sm font-medium text-ink/70 transition-colors hover:bg-mist disabled:opacity-40"
+              >
+                Cancel (Esc)
+              </button>
+              <button
+                onClick={() => void handleRelease()}
+                disabled={releasing}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-700 disabled:opacity-40"
+              >
+                {releasing && <Loader2 size={14} className="animate-spin" />}
+                {releasing ? 'Releasing…' : 'Release'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Close confirmation dialog */}
       {showCloseConfirm && (
