@@ -92,14 +92,14 @@ export function ProductsPage() {
       {/* Page header + tabs */}
       <div className="flex shrink-0 flex-col border-b border-border bg-canvas">
         <div className="px-5 py-3">
-          <h1 className="text-base font-semibold text-ink">Products</h1>
+          <h1 className="text-xl font-semibold text-ink">Products</h1>
         </div>
         <div className="flex gap-0 px-5">
           {(['products', 'categories'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium capitalize transition-colors ${
+              className={`-mb-px border-b-2 px-5 py-2.5 text-base font-medium capitalize transition-colors ${
                 tab === t
                   ? 'border-brand text-brand'
                   : 'border-transparent text-ink/50 hover:text-ink/70'
@@ -107,7 +107,7 @@ export function ProductsPage() {
             >
               {t === 'products' ? 'Products' : 'Categories'}
               {t === 'categories' && !catLoading && (
-                <span className="ml-1.5 rounded-full bg-border/40 px-1.5 py-0.5 text-[10px] text-ink/50">
+                <span className="ml-1.5 rounded-full bg-border/40 px-2 py-0.5 text-xs text-ink/50">
                   {categories.length}
                 </span>
               )}
@@ -194,10 +194,14 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
   async function toggleAvail(p: Product) {
     if (toggling.has(p._id)) return;
     setToggling(prev => new Set([...prev, p._id]));
+    // Optimistic: flip immediately, reconcile with the server's copy, revert on error.
+    const next = !p.isAvailable;
+    setProducts(prev => prev.map(x => (x._id === p._id ? { ...x, isAvailable: next } : x)));
     try {
-      const updated = await updateProduct(p._id, { isAvailable: !p.isAvailable });
+      const updated = await updateProduct(p._id, { isAvailable: next });
       setProducts(prev => prev.map(x => (x._id === updated._id ? updated : x)));
     } catch (err) {
+      setProducts(prev => prev.map(x => (x._id === p._id ? { ...x, isAvailable: p.isAvailable } : x)));
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setToggling(prev => {
@@ -411,7 +415,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
           >
             <FileText size={12} />Export PDF
           </button>
-          <div className="absolute right-0 top-full z-20 mt-1 hidden w-40 rounded-xl border border-border bg-canvas py-1 shadow-lg group-hover:block">
+          <div className="absolute left-0 top-full z-20 mt-1 hidden w-48 whitespace-nowrap rounded-xl border border-border bg-canvas py-1 shadow-lg group-hover:block">
             <button
               onClick={() => void handleExportPDF('all')}
               className="block w-full px-3 py-2 text-left text-xs text-ink/70 hover:bg-mist"
@@ -581,7 +585,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                       <button
                         onClick={() => { void toggleAvail(p); }}
                         disabled={toggling.has(p._id)}
-                        className={`relative inline-flex h-5 w-9 rounded-full transition-colors disabled:opacity-50 ${
+                        className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${
                           p.isAvailable ? 'bg-brand' : 'bg-ink/20'
                         }`}
                       >
@@ -688,7 +692,7 @@ function CategoriesPanel({
     <div className="flex flex-1 min-h-0 flex-col">
       {/* Toolbar */}
       <div className="shrink-0 flex items-center justify-between border-b border-border bg-canvas px-5 py-2.5">
-        <span className="text-xs text-ink/40">{categories.length} categories</span>
+        <span className="text-sm text-ink/50">{categories.length} categories</span>
         <button
           onClick={() => setEditing('new')}
           className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"
