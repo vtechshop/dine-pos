@@ -33,16 +33,45 @@ interface StatusEntry {
 }
 
 const _localCache = new Map<string, StatusEntry>();
+
+// In-process L1 in front of Redis. Every authenticated request resolves hotel
+// status, and Redis is a ~250 ms round-trip from the API region, so reading it
+// per request added that to every call. Other instances see invalidations
+// within LOCAL_TTL_MS; the instance that invalidates sees them immediately.
+const LOCAL_TTL_MS = 15_000;
+const _l1 = new Map<string, { entry: StatusEntry; until: number }>();
+
+function l1Get(hotelId: string): StatusEntry | null {
+  const hit = _l1.get(hotelId);
+  if (!hit) return null;
+  if (hit.until <= Date.now()) { _l1.delete(hotelId); return null; }
+  return hit.entry;
+}
+
+function l1Set(hotelId: string, entry: StatusEntry): void {
+  const now = Date.now();
+  if (_l1.size > 5_000) {
+    for (const [k, v] of _l1) { if (v.until <= now) _l1.delete(k); }
+  }
+  _l1.set(hotelId, { entry, until: Math.min(entry.expiresAt, now + LOCAL_TTL_MS) });
+}
 const STATUS_TTL_MS = 45_000;
 const STATUS_TTL_S  = 45;
 const CACHE_PREFIX  = 'hotel:status:';
 
 export async function getCachedStatus(hotelId: string): Promise<StatusEntry | null> {
+  const local = l1Get(hotelId);
+  if (local) return local;
+
   const redis = getRedisClient();
   if (redis) {
     try {
       const raw = await redis.get(CACHE_PREFIX + hotelId);
-      if (raw) return JSON.parse(raw) as StatusEntry;
+      if (raw) {
+        const entry = JSON.parse(raw) as StatusEntry;
+        l1Set(hotelId, entry);
+        return entry;
+      }
       return null;
     } catch { /* Redis error — fall through to in-memory */ }
   }
@@ -52,6 +81,7 @@ export async function getCachedStatus(hotelId: string): Promise<StatusEntry | nu
 }
 
 async function setCachedStatus(hotelId: string, entry: StatusEntry): Promise<void> {
+  l1Set(hotelId, entry);
   const redis = getRedisClient();
   if (redis) {
     try {
@@ -131,6 +161,7 @@ export async function resolveHotelStatus(hotelId: string): Promise<StatusEntry> 
 // new status takes effect immediately rather than waiting for TTL expiry.
 export const invalidateStatusCache = async (hotelId: string): Promise<void> => {
   _localCache.delete(hotelId);
+  _l1.delete(hotelId);
   const redis = getRedisClient();
   if (redis) {
     try { await redis.del(CACHE_PREFIX + hotelId); } catch { /* ignore */ }

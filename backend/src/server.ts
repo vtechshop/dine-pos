@@ -328,18 +328,28 @@ const _rl = (max: number, windowMs: number) => makeRateLimiter({
   handler: (_req, res) => res.status(429).json({ message: 'Too many requests. Please slow down.' }),
 });
 
+// Same limits, counted in-process — for the busy everyday routes, where a Redis
+// round-trip per request (~250 ms from this region) slowed every screen.
+const _rlLocal = (max: number, windowMs: number) => makeRateLimiter({
+  windowMs,
+  max,
+  distributed: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  handler: (_req, res) => res.status(429).json({ message: 'Too many requests. Please slow down.' }),
+});
+
 // POST /api/orders — 120/min (2 orders/sec burst, generous for any restaurant)
-app.use('/api/orders', _rl(120, 60_000));
+app.use('/api/orders', _rlLocal(120, 60_000));
 // Sync endpoints called by every device on cache refresh — 60/min per IP
-app.use('/api/products',    _rl(60, 60_000));
-app.use('/api/categories',  _rl(60, 60_000));
-app.use('/api/settings',    _rl(60, 60_000));
+app.use('/api/products',    _rlLocal(60, 60_000));
+app.use('/api/categories',  _rlLocal(60, 60_000));
+app.use('/api/settings',    _rlLocal(60, 60_000));
 // Device heartbeat — expected every 5 min per device; 12/min handles 6 devices with headroom
-app.use('/api/devices/heartbeat', _rl(12, 60_000));
+app.use('/api/devices/heartbeat', _rlLocal(12, 60_000));
 // Public remote-config — 30/min per IP; prevents crash-loop hammering
-app.use('/api/remote-config', _rl(30, 60_000));
+app.use('/api/remote-config', _rlLocal(30, 60_000));
 // Session + guest writes — 60/min per IP (generous for any table-service flow)
-app.use('/api/sessions', _rl(60, 60_000));
+app.use('/api/sessions', _rlLocal(60, 60_000));
 // Super admin panel — 60 req/min per IP (tighter than general API; login has its own 10/15-min limiter inside the route)
 app.use('/api/superadmin', _rl(60, 60_000));
 
@@ -405,7 +415,7 @@ app.use('/api/org-customers',                orgCustomerRoutes);
 app.use('/api/category-config',              categoryConfigRoutes);
 app.use('/api/print-jobs', printRoutes);
 app.use('/api/inquiries', inquiryRoutes);
-app.use('/api/modifiers', _rl(60, 60_000));
+app.use('/api/modifiers', _rlLocal(60, 60_000));
 app.use('/api/modifiers', modifierRoutes);
 app.use('/api/vendors',           vendorRoutes);
 app.use('/api/purchase-orders',   purchaseOrderRoutes);
