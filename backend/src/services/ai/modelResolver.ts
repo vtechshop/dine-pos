@@ -44,9 +44,19 @@ function listModels(apiKey: string): Promise<string[]> {
   });
 }
 
-function pickModel(available: string[]): { model: string; reason: string } {
+// AI Chat answers short lookups and may call tools for up to 3 rounds, so a
+// thinking model makes every reply slow. Prefer the fast Flash-Lite models for
+// chat; fall back to the general list. Override with GEMINI_CHAT_MODEL.
+const CHAT_PREFERENCE = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-2.5-flash-lite',
+  ...PREFERENCE,
+];
+
+function pickModel(available: string[], preference: string[] = PREFERENCE): { model: string; reason: string } {
   // Walk the preference list and return the first model present in the available set.
-  for (const pref of PREFERENCE) {
+  for (const pref of preference) {
     if (available.some(m => m.includes(pref))) {
       return { model: pref, reason: `selected from preference list: ${pref}` };
     }
@@ -87,6 +97,7 @@ export async function resolveGeminiModel(apiKey: string): Promise<string> {
         available.forEach(m => console.log('  -', m));
       }
 
+      _available = available;
       const { model, reason } = pickModel(available);
       console.log(`[Gemini] Selected model: ${model}`);
       console.log(`[Gemini] Reason: ${reason}`);
@@ -97,4 +108,21 @@ export async function resolveGeminiModel(apiKey: string): Promise<string> {
   }
 
   return _promise;
+}
+
+let _available: string[] | null = null;
+let _chatResolved: string | null = null;
+
+/** Model for AI Chat — fast Flash-Lite first (see CHAT_PREFERENCE). Cached per process. */
+export async function resolveChatModel(apiKey: string): Promise<string> {
+  if (process.env.GEMINI_CHAT_MODEL) return process.env.GEMINI_CHAT_MODEL;
+  if (_chatResolved) return _chatResolved;
+
+  const general = await resolveGeminiModel(apiKey); // populates _available (or honours GEMINI_MODEL)
+  const available = _available ?? await listModels(apiKey);
+  const { model, reason } = pickModel(available, CHAT_PREFERENCE);
+  console.log(`[Gemini] Chat model: ${model || general} (${model ? reason : 'fallback to general model'})`);
+
+  _chatResolved = model || general;
+  return _chatResolved;
 }

@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import type { FunctionCall } from '@google/generative-ai';
-import { resolveGeminiModel } from '../services/ai/modelResolver';
+import { resolveGeminiModel, resolveChatModel } from '../services/ai/modelResolver';
 import { logger } from './logger';
 
 // 45-second hard cap — Gemini SDK has no built-in request timeout.
@@ -21,6 +21,19 @@ async function getModel(): Promise<GenerativeModel | null> {
   }
   cachedModel = gemini.getGenerativeModel({ model }, { apiVersion: 'v1beta' });
   return cachedModel;
+}
+
+// Separate, faster model for AI Chat (generateWithTools is chat-only).
+let cachedChatModel: GenerativeModel | null = null;
+
+async function getChatModel(): Promise<GenerativeModel | null> {
+  if (!process.env.GEMINI_API_KEY) return null;
+  if (cachedChatModel) return cachedChatModel;
+  if (!gemini) gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  const model = await resolveChatModel(process.env.GEMINI_API_KEY);
+  if (!model) return getModel();
+  cachedChatModel = gemini.getGenerativeModel({ model }, { apiVersion: 'v1beta' });
+  return cachedChatModel;
 }
 
 function geminiTimeout<T>(promise: Promise<T>): Promise<T> {
@@ -80,7 +93,7 @@ export async function generateWithTools(
   tools:          ToolDeclaration[],
   executor:       ToolExecutor,
 ): Promise<string | null> {
-  const model = await getModel();
+  const model = await getChatModel();
   if (!model) return null;
 
   // Build Gemini tool declarations
