@@ -12,6 +12,7 @@ import {
   rejectOcrJob,
 } from '../services/purchaseSuggestion';
 import { sendError } from '../utils/sendError';
+import { logAudit } from '../utils/audit';
 import { makeRateLimiter } from '../utils/rateLimiter';
 import { ipKeyGenerator } from 'express-rate-limit';
 import { getRedisClient } from '../config/redis';
@@ -230,6 +231,40 @@ router.post('/ocr/job/:jobId/reject', async (req: AuthRequest, res: Response) =>
     return res.json({ success: true, jobId: req.params.jobId });
   } catch (err) {
     sendError(res, 500, 'Failed to reject OCR job', err);
+  }
+});
+
+// ─── DELETE /api/ai/ocr/job/:jobId ───────────────────────────────────────────
+// Remove a scan (e.g. wrong file uploaded). Approved jobs created purchase
+// records that reference them, and processing jobs are mid-OCR — both refused.
+
+router.delete('/ocr/job/:jobId', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.jobId)) {
+      return res.status(400).json({ message: 'Invalid job id' });
+    }
+    const deleted = await OcrJob.findOneAndDelete({
+      _id:     req.params.jobId,
+      hotelId: req.hotelId,
+      status:  { $nin: ['approved', 'processing'] },
+    }, { projection: { fileName: 1, status: 1 } }).lean();
+
+    if (!deleted) {
+      const job = await OcrJob.findOne({ _id: req.params.jobId, hotelId: req.hotelId }, { status: 1 }).lean();
+      if (!job) return res.status(404).json({ message: 'Scan not found' });
+      return res.status(409).json({
+        message: job.status === 'approved'
+          ? 'This invoice was already approved into purchase records and cannot be deleted here.'
+          : 'This scan is still being processed. Try again in a moment.',
+      });
+    }
+
+    logAudit(req, 'ocr_job.deleted', 'ocr_job', req.params.jobId, {
+      name: deleted.fileName, status: deleted.status,
+    });
+    return res.json({ success: true });
+  } catch (err) {
+    sendError(res, 500, 'Failed to delete scan', err);
   }
 });
 

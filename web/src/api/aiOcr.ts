@@ -1,6 +1,6 @@
 import { apiFetch } from './client';
 
-export type OcrJobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'rejected';
+export type OcrJobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'approved' | 'rejected';
 export type OcrFileType  = 'pdf' | 'jpg' | 'png';
 
 export interface OcrVendorMatch {
@@ -113,6 +113,11 @@ export function approveOcrJob(
     body:   JSON.stringify({ selectedVendorId, ...(reviewedData ? { reviewedData } : {}) }),
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+/** Delete a scan. Refused (409) for approved or still-processing scans. */
+export function deleteOcrJob(jobId: string): Promise<{ success: boolean }> {
+  return apiFetch(`/ai/ocr/job/${jobId}`, { method: 'DELETE' });
 }
 
 export function rejectOcrJob(
