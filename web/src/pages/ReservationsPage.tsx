@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus, RefreshCw, CalendarDays, Users, Phone, Clock, X, Check,
   Edit2, ChevronDown, AlertCircle, Bell, UserCheck, Ban, LogIn,
@@ -660,6 +661,17 @@ function WaitlistTab(_props: WaitlistTabProps) {
 export function ReservationsPage() {
   const [tab,          setTab]          = useState<'reservations' | 'waitlist'>('reservations');
   const [date,         setDate]         = useState(todayStr());
+
+  // Top-bar search links here as /reservations?date=YYYY-MM-DD — open that day.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const d = searchParams.get('date');
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      setTab('reservations');
+      setDate(d);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [statusFilter, setStatusFilter] = useState<ReservationStatus | 'all'>('all');
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [stats,        setStats]        = useState<Record<string, number>>({});

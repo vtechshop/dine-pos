@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Search, RefreshCw, Users, Star, Award, TrendingUp, Download,
   Layers, AlertTriangle, CheckCircle,
@@ -111,6 +112,16 @@ export function CustomersPage() {
   const [listError, setListError]         = useState<string | null>(null);
   const [featureEnabled, setFeatureEnabled] = useState(true);
   const [selectedId, setSelectedId]       = useState<string | null>(null);
+
+  // Top-bar search links here as /customers?id=<customerId> — open that profile.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get('id');
+    if (id) {
+      setSelectedId(id);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [config, setConfig]               = useState<LoyaltyConfig | null>(null);
   const [orderCustomers, setOrderCustomers] = useState<OrderCustomer[]>([]);
 

@@ -6,6 +6,7 @@ import { useSocket } from '../../context/SocketContext';
 import { useSettings } from '../../context/SettingsContext';
 import { NotificationBell } from '../ui/NotificationBell';
 import { PlatformStatus } from './PlatformStatus';
+import { GlobalSearch } from './GlobalSearch';
 import { BroadcastBell } from '../ui/BroadcastBell';
 import { LiveBadge } from '../ui/LiveBadge';
 
@@ -55,6 +56,9 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
 
         {/* Right controls */}
         <div className="flex items-center gap-1">
+          {/* Global search — reservations / orders / customers / tables (admin-only API) */}
+          {role === 'admin' && <div className="mr-2"><GlobalSearch /></div>}
+
           {/* Swiggy / Zomato status — integrations API is admin-only + feature-gated */}
           {role === 'admin' && aggregatorEnabled && <PlatformStatus />}
 
