@@ -369,6 +369,8 @@ export function DashboardPage() {
   const [filter,        setFilter]        = useState<Filter>('all');
   const [search,        setSearch]        = useState('');
   const [billingSessionId, setBillingSessionId] = useState<string | null>(null);
+  // Session this dashboard just opened by tapping a free table — auto-closed if left empty
+  const [tapOpenedSessionId, setTapOpenedSessionId] = useState<string | null>(null);
   const [openingTableId,   setOpeningTableId]   = useState<string | null>(null);
   const [topProducts,        setTopProducts]        = useState<TopProduct[]>([]);
   const [topProductsLoading, setTopProductsLoading] = useState(true);
@@ -513,6 +515,7 @@ export function DashboardPage() {
     try {
       const { session } = await openSession(tableId);
       void load();
+      setTapOpenedSessionId(session._id);
       setBillingSessionId(session._id);
     } catch (err) {
       // 409 = the table already has an open session (a race, or a session left
@@ -858,7 +861,8 @@ export function DashboardPage() {
           sessionId={billingSessionId}
           openSessions={sessions}
           currencySymbol={currencySymbol}
-          onClose={() => { setBillingSessionId(null); void load(); }}
+          onClose={() => { setBillingSessionId(null); setTapOpenedSessionId(null); void load(); }}
+          autoReleaseIfEmpty={billingSessionId === tapOpenedSessionId}
         />
       )}
     </div>

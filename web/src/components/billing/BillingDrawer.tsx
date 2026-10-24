@@ -16,6 +16,9 @@ interface Props {
   openSessions: SessionSummary[];
   currencySymbol: string;
   onClose: () => void;
+  /** Session was just opened by tapping a free table: if it's still empty when
+   *  the drawer is dismissed, close it so a mis-tap doesn't leave it occupied. */
+  autoReleaseIfEmpty?: boolean;
 }
 
 // Orders that block billing/closing because they're still with the kitchen
@@ -34,7 +37,7 @@ function elapsedLabel(openedAt: string): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose }: Props) {
+export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose: onCloseProp, autoReleaseIfEmpty }: Props) {
   const { socket } = useSocket();
   const { role } = useAuth();
 
@@ -121,6 +124,17 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
 
   // Structural states — drive which view the drawer shows
   const isEmptyTable    = bill !== null && bill.guests.length === 0;
+
+  // Every dismiss path (X, backdrop, Esc, after billing) goes through here.
+  // The server refuses to close if a guest joined meanwhile (e.g. via QR), so
+  // this can never drop a real order — the error is just ignored.
+  const onClose = useCallback(() => {
+    if (autoReleaseIfEmpty && isEmptyTable) {
+      void closeSession(sessionId).catch(() => {}).finally(onCloseProp);
+      return;
+    }
+    onCloseProp();
+  }, [autoReleaseIfEmpty, isEmptyTable, sessionId, onCloseProp]);
   const allGuestsBilled = bill !== null && bill.guests.length > 0 && activeGuestCount === 0;
 
   const guestTotal = selectedGuestBill
