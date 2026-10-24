@@ -5,6 +5,7 @@ import type { IngredientInput } from '../../api/products';
 import { createIngredient, updateIngredient, restockIngredient } from '../../api/products';
 import { useShortcut } from '../../hooks/useShortcut';
 import { useSettings } from '../../context/SettingsContext';
+import { ErrorPopup } from '../ui/ErrorPopup';
 
 interface Props {
   ingredient: Ingredient | null;

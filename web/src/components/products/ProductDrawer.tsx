@@ -13,6 +13,7 @@ import { fetchKitchenStations } from '../../api/kitchenStations';
 import type { KitchenStation } from '../../api/kitchenStations';
 import { useShortcut } from '../../hooks/useShortcut';
 import { useSettings } from '../../context/SettingsContext';
+import { ErrorPopup } from '../ui/ErrorPopup';
 
 // Ingredient type from the backend
 interface Ingredient {
@@ -328,10 +329,9 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
   }
 
   async function handleSave() {
-    if (!form.name.trim() || !form.category || form.price <= 0) {
-      setError('Name, category and a price > 0 are required');
-      return;
-    }
+    if (!form.name.trim()) { setError('Enter a product name'); return; }
+    if (!form.category)    { setError('Choose a category'); return; }
+    if (!(form.price > 0)) { setError(`Price must be more than ${sym}0`); return; }
     for (const v of variants) {
       if (!v.name.trim()) { setError('Variant names cannot be empty'); return; }
       if (v.price < 0)    { setError('Variant prices must be ≥ 0'); return; }
@@ -396,9 +396,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
 
         {/* Body */}
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-          {error && (
-            <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
-          )}
+          <ErrorPopup message={error} onClose={() => setError(null)} />
 
           {/* ── Image ──────────────────────────────────────────────────────── */}
           <div>

@@ -4,6 +4,7 @@ import type { Category } from '../../types';
 import type { CategoryInput } from '../../api/products';
 import { createCategory, updateCategory } from '../../api/products';
 import { useShortcut } from '../../hooks/useShortcut';
+import { ErrorPopup } from '../ui/ErrorPopup';
 
 interface Props {
   category: Category | null;
