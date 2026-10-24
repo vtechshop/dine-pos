@@ -31,6 +31,10 @@ interface Props {
   onClose: () => void;
 }
 
+// Modifiers are hidden from the UI (removed from the sidebar). Flip to true to
+// bring back the product form's modifier-group section.
+const SHOW_MODIFIERS = false;
+
 const BLANK: ProductInput = {
   name: '',
   price: 0,
@@ -162,11 +166,13 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
       }
 
       // Load modifier groups
-      setMgLoading(true);
-      fetchModifierGroups({ active: true, limit: 200 })
-        .then(res => setAllGroups(res.groups))
-        .catch(() => setMgError('Failed to load modifier groups'))
-        .finally(() => setMgLoading(false));
+      if (SHOW_MODIFIERS) {
+        setMgLoading(true);
+        fetchModifierGroups({ active: true, limit: 200 })
+          .then(res => setAllGroups(res.groups))
+          .catch(() => setMgError('Failed to load modifier groups'))
+          .finally(() => setMgLoading(false));
+      }
 
       // Load ingredients (may be 403 if feature disabled)
       setIngLoading(true);
@@ -805,7 +811,7 @@ export function ProductDrawer({ product, categories, onSave, onClose }: Props) {
           )}
 
           {/* ── Modifier Groups (edit mode only) ────────────────────────────── */}
-          {product && (
+          {SHOW_MODIFIERS && product && (
             <div>
               <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-ink/50">
                 Modifier Groups

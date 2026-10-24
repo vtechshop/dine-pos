@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, LayoutGrid, Users, Package, Archive, BarChart2,
-  Settings, CalendarDays, ChefHat, CreditCard, Truck, Link2, RefreshCw, Layers,
+  Settings, CalendarDays, ChefHat, CreditCard, Truck, Link2, RefreshCw,
   Store, ShoppingBag, ClipboardList, Wallet, TrendingUp, Sparkles, X, Bot, Sunrise, RotateCcw,
   FileBarChart, FileText, MessageSquare, Bell, Lightbulb, ScanLine, Tag, Gift, Shield,
   Plus, PauseCircle, Search, Printer, UserCircle, History, Building2,
@@ -50,7 +50,6 @@ const NAV_GROUPS: NavGroup[] = [
     heading: 'Menu & Catalog',
     items: [
       { to: '/products',               icon: Package,    label: 'Products'   },
-      { to: '/modifiers',              icon: Layers,     label: 'Modifiers'  },
       { to: '/inventory',              icon: Archive,    label: 'Inventory'  },
       { to: '/inventory-intelligence', icon: TrendingUp, label: 'Stock Intel' },
     ],
