@@ -5,9 +5,15 @@ export const EMAIL_RE   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const GST_RE     = /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}Z[A-Z\d]{1}$/;
 export const FSSAI_RE   = /^\d{14}$/;
 export const PINCODE_RE = /^\d{6}$/;
+export const PAN_RE     = /^[A-Z]{5}\d{4}[A-Z]$/;
+export const IFSC_RE    = /^[A-Z]{4}0[A-Z\d]{6}$/;
+export const BANK_ACCOUNT_RE = /^\d{9,18}$/;
 
 export const validatePhone   = (v: string) => PHONE_RE.test(v.trim());
 export const validateEmail   = (v: string) => EMAIL_RE.test(v.trim());
 export const validateGST     = (v: string) => GST_RE.test(v.trim().toUpperCase());
 export const validateFSSAI   = (v: string) => FSSAI_RE.test(v.trim());
 export const validatePincode = (v: string) => PINCODE_RE.test(v.trim());
+export const validatePAN     = (v: string) => PAN_RE.test(v.trim().toUpperCase());
+export const validateIFSC    = (v: string) => IFSC_RE.test(v.trim().toUpperCase());
+export const validateBankAccount = (v: string) => BANK_ACCOUNT_RE.test(v.trim());

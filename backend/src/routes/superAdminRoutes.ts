@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import os from 'os';
 import mongoose from 'mongoose';
 import Hotel from '../models/Hotel';
+import Settings from '../models/Settings';
 import Order from '../models/Order';
 import TableSession from '../models/TableSession';
 import Device from '../models/Device';
@@ -1736,6 +1737,33 @@ router.put('/hotels/:id/settings', superAdminAuth, async (req: Request, res: Res
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await logAuditRaw({ action: 'superadmin.hotel.settings_updated', actorRole: 'superadmin', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: update });
     return res.json({ message: 'Hotel settings updated', hotel });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// ── SA Legal-details unlock ───────────────────────────────────────────────────
+// PATCH /api/superadmin/hotels/:id/legal-unlock  body: { fields?: string[] }
+// Hotel admins can't change GST / FSSAI / PAN / bank details once saved. Support
+// clears the wrong ones here so the hotel can re-enter them. Defaults to all.
+
+const SA_LEGAL_FIELDS = [
+  'gstNumber', 'fssaiNumber', 'panNumber',
+  'bankName', 'bankAccountHolder', 'bankAccountNumber', 'bankIfscCode',
+];
+
+router.patch('/hotels/:id/legal-unlock', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
+    const requested = Array.isArray(req.body?.fields) ? (req.body.fields as unknown[]).map(String) : SA_LEGAL_FIELDS;
+    const fields = requested.filter(f => SA_LEGAL_FIELDS.includes(f));
+    if (fields.length === 0) return res.status(400).json({ message: 'No valid legal fields specified' });
+
+    const set: Record<string, string> = {};
+    for (const f of fields) set[f] = '';
+    const settings = await Settings.findOneAndUpdate({ hotelId: req.params.id }, { $set: set }, { new: true });
+    if (!settings) return res.status(404).json({ message: 'Settings not found for this hotel' });
+
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.legal_unlocked', targetType: 'settings', targetId: req.params.id, metadata: { fields }, ip: req.ip });
+    return res.json({ message: 'Legal fields unlocked', fields });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 

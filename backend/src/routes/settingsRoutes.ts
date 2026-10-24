@@ -6,6 +6,7 @@ import { authMiddleware, requireAdmin, AuthRequest, invalidateStatusCache } from
 import { logAudit } from '../utils/audit';
 import { validatePin } from '../utils/pinPolicy';
 import { sendError } from '../utils/sendError';
+import { validateGST, validateFSSAI, validatePAN, validateIFSC, validateBankAccount } from '../utils/validation';
 
 const router = Router();
 
@@ -110,12 +111,47 @@ const SETTINGS_ALLOWED_FIELDS = new Set([
   'loyaltySettings', 'kitchenPin',
 ]);
 
+// Legal / bank details are write-once for the hotel admin: a saved value can't be
+// changed or cleared here (support unlocks via PATCH /superadmin/hotels/:id/legal-unlock).
+const LEGAL_FIELDS: Record<string, { label: string; normalize: (v: string) => string; valid?: (v: string) => boolean }> = {
+  gstNumber:         { label: 'GST number',          normalize: v => v.trim().toUpperCase(), valid: validateGST },
+  fssaiNumber:       { label: 'FSSAI license number', normalize: v => v.trim(),               valid: validateFSSAI },
+  panNumber:         { label: 'PAN number',          normalize: v => v.trim().toUpperCase(), valid: validatePAN },
+  bankName:          { label: 'Bank name',           normalize: v => v.trim() },
+  bankAccountHolder: { label: 'Account holder name', normalize: v => v.trim() },
+  bankAccountNumber: { label: 'Account number',      normalize: v => v.replace(/\s+/g, ''),  valid: validateBankAccount },
+  bankIfscCode:      { label: 'IFSC code',           normalize: v => v.trim().toUpperCase(), valid: validateIFSC },
+};
+
 // PUT update settings for this hotel
 router.put('/', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const body: Record<string, any> = {};
     for (const [k, v] of Object.entries(req.body)) {
       if (SETTINGS_ALLOWED_FIELDS.has(k)) body[k] = v;
+    }
+
+    // Legal fields: drop unchanged/empty values (other screens resend the whole
+    // settings object), reject edits to saved values, validate formats.
+    const legalKeys = Object.keys(body).filter(k => k in LEGAL_FIELDS);
+    if (legalKeys.length > 0) {
+      const current = await Settings.findOne({ hotelId: req.hotelId }).select(legalKeys.join(' ')).lean() as Record<string, any> | null;
+      for (const k of legalKeys) {
+        const rule  = LEGAL_FIELDS[k];
+        const next  = rule.normalize(String(body[k] ?? ''));
+        const saved = String(current?.[k] ?? '').trim();
+        if (!next || next === saved) { delete body[k]; continue; }
+        if (saved) {
+          return res.status(409).json({
+            code: 'LEGAL_FIELD_LOCKED',
+            message: `${rule.label} can't be changed once saved. Contact support to correct it.`,
+          });
+        }
+        if (rule.valid && !rule.valid(next)) {
+          return res.status(400).json({ message: `Enter a valid ${rule.label}.` });
+        }
+        body[k] = next;
+      }
     }
     if (body.kitchenPin && typeof body.kitchenPin === 'string') {
       const pinCheck = validatePin(body.kitchenPin);

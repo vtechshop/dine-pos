@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useId, isValidElement, cloneElement }
 import type { ReactElement } from 'react';
 import {
   User, Building2, Users, Printer, Heart, Flag, Shield,
-  Plus, Pencil, Trash2, RefreshCw, LogOut, Wifi, WifiOff, Check,
+  Plus, Pencil, Trash2, RefreshCw, LogOut, Wifi, WifiOff, Check, Lock,
   type LucideIcon,
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
@@ -20,6 +20,7 @@ import type { SessionDevice } from '../api/devices';
 import { fetchPrinterDevices } from '../api/dashboard';
 import { apiFetch } from '../api/client';
 import { StaffDrawer } from '../components/settings/StaffDrawer';
+import { ErrorPopup } from '../components/ui/ErrorPopup';
 import type { Settings, PrinterDeviceStatus, LoyaltySettings } from '../types';
 
 // ── Shared UI helpers ─────────────────────────────────────────────────────────
@@ -313,47 +314,126 @@ function toLegalDraft(s: Settings): LegalDraft {
   };
 }
 
+// All legal fields are mandatory and write-once: the server rejects changes to a
+// saved value (support can unlock). Patterns mirror backend/src/utils/validation.ts.
+const LEGAL_RULES: Record<keyof LegalDraft, { label: string; re?: RegExp; mono?: boolean; upper?: boolean; placeholder?: string }> = {
+  gstNumber:         { label: 'GST Number',          re: /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/, mono: true, upper: true, placeholder: '27AABCU9603R1ZX' },
+  fssaiNumber:       { label: 'FSSAI License No.',   re: /^\d{14}$/,                          mono: true, placeholder: '10022021000123' },
+  panNumber:         { label: 'PAN Number',          re: /^[A-Z]{5}\d{4}[A-Z]$/,              mono: true, upper: true, placeholder: 'AABCU9603R' },
+  bankName:          { label: 'Bank Name',           placeholder: 'HDFC Bank' },
+  bankAccountHolder: { label: 'Account Holder Name' },
+  bankAccountNumber: { label: 'Account Number',      re: /^\d{9,18}$/,                        mono: true },
+  bankIfscCode:      { label: 'IFSC Code',           re: /^[A-Z]{4}0[A-Z\d]{6}$/,             mono: true, upper: true, placeholder: 'HDFC0001234' },
+};
+
 function LegalSection({ settings, refresh }: { settings: Settings; refresh: () => Promise<void> }) {
   const [d, setD] = useState<LegalDraft>(toLegalDraft(settings));
   const { save, saving, msg } = useSave(refresh);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   useEffect(() => setD(toLegalDraft(settings)), [settings]);
+
+  const saved     = toLegalDraft(settings);
+  const isLocked  = (k: keyof LegalDraft) => saved[k].trim() !== '';
+  const allLocked = (Object.keys(LEGAL_RULES) as (keyof LegalDraft)[]).every(isLocked);
+
+  function validate(): string | null {
+    for (const k of Object.keys(LEGAL_RULES) as (keyof LegalDraft)[]) {
+      const rule = LEGAL_RULES[k];
+      const v = k === 'bankAccountNumber' ? d[k].replace(/\s+/g, '') : d[k].trim();
+      if (!v) return `${rule.label} is required`;
+      if (rule.re && !rule.re.test(v)) return `Enter a valid ${rule.label}`;
+    }
+    return null;
+  }
+
+  function onSave() {
+    const err = validate();
+    if (err) { setFormError(err); return; }
+    setConfirming(true);
+  }
+
+  function field(k: keyof LegalDraft) {
+    const rule   = LEGAL_RULES[k];
+    const locked = isLocked(k);
+    return (
+      <F label={`${rule.label} *`}>
+        <div className="relative">
+          <input
+            value={d[k]}
+            readOnly={locked}
+            onChange={e => setD(p => ({ ...p, [k]: rule.upper ? e.target.value.toUpperCase() : e.target.value }))}
+            placeholder={rule.placeholder}
+            title={locked ? 'Locked after saving. Contact support to change it.' : undefined}
+            className={`${inp} ${rule.mono ? 'font-mono' : ''} ${locked ? 'cursor-not-allowed bg-mist pr-8 text-ink/60' : ''}`}
+          />
+          {locked && <Lock size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink/35" />}
+        </div>
+      </F>
+    );
+  }
 
   return (
     <div className="space-y-5">
+      <ErrorPopup message={formError} onClose={() => setFormError(null)} />
+
       <SectionCard title="Tax & Compliance">
         <div className="grid grid-cols-2 gap-4">
-          <F label="GST Number">
-            <input value={d.gstNumber} onChange={e => setD(p => ({ ...p, gstNumber: e.target.value.toUpperCase() }))} placeholder="27AABCU9603R1ZX" className={`${inp} font-mono`} />
-          </F>
-          <F label="FSSAI License No.">
-            <input value={d.fssaiNumber} onChange={e => setD(p => ({ ...p, fssaiNumber: e.target.value }))} placeholder="10022021000123" className={`${inp} font-mono`} />
-          </F>
-          <div className="col-span-1">
-            <F label="PAN Number">
-              <input value={d.panNumber} onChange={e => setD(p => ({ ...p, panNumber: e.target.value.toUpperCase() }))} placeholder="AABCU9603R" className={`${inp} font-mono`} />
-            </F>
-          </div>
+          {field('gstNumber')}
+          {field('fssaiNumber')}
+          <div className="col-span-1">{field('panNumber')}</div>
         </div>
       </SectionCard>
 
       <SectionCard title="Bank Details">
         <div className="grid grid-cols-2 gap-4">
-          <F label="Bank Name">
-            <input value={d.bankName} onChange={e => setD(p => ({ ...p, bankName: e.target.value }))} placeholder="HDFC Bank" className={inp} />
-          </F>
-          <F label="Account Holder Name">
-            <input value={d.bankAccountHolder} onChange={e => setD(p => ({ ...p, bankAccountHolder: e.target.value }))} className={inp} />
-          </F>
-          <F label="Account Number">
-            <input value={d.bankAccountNumber} onChange={e => setD(p => ({ ...p, bankAccountNumber: e.target.value }))} className={`${inp} font-mono`} />
-          </F>
-          <F label="IFSC Code">
-            <input value={d.bankIfscCode} onChange={e => setD(p => ({ ...p, bankIfscCode: e.target.value.toUpperCase() }))} placeholder="HDFC0001234" className={`${inp} font-mono`} />
-          </F>
+          {field('bankName')}
+          {field('bankAccountHolder')}
+          {field('bankAccountNumber')}
+          {field('bankIfscCode')}
         </div>
       </SectionCard>
 
-      <SaveRow onSave={() => void save(d)} saving={saving} msg={msg} />
+      <p className="flex items-center gap-1.5 text-xs text-ink/50">
+        <Lock size={12} />
+        All fields are required. Once saved they can't be changed. Contact support to correct a mistake.
+      </p>
+
+      {!allLocked && <SaveRow onSave={onSave} saving={saving} msg={msg} />}
+
+      {confirming && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={() => setConfirming(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-canvas p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="mb-1 text-base font-bold text-ink">Save legal details?</h3>
+            <p className="mb-4 text-xs text-ink/60">
+              Check them carefully. After saving, GST, FSSAI, PAN and bank details can't be changed here.
+            </p>
+            <div className="mb-5 space-y-1 rounded-xl border border-border bg-mist px-4 py-3 text-xs">
+              {(Object.keys(LEGAL_RULES) as (keyof LegalDraft)[]).map(k => (
+                <div key={k} className="flex justify-between gap-3">
+                  <span className="text-ink/50">{LEGAL_RULES[k].label}</span>
+                  <span className="truncate font-mono text-ink">{d[k]}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirming(false)}
+                className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium text-ink/70 hover:bg-mist"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => { setConfirming(false); void save(d); }}
+                disabled={saving}
+                className="flex-1 rounded-xl bg-brand py-2.5 text-sm font-bold text-white hover:bg-brand/90 disabled:opacity-40"
+              >
+                Confirm &amp; Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
