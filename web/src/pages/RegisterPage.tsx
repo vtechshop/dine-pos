@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ChangeEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, ChevronDown } from 'lucide-react';
 import { registerHotel } from '../api/hotels';
 import { ApiError } from '../api/client';
 import { Spinner } from '../components/ui/Spinner';
@@ -67,6 +68,14 @@ export function RegisterPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-mist px-4 py-10">
       <div className="w-full max-w-md">
 
+        <Link
+          to="/login"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-ink/55 transition hover:text-ink"
+        >
+          <ArrowLeft size={15} />
+          Back to login
+        </Link>
+
         <div className="mb-8 text-center">
           <img
             src="/branding/logo-64.png"
@@ -124,16 +133,21 @@ export function RegisterPage() {
 
             <div>
               <label htmlFor="businessType" className={labelCls}>Business Type *</label>
+              {/* appearance-none + own chevron so it lines up with the text inputs;
+                  grey until chosen, like the other fields' placeholders */}
+              <div className="relative">
               <select
                 id="businessType" required
                 value={form.businessType} onChange={field('businessType')}
-                className={inputCls}
+                className={`${inputCls} appearance-none pr-10 ${form.businessType ? '' : 'text-ink/40'}`}
               >
-                <option value="">Select type…</option>
+                <option value="" disabled>Select type…</option>
                 {BUSINESS_TYPES.map(t => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
+                  <option key={t.value} value={t.value} className="text-ink">{t.label}</option>
                 ))}
               </select>
+              <ChevronDown size={16} className="pointer-events-none absolute right-3.5 top-1/2 mt-[3px] -translate-y-1/2 text-ink/40" />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

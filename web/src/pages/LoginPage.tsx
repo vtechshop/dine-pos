@@ -3,6 +3,8 @@ import { Link, Navigate } from 'react-router-dom';
 import { CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from '../components/ui/Spinner';
+import { ApiError } from '../api/client';
+import { SUPPORT_PHONE, supportWhatsAppUrl } from '../config/support';
 
 type LoginMode = 'admin' | 'cashier';
 
@@ -10,12 +12,13 @@ const APP_VERSION = 'v1.0-rc1';
 
 // All roles land on the table-grid dashboard for the pilot phase.
 // Dedicated cashier/waiter/kitchen views are delivered in a future phase.
-function roleDestination(_role: string | null): string {
-  return '/dashboard';
+function roleDestination(role: string | null): string {
+  // Super admins sign in through this same form (see handleSubmit).
+  return role === 'superadmin' ? '/super-admin/dashboard' : '/dashboard';
 }
 
 export function LoginPage() {
-  const { isAuthenticated, login, loginCashier, role } = useAuth();
+  const { isAuthenticated, login, loginCashier, loginSuperAdmin, role } = useAuth();
   const [mode, setMode]           = useState<LoginMode>('admin');
 
   // Admin fields
@@ -62,7 +65,19 @@ export function LoginPage() {
     setLoading(true);
     try {
       if (mode === 'admin') {
-        await login(userId.trim(), password);
+        try {
+          await login(userId.trim(), password);
+        } catch (hotelErr) {
+          // One login form for everyone: if these aren't hotel credentials, try
+          // them as super admin before reporting the hotel error. Only for
+          // "wrong credentials" — blocked/expired hotels keep their own message.
+          if (!(hotelErr instanceof ApiError && (hotelErr.status === 401 || hotelErr.status === 404))) throw hotelErr;
+          try {
+            await loginSuperAdmin(userId.trim(), password);
+          } catch {
+            throw hotelErr;
+          }
+        }
       } else {
         await loginCashier(deviceHotelId, employeeCode.trim().toUpperCase(), pin);
       }
@@ -263,6 +278,20 @@ export function LoginPage() {
             )}
           </form>
 
+          {/* Forgot password — right under Sign in (admin only; cashier PINs are reset by the admin) */}
+          {mode === 'admin' && (
+            <div className="mt-3 text-center">
+              <a
+                href={supportWhatsAppUrl('Hi, I forgot my Dine POS password. Please help me reset it.')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-brand hover:underline"
+              >
+                Forgot password?
+              </a>
+            </div>
+          )}
+
           {/* Role hint */}
           {(mode === 'admin' || !!deviceHotelId) && (
             <p className="mt-5 text-center text-[11px] text-ink/40">
@@ -285,27 +314,18 @@ export function LoginPage() {
         <div className="mt-4 flex flex-col items-center gap-2.5 text-xs text-ink/40">
           <span>
             Need help?{' '}
+            {/* WhatsApp works on any device; mailto: did nothing without a mail app */}
             <a
-              href="mailto:support@dinepos.com"
+              href={supportWhatsAppUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
               className="font-medium text-brand hover:underline"
             >
               Contact Support
             </a>
+            <span className="text-ink/30"> · </span>
+            <a href={`tel:${SUPPORT_PHONE}`} className="text-ink/50 hover:underline">{SUPPORT_PHONE}</a>
           </span>
-          <button
-            type="button"
-            className="font-medium text-ink/50 transition hover:text-ink/70"
-            onClick={() =>
-              setError(
-                'To reset your password, contact support at support@dinepos.com',
-              )
-            }
-          >
-            Forgot Password
-          </button>
-          <Link to="/super-admin/login" className="text-ink/40 transition hover:text-ink/60">
-            Super Admin
-          </Link>
           <span className="text-ink/30">Dine POS · {APP_VERSION}</span>
         </div>
       </div>
