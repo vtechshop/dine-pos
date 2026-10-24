@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { RefreshCw, Search, ChevronLeft, ChevronRight, Calendar, X, Banknote, CreditCard, Smartphone, CheckCircle2, Plus } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import type { OrderListItem } from '../types';
@@ -552,6 +552,18 @@ export function OrdersPage() {
   }, [rangeMode, date, status, page]);
 
   useEffect(() => { void load(1); }, [rangeMode, date, status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Deep link from the Live Orders panel: /orders?order=<id>&q=<orderNumber>.
+  // Open that order's drawer once the list has it; otherwise filter to its number.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const focusId = searchParams.get('order');
+    if (!focusId || loading) return;
+    const match = orders.find(o => o._id === focusId);
+    if (match) setSelected(match);
+    else setSearch(searchParams.get('q') ?? '');
+    setSearchParams({}, { replace: true });
+  }, [searchParams, loading, orders, setSearchParams]);
 
   const filtered = useMemo(() =>
     search.trim()

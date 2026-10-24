@@ -1,9 +1,22 @@
+import { useNavigate } from 'react-router-dom';
 import { useLiveOrders } from '../../context/LiveOrdersContext';
+import { useAuth } from '../../context/AuthContext';
 import { OrderCard } from '../ui/OrderCard';
 import { ShoppingCart } from 'lucide-react';
 
 export function RightPanel() {
   const { orders } = useLiveOrders();
+  const { role } = useAuth();
+  const navigate = useNavigate();
+
+  // Orders page (with the detail drawer) is admin-only; other staff work orders from Kitchen.
+  const openOrder = (id: string, orderNumber: string) => {
+    if (role === 'admin') {
+      navigate(`/orders?order=${encodeURIComponent(id)}&q=${encodeURIComponent(orderNumber)}`);
+    } else {
+      navigate('/kitchen');
+    }
+  };
 
   return (
     <aside className="hidden lg:flex w-72 shrink-0 flex-col border-l border-border bg-canvas">
@@ -31,7 +44,15 @@ export function RightPanel() {
         ) : (
           <div className="space-y-2">
             {orders.map(order => (
-              <OrderCard key={order.id} order={order} />
+              <button
+                key={order.id}
+                type="button"
+                onClick={() => openOrder(order.id, order.orderNumber)}
+                title={role === 'admin' ? 'Open order details' : 'Open kitchen'}
+                className="block w-full rounded-xl text-left transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+              >
+                <OrderCard order={order} />
+              </button>
             ))}
           </div>
         )}
