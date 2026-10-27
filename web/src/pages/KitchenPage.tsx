@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback, memo, useMemo } from 'react';
-import { RefreshCw, ChefHat, Clock, Check, X, Truck, MapPin, ChevronDown } from 'lucide-react';
+import { RefreshCw, ChefHat, Clock, Check, X, Truck, MapPin, ChevronDown, Trash2 } from 'lucide-react';
 import type { KDSOrder } from '../types';
-import { fetchKitchenOrders, updateOrderStatus } from '../api/orders';
+import { fetchKitchenOrders, updateOrderStatus, cancelOrder } from '../api/orders';
 import { acceptDeliveryOrder, rejectDeliveryOrder, dispatchDeliveryOrder } from '../api/aggregator';
 import { fetchProducts } from '../api/products';
 import { fetchKitchenStations } from '../api/kitchenStations';
 import type { KitchenStation } from '../api/kitchenStations';
 import { Spinner } from '../components/ui/Spinner';
 import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext';
+
+const DELAYED_MINUTES   = 20;
+const OLD_ORDER_MINUTES = 24 * 60;
 
 // Aggregator platforms we render differently
 const AGGREGATOR_SOURCES = new Set(['swiggy', 'zomato']);
@@ -141,7 +145,10 @@ const OrderCard = memo(function OrderCard({
   const isPreparing  = order.status === 'preparing';
   const isReady      = order.status === 'ready';
   const ageMinutes   = elapsedMinutes(order.createdAt, now);
-  const isDelayed    = ageMinutes >= 20;
+  // DELAYED = food still not ready 20 min after ordering. Ready orders are
+  // waiting for pickup, not late; day-old orders are leftovers (OLD).
+  const isOld        = ageMinutes >= OLD_ORDER_MINUTES;
+  const isDelayed    = !isOld && (isPending || isPreparing) && ageMinutes >= DELAYED_MINUTES;
 
   // Aggregator pending = not yet accepted by kitchen
   const needsAcceptance = isAggregator && isPending && !order.acceptedAt;
@@ -182,7 +189,7 @@ const OrderCard = memo(function OrderCard({
           </div>
         </div>
         {/* Row 2: badges — only when present */}
-        {(isAggregator || order.isParcel || isDelayed) && (
+        {(isAggregator || order.isParcel || isDelayed || isOld) && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {isAggregator && <PlatformBadge source={order.orderSource!} />}
             {!isAggregator && order.isParcel && (
@@ -193,6 +200,14 @@ const OrderCard = memo(function OrderCard({
             {isDelayed && (
               <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600 leading-none">
                 DELAYED
+              </span>
+            )}
+            {isOld && (
+              <span
+                className="rounded bg-ink/10 px-1.5 py-0.5 text-[10px] font-bold text-ink/55 leading-none"
+                title="Placed more than a day ago and never closed — an admin can clear these with “Clear old orders”"
+              >
+                OLD
               </span>
             )}
           </div>
@@ -329,7 +344,11 @@ const OrderCard = memo(function OrderCard({
 
 export function KitchenPage() {
   const { socket } = useSocket();
+  const { role } = useAuth();
   const [orders,        setOrders]        = useState<KDSOrderExtended[]>([]);
+  const [confirmClear,  setConfirmClear]  = useState(false);
+  const [clearing,      setClearing]      = useState(false);
+  const [clearMsg,      setClearMsg]      = useState<string | null>(null);
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState<string | null>(null);
   const [acting,        setActing]        = useState(false);
@@ -479,6 +498,28 @@ export function KitchenPage() {
     ? `Updated ${Math.round((now - lastRefreshed) / 1000)}s ago`
     : 'Loading…';
 
+  // Leftover orders (placed > 1 day ago, never closed). Swiggy/Zomato orders are
+  // excluded — cancelling them here wouldn't tell the platform.
+  const oldOrders = orders.filter(o =>
+    elapsedMinutes(o.createdAt, now) >= OLD_ORDER_MINUTES &&
+    !AGGREGATOR_SOURCES.has(o.orderSource ?? ''),
+  );
+
+  // Cancel via the normal endpoint (admin-only) so stock etc. are restored.
+  async function clearOldOrders() {
+    setClearing(true);
+    let failed = 0;
+    for (const o of oldOrders) {
+      try { await cancelOrder(o._id); } catch { failed++; }
+    }
+    setClearing(false);
+    setConfirmClear(false);
+    setClearMsg(failed
+      ? `Cleared ${oldOrders.length - failed} of ${oldOrders.length}. ${failed} couldn't be cancelled — try again or cancel them from Orders.`
+      : `Cleared ${oldOrders.length} old order${oldOrders.length === 1 ? '' : 's'}.`);
+    void load();
+  }
+
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
@@ -519,6 +560,17 @@ export function KitchenPage() {
           </div>
         )}
 
+        {role === 'admin' && oldOrders.length > 0 && (
+          <button
+            onClick={() => { setClearMsg(null); setConfirmClear(true); }}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink"
+            title="Cancel orders placed more than a day ago that were never closed"
+          >
+            <Trash2 size={13} />
+            Clear {oldOrders.length} old order{oldOrders.length === 1 ? '' : 's'}
+          </button>
+        )}
+
         <button
           onClick={() => void load()}
           disabled={loading}
@@ -529,6 +581,48 @@ export function KitchenPage() {
           Refresh
         </button>
       </div>
+
+      {clearMsg && (
+        <div className="mx-5 mt-4 flex items-center justify-between gap-3 rounded-lg border border-border bg-mist px-4 py-2.5 text-sm text-ink/70">
+          {clearMsg}
+          <button onClick={() => setClearMsg(null)} aria-label="Dismiss" className="text-ink/40 hover:text-ink"><X size={14} /></button>
+        </div>
+      )}
+
+      {confirmClear && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={() => !clearing && setConfirmClear(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-canvas p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="mb-1 text-base font-bold text-ink">Clear {oldOrders.length} old order{oldOrders.length === 1 ? '' : 's'}?</h3>
+            <p className="mb-4 text-xs text-ink/60">
+              These were placed more than a day ago and never closed. They'll be <b>cancelled</b> (stock is put back) and removed from the kitchen. Paid orders aren't affected. This can't be undone.
+            </p>
+            <div className="mb-5 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-border bg-mist px-4 py-3 text-xs">
+              {oldOrders.map(o => (
+                <div key={o._id} className="flex justify-between gap-3">
+                  <span className="font-mono text-ink">{o.orderNumber}</span>
+                  <span className="text-ink/50">{new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · {o.status}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmClear(false)}
+                disabled={clearing}
+                className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium text-ink/70 hover:bg-mist disabled:opacity-40"
+              >
+                Keep them
+              </button>
+              <button
+                onClick={() => void clearOldOrders()}
+                disabled={clearing}
+                className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-40"
+              >
+                {clearing ? 'Clearing…' : 'Clear them'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="mx-5 mt-4 rounded-lg border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand">
