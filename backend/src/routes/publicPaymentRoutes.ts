@@ -214,6 +214,12 @@ router.post('/qr-verify', publicPaymentLimiter, async (req: Request, res: Respon
       !internalTransactionId || !orderId || !hotelId) {
     return res.status(400).json({ message: 'Missing required payment fields' });
   }
+  // All fields must be plain strings — an object here (e.g. {"$ne": null})
+  // would turn the Payment lookup into "any payment of this hotel".
+  if ([razorpay_payment_id, razorpay_order_id, razorpay_signature, internalTransactionId, orderId, hotelId]
+      .some(v => typeof v !== 'string')) {
+    return res.status(400).json({ message: 'Invalid payment fields' });
+  }
   if (!mongoose.Types.ObjectId.isValid(hotelId) || !mongoose.Types.ObjectId.isValid(orderId)) {
     return res.status(400).json({ message: 'Invalid hotelId or orderId' });
   }
@@ -222,6 +228,13 @@ router.post('/qr-verify', publicPaymentLimiter, async (req: Request, res: Respon
     // Find Payment by internalTransactionId scoped to hotel — prevents cross-tenant replay
     const pay = await Payment.findOne({ internalTransactionId, hotelId });
     if (!pay) return res.status(404).json({ message: 'Payment record not found' });
+
+    // The payment must belong to this order BEFORE anything is released —
+    // including the crash-recovery branch below. Otherwise one successful
+    // payment could release any number of other unpaid orders to the kitchen.
+    if (pay.orderId.toString() !== orderId) {
+      return res.status(422).json({ message: 'Payment does not belong to this order' });
+    }
 
     // Idempotency: already verified (webhook may have arrived first, OR a prior call
     // saved pay.success but crashed before releasing the order). In the crash case
@@ -271,11 +284,6 @@ router.post('/qr-verify', publicPaymentLimiter, async (req: Request, res: Respon
         logger.info('[qr-verify] crash-recovery: order released', { orderId });
       }
       return res.json({ success: true });
-    }
-
-    // Validate orderId matches what the Payment record was created for
-    if (pay.orderId.toString() !== orderId) {
-      return res.status(422).json({ message: 'Payment does not belong to this order' });
     }
 
     // Load gateway config for signature verification

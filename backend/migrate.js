@@ -1,7 +1,13 @@
 const { MongoClient } = require('mongodb');
 
 const LOCAL = 'mongodb://localhost:27017/hotelbillingpos';
-const ATLAS = 'mongodb+srv://dineposbill_db_user:7WcJye4meNVwb7LX@hotel-cluster.lrkxckp.mongodb.net/hotelbillingpos?retryWrites=true&w=majority&appName=hotel-cluster';
+// Target comes from the environment — never commit a connection string here.
+// (A production URI was previously hardcoded in this file; it must be rotated.)
+const ATLAS = process.env.MIGRATE_TARGET_URI;
+if (!ATLAS) {
+  console.error('Set MIGRATE_TARGET_URI to the destination MongoDB URI.');
+  process.exit(1);
+}
 
 async function migrate() {
   console.log('Connecting to local MongoDB...');

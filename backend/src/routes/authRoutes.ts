@@ -46,8 +46,12 @@ const staffPinLimiter = makeRateLimiter({
   skip: () => process.env.NODE_ENV === 'test',
   keyGenerator: (req) => {
     const { hotelId, employeeCode } = req.body || {};
-    if (hotelId && employeeCode) return `pin:${hotelId}:${String(employeeCode).toUpperCase()}`;
-    if (hotelId) return `pin:${hotelId}`;
+    // Normalise exactly like the lookups do (lower-case id, trimmed upper-case
+    // code) so " W01" / "w01" / "W01 " can't each get a fresh attempt budget.
+    const hid  = String(hotelId ?? '').trim().toLowerCase();
+    const code = String(employeeCode ?? '').trim().toUpperCase();
+    if (hid && code) return `pin:${hid}:${code}`;
+    if (hid) return `pin:${hid}`;
     return req.ip || 'unknown';
   },
   validate: { keyGeneratorIpFallback: false },
@@ -55,6 +59,15 @@ const staffPinLimiter = makeRateLimiter({
 });
 
 const router = Router();
+
+// Staff PIN logins take hotelId / employeeCode / pin straight from the body.
+// Anything but plain strings (e.g. {"$ne": …}) must be rejected before it
+// reaches a query or gets signed into a JWT.
+const OBJECT_ID_RE = /^[a-f\d]{24}$/i;
+function badStaffLogin(hotelId: unknown, ...strings: unknown[]): boolean {
+  if (typeof hotelId !== 'string' || !OBJECT_ID_RE.test(hotelId)) return true;
+  return strings.some(s => typeof s !== 'string' && typeof s !== 'number');
+}
 
 // Shared hotel status guard — mirrors the checks in the admin login route so all
 // login endpoints return consistent 403 responses for non-operable accounts.
@@ -253,6 +266,9 @@ router.post('/kitchen', staffPinLimiter, async (req: Request, res: Response) => 
   if (!hotelId || !pin) {
     return res.status(400).json({ message: 'Hotel ID and PIN required' });
   }
+  if (badStaffLogin(hotelId, pin)) {
+    return res.status(400).json({ message: 'Invalid Hotel ID or PIN' });
+  }
   try {
     const { blocked } = await checkHotelStatus(res, hotelId);
     if (blocked) return;
@@ -276,6 +292,9 @@ router.post('/waiter', staffPinLimiter, async (req: Request, res: Response) => {
   const { hotelId, employeeCode, pin } = req.body;
   if (!hotelId || !employeeCode || !pin) {
     return res.status(400).json({ message: 'Hotel ID, employee code and PIN required' });
+  }
+  if (badStaffLogin(hotelId, employeeCode, pin)) {
+    return res.status(400).json({ message: 'Invalid Hotel ID, employee code or PIN' });
   }
   try {
     const { blocked } = await checkHotelStatus(res, hotelId);
@@ -315,6 +334,9 @@ router.post('/cashier', staffPinLimiter, async (req: Request, res: Response) => 
   const { hotelId, employeeCode, pin } = req.body;
   if (!hotelId || !employeeCode || !pin) {
     return res.status(400).json({ message: 'Hotel ID, employee code and PIN required' });
+  }
+  if (badStaffLogin(hotelId, employeeCode, pin)) {
+    return res.status(400).json({ message: 'Invalid Hotel ID, employee code or PIN' });
   }
   try {
     const { blocked } = await checkHotelStatus(res, hotelId);

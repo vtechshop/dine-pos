@@ -226,6 +226,12 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
       waiterId?: string; waiterName?: string;
       cashierId?: string; cashierName?: string;
     };
+    // Every handler scopes queries by req.hotelId. A token carrying anything
+    // other than a 24-hex id (e.g. an operator object) must never get this far.
+    if (typeof decoded.hotelId !== 'string' || !/^[a-f\d]{24}$/i.test(decoded.hotelId)) {
+      res.status(401).json({ message: 'Invalid token' });
+      return;
+    }
     req.hotelId     = decoded.hotelId;
     req.hotelName   = decoded.hotelName;
     req.role        = decoded.role;

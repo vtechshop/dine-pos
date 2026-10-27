@@ -19,6 +19,7 @@ import { logger } from './utils/logger';
 import ChatMessage from './models/ChatMessage';
 import PrinterDevice from './models/PrinterDevice';
 import PrintJob from './models/PrintJob';
+import { flushablePrintJobsFilter } from './utils/printFlush';
 import Settings from './models/Settings';
 
 // Route imports
@@ -39,6 +40,7 @@ import uploadRoutes from './routes/uploadRoutes';
 import tableRoutes from './routes/tableRoutes';
 import reservationRoutes from './routes/reservationRoutes';
 import searchRoutes from './routes/searchRoutes';
+import { sanitizeRequest } from './utils/sanitizeRequest';
 import waitlistRoutes from './routes/waitlistRoutes';
 import publicReservationRoutes from './routes/publicReservationRoutes';
 import expenseRoutes from './routes/expenseRoutes';
@@ -296,6 +298,10 @@ app.use(express.json({
     }
   },
 }));
+
+// Strip "$"-operator keys from body/query/params (NoSQL injection guard).
+// Webhook signatures are checked against rawBody above, so they're unaffected.
+app.use(sanitizeRequest);
 
 // Attach a UUID to every request for log correlation; echo it back to callers
 app.use((req, res, next) => {
@@ -673,6 +679,9 @@ io.use((socket, next) => {
   // Hotel JWT
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { hotelId: string; role?: string };
+    if (typeof decoded.hotelId !== 'string' || !/^[a-f\d]{24}$/i.test(decoded.hotelId)) {
+      throw new Error('token hotelId is not an ObjectId');
+    }
     socket.data.hotelId = decoded.hotelId;
     socket.data.authenticated = true;
     logger.info('[SOCKET] Auth: ACCEPTED hotel JWT', {
@@ -882,17 +891,9 @@ io.on('connection', (socket) => {
       // was offline. Only jobs from the last 24 hours; oldest first so KOTs print
       // in the order they were originally queued.
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const pendingJobs = await PrintJob.find({
-        hotelId:      new mongoose.Types.ObjectId(hotelId),
-        printerTarget: data.printerRole,
-        // Also retry recently-failed jobs (e.g. Bluetooth was off last attempt)
-        // but cap at 3 total attempts to avoid infinite retry loops.
-        $or: [
-          { status: 'pending' },
-          { status: 'failed', attemptCount: { $lt: 3 } },
-        ],
-        createdAt:    { $gte: since },
-      }).sort({ createdAt: 1 }).lean();
+      const pendingJobs = await PrintJob.find(
+        flushablePrintJobsFilter(hotelId, data.printerRole as 'kitchen' | 'cashier', since),
+      ).sort({ createdAt: 1 }).lean();
 
       if (pendingJobs.length > 0) {
         let flushed = 0;
