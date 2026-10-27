@@ -7,6 +7,9 @@ export interface ITicketReply {
 }
 
 export interface ITicket extends Document {
+  /** Owning hotel (from the JWT). Older tickets predate this field and are
+   *  matched by the hotel's stored phone instead. */
+  hotelId?: mongoose.Types.ObjectId | null;
   hotelName: string;
   hotelPhone: string;
   subject: string;
@@ -21,6 +24,7 @@ export interface ITicket extends Document {
 
 const TicketSchema: Schema = new Schema(
   {
+    hotelId:     { type: Schema.Types.ObjectId, ref: 'Hotel', default: null, index: true },
     hotelName:   { type: String, required: true },
     hotelPhone:  { type: String, required: true },
     subject:     { type: String, required: true },

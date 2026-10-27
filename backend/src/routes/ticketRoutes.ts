@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { timingSafeEqual } from 'crypto';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import Ticket from '../models/Ticket';
+import Hotel from '../models/Hotel';
+import { sendError } from '../utils/sendError';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -44,44 +47,68 @@ const superAdminAuth = (req: Request, res: Response, next: Function) => {
 
 // ── Hotel routes (JWT required) ────────────────────────────────────────────
 
+// Tickets belong to the hotel in the JWT. hotelName / hotelPhone / :phone sent by
+// the client are ignored (they let any user read, reply to or file tickets as
+// another hotel). Legacy tickets without hotelId match on the hotel's stored phone.
+async function ownTicketsFilter(hotelId: string): Promise<Record<string, unknown> | null> {
+  const hotel = await Hotel.findById(hotelId).select('phone').lean<{ phone?: string }>();
+  if (!hotel) return null;
+  const or: Record<string, unknown>[] = [{ hotelId: new mongoose.Types.ObjectId(hotelId) }];
+  if (hotel.phone) or.push({ hotelId: null, hotelPhone: hotel.phone });
+  return { $or: or };
+}
+
 // POST /api/tickets — raise a ticket
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { hotelName, hotelPhone, subject, description, category, priority } = req.body;
-    if (!hotelName || !hotelPhone || !subject || !description) {
-      return res.status(400).json({ message: 'hotelName, hotelPhone, subject and description are required' });
+    const { subject, description, category, priority } = req.body;
+    if (typeof subject !== 'string' || !subject.trim() || typeof description !== 'string' || !description.trim()) {
+      return res.status(400).json({ message: 'subject and description are required' });
     }
-    const ticket = await Ticket.create({ hotelName, hotelPhone, subject, description, category, priority });
+    const hotel = await Hotel.findById(req.hotelId).select('hotelName phone').lean<{ hotelName?: string; phone?: string }>();
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    const ticket = await Ticket.create({
+      hotelId:    new mongoose.Types.ObjectId(req.hotelId!),
+      hotelName:  hotel.hotelName || req.hotelName || 'Hotel',
+      hotelPhone: hotel.phone || '',
+      subject, description, category, priority,
+    });
     return res.status(201).json(ticket);
-  } catch (error: any) {
-    return res.status(500).json({ message: error.message });
+  } catch (error) {
+    return sendError(res, 500, 'Failed to create ticket', error);
   }
 });
 
-// GET /api/tickets/hotel/:phone — get tickets for a hotel
+// GET /api/tickets/hotel/:phone — this hotel's tickets (:phone kept for app
+// compatibility but ignored — the hotel comes from the JWT)
 router.get('/hotel/:phone', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const tickets = await Ticket.find({ hotelPhone: req.params.phone }).sort({ createdAt: -1 });
+    const filter = await ownTicketsFilter(req.hotelId!);
+    if (!filter) return res.json([]);
+    const tickets = await Ticket.find(filter).sort({ createdAt: -1 });
     return res.json(tickets);
   } catch (error) {
-    return res.status(500).json({ message: 'Server error' });
+    return sendError(res, 500, 'Server error', error);
   }
 });
 
-// POST /api/tickets/:id/reply — hotel adds a reply
+// POST /api/tickets/:id/reply — hotel adds a reply to one of its own tickets
 router.post('/:id/reply', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { message } = req.body;
-    if (!message) return res.status(400).json({ message: 'Message required' });
-    const ticket = await Ticket.findByIdAndUpdate(
-      req.params.id,
+    if (typeof message !== 'string' || !message.trim()) return res.status(400).json({ message: 'Message required' });
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ message: 'Ticket not found' });
+    const filter = await ownTicketsFilter(req.hotelId!);
+    if (!filter) return res.status(404).json({ message: 'Ticket not found' });
+    const ticket = await Ticket.findOneAndUpdate(
+      { _id: req.params.id, ...filter },
       { $push: { replies: { message, by: 'hotel' } }, status: 'open' },
       { new: true }
     );
     if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
     return res.json(ticket);
   } catch (error) {
-    return res.status(500).json({ message: 'Server error' });
+    return sendError(res, 500, 'Server error', error);
   }
 });
 
