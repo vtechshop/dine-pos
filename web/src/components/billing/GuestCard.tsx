@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, GitMerge, ArrowRightLeft, UserMinus, MoreHorizontal } from 'lucide-react';
 import type { Guest, BillingOrder } from '../../types';
+import { sumDue, sumPaidOnline } from '../../utils/counterBilling';
 
 interface Props {
   guest: Guest;
@@ -36,9 +37,11 @@ export function GuestCard({ guest, orders, currencySymbol, selected, onSelect, o
 
   const isActive   = guest.status === 'active';
   const isBilled   = guest.status === 'billed';
-  const subtotal   = orders.reduce((s, o) => s + (o.subtotal  ?? 0), 0);
-  const taxTotal   = orders.reduce((s, o) => s + (o.taxTotal  ?? 0), 0);
-  const grandTotal = orders.reduce((s, o) => s + (o.grandTotal ?? 0), 0);
+  // Amount due at the counter: excludes cancelled, unpaid-online and prepaid-online orders.
+  const subtotal   = sumDue(orders, o => o.subtotal);
+  const taxTotal   = sumDue(orders, o => o.taxTotal);
+  const grandTotal = sumDue(orders);
+  const paidOnline = sumPaidOnline(orders);
 
   async function handleLeft() {
     setLeftBusy(true);
@@ -63,7 +66,12 @@ export function GuestCard({ guest, orders, currencySymbol, selected, onSelect, o
           {guest.status === 'active' ? 'Active' : guest.status === 'billed' ? 'Billed' : guest.status}
         </div>
         <span className="flex-1 truncate text-sm font-medium text-ink">{guest.displayLabel}</span>
-        <span className="text-sm font-semibold tabular-nums text-ink">{fmt(grandTotal, currencySymbol)}</span>
+        <span className="text-right">
+          <span className="block text-sm font-semibold tabular-nums text-ink">{fmt(grandTotal, currencySymbol)}</span>
+          {paidOnline > 0 && (
+            <span className="block text-[10px] tabular-nums text-green-600" title="Already paid online (QR) — not charged again">+ {fmt(paidOnline, currencySymbol)} paid online</span>
+          )}
+        </span>
         <button
           onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
           className="ml-1 rounded-md p-1 text-ink/40 hover:bg-mist"

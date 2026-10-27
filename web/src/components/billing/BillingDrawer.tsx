@@ -5,6 +5,7 @@ import { fetchSessionBill, billGuest, bulkBillAndClose, markGuestLeft, closeSess
 import type { SplitDetails } from '../../api/billing';
 import { cancelOrder } from '../../api/orders';
 import { useAuth } from '../../context/AuthContext';
+import { sumDue } from '../../utils/counterBilling';
 import { GuestPanel } from './GuestPanel';
 import { PaymentPanel } from './PaymentPanel';
 import { ReceiptView } from './ReceiptView';
@@ -119,7 +120,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
   const activeGuestBills  = bill?.guests.filter(gb => gb.guest.status === 'active') ?? [];
   const activeGuestCount  = activeGuestBills.length;
   const grandTotal        = activeGuestBills.reduce(
-    (s, gb) => s + gb.orders.reduce((os, o) => os + o.grandTotal, 0), 0,
+    (s, gb) => s + sumDue(gb.orders), 0,
   );
 
   // Structural states — drive which view the drawer shows
@@ -138,7 +139,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
   const allGuestsBilled = bill !== null && bill.guests.length > 0 && activeGuestCount === 0;
 
   const guestTotal = selectedGuestBill
-    ? selectedGuestBill.orders.reduce((s, o) => s + o.grandTotal, 0)
+    ? sumDue(selectedGuestBill.orders)
     : 0;
 
   const billingAmount    = mode === 'table' ? grandTotal : guestTotal;

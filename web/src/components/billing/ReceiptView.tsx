@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, Printer, X } from 'lucide-react';
 import type { Guest, BillingOrder } from '../../types';
+import { sumDue, isDueAtCounter } from '../../utils/counterBilling';
 import { fetchReceiptJobs, reprintJob } from '../../api/billing';
 
 interface Props {
@@ -38,9 +39,10 @@ export function ReceiptView({ guest, sessionId, tableLabel, orders, currencySymb
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>('checking');
   const [retryCount,    setRetryCount]    = useState(0);
 
-  const subtotal   = orders.reduce((s, o) => s + (o.subtotal ?? 0), 0);
-  const taxTotal   = orders.reduce((s, o) => s + (o.taxTotal ?? 0), 0);
-  const grandTotal = orders.reduce((s, o) => s + (o.grandTotal ?? 0), 0);
+  // Counter receipt: only what was collected here (see utils/counterBilling).
+  const subtotal   = sumDue(orders, o => o.subtotal);
+  const taxTotal   = sumDue(orders, o => o.taxTotal);
+  const grandTotal = sumDue(orders);
 
   useEffect(() => {
     setPrinterStatus('checking');
@@ -118,7 +120,7 @@ export function ReceiptView({ guest, sessionId, tableLabel, orders, currencySymb
 
         {/* Items */}
         <div className="space-y-0.5">
-          {orders.flatMap(order =>
+          {orders.filter(isDueAtCounter).flatMap(order =>
             order.items.map((item, i) => (
               <div key={`${order._id}-${i}`}>
                 <div className="flex justify-between text-ink/70">

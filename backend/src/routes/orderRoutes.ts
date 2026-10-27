@@ -33,6 +33,7 @@ import CouponRedemption from '../models/CouponRedemption';
 import GiftVoucher from '../models/GiftVoucher';
 import WalletTransaction from '../models/WalletTransaction';
 import { resolveCoupon, CouponResult } from '../utils/couponUtils';
+import { isDueAtCounter } from '../utils/counterBilling';
 
 const router = Router();
 
@@ -105,7 +106,7 @@ function recalcOrderTotals(
 //     active, not deleted, and override the price from the DB value
 //   • recompute item.price = dbBasePrice + sum(dbOptionPrices)
 // Aggregator items without a product ref pass through unvalidated (no DB record to check).
-async function validateAndEnrichItems(
+export async function validateAndEnrichItems(
   rawItems: any[],
   hotelId: string,
 ): Promise<{ items: any[]; error: string | null }> {
@@ -154,10 +155,11 @@ async function validateAndEnrichItems(
   const enriched: any[] = [];
 
   for (const item of rawItems) {
-    // Items without a product ref are aggregator/manual lines — pass through
-    if (!item.product || !mongoose.isValidObjectId(item.product)) {
-      enriched.push(item);
-      continue;
+    // Every POS line must reference a product of this hotel: its price and tax
+    // come from the DB. A product-less line used to pass through with the
+    // client's price/taxPercent (₹1, 0% GST). Aggregator orders don't use this route.
+    if (!item.product || !mongoose.isValidObjectId(String(item.product))) {
+      return { items: [], error: `Item "${String(item.productName ?? '').slice(0, 60) || 'unknown'}" is not linked to a product` };
     }
 
     const product = productMap.get(String(item.product));
@@ -1229,7 +1231,8 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     }).catch(() => {});
 
     // ── Phase 4: Update guest running total ───────────────────────────────────
-    if (linkedGuestId) {
+    // Only counter-payable orders add to what the guest owes (see counterBilling).
+    if (linkedGuestId && isDueAtCounter(order)) {
       await Guest.findByIdAndUpdate(linkedGuestId, { $inc: { totalAmount: order.grandTotal } });
     }
 
@@ -1435,8 +1438,10 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         // Tally Direct Sync — fire-and-forget; failure NEVER rolls back the cancellation
         void createTallySyncJobForCancellation(req.hotelId!, existing._id);
 
-        if (existing.guestId) {
-          await Guest.findByIdAndUpdate(existing.guestId, [
+        // Undo only what this order added to the guest's amount due (prepaid /
+        // unpaid online orders never added anything). Scoped to this hotel.
+        if (existing.guestId && isDueAtCounter(existing)) {
+          await Guest.updateOne({ _id: existing.guestId, hotelId: req.hotelId }, [
             { $set: { totalAmount: { $max: [0, { $subtract: ['$totalAmount', existing.grandTotal] }] } } },
           ]);
         }

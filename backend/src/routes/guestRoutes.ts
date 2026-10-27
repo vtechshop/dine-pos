@@ -21,6 +21,7 @@ import { getLoyaltyConfig, calculateEarnedPoints, calculateMaxRedeemablePoints, 
 import OrganizationCustomer from '../models/OrganizationCustomer';
 import { scheduleReceiptPrint } from '../utils/printUtils';
 import { createWhatsAppReceiptJobForGuest } from '../services/whatsappReceiptService';
+import { counterBillingOrderUpdates, isDueAtCounter } from '../utils/counterBilling';
 
 // mergeParams: true — inherits :sessionId from the parent sessionRoutes mount
 const router = Router({ mergeParams: true });
@@ -535,10 +536,13 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
 
       // D-10: Await order sync — fire-and-forget left reports and kitchen display stale.
       // Any failure is surfaced to the caller so the billing inconsistency is visible.
-      await Order.updateMany(
-        { sessionId: session._id, guestId: updated._id, status: { $ne: 'cancelled' } },
-        { $set: { paymentMethod, status: 'completed' } },
+      // Counter orders take this payment method; orders already paid online keep
+      // 'razorpay'; unpaid payment_pending QR orders are never marked completed.
+      const guestOrderUpdates = counterBillingOrderUpdates(
+        { sessionId: session._id, guestId: updated._id }, paymentMethod,
       );
+      await Order.updateMany(guestOrderUpdates.counter.filter, guestOrderUpdates.counter.update);
+      await Order.updateMany(guestOrderUpdates.prepaid.filter, guestOrderUpdates.prepaid.update);
 
       const billingDiscount = guestAfterLoyalty.loyaltyDiscountAmount ?? 0;
       const netPayable = guestAfterLoyalty.totalAmount - billingDiscount - guestVoucherAmount;
@@ -829,7 +833,8 @@ router.post('/split', requireCashierOrAdmin, async (req: AuthRequest, res: Respo
 
     const newGuestNumber = updatedSession.guestCount;
     const newLabel = guestLabel(newGuestNumber);
-    const splitTotal = ordersToMove.reduce((sum, o) => sum + o.grandTotal, 0);
+    // Only counter-payable orders carry an amount due (prepaid / cancelled don't).
+    const splitTotal = ordersToMove.reduce((sum, o) => sum + (isDueAtCounter(o) ? o.grandTotal : 0), 0);
     const remainingTotal = Math.max(0, source.totalAmount - splitTotal);
 
     // Create the new guest

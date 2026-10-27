@@ -176,6 +176,7 @@ export interface BillingOrder {
   orderSource: string;
   /** Present at runtime — the bill endpoint returns full order docs. */
   status?: string;
+  paymentMethod?: string;
   createdAt: string;
 }
 

@@ -4,6 +4,7 @@ import { mergeGuests, transferGuest, markGuestLeft } from '../../api/billing';
 import { useState, memo } from 'react';
 import { MergeGuestModal } from './MergeGuestModal';
 import { TransferGuestModal } from './TransferGuestModal';
+import { sumDue } from '../../utils/counterBilling';
 
 interface Props {
   sessionId: string;
@@ -39,7 +40,7 @@ export const GuestPanel = memo(function GuestPanel({
   const activeGuests = guestBills.map(gb => gb.guest).filter(g => g.status === 'active');
   const activeTotal  = activeGuests.reduce((s, g) => s + g.totalAmount, 0);
   const billedTotal  = guestBills.map(gb => gb.guest).filter(g => g.status === 'billed').reduce((s, g) => s + g.totalAmount, 0);
-  const grandTotal   = guestBills.reduce((s, gb) => s + gb.orders.reduce((os, o) => os + o.grandTotal, 0), 0);
+  const grandTotal   = guestBills.reduce((s, gb) => s + sumDue(gb.orders), 0);
 
   async function handleMerge(targetId: string) {
     if (!mergeSource) return;

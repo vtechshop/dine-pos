@@ -48,6 +48,7 @@ import { scheduleKOTPrint } from '../utils/printUtils';
 import { io } from '../server';
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
 import GatewayFactory from '../services/payment/GatewayFactory';
+import { isDueAtCounter } from '../utils/counterBilling';
 
 const router = Router();
 
@@ -640,8 +641,10 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     }
 
     // ── Update guest: increment running total + clear idle timeout ────────────
+    // Only counter-payable orders add to what the guest owes at the counter.
+    // QR / kiosk-Razorpay orders are paid online and must not be charged again.
     await Guest.findByIdAndUpdate(guest._id, {
-      $inc: { totalAmount: grandTotal },
+      ...(isDueAtCounter(orderDoc) ? { $inc: { totalAmount: grandTotal } } : {}),
       $set: { qrTokenExpiresAt: null }, // once ordering started, token never idles out
     });
 

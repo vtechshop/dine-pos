@@ -22,6 +22,7 @@ import CustomerProfile from '../models/CustomerProfile';
 import guestRouter from './guestRoutes';
 import { getLoyaltyConfig, calculateEarnedPoints, earnPoints } from '../utils/loyaltyUtils';
 import { scheduleReceiptPrint } from '../utils/printUtils';
+import { counterBillingOrderUpdates, isDueAtCounter } from '../utils/counterBilling';
 
 const router = Router();
 
@@ -467,10 +468,11 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
       // D-10: Mark session orders as completed so reports and kitchen display are consistent.
       // Unlike individual billing (where orders belong to one guest), bulk bill closes all
       // active orders for the whole session.
-      await Order.updateMany(
-        { sessionId: session._id, status: { $ne: 'cancelled' } },
-        { $set: { paymentMethod, status: 'completed' } },
-      );
+      // Counter orders take this payment method; orders already paid online keep
+      // 'razorpay'; unpaid payment_pending QR orders are never marked completed.
+      const sessionOrderUpdates = counterBillingOrderUpdates({ sessionId: session._id }, paymentMethod);
+      await Order.updateMany(sessionOrderUpdates.counter.filter, sessionOrderUpdates.counter.update);
+      await Order.updateMany(sessionOrderUpdates.prepaid.filter, sessionOrderUpdates.prepaid.update);
 
       // Gift voucher deduction for bulk bill (best-effort, logged on failure)
       if (sessionVoucherDoc && sessionVoucherAmount > 0) {
