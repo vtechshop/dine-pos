@@ -21,12 +21,18 @@ export const connectRedis = async (): Promise<void> => {
     return;
   }
 
+  // Give up only on the initial connect (so boot falls back to in-memory mode
+  // instead of hanging). Once connected, never stop reconnecting: giving up
+  // after a few seconds of Redis downtime used to leave the instance without
+  // Socket.IO fan-out, scheduler locks and caches until its next restart.
+  let connectedOnce = false;
+
   try {
     _client = new Redis(url, {
       maxRetriesPerRequest: 3,
       retryStrategy: (times) => {
-        if (times > 5) {
-          logger.warn('Redis retry limit reached — giving up');
+        if (!connectedOnce && times > 5) {
+          logger.warn('Redis retry limit reached on initial connect — giving up');
           return null; // stop retrying
         }
         return Math.min(times * 500, 5000);
@@ -34,6 +40,8 @@ export const connectRedis = async (): Promise<void> => {
       lazyConnect: true,
       enableOfflineQueue: false,
     });
+
+    _client.on('ready', () => { connectedOnce = true; });
 
     _client.on('error', (err) => {
       logger.error('Redis connection error', { err: String(err) });
