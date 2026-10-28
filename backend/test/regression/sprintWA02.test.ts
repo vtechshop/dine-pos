@@ -18,6 +18,14 @@ import * as path from 'path';
 
 const root = path.resolve(__dirname, '../../src');
 
+// The success branch of the worker, from the 'sent' check to its first `return;`.
+// (A fixed character window broke when comments were added inside the branch.)
+function successBlock(src: string): string {
+  const start = src.indexOf("result.status === 'sent'");
+  const end   = src.indexOf('return;', start);
+  return src.slice(start, end);
+}
+
 function readSrc(rel: string): string {
   return fs.readFileSync(path.join(root, rel), 'utf-8');
 }
@@ -89,68 +97,44 @@ describe('WA-S2-08–15  Worker success update must not regress status', () => {
 
   test('WA-S2-08: Worker success path uses findOneAndUpdate, not findByIdAndUpdate', () => {
     // After the "sent/partial" branch the update must guard against regression
-    const sentBlock = worker.slice(
-      worker.indexOf("result.status === 'sent'"),
-      worker.indexOf("result.status === 'sent'") + 400,
-    );
+    const sentBlock = successBlock(worker);
     expect(sentBlock).toContain('findOneAndUpdate');
     expect(sentBlock).not.toContain('findByIdAndUpdate');
   });
 
   test('WA-S2-09: Success update excludes "delivered" from overwrite targets', () => {
-    const sentBlock = worker.slice(
-      worker.indexOf("result.status === 'sent'"),
-      worker.indexOf("result.status === 'sent'") + 500,
-    );
+    const sentBlock = successBlock(worker);
     expect(sentBlock).toContain('delivered');
   });
 
   test('WA-S2-10: Success update excludes "read" from overwrite targets', () => {
-    const sentBlock = worker.slice(
-      worker.indexOf("result.status === 'sent'"),
-      worker.indexOf("result.status === 'sent'") + 500,
-    );
+    const sentBlock = successBlock(worker);
     expect(sentBlock).toContain('read');
   });
 
   test('WA-S2-11: $nin guard is applied on the query, not the $set', () => {
-    const sentBlock = worker.slice(
-      worker.indexOf("result.status === 'sent'"),
-      worker.indexOf("result.status === 'sent'") + 500,
-    );
+    const sentBlock = successBlock(worker);
     // $nin appears BEFORE $set
     expect(sentBlock.indexOf('$nin')).toBeLessThan(sentBlock.indexOf('$set'));
   });
 
   test('WA-S2-12: Success status is still "sent" in the $set', () => {
-    const sentBlock = worker.slice(
-      worker.indexOf("result.status === 'sent'"),
-      worker.indexOf("result.status === 'sent'") + 600,
-    );
+    const sentBlock = successBlock(worker);
     expect(sentBlock).toContain("status:       'sent'");
   });
 
   test('WA-S2-13: sentAt is set in the success path', () => {
-    const sentBlock = worker.slice(
-      worker.indexOf("result.status === 'sent'"),
-      worker.indexOf("result.status === 'sent'") + 600,
-    );
+    const sentBlock = successBlock(worker);
     expect(sentBlock).toContain('sentAt');
   });
 
   test('WA-S2-14: attemptCount is incremented in the success path', () => {
-    const sentBlock = worker.slice(
-      worker.indexOf("result.status === 'sent'"),
-      worker.indexOf("result.status === 'sent'") + 600,
-    );
+    const sentBlock = successBlock(worker);
     expect(sentBlock).toContain('attemptCount');
   });
 
   test('WA-S2-15: requestId is saved in the success path', () => {
-    const sentBlock = worker.slice(
-      worker.indexOf("result.status === 'sent'"),
-      worker.indexOf("result.status === 'sent'") + 600,
-    );
+    const sentBlock = successBlock(worker);
     expect(sentBlock).toContain('requestId');
   });
 });

@@ -1,7 +1,7 @@
 import { api } from '../../../utils/api-client';
 import { authHeaders } from '../../../utils/env';
 import { getHotelA } from '../../setup/testEnv';
-import { createOrder, updateOrderStatus } from '../../helpers/order.helper';
+import { createOrder, updateOrderStatus, productLine, hotelForToken } from '../../helpers/order.helper';
 
 describe('Reports — Product Report', () => {
   let adminToken: string;
@@ -37,7 +37,8 @@ describe('Reports — Product Report', () => {
   });
 
   it('PRR-003 completed order product appears in product report', async () => {
-    const items = [{ productName: 'Unique Report Dish', quantity: 3, price: 100, total: 300 }];
+    const line = productLine(hotelForToken(adminToken), 1, 3);
+    const items = [line];
     const { orderId } = await createOrder(adminToken, { items });
     await updateOrderStatus(kitchenToken, orderId, 'preparing');
     await updateOrderStatus(kitchenToken, orderId, 'ready');
@@ -49,7 +50,7 @@ describe('Reports — Product Report', () => {
       .set(authHeaders(adminToken))
       .query({ date: today });
     const products: any[] = Array.isArray(res.body) ? res.body : res.body.products || res.body.data || [];
-    const found = products.find((p: any) => p.name === 'Unique Report Dish' || p.productName === 'Unique Report Dish');
+    const found = products.find((p: any) => p.name === line.productName || p.productName === line.productName);
     // Product should be in the report
     if (found) {
       expect(found.quantity || found.totalQuantity).toBeGreaterThanOrEqual(3);

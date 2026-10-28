@@ -8,6 +8,7 @@ import { sendError } from '../utils/sendError';
 import { requireFeature } from '../middleware/requireFeature';
 import { isValidDateParam } from '../utils/dateParam';
 import { createTallySyncJobForExpense } from '../services/tallySyncService';
+import { REVENUE_FILTER } from '../utils/revenue';
 
 const router = Router();
 router.use(authMiddleware);
@@ -72,7 +73,7 @@ router.get('/pnl', async (req: AuthRequest, res: Response) => {
 
     const [revenueResult, expenseResult] = await Promise.all([
       Order.aggregate([
-        { $match: { hotelId: hotelObjId, status: { $ne: 'cancelled' }, createdAt: { $gte: start, $lte: end } } },
+        { $match: { hotelId: hotelObjId, ...REVENUE_FILTER, createdAt: { $gte: start, $lte: end } } },
         { $group: { _id: null, revenue: { $sum: '$grandTotal' }, orders: { $sum: 1 } } },
       ]),
       Expense.aggregate([

@@ -34,16 +34,34 @@ export function amountDueAtCounter(orders: Array<CounterBillableOrder & { grandT
  * - prepaid online orders that were released to the kitchen: completed, but keep
  *   'razorpay' as their payment method
  * - payment_pending (never paid, never cooked) and cancelled: left untouched
+ *
+ * `completion` is extra metadata set on every order completed here (payment
+ * time, cashier, settledVia) so reports and shift cash bucket these orders by
+ * when they were paid and know the money is recorded on the Guest / TableSession.
  */
-export function counterBillingOrderUpdates(scope: Record<string, unknown>, paymentMethod: string) {
+export function counterBillingOrderUpdates(
+  scope: Record<string, unknown>,
+  paymentMethod: string,
+  completion: Record<string, unknown> = {},
+) {
+  // Prepaid orders were paid when the gateway confirmed (qr-verify / webhook set
+  // paymentTime then); billing must not move that to the bill time, or revenue
+  // by payment time lands on the wrong day. Bill time is only a fallback.
+  const { paymentTime, ...prepaidCompletion } = completion;
   return {
     counter: {
       filter: { ...scope, status: { $nin: ['cancelled', 'payment_pending', 'completed'] }, paymentMethod: { $ne: 'razorpay' } },
-      update: { $set: { paymentMethod, status: 'completed' } },
+      update: { $set: { ...completion, paymentMethod, status: 'completed' } },
     },
     prepaid: {
       filter: { ...scope, status: { $nin: ['cancelled', 'payment_pending', 'completed'] }, paymentMethod: 'razorpay' },
-      update: { $set: { status: 'completed' } },
+      update: paymentTime === undefined
+        ? { $set: { ...prepaidCompletion, status: 'completed' } }
+        : [{ $set: {
+            ...Object.fromEntries(Object.entries(prepaidCompletion).map(([k, v]) => [k, { $literal: v }])),
+            status:      'completed',
+            paymentTime: { $ifNull: ['$paymentTime', { $literal: paymentTime }] },
+          } }],
     },
   };
 }

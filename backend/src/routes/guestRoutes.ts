@@ -22,6 +22,7 @@ import OrganizationCustomer from '../models/OrganizationCustomer';
 import { scheduleReceiptPrint } from '../utils/printUtils';
 import { createWhatsAppReceiptJobForGuest } from '../services/whatsappReceiptService';
 import { counterBillingOrderUpdates, isDueAtCounter } from '../utils/counterBilling';
+import { checkOnlineOrdersForBilling, onlineBillingBlockResponse } from '../utils/onlinePayment';
 
 // mergeParams: true — inherits :sessionId from the parent sessionRoutes mount
 const router = Router({ mergeParams: true });
@@ -239,6 +240,18 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         return;
       }
 
+      // R1 + R2: every online order of this guest must be resolved first —
+      // unpaid (payment_pending) orders would vanish from billing and a later
+      // payment would land on a closed bill; orders marked paid online need a
+      // verified payment (utils/onlinePayment.ts). Checked before any write.
+      const onlineBlock = onlineBillingBlockResponse(
+        await checkOnlineOrdersForBilling(req.hotelId!, { sessionId: session._id, guestId: guest._id }),
+      );
+      if (onlineBlock) {
+        res.status(409).json(onlineBlock);
+        return;
+      }
+
       const updateFields: Record<string, any> = {
         status: 'billed',
         paymentMethod,
@@ -311,7 +324,7 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
           return;
         }
         guestVoucherAmount = Math.round(
-          Math.min(guestVoucherDoc.balance, guest.totalAmount - loyaltyDiscount) * 100,
+          Math.min(guestVoucherDoc.balance, Math.max(0, guest.totalAmount - loyaltyDiscount)) * 100,
         ) / 100;
       }
 
@@ -538,14 +551,30 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
       // Any failure is surfaced to the caller so the billing inconsistency is visible.
       // Counter orders take this payment method; orders already paid online keep
       // 'razorpay'; unpaid payment_pending QR orders are never marked completed.
+      // Completion metadata (payment time, cashier, settledVia) lets reports and
+      // shift cash bucket these orders by when they were paid; the money itself is
+      // recorded once on the Guest (collectedAmount / cashCollected below).
+      const billedNow = updated.billedAt ?? new Date();
       const guestOrderUpdates = counterBillingOrderUpdates(
         { sessionId: session._id, guestId: updated._id }, paymentMethod,
+        {
+          completedAt: billedNow, paymentTime: billedNow, settledVia: 'guest',
+          ...(req.cashierId ? { cashierId: String(req.cashierId) } : {}),
+        },
       );
       await Order.updateMany(guestOrderUpdates.counter.filter, guestOrderUpdates.counter.update);
       await Order.updateMany(guestOrderUpdates.prepaid.filter, guestOrderUpdates.prepaid.update);
 
       const billingDiscount = guestAfterLoyalty.loyaltyDiscountAmount ?? 0;
-      const netPayable = guestAfterLoyalty.totalAmount - billingDiscount - guestVoucherAmount;
+      // Guest.totalAmount already excludes orders paid online (counterBilling).
+      const netPayable = Math.max(0, +(guestAfterLoyalty.totalAmount - billingDiscount - guestVoucherAmount).toFixed(2));
+
+      // Record what the counter actually collected (shift cash reads this).
+      const collectedAmount = paymentMethod === 'complimentary' ? 0 : netPayable;
+      const cashCollected =
+        paymentMethod === 'cash'  ? collectedAmount :
+        paymentMethod === 'split' ? Math.max(0, Number(splitDetails?.cash ?? 0)) : 0;
+      await Guest.updateOne({ _id: updated._id }, { $set: { collectedAmount, cashCollected } });
 
       io.to(`hotel_${req.hotelId}`).emit('guest_billed', {
         sessionId: session._id,
@@ -580,6 +609,28 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         res.status(403).json({ message: 'Waiters cannot mark guests as left' });
         return;
       }
+      // R2: a guest with online orders cannot just be marked left — an unpaid one
+      // would vanish (and a later payment land nowhere), a paid one would never be
+      // completed or counted. Bill the guest instead (₹0 due when all were prepaid).
+      const leftCheck = await checkOnlineOrdersForBilling(req.hotelId!, { sessionId: session._id, guestId: guest._id });
+      const leftBlock = onlineBillingBlockResponse(leftCheck);
+      if (leftBlock) {
+        res.status(409).json(leftBlock);
+        return;
+      }
+      const paidOnlineOpen = await Order.countDocuments({
+        hotelId: req.hotelId, sessionId: session._id, guestId: guest._id,
+        paymentMethod: 'razorpay', status: { $nin: ['cancelled', 'completed', 'payment_pending'] },
+      });
+      if (paidOnlineOpen > 0) {
+        res.status(409).json({
+          code:    'GUEST_HAS_PAID_ONLINE_ORDERS',
+          message: `This guest has ${paidOnlineOpen} order${paidOnlineOpen > 1 ? 's' : ''} already paid online. Bill the guest instead of marking them left, so the paid order is recorded.`,
+          paidOnlineOrders: paidOnlineOpen,
+        });
+        return;
+      }
+
       // D-03: status guard is inside the atomic MongoDB filter, not a separate
       // read — prevents a concurrent bill from being overwritten by a left action.
       const updated = await Guest.findOneAndUpdate(

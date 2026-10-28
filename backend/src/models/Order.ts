@@ -61,6 +61,7 @@ export interface IOrder extends Document {
   completedAt: Date | null;
   cashierId: string;
   tipAmount: number;          // gratuity recorded at payment time (never affects grandTotal)
+  additionalDiscount: number; // post-order discount applied at payment (already subtracted from grandTotal)
   // ── Table Session / Guest Billing (Architecture v1.1) ───────────────────
   // null for takeaway, aggregator, and hotels with tableSessions=false
   sessionId: mongoose.Types.ObjectId | null;
@@ -86,6 +87,8 @@ export interface IOrder extends Document {
   refundedBy:     string;
   refundReason:   string;
   refundAmount:   number;
+  refundMethod:   string;      // how the refund was paid out: cash | upi | card | original | other ('' = not recorded)
+  settledVia:     string;      // '' (POS) | 'guest' | 'session' — billing path that collected payment
   // ── Delivery / aggregator fields ─────────────────────────────────────────
   platformOrderId:     string;   // Swiggy/Zomato order ref
   deliveryAddress:     string;
@@ -235,6 +238,9 @@ const OrderSchema: Schema = new Schema(
 
     // ── Tip (C-fix: field was handled in PATCH /payment but never persisted) ─
     tipAmount: { type: Number, default: 0, min: 0 },
+    // Was missing from the schema, so strict mode silently dropped it: the discount
+    // reduced grandTotal with no record, and repeated calls stacked.
+    additionalDiscount: { type: Number, default: 0, min: 0 },
 
     // ── Table Session / Guest Billing (Architecture v1.1) ─────────────────
     sessionId: { type: Schema.Types.ObjectId, ref: 'TableSession', default: null },
@@ -266,6 +272,10 @@ const OrderSchema: Schema = new Schema(
     refundedBy:   { type: String, default: '' },
     refundReason: { type: String, default: '' },
     refundAmount: { type: Number, default: 0 },
+    refundMethod: { type: String, enum: ['', 'cash', 'upi', 'card', 'original', 'other'], default: '' },
+    // Set when payment was collected by guest/table billing (the Guest/TableSession
+    // record holds the amount collected) so shift totals never count it twice.
+    settledVia:   { type: String, enum: ['', 'guest', 'session'], default: '' },
 
     // ── Delivery / aggregator fields ──────────────────────────────────────
     platformOrderId:     { type: String, default: '' },

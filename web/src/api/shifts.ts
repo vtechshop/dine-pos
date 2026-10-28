@@ -106,6 +106,10 @@ export interface ShiftStats {
   cashSales: number;
   upiSales: number;
   cardSales: number;
+  splitCashSales?: number;
+  onlineSales?: number;
+  expectedCash?: number;
+  refunds?: { count: number; amount: number; cashAmount: number };
 }
 
 export function apiGetActiveShiftStats(): Promise<ShiftStats> {

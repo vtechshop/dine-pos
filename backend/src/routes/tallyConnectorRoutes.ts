@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import { TallyConfig } from '../models/TallyConfig';
 import { TallySyncJob, ITallySyncJob } from '../models/TallySyncJob';
 import Order from '../models/Order';
@@ -26,7 +27,11 @@ const router = Router();
 async function resolveHotelFromToken(authHeader: string | undefined): Promise<string | null> {
   if (!authHeader?.startsWith('Bearer ')) return null;
   const token = authHeader.slice(7).trim();
-  if (!token || token.length < 10) return null;
+  // Tokens are generated as randomBytes(32).hex (64 hex chars, tallyRoutes
+  // /connector-token). Reject anything else before touching the DB, so junk or
+  // JWTs cannot trigger the decrypt scan below.
+  if (!/^[a-f0-9]{64}$/i.test(token)) return null;
+  const tokenBuf = Buffer.from(token, 'utf8');
 
   // Brute-force scan is acceptable: connector poll is infrequent (seconds apart)
   // and the number of TallyConfig docs per deployment is small (< 1000).
@@ -37,8 +42,11 @@ async function resolveHotelFromToken(authHeader: string | undefined): Promise<st
 
   for (const cfg of configs) {
     try {
-      const plain = decrypt(cfg.connectorToken);
-      if (plain === token) return String(cfg.hotelId);
+      const plain = Buffer.from(decrypt(cfg.connectorToken), 'utf8');
+      // Constant-time comparison (length checked first — timingSafeEqual requires it)
+      if (plain.length === tokenBuf.length && crypto.timingSafeEqual(plain, tokenBuf)) {
+        return String(cfg.hotelId);
+      }
     } catch { /* corrupted entry — skip */ }
   }
   return null;

@@ -12,8 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SubscriptionExpired'>;
 
-const SUPPORT_PHONE    = '+917871469095';
-const SUPPORT_WHATSAPP = '917871469095';
+const SUPPORT_PHONE    = '+916381356683';
+const SUPPORT_WHATSAPP = '916381356683';
 const SUPPORT_EMAIL    = 'support@dinepos.in';
 
 const SubscriptionExpiredScreen: React.FC<Props> = ({ navigation, route }) => {

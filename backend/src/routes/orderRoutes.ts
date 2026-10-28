@@ -34,6 +34,11 @@ import GiftVoucher from '../models/GiftVoucher';
 import WalletTransaction from '../models/WalletTransaction';
 import { resolveCoupon, CouponResult } from '../utils/couponUtils';
 import { isDueAtCounter } from '../utils/counterBilling';
+import {
+  ONLINE_PAYMENT_METHOD, verifyOnlinePayment, describeOnlinePaymentProblem,
+  touchesOnlinePayment, validateOnlinePaymentMethodChange, adjustGuestAmountDue,
+} from '../utils/onlinePayment';
+import { REVENUE_FILTER, summarizeRefunds, summarizeOpenOrders } from '../utils/revenue';
 
 const router = Router();
 
@@ -158,8 +163,8 @@ export async function validateAndEnrichItems(
     // Every POS line must reference a product of this hotel: its price and tax
     // come from the DB. A product-less line used to pass through with the
     // client's price/taxPercent (₹1, 0% GST). Aggregator orders don't use this route.
-    if (!item.product || !mongoose.isValidObjectId(String(item.product))) {
-      return { items: [], error: `Item "${String(item.productName ?? '').slice(0, 60) || 'unknown'}" is not linked to a product` };
+    if (!item || !item.product || !mongoose.isValidObjectId(String(item.product))) {
+      return { items: [], error: `Item "${String(item?.productName ?? '').slice(0, 60) || 'unknown'}" is not linked to a product` };
     }
 
     const product = productMap.get(String(item.product));
@@ -233,6 +238,77 @@ export async function validateAndEnrichItems(
   return { items: enriched, error: null };
 }
 
+// ── Prepaid tender restore (wallet / gift voucher) ──────────────────────────
+// Shared by cancellation and refund. Each is idempotent: the order-level
+// *RestoredAt claim guarantees the balance is credited at most once.
+async function restoreGiftVoucherForOrder(order: any, hotelId: string, createdBy: string, remarks: string): Promise<void> {
+  const amt = Number(order.giftVoucherAmount) || 0;
+  if (amt <= 0 || !order.giftVoucherId) return;
+  const claimed = await Order.findOneAndUpdate(
+    { _id: order._id, hotelId, giftVoucherRestoredAt: null },
+    { $set: { giftVoucherRestoredAt: new Date() } },
+  );
+  if (!claimed) return;
+  const now = new Date();
+  await GiftVoucher.findOneAndUpdate(
+    { _id: order.giftVoucherId, hotelId },
+    [
+      { $set: { balance: { $add: ['$balance', amt] }, isActive: true } },
+      {
+        $set: {
+          transactions: {
+            $concatArrays: [
+              { $ifNull: ['$transactions', []] },
+              [{
+                type: 'refund', amount: amt, balanceAfter: { $ifNull: ['$balance', 0] },
+                orderId: order._id, remarks, createdBy, createdAt: now,
+              }],
+            ],
+          },
+        },
+      },
+    ] as any,
+  );
+}
+
+async function restoreWalletForOrder(order: any, hotelId: string, createdBy: string, remarks: string): Promise<void> {
+  const amt = Number(order.walletAmount) || 0;
+  if (amt <= 0 || !order.walletCustomerId) return;
+  const claimed = await Order.findOneAndUpdate(
+    { _id: order._id, hotelId, walletRestoredAt: null },
+    { $set: { walletRestoredAt: new Date() } },
+  );
+  if (!claimed) return; // already restored by a concurrent request
+  const hotelOId    = new mongoose.Types.ObjectId(hotelId);
+  const customerOId = new mongoose.Types.ObjectId(String(order.walletCustomerId));
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const credited = await CustomerProfile.findOneAndUpdate(
+        { _id: customerOId, hotelId: hotelOId },
+        { $inc: { walletBalance: amt } },
+        { new: true, session },
+      );
+      if (credited) {
+        await WalletTransaction.create([{
+          hotelId:      hotelOId,
+          customerId:   customerOId,
+          type:         'credit',
+          source:       'refund',
+          amount:       amt,
+          balanceAfter: +((credited as any).walletBalance ?? 0).toFixed(2),
+          orderId:      order._id,
+          paymentRef:   '',
+          remarks,
+          createdBy,
+        }], { session });
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+
 // Helper: Generate order number like ORD-20260310-001 (per hotel)
 // Uses an atomic MongoDB $inc counter — no race condition under concurrent tablets.
 const generateOrderNumber = async (hotelId: string, prefix = 'ORD'): Promise<string> => {
@@ -256,7 +332,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
     const endOfDay = new Date(date); endOfDay.setHours(23, 59, 59, 999);
 
     const [result] = await Order.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), ...REVENUE_FILTER, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
       { $group: {
         _id: null,
         totalSales:     { $sum: '$grandTotal' },
@@ -272,6 +348,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
         upiCollectTotal: { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi_collect'] }, '$grandTotal', 0] } },
         cardTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card']  }, '$grandTotal', 0] } },
         splitTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'split'] }, '$grandTotal', 0] } },
+        onlineTotal:     { $sum: { $cond: [{ $eq: ['$paymentMethod', 'razorpay'] }, '$grandTotal', 0] } },
         dineInOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, 1, 0] } },
         dineInTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, '$grandTotal', 0] } },
         takeawayOrders: { $sum: { $cond: [{ $eq: ['$orderSource', 'takeaway'] }, 1, 0] } },
@@ -299,18 +376,27 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
     const empty = {
       totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0,
       cashTotal: 0, upiTotal: 0, upiIntentTotal: 0, upiQrTotal: 0, upiCollectTotal: 0,
-      cardTotal: 0, splitTotal: 0,
+      cardTotal: 0, splitTotal: 0, onlineTotal: 0,
       dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0,
       swiggyOrders: 0, swiggyTotal: 0, zomatoOrders: 0, zomatoTotal: 0,
       qrOrders: 0, qrTotal: 0,
     };
     const r = result || empty;
     const netSales = +(r.totalSales - sessionLoyaltyDiscount).toFixed(2);
+    // Refunds issued today reduce net sales; unpaid orders are shown, never counted.
+    const [dayRefunds, dayOpenOrders] = await Promise.all([
+      summarizeRefunds(req.hotelId!, startOfDay, endOfDay),
+      summarizeOpenOrders(req.hotelId!, startOfDay, endOfDay),
+    ]);
+    const salesAfterRefunds = +(netSales - dayRefunds.amount).toFixed(2);
 
     res.json({
       date: dateStr,
-      totalSales: netSales,
-      totalRevenue: netSales,
+      totalSales: salesAfterRefunds,
+      totalRevenue: salesAfterRefunds,
+      grossSales: netSales,
+      refunds: dayRefunds,
+      openOrders: dayOpenOrders,
       totalTax: r.totalTax,
       totalDiscount: r.totalDiscount,
       totalOrders: r.totalOrders,
@@ -325,6 +411,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
         upi_collect: r.upiCollectTotal,
         card: r.cardTotal,
         split: r.splitTotal,
+        online: r.onlineTotal ?? 0,
       },
       sourceBreakdown: {
         'dine-in':  { orders: r.dineInOrders,    revenue: r.dineInTotal },
@@ -352,7 +439,7 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
     const end     = new Date(toStr);   end.setHours(23, 59, 59, 999);
 
     const [result] = await Order.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, createdAt: { $gte: start, $lte: end } } },
+      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), ...REVENUE_FILTER, createdAt: { $gte: start, $lte: end } } },
       { $group: {
         _id: null,
         totalSales:     { $sum: '$grandTotal' },
@@ -368,6 +455,7 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
         upiCollectTotal: { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi_collect'] }, '$grandTotal', 0] } },
         cardTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card']  }, '$grandTotal', 0] } },
         splitTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'split'] }, '$grandTotal', 0] } },
+        onlineTotal:     { $sum: { $cond: [{ $eq: ['$paymentMethod', 'razorpay'] }, '$grandTotal', 0] } },
         dineInOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, 1, 0] } },
         dineInTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, '$grandTotal', 0] } },
         takeawayOrders: { $sum: { $cond: [{ $eq: ['$orderSource', 'takeaway'] }, 1, 0] } },
@@ -393,15 +481,22 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
     const empty = {
       totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0,
       cashTotal: 0, upiTotal: 0, upiIntentTotal: 0, upiQrTotal: 0, upiCollectTotal: 0,
-      cardTotal: 0, splitTotal: 0,
+      cardTotal: 0, splitTotal: 0, onlineTotal: 0,
       dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0,
       swiggyOrders: 0, swiggyTotal: 0, zomatoOrders: 0, zomatoTotal: 0, qrOrders: 0, qrTotal: 0,
     };
     const r = result || empty;
     const netRangeSales = +(r.totalSales - rangeSessionLoyaltyDiscount).toFixed(2);
+    const [rangeRefunds, rangeOpenOrders] = await Promise.all([
+      summarizeRefunds(req.hotelId!, start, end),
+      summarizeOpenOrders(req.hotelId!, start, end),
+    ]);
+    const rangeAfterRefunds = +(netRangeSales - rangeRefunds.amount).toFixed(2);
     res.json({
       from: fromStr, to: toStr,
-      totalSales: netRangeSales, totalTax: r.totalTax, totalDiscount: r.totalDiscount,
+      totalSales: rangeAfterRefunds, grossSales: netRangeSales,
+      refunds: rangeRefunds, openOrders: rangeOpenOrders,
+      totalTax: r.totalTax, totalDiscount: r.totalDiscount,
       totalOrders: r.totalOrders, parcelOrders: r.parcelOrders, parcelRevenue: r.parcelRevenue,
       cancelledOrders: rangeCancelledOrders,
       paymentBreakdown: {
@@ -412,6 +507,7 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
         upi_collect: r.upiCollectTotal,
         card: r.cardTotal,
         split: r.splitTotal,
+        online: r.onlineTotal ?? 0,
       },
       sourceBreakdown: {
         'dine-in':  { orders: r.dineInOrders,    revenue: r.dineInTotal },
@@ -435,7 +531,7 @@ router.get('/reports/products', authMiddleware, requireAdmin, async (req: AuthRe
     const endOfDay   = new Date(date); endOfDay.setHours(23, 59, 59, 999);
 
     const results = await Order.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), ...REVENUE_FILTER, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
       { $unwind: '$items' },
       { $group: {
         _id: '$items.productName',
@@ -558,14 +654,19 @@ router.get('/', requireAdmin, async (req: AuthRequest, res: Response) => {
       to.setHours(23, 59, 59, 999);
       filter.createdAt = { $gte: from, $lte: to };
     }
+    // Plain strings only: sanitizeRequest strips "$" keys, so ?status[$ne]=x
+    // arrives as {} — passing that to Mongoose was a cast error (HTTP 500).
+    if (req.query.status !== undefined && typeof req.query.status !== 'string') {
+      return res.status(400).json({ message: 'Invalid status filter' });
+    }
     if (req.query.status) filter.status = req.query.status;
-    if (req.query.source) filter.orderSource = req.query.source;
+    if (typeof req.query.source === 'string' && req.query.source) filter.orderSource = req.query.source;
 
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 20), 200);
     const skip = (page - 1) * limit;
 
-    if (req.query.q) {
+    if (typeof req.query.q === 'string' && req.query.q) {
       const raw = (req.query.q as string).trim();
       if (raw) {
         // Escape regex special characters to prevent injection
@@ -595,7 +696,7 @@ router.get('/customers', requireAdmin, async (req: AuthRequest, res: Response) =
   try {
     const match: any = {
       hotelId: new mongoose.Types.ObjectId(req.hotelId),
-      status: { $ne: 'cancelled' },
+      ...REVENUE_FILTER,
       customerPhone: { $nin: ['', null] },
     };
 
@@ -667,6 +768,10 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     // offlineId is the client-generated queue item id. If the network dropped
     // after the server saved but before the client received the 201, the client
     // will retry. We return the already-saved order instead of duplicating it.
+    if (req.body.offlineId !== undefined && req.body.offlineId !== null &&
+        (typeof req.body.offlineId !== 'string' || req.body.offlineId.length > 128)) {
+      return res.status(400).json({ message: 'Invalid offlineId' });
+    }
     if (req.body.offlineId) {
       const existing = await Order.findOne({
         offlineId: req.body.offlineId,
@@ -682,6 +787,16 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     // Hotels without tableSessions simply have no sessions — validation returns null
     // naturally, so an explicit feature-flag check is not needed here.
     let linkedGuestId: mongoose.Types.ObjectId | null = null;
+
+    // R1: an order is paid online only when a verified gateway payment exists.
+    // Staff create it unpaid and complete it after /api/payments/verify. A table
+    // guest's order created as 'razorpay' would never be added to the guest's
+    // amount due (counterBilling) and would be closed as "paid online" with no
+    // payment behind it — so table orders cannot start as 'razorpay'.
+    const wantsOnline = req.body.paymentMethod === ONLINE_PAYMENT_METHOD;
+    if (wantsOnline && (req.body.sessionId || req.body.guestId)) {
+      return res.status(400).json({ code: 'ONLINE_PAYMENT_NOT_ALLOWED', message: 'Table orders cannot be created as paid online. Choose the payment method when billing the table, or let the guest pay by QR.' });
+    }
 
     if (req.body.sessionId && req.body.guestId) {
       const { sessionId, guestId } = req.body;
@@ -771,6 +886,10 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       // we guard with resolveHotelStatus to keep strict feature control).
       try {
         const entry = await resolveHotelStatus(req.hotelId!);
+        if ((entry.features as any)?.tableSessions && wantsOnline) {
+          // Checked before a session is opened so a refused order leaves no empty table session.
+          return res.status(400).json({ code: 'ONLINE_PAYMENT_NOT_ALLOWED', message: 'Table orders cannot be created as paid online. Choose the payment method when billing the table, or let the guest pay by QR.' });
+        }
         if ((entry.features as any)?.tableSessions) {
           const openedBy = req.role === 'waiter' && req.waiterName
             ? `Waiter: ${req.waiterName}`
@@ -809,6 +928,10 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
         // Other session errors are non-fatal — order proceeds without session link
         logger.warn('Auto-session error; order proceeds without session', { error: String(sessionErr), hotelId: req.hotelId });
       }
+    }
+
+    if (wantsOnline && linkedGuestId) {
+      return res.status(400).json({ code: 'ONLINE_PAYMENT_NOT_ALLOWED', message: 'Table orders cannot be created as paid online. Choose the payment method when billing the table, or let the guest pay by QR.' });
     }
 
     // ── Server-side price + modifier integrity check ─────────────────────────
@@ -1334,6 +1457,12 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     if (status === 'cancelled' && existing.status === 'completed') {
       return res.status(400).json({ message: 'Cannot cancel a completed order. Process a refund instead.' });
     }
+    // A completed (paid) order is final for every role, admin included. Moving it
+    // back (e.g. completed → served → cancelled) would restore stock and reverse
+    // wallet/voucher/loyalty although the money was collected. Use refund instead.
+    if (existing.status === 'completed' && status !== 'completed') {
+      return res.status(400).json({ message: 'Completed orders cannot change status. Process a refund instead.' });
+    }
     // Cashier: may only complete orders (all other transitions are role-restricted)
     if (role === 'cashier' && status !== 'completed') {
       return res.status(403).json({ message: 'Access denied.' });
@@ -1382,7 +1511,9 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       try {
         await cancelTx.withTransaction(async () => {
           prevDoc = await Order.findOneAndUpdate(
-            { _id: req.params.id, hotelId: req.hotelId, status: { $ne: 'cancelled' } },
+            // $nin completed: a concurrent completion between our read and this
+            // write must win — a paid order is never cancelled.
+            { _id: req.params.id, hotelId: req.hotelId, status: { $nin: ['cancelled', 'completed'] } },
             { $set: { status: 'cancelled' } },
             { new: false, session: cancelTx },
           ) as typeof existing | null;
@@ -1602,86 +1733,12 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         }
 
         // ── Gift voucher reversal on cancellation (fire-and-forget, idempotent via giftVoucherRestoredAt) ──
-        const cancelVoucherAmt = (existing as any).giftVoucherAmount as number | undefined;
-        if (cancelVoucherAmt && cancelVoucherAmt > 0 && (existing as any).giftVoucherId) {
-          ;(async () => {
-            try {
-              const claimed = await Order.findOneAndUpdate(
-                { _id: existing._id, hotelId: req.hotelId, giftVoucherRestoredAt: null },
-                { $set: { giftVoucherRestoredAt: new Date() } },
-              );
-              if (!claimed) return;
-              const cancelNow = new Date();
-              await GiftVoucher.findOneAndUpdate(
-                { _id: (existing as any).giftVoucherId, hotelId: req.hotelId },
-                [
-                  { $set: { balance: { $add: ['$balance', cancelVoucherAmt] }, isActive: true } },
-                  {
-                    $set: {
-                      transactions: {
-                        $concatArrays: [
-                          { $ifNull: ['$transactions', []] },
-                          [{
-                            type: 'refund', amount: cancelVoucherAmt, balanceAfter: { $ifNull: ['$balance', 0] },
-                            orderId: existing._id,
-                            remarks: `Cancellation: Order #${existing.orderNumber ?? ''}`,
-                            createdBy: 'system:cancel', createdAt: cancelNow,
-                          }],
-                        ],
-                      },
-                    },
-                  },
-                ] as any,
-              );
-            } catch (e) {
-              logger.warn('[gift-voucher] reversal on cancellation failed', { orderId: String(existing._id), err: String(e) });
-            }
-          })();
-        }
+        restoreGiftVoucherForOrder(existing, req.hotelId!, 'system:cancel', `Cancellation: Order #${existing.orderNumber ?? ''}`)
+          .catch(e => logger.warn('[gift-voucher] reversal on cancellation failed', { orderId: String(existing._id), err: String(e) }));
 
         // C-04: Wallet refund on cancellation — fire-and-forget, idempotent via walletRestoredAt.
-        const cancelWalletAmt = (existing as any).walletAmount as number | undefined;
-        if (cancelWalletAmt && cancelWalletAmt > 0 && (existing as any).walletCustomerId) {
-          ;(async () => {
-            try {
-              const claimed = await Order.findOneAndUpdate(
-                { _id: existing._id, hotelId: req.hotelId, walletRestoredAt: null },
-                { $set: { walletRestoredAt: new Date() } },
-              );
-              if (!claimed) return; // already refunded by a concurrent request
-              const refundHotelOId    = new mongoose.Types.ObjectId(req.hotelId!);
-              const refundCustomerOId = new mongoose.Types.ObjectId(String((existing as any).walletCustomerId));
-              const refundSession = await mongoose.startSession();
-              try {
-                await refundSession.withTransaction(async () => {
-                  const refunded = await CustomerProfile.findOneAndUpdate(
-                    { _id: refundCustomerOId, hotelId: refundHotelOId },
-                    { $inc: { walletBalance: cancelWalletAmt } },
-                    { new: true, session: refundSession },
-                  );
-                  if (refunded) {
-                    await WalletTransaction.create([{
-                      hotelId:      refundHotelOId,
-                      customerId:   refundCustomerOId,
-                      type:         'credit',
-                      source:       'refund',
-                      amount:       cancelWalletAmt,
-                      balanceAfter: +((refunded as any).walletBalance ?? 0).toFixed(2),
-                      orderId:      existing._id,
-                      paymentRef:   '',
-                      remarks:      `Refund: Order #${(existing as any).orderNumber ?? ''}`,
-                      createdBy:    'system:cancel',
-                    }], { session: refundSession });
-                  }
-                });
-              } finally {
-                await refundSession.endSession();
-              }
-            } catch (e) {
-              logger.warn('[wallet] refund on cancellation failed', { orderId: String(existing._id), err: String(e) });
-            }
-          })();
-        }
+        restoreWalletForOrder(existing, req.hotelId!, 'system:cancel', `Refund: Order #${(existing as any).orderNumber ?? ''}`)
+          .catch(e => logger.warn('[wallet] refund on cancellation failed', { orderId: String(existing._id), err: String(e) }));
       }
     }
 
@@ -1693,15 +1750,24 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       // M13: Razorpay orders must have a verified Payment record before completion.
       // Check BOTH the stored paymentMethod (e.g. QR orders already stored as 'razorpay')
       // AND the client-supplied paymentMethod — either triggers the guard.
+      // R1: verified = a successful INR gateway payment for THIS order whose amount
+      // matches the order total (utils/onlinePayment.ts).
       if (paymentMethod === 'razorpay' || existing.paymentMethod === 'razorpay') {
-        const razorpayPmt = await Payment.findOne({
-          orderId: existing._id,
-          hotelId: req.hotelId,
-          status: 'success',
-          gatewayType: { $in: ['razorpay', 'razorpay_link'] },
-        }).select('_id').lean();
-        if (!razorpayPmt) {
-          return res.status(400).json({ message: 'Payment verification required before completing a Razorpay order.' });
+        const check = await verifyOnlinePayment(req.hotelId!, existing);
+        if (!check.verified) {
+          return res.status(400).json({
+            code:    'ONLINE_PAYMENT_UNVERIFIED',
+            reason:  check.problem,
+            message: `Payment verification required before completing a Razorpay order: ${describeOnlinePaymentProblem(check.problem!)}.`,
+          });
+        }
+        // A verified online order keeps 'razorpay' — completing it under another
+        // method would record money that was never taken at the counter.
+        if (existing.paymentMethod === ONLINE_PAYMENT_METHOD && paymentMethod && paymentMethod !== ONLINE_PAYMENT_METHOD) {
+          return res.status(400).json({
+            code:    'ONLINE_PAYMENT_CAPTURED',
+            message: 'This order was paid online and must be completed as Razorpay. Use a refund to reverse an online payment.',
+          });
         }
       }
 
@@ -1756,6 +1822,10 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       const completedOrder = await Order.findById(req.params.id);
       const orderForResponse = completedOrder ?? existing;
 
+      // Customer-facing kiosk screens (public room) get status only — no PII.
+      io.to(`public_${req.hotelId}`).emit('order_status_update', {
+        orderId: existing._id, orderNumber: existing.orderNumber, status: 'completed',
+      });
       io.to(`hotel_${req.hotelId}`).emit('order_status_update', {
         orderId:      existing._id,
         orderNumber:  existing.orderNumber,
@@ -1873,6 +1943,9 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     }
     await existing.save();
 
+    io.to(`public_${req.hotelId}`).emit('order_status_update', {
+      orderId: existing._id, orderNumber: existing.orderNumber, status: existing.status,
+    });
     io.to(`hotel_${req.hotelId}`).emit('order_status_update', {
       orderId: existing._id,
       orderNumber: existing.orderNumber,
@@ -1890,6 +1963,9 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       });
     }
     if (existing.status === 'served') {
+      io.to(`public_${req.hotelId}`).emit('order_served', {
+        orderId: existing._id, orderNumber: existing.orderNumber,
+      });
       io.to(`hotel_${req.hotelId}`).emit('order_served', {
         orderId: existing._id,
         orderNumber: existing.orderNumber,
@@ -1907,11 +1983,16 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
 
 // PUT update order — field whitelist prevents mass-assignment and MongoDB operator injection
 // H-03: 'status' removed; status transitions must go through PATCH /:id/status
+// discountAmount is intentionally NOT editable here: changing it without
+// recomputing grandTotal made reports disagree with the bill. Discounts go
+// through order creation or PATCH /:id/payment (additionalDiscount).
 const ORDER_UPDATE_ALLOWED = new Set([
-  'paymentStatus', 'paymentMethod', 'notes', 'discountAmount',
+  'paymentStatus', 'paymentMethod', 'notes',
   'tableNumber', 'isParcel', 'customerName',
   'transactionId', 'upiApp', 'payments', 'splitDetails',
 ]);
+// Money fields are frozen once the order is completed (shift/reports already counted them).
+const ORDER_PAYMENT_FIELDS = ['paymentStatus', 'paymentMethod', 'transactionId', 'upiApp', 'payments', 'splitDetails'];
 
 router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   // Reject MongoDB operator keys (e.g. $set, $unset, $where)
@@ -1925,13 +2006,41 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     if (ORDER_UPDATE_ALLOWED.has(key)) update[key] = req.body[key];
   }
 
+  const touchesPayment = ORDER_PAYMENT_FIELDS.some(k => k in update);
   try {
+    // R1: same server-side verification as PATCH /:id/payment when the change moves
+    // the order into or out of "paid online".
+    let guestDelta = 0;
+    let pinnedMethod: string | undefined;
+    if ('paymentMethod' in update) {
+      const current = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId })
+        .select('status paymentMethod grandTotal guestId').lean();
+      if (current && current.status !== 'completed' && touchesOnlinePayment(current.paymentMethod, update.paymentMethod)) {
+        const v = await validateOnlinePaymentMethodChange(req.hotelId!, current as any, String(update.paymentMethod));
+        if ('error' in v) return res.status(v.error.status).json({ code: v.error.code, message: v.error.message });
+        guestDelta   = v.guestDelta;
+        pinnedMethod = current.paymentMethod;
+      }
+    }
     const order = await Order.findOneAndUpdate(
-      { _id: req.params.id, hotelId: req.hotelId },
+      {
+        _id: req.params.id, hotelId: req.hotelId,
+        ...(touchesPayment ? { status: { $ne: 'completed' } } : {}),
+        ...(pinnedMethod ? { paymentMethod: pinnedMethod } : {}),
+      },
       update,
       { new: true, runValidators: true }
     );
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order && guestDelta) await adjustGuestAmountDue(req.hotelId!, order.guestId, guestDelta);
+    if (!order && pinnedMethod && await Order.exists({ _id: req.params.id, hotelId: req.hotelId, status: { $ne: 'completed' } })) {
+      return res.status(409).json({ message: 'Order was changed by another request. Please refresh and try again.' });
+    }
+    if (!order) {
+      if (touchesPayment && await Order.exists({ _id: req.params.id, hotelId: req.hotelId, status: 'completed' })) {
+        return res.status(400).json({ message: 'Payment details of a completed order cannot be changed.' });
+      }
+      return res.status(404).json({ message: 'Order not found' });
+    }
     res.json(order);
   } catch (error) {
     sendError(res, 400, 'Invalid data', error);
@@ -1957,15 +2066,37 @@ router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res
     if (paymentMethod && VALID_PM.includes(paymentMethod)) {
       update.paymentMethod = paymentMethod;
     }
-    if (splitDetails && Array.isArray(splitDetails) && splitDetails.length > 0) {
+    // splitDetails is stored as { cash, upi, card } (Order schema). The web client
+    // sends that object; it used to be silently dropped because only an array was
+    // accepted here, so the cash share of split bills never reached the shift.
+    // Legacy array form [{ mode, amount }] is still accepted and normalised.
+    if (splitDetails && (Array.isArray(splitDetails) ? splitDetails.length > 0 : typeof splitDetails === 'object')) {
+      const norm = { cash: 0, upi: 0, card: 0 };
+      if (Array.isArray(splitDetails)) {
+        for (const p of splitDetails as any[]) {
+          const amt = Number(p?.amount) || 0;
+          const mode = String(p?.mode ?? '');
+          if (mode === 'cash') norm.cash += amt;
+          else if (mode === 'card') norm.card += amt;
+          else norm.upi += amt;
+        }
+      } else {
+        norm.cash = Number((splitDetails as any).cash) || 0;
+        norm.upi  = Number((splitDetails as any).upi)  || 0;
+        norm.card = Number((splitDetails as any).card) || 0;
+      }
+      if ([norm.cash, norm.upi, norm.card].some(v => !isFinite(v) || v < 0)) {
+        return res.status(400).json({ message: 'Split amounts must be non-negative numbers' });
+      }
       // M5: reject if split amounts don't add up (within ±1 rupee for floating point)
-      const splitTotal = splitDetails.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
-      if (Math.abs(splitTotal - order.grandTotal) > 1) {
+      const splitTotal = norm.cash + norm.upi + norm.card;
+      const payable = typeof update.grandTotal === 'number' ? update.grandTotal as number : order.grandTotal;
+      if (Math.abs(splitTotal - payable) > 1) {
         return res.status(400).json({
-          message: `Split payment total (${splitTotal.toFixed(2)}) must equal order total (${order.grandTotal.toFixed(2)})`,
+          message: `Split payment total (${splitTotal.toFixed(2)}) must equal order total (${payable.toFixed(2)})`,
         });
       }
-      update.splitDetails = splitDetails;
+      update.splitDetails = norm;
     }
     if (tipAmount != null) {
       const rawTip = Number(tipAmount);
@@ -1981,7 +2112,16 @@ router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res
       }
       update.tipAmount = rawTip;
     }
+    // additionalDiscount is the bill's absolute post-order discount. It REPLACES
+    // any earlier value: the base is the total before any additional discount,
+    // so repeated calls cannot stack and the cashier cap is checked on the base.
+    const prevAddDisc = Number((order as any).additionalDiscount) || 0;
     if (additionalDiscount != null && Number(additionalDiscount) > 0) {
+      const reqDisc = Number(additionalDiscount);
+      if (!isFinite(reqDisc)) {
+        return res.status(400).json({ message: 'additionalDiscount must be a number' });
+      }
+      const baseTotal = Math.round((order.grandTotal + prevAddDisc) * 100) / 100;
       // RBAC: discount gate for additional post-order discount
       if (req.role !== 'admin') {
         const hotelCap2 = await Hotel.findById(req.hotelId).select('maxCashierDiscountPercent').lean() as any;
@@ -1989,22 +2129,49 @@ router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res
         if (cap2 === 0) {
           return res.status(403).json({ message: 'Only admins can apply discounts.' });
         }
-        const addPct = order.grandTotal > 0 ? (Number(additionalDiscount) / order.grandTotal * 100) : 0;
+        const addPct = baseTotal > 0 ? (reqDisc / baseTotal * 100) : 0;
         if (addPct > cap2) {
           return res.status(403).json({ message: `Discount ${addPct.toFixed(1)}% exceeds cashier limit of ${cap2}%. Contact admin.` });
         }
       }
-      const addDisc = Math.min(Number(additionalDiscount), order.grandTotal);
+      const addDisc = Math.round(Math.min(reqDisc, baseTotal) * 100) / 100;
       update.additionalDiscount = addDisc;
-      update.grandTotal = Math.max(0, Math.round((order.grandTotal - addDisc) * 100) / 100);
+      update.grandTotal = Math.max(0, Math.round((baseTotal - addDisc) * 100) / 100);
     }
 
+    // R1: moving an order into / out of "paid online" needs server verification
+    // (utils/onlinePayment.ts), and the table guest's amount due moves with it.
+    let guestDelta = 0;
+    const effectiveMethod = (update.paymentMethod as string | undefined) ?? order.paymentMethod;
+    if (effectiveMethod === ONLINE_PAYMENT_METHOD && typeof update.grandTotal === 'number') {
+      return res.status(400).json({
+        code:    'ONLINE_PAYMENT_TOTAL_LOCKED',
+        message: 'The total of an order paid online cannot be discounted here — it must match the online payment.',
+      });
+    }
+    if (touchesOnlinePayment(order.paymentMethod, update.paymentMethod)) {
+      const v = await validateOnlinePaymentMethodChange(req.hotelId!, order as any, update.paymentMethod as string);
+      if ('error' in v) return res.status(v.error.status).json({ code: v.error.code, message: v.error.message });
+      guestDelta = v.guestDelta;
+    }
+
+    // Conditional write: only if the order is still open and nobody changed the
+    // discount/total since we read it (prevents lost updates / double discount).
     const updated = await Order.findOneAndUpdate(
-      { _id: req.params.id, hotelId: req.hotelId },
+      {
+        _id: req.params.id, hotelId: req.hotelId,
+        status: { $ne: 'completed' },
+        grandTotal: order.grandTotal,
+        // Same method as validated above: two concurrent method changes cannot
+        // both move the guest's amount due.
+        ...(order.paymentMethod ? { paymentMethod: order.paymentMethod } : {}),
+        ...(prevAddDisc > 0 ? { additionalDiscount: prevAddDisc } : { additionalDiscount: { $in: [0, null] } }),
+      },
       { $set: update },
       { new: true },
     );
-    if (!updated) return res.status(404).json({ message: 'Order not found' });
+    if (!updated) return res.status(409).json({ message: 'Order was changed by another request. Please refresh and try again.' });
+    await adjustGuestAmountDue(req.hotelId!, order.guestId, guestDelta);
 
     logAudit(req, 'order.payment_updated', 'order', String(updated._id), {
       paymentMethod, splitDetails: splitDetails?.length, tipAmount, additionalDiscount,
@@ -2021,7 +2188,7 @@ router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res
 // wallet, voucher balances using the same path as order cancellation.
 router.post(
   '/:id/refund',
-  authMiddleware, resolveHotelStatus, requireAdmin,
+  authMiddleware, requireAdmin,
   async (req: AuthRequest, res: Response) => {
     try {
       const order = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId });
@@ -2035,18 +2202,32 @@ router.post(
 
       const reason = String(req.body.reason || '').trim();
       if (!reason) return res.status(400).json({ message: 'refundReason is required.' });
+      // Optional: how the refund was paid out. Recorded for reconciliation only —
+      // not auto-subtracted from shift cash (see utils/shiftCash.ts).
+      const REFUND_METHODS = ['cash', 'upi', 'card', 'original', 'other'];
+      const refundMethod = req.body.refundMethod === undefined ? '' : String(req.body.refundMethod);
+      if (refundMethod && !REFUND_METHODS.includes(refundMethod)) {
+        return res.status(400).json({ message: `refundMethod must be one of: ${REFUND_METHODS.join(', ')}` });
+      }
       const requestedAmount = Number(req.body.refundAmount) || order.grandTotal;
       const refundAmount    = Math.min(Math.max(0, requestedAmount), order.grandTotal);
 
-      await Order.findOneAndUpdate(
-        { _id: order._id, hotelId: req.hotelId },
+      // Atomic claim: only one request can mark the order refunded, so the
+      // loyalty / wallet / voucher reversals below run exactly once.
+      const claimedRefund = await Order.findOneAndUpdate(
+        { _id: order._id, hotelId: req.hotelId, status: 'completed', refundedAt: null },
         { $set: {
           refundedAt:   new Date(),
           refundedBy:   String((req as any).cashierId || (req as any).adminId || ''),
           refundReason: reason,
           refundAmount,
+          refundMethod,
         }},
+        { new: true },
       );
+      if (!claimedRefund) {
+        return res.status(409).json({ message: 'This order has already been refunded.' });
+      }
 
       logAudit(req, 'order.refunded', 'order', String(order._id), {
         orderNumber: order.orderNumber,
@@ -2057,6 +2238,9 @@ router.post(
       // ── Loyalty + wallet + voucher reversal (fire-and-forget) ────────────────
       ;(async () => {
         try {
+          // Loyalty runs in its own function: its early returns (loyalty off, no
+          // phone, no profile) must NOT skip the wallet/voucher restores below.
+          await (async () => {
           const loyaltyCfg = await getLoyaltyConfig(req.hotelId!);
           const customerPhone = order.customerPhone;
           if (!customerPhone) return;
@@ -2140,46 +2324,19 @@ router.post(
               );
             }
           }
+          })();
         } catch (loyaltyErr) {
           logger.error('[refund] loyalty reversal failed', { orderId: String(order._id), err: String(loyaltyErr) });
         }
 
-        // Restore wallet
+        // Restore wallet + gift voucher (shared, idempotent helpers — same as cancellation)
         try {
-          const walletAmt = (order as any).walletAmount ?? 0;
-          if (walletAmt > 0 && order.walletCustomerId) {
-            const walletClaimed = await Order.findOneAndUpdate(
-              { _id: order._id, walletRestoredAt: null },
-              { $set: { walletRestoredAt: new Date() } },
-            );
-            if (walletClaimed) {
-              await WalletTransaction.create({
-                hotelId:    req.hotelId,
-                customerId: order.walletCustomerId,
-                type:       'credit',
-                amount:     walletAmt,
-                referenceId: String(order._id),
-                description: `Wallet restore: Order #${order.orderNumber} refunded`,
-              });
-              await CustomerProfile.findByIdAndUpdate(order.walletCustomerId, { $inc: { walletBalance: walletAmt } });
-            }
-          }
+          await restoreWalletForOrder(order, req.hotelId!, 'system:refund', `Wallet restore: Order #${order.orderNumber} refunded`);
         } catch (walletErr) {
           logger.error('[refund] wallet restore failed', { orderId: String(order._id), err: String(walletErr) });
         }
-
-        // Restore gift voucher
         try {
-          const voucherAmt = (order as any).giftVoucherAmount ?? 0;
-          if (voucherAmt > 0 && order.giftVoucherId && !(order as any).giftVoucherRestoredAt) {
-            const voucherClaimed = await Order.findOneAndUpdate(
-              { _id: order._id, giftVoucherRestoredAt: null },
-              { $set: { giftVoucherRestoredAt: new Date() } },
-            );
-            if (voucherClaimed) {
-              await GiftVoucher.findByIdAndUpdate(order.giftVoucherId, { $inc: { balance: voucherAmt } });
-            }
-          }
+          await restoreGiftVoucherForOrder(order, req.hotelId!, 'system:refund', `Refund: Order #${order.orderNumber}`);
         } catch (voucherErr) {
           logger.error('[refund] voucher restore failed', { orderId: String(order._id), err: String(voucherErr) });
         }

@@ -5,7 +5,7 @@ import { fetchSessionBill, billGuest, bulkBillAndClose, markGuestLeft, closeSess
 import type { SplitDetails } from '../../api/billing';
 import { cancelOrder } from '../../api/orders';
 import { useAuth } from '../../context/AuthContext';
-import { sumDue } from '../../utils/counterBilling';
+import { sumDue, sumPaidOnline } from '../../utils/counterBilling';
 import { GuestPanel } from './GuestPanel';
 import { PaymentPanel } from './PaymentPanel';
 import { ReceiptView } from './ReceiptView';
@@ -147,8 +147,14 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
   const splitSum         = splitDetails.cash + splitDetails.card + splitDetails.upi;
   const splitValid       = Math.abs(splitSum - netBillingAmount) < 0.01;
 
+  // Paid online already — a guest/table whose orders were all prepaid still
+  // needs closing out at ₹0 due.
+  const paidOnlineTotal = mode === 'table'
+    ? activeGuestBills.reduce((s, gb) => s + sumPaidOnline(gb.orders), 0)
+    : (selectedGuestBill ? sumPaidOnline(selectedGuestBill.orders) : 0);
+
   const canConfirm =
-    billingAmount > 0 &&
+    (billingAmount > 0 || paidOnlineTotal > 0) &&
     !confirming &&
     (paymentMethod !== 'split' || splitValid) &&
     (mode === 'table' || !!selectedGuestId);

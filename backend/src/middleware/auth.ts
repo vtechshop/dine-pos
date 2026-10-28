@@ -15,9 +15,17 @@ export interface AuthRequest extends Request {
   waiterName?: string;
   cashierId?: string;
   cashierName?: string;
+  /** Set only on tokens minted by POST /api/branches/switch for an HQ admin acting in a branch. */
+  actingOrgId?: string;
 }
 
 const JWT_SECRET = process.env.JWT_SECRET!;
+
+// A token's hotelId must be a plain 24-hex string. Anything else (e.g. an object
+// smuggled in via operator injection at login) would turn {hotelId: req.hotelId}
+// filters into cross-tenant queries.
+export const isHotelIdString = (v: unknown): v is string =>
+  typeof v === 'string' && /^[a-f0-9]{24}$/i.test(v);
 
 // ── Per-hotel status cache ────────────────────────────────────────────────────
 // Short TTL (45 s) so suspensions / plan changes take effect quickly.
@@ -225,6 +233,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
       hotelId: string; hotelName?: string; role?: string;
       waiterId?: string; waiterName?: string;
       cashierId?: string; cashierName?: string;
+      actingOrgId?: string;
     };
     // Every handler scopes queries by req.hotelId. A token carrying anything
     // other than a 24-hex id (e.g. an operator object) must never get this far.
@@ -239,6 +248,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     req.waiterName  = decoded.waiterName;
     req.cashierId   = decoded.cashierId;
     req.cashierName = decoded.cashierName;
+    req.actingOrgId = isHotelIdString(decoded.actingOrgId) ? decoded.actingOrgId : undefined;
 
     // Check current hotel status — a live JWT is not enough
     let entry: StatusEntry;
@@ -330,6 +340,10 @@ export const requireHotelJwt = (req: AuthRequest, res: Response, next: NextFunct
     const decoded = jwt.verify(token, JWT_SECRET) as {
       hotelId: string; hotelName?: string; role?: string;
     };
+    if (!isHotelIdString(decoded.hotelId)) {
+      res.status(401).json({ message: 'Invalid or expired session. Please login again.' });
+      return;
+    }
     req.hotelId   = decoded.hotelId;
     req.hotelName = decoded.hotelName;
     req.role      = decoded.role;
@@ -381,9 +395,13 @@ export const requireWaiterOrCashierOrAdmin = (req: AuthRequest, res: Response, n
   next();
 };
 
-export const generateToken = (hotelId: string, hotelName: string): string => {
-  // H-03: 15-minute access token; clients must use the refresh token to obtain new tokens silently
-  return jwt.sign({ hotelId, hotelName, role: 'admin' }, JWT_SECRET, { expiresIn: '15m' });
+export const generateToken = (hotelId: string, hotelName: string, actingOrgId?: string): string => {
+  // H-03: 15-minute access token; clients must use the refresh token to obtain new tokens silently.
+  // actingOrgId marks an HQ admin acting inside one of its branches (see utils/orgAuth.ts).
+  return jwt.sign(
+    { hotelId, hotelName, role: 'admin', ...(actingOrgId ? { actingOrgId } : {}) },
+    JWT_SECRET, { expiresIn: '15m' },
+  );
 };
 
 export const generateKitchenToken = (hotelId: string): string => {
@@ -405,10 +423,10 @@ export const hashRefreshToken = (token: string): string =>
 
 // familyId groups all tokens from one login session for H-9 family invalidation.
 // Pass an existing familyId during rotation; omit (or pass undefined) on new login.
-export const generateRefreshToken = async (hotelId: string, familyId?: string): Promise<{ token: string; familyId: string }> => {
+export const generateRefreshToken = async (hotelId: string, familyId?: string, actingOrgId?: string | null): Promise<{ token: string; familyId: string }> => {
   const token = crypto.randomUUID();
   const family = familyId ?? crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  await RefreshToken.create({ token: hashRefreshToken(token), hotelId, familyId: family, expiresAt });
+  await RefreshToken.create({ token: hashRefreshToken(token), hotelId, familyId: family, expiresAt, actingOrgId: actingOrgId || null });
   return { token, familyId: family };
 };

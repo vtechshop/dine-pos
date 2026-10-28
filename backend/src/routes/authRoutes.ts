@@ -12,6 +12,7 @@ import { sendError } from '../utils/sendError';
 
 // Token refresh — 20 requests / 15 min per IP (prevents refresh-token brute-force)
 const refreshLimiter = makeRateLimiter({
+  name: 'auth:refresh',
   windowMs: 15 * 60 * 1000,
   max: 20,
   skip: () => process.env.NODE_ENV === 'test',
@@ -23,6 +24,7 @@ const refreshLimiter = makeRateLimiter({
 // crafted tokens and observing different timing side-channels.
 // 30 requests / 15 min per IP is generous for legitimate use.
 const logoutLimiter = makeRateLimiter({
+  name: 'auth:logout',
   windowMs: 15 * 60 * 1000,
   max: 30,
   skip: () => process.env.NODE_ENV === 'test',
@@ -31,16 +33,38 @@ const logoutLimiter = makeRateLimiter({
 
 // Admin login — strict: 10 attempts / 15 min per IP (protects full account access)
 const loginLimiter = makeRateLimiter({
+  name: 'auth:login:ip',
   windowMs: 15 * 60 * 1000,
   max: 10,
   skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Too many login attempts. Please try again after 15 minutes.' },
 });
 
+// Admin login — second limit per ACCOUNT (normalised userId), shared across IPs and
+// instances, so distributed guessing against one owner account is capped too.
+// Windowed (15 min), never permanent, so a targeted lockout clears by itself.
+const loginAccountLimiter = makeRateLimiter({
+  name: 'auth:login:account',
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    const id = typeof req.body?.userId === 'string' ? req.body.userId.trim().toLowerCase() : '';
+    return id ? `acct:${id}` : `ip:${req.ip || 'unknown'}`;
+  },
+  validate: { keyGeneratorIpFallback: false },
+  message: { message: 'Too many login attempts. Please try again after 15 minutes.' },
+});
+
+// Constant bcrypt work for unknown accounts so response time does not reveal
+// whether a User ID exists.
+const DUMMY_HASH = bcrypt.hashSync('dinepos-dummy-password', 10);
+
 // Staff PIN login — keyed by hotelId:employeeCode (not by IP) so tablets that
 // share a restaurant's public IP never burn each other's counter.
 // Kitchen route has no employeeCode so it keys by hotelId alone.
 const staffPinLimiter = makeRateLimiter({
+  name: 'auth:pin:account',
   windowMs: 15 * 60 * 1000,
   max: 30,
   skip: () => process.env.NODE_ENV === 'test',
@@ -57,6 +81,40 @@ const staffPinLimiter = makeRateLimiter({
   validate: { keyGeneratorIpFallback: false },
   message: { message: 'Too many PIN attempts. Please wait a moment and try again.' },
 });
+
+// Second, coarser limit per IP so rotating employee codes cannot dodge the
+// per-account counter. Generous because a restaurant's tablets share one IP.
+const staffPinIpLimiter = makeRateLimiter({
+  name: 'auth:pin:ip',
+  windowMs: 15 * 60 * 1000,
+  max: 150,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { message: 'Too many PIN attempts. Please wait a moment and try again.' },
+});
+
+// Validates and canonicalises staff-login input BEFORE the rate limiter, so
+// the limiter key cannot be varied (case, whitespace, extra fields) and no
+// non-string value (e.g. {"$ne": null}) ever reaches a query or a JWT.
+const normalizeStaffLogin = (needsEmployeeCode: boolean) =>
+  (req: Request, res: Response, next: () => void) => {
+    const { hotelId, employeeCode, pin } = req.body || {};
+    const pinStr = typeof pin === 'number' ? String(pin) : pin;
+    if (typeof hotelId !== 'string' || !/^[a-f0-9]{24}$/i.test(hotelId.trim()) ||
+        typeof pinStr !== 'string' || !pinStr.trim() ||
+        (needsEmployeeCode && (typeof employeeCode !== 'string' || !employeeCode.trim()))) {
+      return res.status(400).json({
+        message: needsEmployeeCode ? 'Hotel ID, employee code and PIN required' : 'Hotel ID and PIN required',
+      });
+    }
+    req.body = {
+      hotelId: hotelId.trim().toLowerCase(),
+      pin:     pinStr.trim(),
+      ...(needsEmployeeCode ? { employeeCode: employeeCode.trim().toUpperCase() } : {}),
+    };
+    return next();
+  };
+
+const STAFF_LOGIN_FAILED = 'Incorrect employee code or PIN';
 
 const router = Router();
 
@@ -126,7 +184,7 @@ const trialDaysRemaining = (trialEndDate: Date | null): number => {
 };
 
 // POST /api/auth/login
-router.post('/login', loginLimiter, async (req: Request, res: Response) => {
+router.post('/login', loginLimiter, loginAccountLimiter, async (req: Request, res: Response) => {
   const { userId, password } = req.body;
   if (!userId || !password || typeof userId !== 'string' || typeof password !== 'string') {
     return res.status(400).json({ message: 'User ID and password required' });
@@ -135,6 +193,15 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   try {
     const hotel = await Hotel.findOne({ adminId: userId.trim() });
     if (!hotel || !hotel.adminPasswordHash) {
+      await bcrypt.compare(password, DUMMY_HASH);
+      return res.status(401).json({ message: 'Invalid User ID or Password' });
+    }
+
+    // Password FIRST: account status (pending / suspended / expired, hotelId) is
+    // only revealed to someone who knows the password — no account enumeration.
+    const isMatch = await bcrypt.compare(password, hotel.adminPasswordHash);
+    if (!isMatch) {
+      logAuditRaw({ hotelId: hotel._id.toString(), action: 'login.failure', targetType: 'hotel', targetId: hotel._id.toString(), metadata: { userId, reason: 'wrong_password' }, ip: req.ip });
       return res.status(401).json({ message: 'Invalid User ID or Password' });
     }
 
@@ -166,12 +233,6 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
           : 'Your subscription has expired. Please renew to continue.',
         hotelId: hotel._id,
       });
-    }
-
-    const isMatch = await bcrypt.compare(password, hotel.adminPasswordHash);
-    if (!isMatch) {
-      logAuditRaw({ hotelId: hotel._id.toString(), action: 'login.failure', targetType: 'hotel', targetId: hotel._id.toString(), metadata: { userId, reason: 'wrong_password' }, ip: req.ip });
-      return res.status(401).json({ message: 'Invalid User ID or Password' });
     }
 
     const [token, { token: refreshToken }] = await Promise.all([
@@ -250,8 +311,8 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
 
     // H-9: Rotate within the same family so the family can be revoked atomically.
     const [newToken, { token: newRefreshToken }] = await Promise.all([
-      Promise.resolve(generateToken(record.hotelId.toString(), (hotel as any).hotelName)),
-      generateRefreshToken(record.hotelId.toString(), record.familyId),
+      Promise.resolve(generateToken(record.hotelId.toString(), (hotel as any).hotelName, record.actingOrgId?.toString())),
+      generateRefreshToken(record.hotelId.toString(), record.familyId, record.actingOrgId?.toString()),
     ]);
 
     return res.json({ token: newToken, refreshToken: newRefreshToken });
@@ -261,7 +322,7 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/kitchen — validate kitchen PIN, return short-lived kitchen JWT
-router.post('/kitchen', staffPinLimiter, async (req: Request, res: Response) => {
+router.post('/kitchen', normalizeStaffLogin(false), staffPinIpLimiter, staffPinLimiter, async (req: Request, res: Response) => {
   const { hotelId, pin } = req.body;
   if (!hotelId || !pin) {
     return res.status(400).json({ message: 'Hotel ID and PIN required' });
@@ -288,7 +349,7 @@ router.post('/kitchen', staffPinLimiter, async (req: Request, res: Response) => 
 });
 
 // POST /api/auth/waiter — login with hotelId + employeeCode + PIN
-router.post('/waiter', staffPinLimiter, async (req: Request, res: Response) => {
+router.post('/waiter', normalizeStaffLogin(true), staffPinIpLimiter, staffPinLimiter, async (req: Request, res: Response) => {
   const { hotelId, employeeCode, pin } = req.body;
   if (!hotelId || !employeeCode || !pin) {
     return res.status(400).json({ message: 'Hotel ID, employee code and PIN required' });
@@ -304,14 +365,14 @@ router.post('/waiter', staffPinLimiter, async (req: Request, res: Response) => {
       employeeCode: employeeCode.toString().trim().toUpperCase(),
     }).lean();
     if (!waiter) {
-      return res.status(401).json({ message: 'Employee code not found' });
+      return res.status(401).json({ message: STAFF_LOGIN_FAILED });
     }
     if (!waiter.isActive) {
       return res.status(403).json({ message: 'Your account is inactive. Contact admin.' });
     }
     if (!await bcrypt.compare(pin.toString().trim(), (waiter as any).pin)) {
       logAuditRaw({ hotelId, action: 'waiter.login.failure', targetType: 'waiter', targetId: String((waiter as any)._id), metadata: { employeeCode, reason: 'wrong_pin' }, ip: req.ip });
-      return res.status(401).json({ message: 'Incorrect PIN' });
+      return res.status(401).json({ message: STAFF_LOGIN_FAILED });
     }
     logAuditRaw({ hotelId, action: 'waiter.login.success', targetType: 'waiter', targetId: String((waiter as any)._id), metadata: { employeeCode }, ip: req.ip });
     const token = generateWaiterToken(hotelId, String((waiter as any)._id), waiter.name);
@@ -330,7 +391,7 @@ router.post('/waiter', staffPinLimiter, async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/cashier — login with hotelId + employeeCode + PIN
-router.post('/cashier', staffPinLimiter, async (req: Request, res: Response) => {
+router.post('/cashier', normalizeStaffLogin(true), staffPinIpLimiter, staffPinLimiter, async (req: Request, res: Response) => {
   const { hotelId, employeeCode, pin } = req.body;
   if (!hotelId || !employeeCode || !pin) {
     return res.status(400).json({ message: 'Hotel ID, employee code and PIN required' });
@@ -346,14 +407,14 @@ router.post('/cashier', staffPinLimiter, async (req: Request, res: Response) => 
       employeeCode: employeeCode.toString().trim().toUpperCase(),
     }).lean();
     if (!cashier) {
-      return res.status(401).json({ message: 'Employee code not found' });
+      return res.status(401).json({ message: STAFF_LOGIN_FAILED });
     }
     if (!cashier.isActive) {
       return res.status(403).json({ message: 'Your account is inactive. Contact admin.' });
     }
     if (!await bcrypt.compare(pin.toString().trim(), (cashier as any).pin)) {
       logAuditRaw({ hotelId, action: 'cashier.login.failure', targetType: 'cashier', targetId: String((cashier as any)._id), metadata: { employeeCode, reason: 'wrong_pin' }, ip: req.ip });
-      return res.status(401).json({ message: 'Incorrect PIN' });
+      return res.status(401).json({ message: STAFF_LOGIN_FAILED });
     }
     logAuditRaw({ hotelId, action: 'cashier.login.success', targetType: 'cashier', targetId: String((cashier as any)._id), metadata: { employeeCode }, ip: req.ip });
     const token = generateCashierToken(hotelId, String((cashier as any)._id), cashier.name);

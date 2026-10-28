@@ -25,6 +25,8 @@ export interface IGuest extends Document {
   paymentMethod: GuestPaymentMethod | null;
   splitDetails: IGuestSplitDetails;
   paidAmount: number | null;
+  collectedAmount: number | null;   // amount collected at the counter when billed individually (null = legacy / bulk)
+  cashCollected: number | null;     // cash part of collectedAmount
   billedAt: Date | null;
   loyaltyPointsRedeemed: number;   // points redeemed at billing (0 = none)
   loyaltyDiscountAmount: number;   // rupee value of redeemed points
@@ -62,6 +64,12 @@ const GuestSchema: Schema = new Schema(
       card: { type: Number, default: 0 },
     },
     paidAmount:             { type: Number, default: null },
+    // What the counter actually collected for this guest's individual bill
+    // (net of loyalty and voucher; orders paid online never add to totalAmount).
+    // Used by shift cash.
+    // null = billed before this field existed, or billed via table bulk bill.
+    collectedAmount:        { type: Number, default: null },
+    cashCollected:          { type: Number, default: null },
     billedAt:               { type: Date, default: null },
     loyaltyPointsRedeemed:  { type: Number, default: 0, min: 0 },
     loyaltyDiscountAmount:  { type: Number, default: 0, min: 0 },
@@ -83,6 +91,14 @@ GuestSchema.index({ hotelId: 1, sessionId: 1 });
 // Customer visit history across sessions
 GuestSchema.index({ hotelId: 1, customerId: 1, createdAt: -1 }, { sparse: true });
 // QR token lookup — hot path on EVERY QR order request; must be O(log n)
-GuestSchema.index({ qrSessionToken: 1 }, { unique: true, sparse: true });
+// Unique only for real tokens. The old { unique, sparse } index also indexed the
+// many guests with qrSessionToken: null (staff-created and every billed guest),
+// so on a database where it was built, the second null raised E11000.
+// New name avoids clashing with an existing 'qrSessionToken_1' — see
+// docs/migrations/2026-10-guest-qrSessionToken-index.md for dropping the old one.
+GuestSchema.index(
+  { qrSessionToken: 1 },
+  { unique: true, partialFilterExpression: { qrSessionToken: { $type: 'string' } }, name: 'qrSessionToken_unique_string' },
+);
 
 export default mongoose.model<IGuest>('Guest', GuestSchema);

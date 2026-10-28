@@ -3,10 +3,12 @@ import jwt from 'jsonwebtoken';
 import { makeRateLimiter } from '../utils/rateLimiter';
 import Hotel from '../models/Hotel';
 import { sendError } from '../utils/sendError';
+import { isHotelIdString } from '../middleware/auth';
 import { validatePhone, validateEmail, validateGST, validateFSSAI, validatePincode } from '../utils/validation';
 
 // 5 registration / resubmit attempts per hour per IP — prevents registration spam
 const registrationLimiter = makeRateLimiter({
+  name: 'hotel:register',
   windowMs: 60 * 60 * 1000,
   max: 5,
   skip: () => process.env.NODE_ENV === 'test',
@@ -15,6 +17,7 @@ const registrationLimiter = makeRateLimiter({
 
 // 3 reset requests per hour per IP — prevents super-admin panel spam
 const resetRequestLimiter = makeRateLimiter({
+  name: 'hotel:reset-request',
   windowMs: 60 * 60 * 1000,
   max: 3,
   skip: () => process.env.NODE_ENV === 'test',
@@ -30,6 +33,10 @@ const jwtOnlyAuth = (req: Request, res: Response, next: NextFunction): void => {
   if (!token) { res.status(401).json({ message: 'Authentication required' }); return; }
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { hotelId: string };
+    if (!isHotelIdString(decoded.hotelId)) {
+      res.status(401).json({ message: 'Invalid or expired session' });
+      return;
+    }
     (req as any).hotelId = decoded.hotelId;
     next();
   } catch {

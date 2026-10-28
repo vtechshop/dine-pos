@@ -444,8 +444,8 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.contactSub}>Available 24/7 for you</Text>
       </View>
       {[
-        { icon: 'phone' as const, label: 'Call Support', value: '+91 78714 69095', color: '#4CAF50', onPress: () => Linking.openURL('tel:+917871469095') },
-        { icon: 'chat' as const, label: 'WhatsApp', value: '+91 78714 69095', color: '#25D366', onPress: () => Linking.openURL('whatsapp://send?phone=917871469095') },
+        { icon: 'phone' as const, label: 'Call Support', value: '+91 63813 56683', color: '#4CAF50', onPress: () => Linking.openURL('tel:+916381356683') },
+        { icon: 'chat' as const, label: 'WhatsApp', value: '+91 63813 56683', color: '#25D366', onPress: () => Linking.openURL('whatsapp://send?phone=916381356683') },
         { icon: 'email' as const, label: 'Email Support', value: 'support@dinepos.in', color: '#2196F3', onPress: () => Linking.openURL('mailto:support@dinepos.in') },
       ].map((c, i) => (
         <TouchableOpacity key={i} style={styles.contactCard} onPress={c.onPress}>

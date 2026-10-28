@@ -62,9 +62,12 @@ describe('P2-01 — M13 Razorpay guard uses DB-stored paymentMethod', () => {
     expect(route).toContain("paymentMethod === 'razorpay' || existing.paymentMethod === 'razorpay'");
   });
 
-  it('GL-05 — guard leads to Payment.findOne check for verified Razorpay payment', () => {
+  it('GL-05 — guard leads to the verified-payment check (utils/onlinePayment verifyOnlinePayment)', () => {
     const guardIdx   = route.indexOf("paymentMethod === 'razorpay' || existing.paymentMethod === 'razorpay'");
-    const pmtFindIdx = route.indexOf('Payment.findOne', guardIdx);
+    // R1 (2026-10): the Payment lookup moved into verifyOnlinePayment, which also
+    // checks amount, currency and order association — it must follow the guard directly.
+    const pmtFindIdx = route.indexOf('verifyOnlinePayment(', guardIdx);
+    expect(pmtFindIdx - guardIdx).toBeLessThan(200);
     expect(pmtFindIdx).toBeGreaterThan(guardIdx);
   });
 });

@@ -14,6 +14,7 @@ import { api } from '../../../utils/api-client';
 import { authHeaders } from '../../../utils/env';
 import { getHotelA } from '../../setup/testEnv';
 import {
+  productLine,
   createOrder,
   updateOrderStatus,
   createCompletedOrder,
@@ -45,10 +46,12 @@ describe('Cashier Regression', () => {
       // NOTE: The backend field is 'deliveryFee' (not 'deliveryCharge' as named in the spec).
       // recalcOrderTotals() in orderRoutes does NOT currently add deliveryFee to grandTotal;
       // the grandTotal assertion below will fail naturally if that gap exists.
-      const items = [{ productName: 'Biryani', quantity: 1, price: 200, total: 200 }];
-      const subtotal = 200;
-      // Items carry no taxPercent, so the server computes taxTotal = 0.
-      const taxTotal = 0;
+      // Linked to a seeded product (₹180). The server prices lines from the DB and
+      // applies the hotel's tax, so the expected total uses the server's
+      // subtotal / taxTotal from the response.
+      const items = [productLine(getHotelA(), 0, 1)];
+      const subtotal = 180;
+      const taxTotal = 0; // client hint only — ignored by the server
       const deliveryFee = 150;
 
       const res = await api
@@ -75,7 +78,8 @@ describe('Cashier Regression', () => {
       expect(order.deliveryFee).toBe(deliveryFee);
 
       // grandTotal should equal subtotal + tax + deliveryFee (spec requirement).
-      const expectedGrandTotal = Math.round((subtotal + taxTotal + deliveryFee) * 100) / 100;
+      expect(order.subtotal).toBe(subtotal);
+      const expectedGrandTotal = Math.round((order.subtotal + order.taxTotal + deliveryFee) * 100) / 100;
       expect(order.grandTotal).toBe(expectedGrandTotal);
     });
   });
@@ -245,8 +249,8 @@ describe('Cashier Regression', () => {
           customerName: 'Discount Test',
           customerPhone: uniquePhone(),
           orderSource: 'dine-in',
-          items: [{ productName: 'Tea', quantity: 1, price: 50, total: 50 }],
-          subtotal: 50,
+          items: [productLine(getHotelA(), 1, 1)],
+          subtotal: 30,
           taxTotal: 0,
           grandTotal: 0, // server recalculates; client value is ignored
           discountAmount: 50,

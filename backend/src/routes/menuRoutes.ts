@@ -161,10 +161,13 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
     resolvedHotelId = hotelId; // make available to the duplicate-key catch block
 
     // Resolve orderSource from body (accepts 'orderSource' and legacy 'source' field)
+    // Same rule as /api/public/qr/orders: a public order is either 'kiosk' (hotel
+    // device, feature-gated, may pay at counter) or 'qr' (customer device, online
+    // payment required). Anything else — including the legacy 'dine-in' value —
+    // is treated as 'qr'. Accepting 'dine-in' + cash here let anonymous callers
+    // send unpaid orders straight to the kitchen/KOT printer.
     const rawSource = String(reqOrderSource || source || '');
-    const orderSource: 'qr' | 'kiosk' | 'dine-in' =
-      rawSource === 'kiosk' ? 'kiosk' :
-      rawSource === 'dine-in' ? 'dine-in' : 'qr';
+    const orderSource: 'qr' | 'kiosk' = rawSource === 'kiosk' ? 'kiosk' : 'qr';
 
     // Kiosk orderSource requires the premium kiosk feature flag to be enabled.
     // Without this check, any public client with a known hotelId could send
@@ -346,7 +349,8 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
     if (error.code === 11000 && error.keyPattern?.offlineId) {
       try {
         const saved = await Order.findOne({
-          offlineId: req.body.offlineId,
+          // same normalisation as the stored value (trim + 64 chars)
+          offlineId: typeof req.body.offlineId === 'string' ? req.body.offlineId.trim().slice(0, 64) : req.body.offlineId,
           hotelId:   resolvedHotelId, // server-validated; never from req.body directly
         });
         if (saved) return res.status(200).json(saved);

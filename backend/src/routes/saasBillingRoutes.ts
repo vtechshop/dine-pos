@@ -17,7 +17,7 @@ import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Hotel from '../models/Hotel';
 import Subscription from '../models/Subscription';
-import { requireHotelJwt, AuthRequest } from '../middleware/auth';
+import { requireHotelJwt, requireAdmin, AuthRequest } from '../middleware/auth';
 import {
   getPlanId,
   createSubscription,
@@ -216,7 +216,8 @@ router.get('/plan', async (req: AuthRequest, res: Response) => {
 // Creates a Razorpay subscription and returns the hosted checkout URL.
 // The hotel owner completes payment on Razorpay's hosted page.
 // Activation is confirmed by the webhook (subscription.activated / invoice.paid).
-router.post('/subscribe', async (req: AuthRequest, res: Response) => {
+// Owner-only: staff tokens (kitchen PIN, waiter, cashier) must not change billing.
+router.post('/subscribe', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const hotel = await Hotel.findById(req.hotelId)
       .select('rzpSubscriptionId rzpSubscriptionStatus rzpCustomPlanId saasAnnualPrice status')
@@ -263,7 +264,7 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
 // ── POST /api/saas/cancel ─────────────────────────────────────────────────────
 // Cancels the current subscription at the end of the current billing cycle.
 // Hotel remains active until subscriptionEndDate.
-router.post('/cancel', async (req: AuthRequest, res: Response) => {
+router.post('/cancel', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const hotel = await Hotel.findById(req.hotelId)
       .select('rzpSubscriptionId rzpSubscriptionStatus status')
@@ -303,7 +304,7 @@ router.post('/cancel', async (req: AuthRequest, res: Response) => {
 
 // ── GET /api/saas/invoices ────────────────────────────────────────────────────
 // Returns paginated billing history (Subscription records) for this hotel.
-router.get('/invoices', async (req: AuthRequest, res: Response) => {
+router.get('/invoices', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 10));

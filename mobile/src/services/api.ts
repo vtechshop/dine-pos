@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createCustomerOrderQueue, CustomerQueueEntry } from './customerOrderQueue';
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL } from '../utils/constants';
 import { Category, Product, Order, Settings, DailyReport, Hotel, SuperAdminStats, Table, Reservation, Expense, WasteLog, PnLReport, Customer, Ingredient, GSTReport, TallyReport, GSTR1Json, RemoteConfig, Device, AppNotification, FeatureFlags, LoyaltyConfig, LoyaltyCustomer, LoyaltyTransaction, AggregatorIntegration, AggregatorSyncStatus, WebhookLog, ExecutiveDashboard, MorningBrief, BriefHistoryResponse, AIDailyReport, SalesForecast, InventoryForecast, AIAlertResult, AIRecommendationSet, AIStaffAnalyticsReport, AIKitchenAnalyticsReport, AIChatResponse, AIChatHistoryResponse, OcrJobsResponse, OcrReviewScreen, Coupon, CouponValidation, GiftVoucher, WalletTransaction, ModifierGroup } from '../types';
@@ -276,14 +277,20 @@ export const validateSession = async (): Promise<'valid' | 'refreshed' | 'expire
 
 // ── Generic fetch wrapper ────────────────────────────────────────────────────
 
+// background: true for sync-engine calls — failures are reported to the caller
+// only (no forced logout, no navigation) so a background retry never disrupts
+// the cashier's current screen.
+type FetchOptions = RequestInit & { background?: boolean };
+
 const fetchAPI = async <T>(
   endpoint: string,
-  options?: RequestInit,
+  rawOptions?: FetchOptions,
   skipAuth = false,
   retries = 2,
   _isTokenRetry = false,
   timeoutMs = 12_000,
 ): Promise<T> => {
+  const { background = false, ...options } = rawOptions ?? {};
   const baseUrl = await getBaseUrl();
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -291,7 +298,7 @@ const fetchAPI = async <T>(
     const token = await getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
-  const mergedHeaders = options?.headers
+  const mergedHeaders = options.headers
     ? { ...headers, ...(options.headers as Record<string, string>) }
     : headers;
 
@@ -326,20 +333,23 @@ const fetchAPI = async <T>(
         if (response.status === 401 && !skipAuth && !_isTokenRetry && endpoint !== '/auth/refresh') {
           const refreshed = await tryRefreshTokens();
           if (refreshed) {
-            return fetchAPI<T>(endpoint, options, skipAuth, retries, true);
+            return fetchAPI<T>(endpoint, rawOptions, skipAuth, retries, true);
           }
-          // Both tokens exhausted — notify AuthContext to clear state and redirect.
-          emitSessionExpired().catch(() => {});
+          // Both tokens exhausted — notify AuthContext to clear state and redirect
+          // (foreground only; background sync just reports 'auth' and waits).
+          if (!background) emitSessionExpired().catch(() => {});
           const err: any = new Error('Session expired. Please login again.');
           err.code = 'SESSION_EXPIRED';
+          err.status = 401;
           throw err;
         }
 
         // Don't retry other client errors (4xx)
         if (response.status < 500) {
           const err: any = new Error(errBody.message || 'Request failed');
+          err.status = response.status;
           if (errBody.code) err.code = errBody.code;
-          if (errBody.code === 'TRIAL_EXPIRED' || errBody.code === 'PLAN_EXPIRED') {
+          if (!background && (errBody.code === 'TRIAL_EXPIRED' || errBody.code === 'PLAN_EXPIRED')) {
             const expiredOnRaw = errBody.expiredOn;
             const expiredOn = expiredOnRaw
               ? new Date(expiredOnRaw).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -354,6 +364,7 @@ const fetchAPI = async <T>(
         }
         // Retry server errors (5xx) after backoff
         lastError = new Error(errBody.message || `Server error (${response.status})`);
+        (lastError as any).status = response.status;
         if (attempt < retries) {
           await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
           continue;
@@ -566,10 +577,11 @@ export const getOrder = (id: string): Promise<Order> => {
   return fetchAPI<Order>(`/orders/${id}`);
 };
 
-export const createOrder = (data: Partial<Order>): Promise<Order> => {
+export const createOrder = (data: Partial<Order>, opts?: { background?: boolean }): Promise<Order> => {
   return fetchAPI<Order>('/orders', {
     method: 'POST',
     body: JSON.stringify(data),
+    background: opts?.background,
   });
 };
 
@@ -599,6 +611,8 @@ export const createPublicOrder = async (data: {
   orderSource?: string;
   paymentMethod?: string;
   status?: string;
+  // Idempotency key: the server returns the existing order for a repeated id.
+  offlineId?: string;
 }): Promise<Order> => {
   return fetchAPI<Order>('/public/orders', {
     method: 'POST',
@@ -618,11 +632,13 @@ export const updateOrder = (
 
 export const updateOrderStatus = (
   id: string,
-  status: Order['status']
+  status: Order['status'],
+  opts?: { background?: boolean },
 ): Promise<Order> => {
   return fetchAPI<Order>(`/orders/${id}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status }),
+    background: opts?.background,
   });
 };
 
@@ -1792,10 +1808,12 @@ export const completeOrderWithDetails = (
   orderId: string,
   paymentMethod: string,
   details?: PaymentDetails,
+  opts?: { background?: boolean },
 ): Promise<Order> =>
   fetchAPI<Order>(`/orders/${orderId}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status: 'completed', paymentMethod, ...details }),
+    background: opts?.background,
   });
 
 // Cancel an orphaned order (billing mode: payment failed after createOrder succeeded)
@@ -1933,47 +1951,25 @@ export const loadMenuCache = async (hotelId: string): Promise<{ categories: Cate
 // ── Customer order queue (offline orders waiting to sync) ─────────────────────
 const CUSTOMER_ORDER_QUEUE_KEY = '@customer_order_queue';
 
-export interface QueuedCustomerOrder {
-  id: string;
-  hotelId: string;
-  localToken: string;
-  orderData: Parameters<typeof createPublicOrder>[0];
-  queuedAt: number;
-}
+// Logic lives in customerOrderQueue.ts (pure, unit-tested): stable offlineId per
+// order, serialised storage writes, single in-flight flush, 4xx → failed.
+export type QueuedCustomerOrder = CustomerQueueEntry;
 
-export const enqueueCustomerOrder = async (
+const customerQueue = createCustomerOrderQueue({
+  storage: AsyncStorage,
+  key:     CUSTOMER_ORDER_QUEUE_KEY,
+  send:    (orderData) => createPublicOrder(orderData as Parameters<typeof createPublicOrder>[0]),
+});
+
+export const enqueueCustomerOrder = (
   hotelId: string,
   localToken: string,
   orderData: Parameters<typeof createPublicOrder>[0],
-): Promise<string> => {
-  const id = `local_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  const existing: QueuedCustomerOrder[] = JSON.parse(
-    await AsyncStorage.getItem(CUSTOMER_ORDER_QUEUE_KEY) || '[]'
-  );
-  await AsyncStorage.setItem(
-    CUSTOMER_ORDER_QUEUE_KEY,
-    JSON.stringify([...existing, { id, hotelId, localToken, orderData, queuedAt: Date.now() }])
-  );
-  return id;
-};
+): Promise<string> => customerQueue.enqueue(hotelId, localToken, orderData as unknown as Record<string, unknown>);
 
-export const flushCustomerOrderQueue = async (): Promise<void> => {
-  const raw = await AsyncStorage.getItem(CUSTOMER_ORDER_QUEUE_KEY);
-  if (!raw) return;
-  const queue: QueuedCustomerOrder[] = JSON.parse(raw);
-  if (queue.length === 0) return;
-
-  const remaining: QueuedCustomerOrder[] = [];
-  for (const entry of queue) {
-    try {
-      await createPublicOrder(entry.orderData);
-      // Success — server emits new_order socket → kitchen/admin notified automatically
-    } catch {
-      remaining.push(entry); // keep for next retry
-    }
-  }
-  await AsyncStorage.setItem(CUSTOMER_ORDER_QUEUE_KEY, JSON.stringify(remaining));
-};
+export const flushCustomerOrderQueue = async (): Promise<void> => { await customerQueue.flush(); };
+export const getCustomerOrderQueue = () => customerQueue.list();
+export const retryFailedCustomerOrders = () => customerQueue.retryFailed();
 
 // ── Vendors ───────────────────────────────────────────────────────────────────
 

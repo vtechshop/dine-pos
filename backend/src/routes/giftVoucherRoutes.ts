@@ -14,7 +14,8 @@
 
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { ipKeyGenerator } from 'express-rate-limit';
+import { makeRateLimiter } from '../utils/rateLimiter';
 import {
   authMiddleware, requireAdmin, requireCashierOrAdmin, AuthRequest,
 } from '../middleware/auth';
@@ -30,7 +31,8 @@ router.use(authMiddleware);
 
 // ── Rate limiters (hotel-scoped — auth runs before these) ──────────────────────
 // /check — cashiers check frequently; 60/min per hotel is generous
-const checkLimiter = rateLimit({
+const checkLimiter = makeRateLimiter({
+  name: 'gv:check',
   windowMs: 60 * 1000,
   max: 60,
   keyGenerator: (req: any) => `gv:check:${req.hotelId ?? ipKeyGenerator(req.ip ?? '')}`,
@@ -40,7 +42,8 @@ const checkLimiter = rateLimit({
 });
 
 // /redeem — stricter; normal POS sees at most a few per minute
-const redeemLimiter = rateLimit({
+const redeemLimiter = makeRateLimiter({
+  name: 'gv:redeem',
   windowMs: 60 * 1000,
   max: 30,
   keyGenerator: (req: any) => `gv:redeem:${req.hotelId ?? ipKeyGenerator(req.ip ?? '')}`,
@@ -50,7 +53,8 @@ const redeemLimiter = rateLimit({
 });
 
 // /topup and issue — admin actions; 20/min is generous
-const adminActionLimiter = rateLimit({
+const adminActionLimiter = makeRateLimiter({
+  name: 'gv:admin',
   windowMs: 60 * 1000,
   max: 20,
   keyGenerator: (req: any) => `gv:admin:${req.hotelId ?? ipKeyGenerator(req.ip ?? '')}`,

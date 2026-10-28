@@ -11,6 +11,7 @@ import { logger } from '../utils/logger';
 import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, reverseEarnedPoints } from '../utils/loyaltyUtils';
 import { io } from '../server';
 import { scheduleKOTPrint } from '../utils/printUtils';
+import { releasePaidOnlineOrder } from '../utils/onlinePayment';
 
 const router = Router();
 
@@ -169,11 +170,11 @@ async function handleRazorpayEvent(event: Record<string, unknown>, eventType: st
 
       // Release QR payment-pending orders — atomic, idempotent (only the first caller wins).
       // qr-verify may have already released the order; in that case this is a no-op.
-      const qrReleased = await Order.findOneAndUpdate(
-        { _id: pay.orderId, hotelId, status: 'payment_pending' },
-        { $set: { status: 'pending' } },
-        { new: true },
-      ).catch(() => null);
+      // R2: not released after the table guest / session was closed or the order was
+      // cancelled — recorded for reconciliation instead (utils/onlinePayment.ts).
+      const { released: qrReleased } = await releasePaidOnlineOrder(
+        hotelId, String(pay.orderId), {}, 'webhook', String(pay._id),
+      ).catch(() => ({ released: null }));
       if (qrReleased) {
         try {
           io.to(`hotel_${hotelId}`).emit('new_order', {

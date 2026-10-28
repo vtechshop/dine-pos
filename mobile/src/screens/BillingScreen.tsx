@@ -363,16 +363,23 @@ Thank you for dining with us! 🍽️`;
     // The order is stored in cashier_order_queue and flushed by syncEngine on
     // reconnect; the server's offlineId unique index prevents duplicates.
     if (!isConnected()) {
+      // Wallet balance is server-authoritative: it cannot be debited offline.
+      // (It used to be folded into discountAmount → the server never deducted
+      // the wallet, so the customer could spend the same balance again.)
+      if (useWallet && walletInfo) {
+        showAlert(
+          'Wallet needs internet',
+          'Wallet balance can only be used while online. Turn off "Use wallet" to save this bill offline, or reconnect.',
+        );
+        return;
+      }
       const dvOff         = parseFloat(discountInput) || 0;
       const preTaxOff     = cart.subtotal + cart.taxTotal;
       const manDiscOff    = dvOff > 0
         ? (discountType === 'percent' ? (preTaxOff * dvOff) / 100 : Math.min(dvOff, preTaxOff))
         : 0;
       const voucherOff    = appliedVoucher?.redeemAmount ?? 0;
-      const walletOff     = useWallet && walletInfo
-        ? Math.min(walletInfo.walletBalance, Math.max(0, preTaxOff - manDiscOff - voucherOff))
-        : 0;
-      const grandTotalOff = Math.max(0, preTaxOff - manDiscOff - voucherOff - walletOff - (appliedCoupon?.discountAmount ?? 0));
+      const grandTotalOff = Math.max(0, preTaxOff - manDiscOff - voucherOff - (appliedCoupon?.discountAmount ?? 0));
       applyDiscount();
       const isParcelOff   = ['swiggy', 'zomato', 'takeaway'].includes(orderSource);
       const tableOff      = orderSource === 'swiggy' ? 'Swiggy'
@@ -395,7 +402,7 @@ Thank you for dining with us! 🍽️`;
           taxAmount:         item.taxAmount,
           total:             item.total,
         })),
-        discountAmount:  manDiscOff + walletOff,
+        discountAmount:  manDiscOff,
         couponCode:      appliedCoupon?.code || undefined,
         giftVoucherCode: appliedVoucher?.voucherCode || undefined,
         status:          'pending',
@@ -433,7 +440,13 @@ Thank you for dining with us! 🍽️`;
           {
             text: 'Cash',
             onPress: () => {
-              enqueueCashierOrder(hotelIdOff, offlineId, { ...offlinePayload, paymentMethod: 'cash' });
+              try {
+                enqueueCashierOrder(hotelIdOff, offlineId, { ...offlinePayload, paymentMethod: 'cash' });
+              } catch (e: any) {
+                showAlert('Cannot save offline', e?.message ?? 'This bill needs an internet connection.');
+                setPlacing(false);
+                return;
+              }
               showAlert('Saved Offline', 'Cash order queued. Will sync when you reconnect.');
               resetCart();
               setPlacing(false);
@@ -442,7 +455,13 @@ Thank you for dining with us! 🍽️`;
           {
             text: 'Card',
             onPress: () => {
-              enqueueCashierOrder(hotelIdOff, offlineId, { ...offlinePayload, paymentMethod: 'card' });
+              try {
+                enqueueCashierOrder(hotelIdOff, offlineId, { ...offlinePayload, paymentMethod: 'card' });
+              } catch (e: any) {
+                showAlert('Cannot save offline', e?.message ?? 'This bill needs an internet connection.');
+                setPlacing(false);
+                return;
+              }
               showAlert('Saved Offline', 'Card order queued. Will sync when you reconnect.');
               resetCart();
               setPlacing(false);

@@ -193,6 +193,9 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
     if (!orderId || !amount || amount <= 0) {
       return res.status(400).json({ message: 'orderId and amount (> 0) are required' });
     }
+    if (String(currency).toUpperCase() !== 'INR') {
+      return res.status(400).json({ message: 'Only INR payments are supported' });
+    }
 
     // Validate order belongs to hotel
     const order = await Order.findOne({ _id: orderId, hotelId: req.hotelId });
