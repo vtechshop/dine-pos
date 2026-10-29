@@ -1307,7 +1307,8 @@ export function NewOrderPanel() {
       </div>
 
       {/* ── RIGHT: cart + payment ────────────────────────────────────────────── */}
-      <div className="w-full shrink-0 space-y-3 lg:w-80 xl:w-96">
+      {/* Scrolls on its own on wide screens so the page itself never scrolls */}
+      <div className="w-full shrink-0 space-y-3 lg:min-h-0 lg:w-80 lg:overflow-y-auto lg:pr-1 xl:w-96">
         {/* Cart header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1509,9 +1510,10 @@ export function NewOrderPanel() {
           </div>
         )}
 
-        {/* Action buttons */}
+        {/* Action buttons — stay visible at the bottom of the cart */}
         {cart.length > 0 && (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="sticky bottom-0 grid grid-cols-2 gap-2 bg-mist pb-0.5 pt-2">
+
             <button
               type="button"
               onClick={handleHold}
