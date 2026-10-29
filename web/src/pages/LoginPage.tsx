@@ -4,7 +4,7 @@ import { CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from '../components/ui/Spinner';
 import { ApiError } from '../api/client';
-import { SUPPORT_PHONE, supportWhatsAppUrl } from '../config/support';
+import { SUPPORT_PHONE, SUPPORT_PHONE_DISPLAY, SUPPORT_PAGE, supportWhatsAppUrl } from '../config/support';
 
 type LoginMode = 'admin' | 'cashier';
 
@@ -314,17 +314,12 @@ export function LoginPage() {
         <div className="mt-4 flex flex-col items-center gap-2.5 text-xs text-ink/40">
           <span>
             Need help?{' '}
-            {/* WhatsApp works on any device; mailto: did nothing without a mail app */}
-            <a
-              href={supportWhatsAppUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-brand hover:underline"
-            >
+            {/* Support page offers WhatsApp, call and email */}
+            <Link to={SUPPORT_PAGE} className="font-medium text-brand hover:underline">
               Contact Support
-            </a>
+            </Link>
             <span className="text-ink/30"> · </span>
-            <a href={`tel:${SUPPORT_PHONE}`} className="text-ink/50 hover:underline">{SUPPORT_PHONE}</a>
+            <a href={`tel:${SUPPORT_PHONE}`} className="text-ink/50 hover:underline">{SUPPORT_PHONE_DISPLAY}</a>
           </span>
           <span className="text-ink/30">Dine POS · {APP_VERSION}</span>
         </div>

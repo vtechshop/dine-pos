@@ -163,9 +163,9 @@ export function AIDashboardPage() {
         <p className="text-sm text-ink/50 max-w-sm text-center">
           The AI Platform is a premium feature. Contact support to enable it for your account.
         </p>
-        <a href="mailto:support@dinepos.in" className="rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white">
+        <Link to="/support" className="rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white">
           Contact Support
-        </a>
+        </Link>
       </div>
     );
   }

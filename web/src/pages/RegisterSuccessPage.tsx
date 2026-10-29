@@ -25,9 +25,9 @@ export function RegisterSuccessPage() {
 
         <p className="mt-5 text-center text-xs text-ink/40">
           Need help?{' '}
-          <a href="mailto:support@dinepos.com" className="text-brand hover:underline">
+          <Link to="/support" className="text-brand hover:underline">
             Contact Support
-          </a>
+          </Link>
         </p>
       </div>
     </div>
