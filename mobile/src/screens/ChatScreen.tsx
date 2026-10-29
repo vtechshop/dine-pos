@@ -285,7 +285,7 @@ export function SupportScreen() {
   const contacts = [
     { icon: 'phone' as const, label: 'Call Support', value: '+91 98765 43210', action: 'tel:+919876543210', color: '#4CAF50' },
     { icon: 'chat' as const, label: 'WhatsApp', value: '+91 98765 43210', action: 'whatsapp://send?phone=919876543210', color: '#25D366' },
-    { icon: 'email' as const, label: 'Email Support', value: 'support@dinepos.com', action: 'mailto:support@dinepos.com', color: '#2196F3' },
+    { icon: 'email' as const, label: 'Email Support', value: 'info@happya.in', action: 'mailto:info@happya.in', color: '#2196F3' },
   ];
 
   return (

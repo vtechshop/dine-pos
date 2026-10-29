@@ -109,7 +109,7 @@ export function RegisterPage() {
               <input
                 id="hotelName" type="text" required autoComplete="organization"
                 value={form.hotelName} onChange={field('hotelName')}
-                placeholder="e.g. Annapoorna Restaurant"
+                placeholder="e.g. ABC Restaurant"
                 className={inputCls}
               />
             </div>
