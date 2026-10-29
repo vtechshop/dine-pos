@@ -58,6 +58,7 @@ export interface CashierOrderItem {
   orderNumber: string;
   tableNumber: string;
   customerName?: string;
+  notes?: string;
   grandTotal: number;
   subtotal: number;
   taxTotal: number;

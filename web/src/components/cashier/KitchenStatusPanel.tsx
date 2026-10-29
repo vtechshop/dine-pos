@@ -3,10 +3,32 @@ import {
   Flame, CheckCircle, Clock, RefreshCw, AlertCircle,
   UtensilsCrossed, ChevronRight,
 } from 'lucide-react';
-import { fetchKitchenOrders } from '../../api/orders';
+import { fetchCashierOrders } from '../../api/orders';
 import { ApiError } from '../../api/client';
 import { Spinner } from '../ui/Spinner';
 import type { KDSOrder } from '../../types';
+
+const KITCHEN_STATUSES: readonly string[] = ['pending', 'preparing', 'ready'];
+
+// Cashiers can't read the kitchen screen's own list (/orders/kitchen is kitchen/admin
+// only), so build the same view from the cashier order list: active kitchen orders, oldest first.
+async function fetchKitchenView(): Promise<KDSOrder[]> {
+  const orders = await fetchCashierOrders();
+  return orders
+    .filter(o => KITCHEN_STATUSES.includes(o.status))
+    .map(o => ({
+      _id: o._id,
+      orderNumber: o.orderNumber,
+      tableNumber: o.tableNumber,
+      customerName: o.customerName,
+      notes: o.notes,
+      status: o.status as KDSOrder['status'],
+      isParcel: o.isParcel,
+      items: o.items.map(i => ({ productName: i.productName, quantity: i.quantity })),
+      createdAt: o.createdAt,
+    }))
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -145,7 +167,7 @@ export function KitchenStatusPanel() {
     let cancelled = false;
     setLoading(true);
     try {
-      const data = await fetchKitchenOrders();
+      const data = await fetchKitchenView();
       if (!cancelled) { setOrders(data); setError(null); setAccessDenied(false); }
     } catch (e) {
       if (!cancelled) {
