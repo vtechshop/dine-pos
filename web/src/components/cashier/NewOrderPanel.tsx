@@ -81,9 +81,9 @@ function ProductCard({
         type="button"
         onClick={() => onAdd(product)}
         disabled={!product.isAvailable}
-        className="flex w-full flex-col p-3 text-left active:scale-[0.98]"
+        className="flex w-full flex-col px-3 py-2 text-left active:scale-[0.98]"
       >
-        <div className="mb-1.5 flex items-center justify-between gap-1 pr-4">
+        <div className="mb-1 flex items-center justify-between gap-1 pr-4">
           <span className={`h-3 w-3 shrink-0 rounded-sm border ${isVeg ? 'border-emerald-500' : 'border-red-500'}`}>
             <span className={`block h-1.5 w-1.5 m-[2px] rounded-full ${isVeg ? 'bg-emerald-500' : 'bg-red-500'}`} />
           </span>
@@ -943,7 +943,7 @@ export function NewOrderPanel() {
   return (
     <div className="flex h-full flex-col gap-4 lg:flex-row">
       {/* ── LEFT: product selection ──────────────────────────────────────────── */}
-      <div className="flex min-w-0 flex-1 flex-col min-h-0 space-y-3">
+      <div className="flex min-w-0 flex-1 flex-col min-h-0 space-y-2.5">
         {/* Order type */}
         <div className="flex gap-1 rounded-xl border border-border bg-canvas p-1">
           <TypeTab active={orderType === 'dine-in'}  icon={<UtensilsCrossed size={13} />} label="Dine In"   onClick={() => setOrderType('dine-in')} />
@@ -1011,38 +1011,38 @@ export function NewOrderPanel() {
 
         {/* Order meta form — Takeaway */}
         {orderType === 'takeaway' && (
-          <div className="rounded-xl border border-border bg-canvas p-3 space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">Takeaway Details</p>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                value={takeAway.customerName}
-                onChange={e => setTakeAway(d => ({ ...d, customerName: e.target.value }))}
-                placeholder="Customer name *"
-                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-              />
-              <input
-                type="tel"
-                value={takeAway.phone}
-                onChange={e => setTakeAway(d => ({ ...d, phone: e.target.value }))}
-                placeholder="Phone *"
-                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-              />
-            </div>
+          // One row on wide screens so the menu below gets the height
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-canvas p-2 xl:grid-cols-3">
             <input
               type="text"
+              aria-label="Customer name"
+              value={takeAway.customerName}
+              onChange={e => setTakeAway(d => ({ ...d, customerName: e.target.value }))}
+              placeholder="Customer name *"
+              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            />
+            <input
+              type="tel"
+              aria-label="Phone"
+              value={takeAway.phone}
+              onChange={e => setTakeAway(d => ({ ...d, phone: e.target.value }))}
+              placeholder="Phone *"
+              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            />
+            <input
+              type="text"
+              aria-label="Order notes"
               value={takeAway.notes}
               onChange={e => setTakeAway(d => ({ ...d, notes: e.target.value }))}
               placeholder="Order notes…"
-              className="block w-full rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+              className="col-span-2 min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50 xl:col-span-1"
             />
           </div>
         )}
 
         {/* Order meta form — Delivery */}
         {orderType === 'delivery' && (
-          <div className="rounded-xl border border-border bg-canvas p-3 space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">Delivery Details</p>
+          <div className="rounded-xl border border-border bg-canvas p-2 space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <input
                 type="text"
@@ -1220,9 +1220,9 @@ export function NewOrderPanel() {
 
         {/* Recent products strip */}
         {!search && activeCat !== FAVS_CAT && recentProducts.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/35">Recently Added</p>
-            <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+          <div className="flex items-center gap-2">
+            <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-ink/35">Recent</p>
+            <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
               {recentProducts.map(p => (
                 <button
                   key={p._id}
@@ -1239,9 +1239,9 @@ export function NewOrderPanel() {
 
         {/* Top today strip */}
         {!search && activeCat !== FAVS_CAT && topProducts.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/35">Top Today</p>
-            <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+          <div className="flex items-center gap-2">
+            <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-ink/35">Top Today</p>
+            <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
               {topProducts.map(({ row, product }) => (
                 <button
                   key={product._id}
@@ -1290,7 +1290,7 @@ export function NewOrderPanel() {
             )}
           </div>
         ) : (
-          <div className="flex-1 min-h-0 grid grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="flex-1 min-h-0 grid grid-cols-2 content-start gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {visibleProducts.map(p => (
               <ProductCard
                 key={p._id}
