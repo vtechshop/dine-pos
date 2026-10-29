@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { createSaasSubscription, createSaasSubscriptionPublic, checkSaasStatusPublic } from '../api/saasBilling';
 
-const SUPPORT_PHONE    = '+917871469095';
-const SUPPORT_WHATSAPP = '917871469095';
+const SUPPORT_PHONE    = '+916381356683';
+const SUPPORT_WHATSAPP = '916381356683';
 const SUPPORT_EMAIL    = 'support@dinepos.in';
 
 interface ExpiredInfo {
@@ -110,8 +110,8 @@ export function SubscriptionExpiredPage() {
   );
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 dark:bg-gray-900">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-lg dark:bg-gray-800">
+    <div className="flex h-full flex-col items-center overflow-y-auto bg-gray-50 px-4 py-10 dark:bg-gray-900">
+      <div className="my-auto w-full max-w-md rounded-2xl bg-white p-8 shadow-lg dark:bg-gray-800">
 
         {/* Icon */}
         <div className="mb-6 flex justify-center">

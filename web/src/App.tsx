@@ -14,6 +14,7 @@ import { Spinner } from './components/ui/Spinner';
 import { LoginPage }            from './pages/LoginPage';
 import { RegisterPage }         from './pages/RegisterPage';
 import { RegisterSuccessPage }  from './pages/RegisterSuccessPage';
+import { SupportPage }          from './pages/SupportPage';
 import { SuperAdminLoginPage }  from './pages/super-admin/SuperAdminLoginPage';
 import { SuperAdminRoute }      from './components/SuperAdminRoute';
 import { SuperAdminLayout }     from './components/layout/SuperAdminLayout';
@@ -135,6 +136,7 @@ export function App() {
                   <Route path="/login"              element={<LoginPage />} />
                   <Route path="/register"          element={<RegisterPage />} />
                   <Route path="/register/success"  element={<RegisterSuccessPage />} />
+                  <Route path="/support"           element={<SupportPage />} />
                   <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
                   <Route path="/customer-display"  element={<CustomerDisplayPage />} />
                   <Route path="/subscription-expired" element={<SubscriptionExpiredPage />} />

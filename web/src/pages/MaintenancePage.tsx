@@ -8,8 +8,8 @@ interface MaintenancePageProps {
 
 export function MaintenancePage({ message, onLogout, onRetry }: MaintenancePageProps) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-mist p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-canvas p-8 text-center shadow-lg">
+    <div className="flex h-full flex-col items-center overflow-y-auto bg-mist p-6">
+      <div className="my-auto w-full max-w-sm rounded-2xl border border-border bg-canvas p-8 text-center shadow-lg">
         <div className="mb-4 flex justify-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100">
             <Wrench size={26} className="text-amber-600" />

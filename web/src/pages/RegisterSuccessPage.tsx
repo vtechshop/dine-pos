@@ -3,8 +3,8 @@ import { CheckCircle } from 'lucide-react';
 
 export function RegisterSuccessPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-mist px-4">
-      <div className="w-full max-w-sm">
+    <div className="flex h-full flex-col items-center overflow-y-auto bg-mist px-4 py-10">
+      <div className="my-auto w-full max-w-sm">
 
         <div className="rounded-2xl border border-border bg-canvas p-10 shadow-sm text-center">
           <CheckCircle className="mx-auto mb-5 h-14 w-14 text-green-500" strokeWidth={1.5} />
@@ -25,9 +25,9 @@ export function RegisterSuccessPage() {
 
         <p className="mt-5 text-center text-xs text-ink/40">
           Need help?{' '}
-          <a href="mailto:support@dinepos.com" className="text-brand hover:underline">
+          <Link to="/support" className="text-brand hover:underline">
             Contact Support
-          </a>
+          </Link>
         </p>
       </div>
     </div>
