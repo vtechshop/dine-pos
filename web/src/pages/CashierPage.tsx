@@ -33,6 +33,7 @@ import { PermissionsPanel }       from '../components/cashier/PermissionsPanel';
 import { OnlineOrdersPanel }      from '../components/cashier/OnlineOrdersPanel';
 import { ZReportView }            from '../components/cashier/ZReportView';
 import { ShiftHistoryPanel }      from '../components/cashier/ShiftHistoryPanel';
+import { CashierQuickSearch }     from '../components/cashier/CashierQuickSearch';
 import type { DailyReport, PrinterDeviceStatus } from '../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -367,6 +368,9 @@ export function CashierPage() {
           dark={dark}
         />
       </div>
+
+      {/* Jump to a screen by name */}
+      <CashierQuickSearch dark={dark} />
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 shrink-0">
