@@ -1,4 +1,4 @@
-import { ShieldCheck, ShieldOff, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, ShieldOff, Info } from 'lucide-react';
 import { useCashierPermissions } from '../../hooks/useCashierPermissions';
 import { getCashierId } from '../../utils/cashierIdentity';
 import type { CashierPermissions } from '../../utils/cashierPermissions';
@@ -61,26 +61,6 @@ const PERM_ROWS: PermRow[] = [
   },
 ];
 
-// ── Required backend endpoints ────────────────────────────────────────────────
-
-const BACKEND_GAPS = [
-  {
-    method: 'GET',
-    path: '/api/cashiers/:id/permissions',
-    note: 'Returns the CashierPermissions object for a specific cashier',
-  },
-  {
-    method: 'PATCH',
-    path: '/api/cashiers/:id/permissions',
-    note: 'Updates permissions for a cashier (admin-only)',
-  },
-  {
-    method: 'JWT claim',
-    path: 'permissions: {...}',
-    note: 'Or include permissions in the cashier JWT payload at login',
-  },
-];
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function PermissionsPanel() {
@@ -92,18 +72,12 @@ export function PermissionsPanel() {
 
   return (
     <div className="space-y-4 max-w-2xl">
-      {/* Backend gap notice */}
-      <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-        <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-500" />
-        <div>
-          <p className="text-xs font-semibold text-amber-800">Backend permissions API not implemented</p>
-          <p className="text-[11px] text-amber-700/80 mt-1 leading-relaxed">
-            All permissions are currently set to their defaults (all enabled). Fine-grained
-            per-cashier permissions require backend endpoints listed below. Once the API is
-            available, the <code className="bg-amber-100 px-0.5 rounded font-mono">pos_perms_{'{cashierId}'}</code> localStorage
-            key will be replaced by live API data.
-          </p>
-        </div>
+      <div className="flex items-start gap-3 rounded-xl border border-border bg-canvas p-4">
+        <Info size={16} className="mt-0.5 shrink-0 text-ink/40" />
+        <p className="text-xs leading-relaxed text-ink/60">
+          These are the actions you can use on this POS. Actions marked Denied need your
+          hotel admin — ask them if you need one done.
+        </p>
       </div>
 
       {/* Current permissions summary */}
@@ -148,24 +122,6 @@ export function PermissionsPanel() {
               </div>
             );
           })}
-        </div>
-      </div>
-
-      {/* Required backend work */}
-      <div className="rounded-xl border border-border bg-canvas p-4">
-        <p className="mb-3 text-xs font-semibold text-ink/70">Required Backend Endpoints</p>
-        <div className="space-y-2">
-          {BACKEND_GAPS.map(gap => (
-            <div key={gap.path} className="rounded-lg border border-border bg-mist px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="rounded bg-ink/10 px-1.5 py-0.5 font-mono text-[9px] font-bold text-ink/60">
-                  {gap.method}
-                </span>
-                <code className="font-mono text-[11px] text-ink/70">{gap.path}</code>
-              </div>
-              <p className="mt-1 text-[10px] text-ink/45">{gap.note}</p>
-            </div>
-          ))}
         </div>
       </div>
     </div>
