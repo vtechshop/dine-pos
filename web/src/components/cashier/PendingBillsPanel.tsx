@@ -259,7 +259,7 @@ export function PendingBillsPanel() {
       const token = localStorage.getItem('pos_token') ?? localStorage.getItem('pos_cashier_token') ?? '';
       if (!token) return 'Cashier';
       const p = JSON.parse(atob(token.split('.')[1]));
-      return (p.name as string | undefined) ?? 'Cashier';
+      return ((p.cashierName ?? p.name) as string | undefined) ?? 'Cashier';
     } catch { return 'Cashier'; }
   })();
   const cashierId = (() => {

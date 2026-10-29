@@ -12,7 +12,9 @@ function bestPayload(): Record<string, unknown> {
 }
 
 export function getCashierName(): string {
-  return (bestPayload().name as string | undefined) ?? 'Cashier';
+  const p = bestPayload();
+  // Cashier tokens carry the name as 'cashierName'
+  return ((p.cashierName ?? p.name) as string | undefined) ?? 'Cashier';
 }
 
 export function getCashierId(): string {

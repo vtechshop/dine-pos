@@ -35,7 +35,7 @@ function getCashierFromJwt() {
   const fallback = parseJwt('pos_token');
   const p = Object.keys(payload).length > 0 ? payload : fallback;
   return {
-    name: (p.name as string | undefined) ?? 'Cashier',
+    name: ((p.cashierName ?? p.name) as string | undefined) ?? 'Cashier',
     code: (p.employeeCode as string | undefined) ?? '',
     mobile: (p.mobile as string | undefined) ?? '',
     role: (p.role as string | undefined) ?? 'cashier',

@@ -322,7 +322,7 @@ function OpenShiftForm() {
       const token = localStorage.getItem('pos_token') ?? localStorage.getItem('pos_cashier_token') ?? '';
       if (token) {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        cashierName = (payload.name as string | undefined) ?? 'Cashier';
+        cashierName = ((payload.cashierName ?? payload.name) as string | undefined) ?? 'Cashier';
         cashierId   = (payload.employeeCode as string | undefined) ?? (payload.sub as string | undefined) ?? '';
       }
     } catch { /* use defaults */ }

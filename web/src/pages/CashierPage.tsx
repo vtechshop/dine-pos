@@ -52,7 +52,7 @@ function parseJwt(key: string): Record<string, unknown> {
 function getCashierIdentity() {
   const payload = parseJwt('pos_cashier_token') || parseJwt('pos_token');
   return {
-    name: (payload.name as string | undefined) ?? 'Cashier',
+    name: ((payload.cashierName ?? payload.name) as string | undefined) ?? 'Cashier',
     code: (payload.employeeCode as string | undefined) ?? '',
   };
 }
