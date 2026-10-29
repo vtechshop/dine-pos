@@ -294,12 +294,12 @@ describe('OFF-S2-07 successful sync marks synced', () => {
     expect(server.orders.get(record.offlineId)?.status).toBe('completed');
   });
 
-  it('marks a delivery order served, then completes it', async () => {
+  it('completes a counter delivery order directly, without a served step', async () => {
     const record = await enqueueOrder(HOTEL_A, orderPayload({ orderSource: 'admin', isParcel: true }));
     const server = new FakeServer();
     useServer(server);
     await syncNow(HOTEL_A);
-    expect(server.updateOrderStatus).toHaveBeenCalledWith('srv-1', 'served');
+    expect(server.updateOrderStatus).not.toHaveBeenCalledWith('srv-1', 'served');
     expect(server.completeOrder).toHaveBeenCalledWith('srv-1');
     expect(server.orders.get(record.offlineId)?.status).toBe('completed');
   });

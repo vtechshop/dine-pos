@@ -39,6 +39,7 @@ import {
   touchesOnlinePayment, validateOnlinePaymentMethodChange, adjustGuestAmountDue,
 } from '../utils/onlinePayment';
 import { REVENUE_FILTER, summarizeRefunds, summarizeOpenOrders } from '../utils/revenue';
+import { isQuickServiceOrder } from '../utils/quickService';
 
 const router = Router();
 
@@ -1479,7 +1480,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: `Order must be ready before it can be served (current: ${existing.status}).` });
     }
     // C2: Takeaway/delivery orders can be completed directly from 'pending' (immediate counter payment)
-    const isQuickService = (existing as any).orderSource === 'takeaway';
+    const isQuickService = isQuickServiceOrder(existing as any);
     if (role === 'cashier' && !['served', 'ready'].includes(existing.status)) {
       if (!(isQuickService && existing.status === 'pending')) {
         return res.status(400).json({ message: `Order must be ready or served before it can be completed (current: ${existing.status}).` });
