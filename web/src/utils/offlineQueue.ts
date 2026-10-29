@@ -115,11 +115,13 @@ export function assertOfflineQueueable(payload: unknown): asserts payload is Cre
 }
 
 /**
- * The steps NewOrderPanel runs online after `createOrder`: takeaway and delivery (sent as
- * orderSource 'admin') are marked served and completed; a dine-in order stays open for its table.
+ * The steps NewOrderPanel runs online after `createOrder`: takeaway is completed straight
+ * from pending (cashiers may not set 'served'); delivery (sent as orderSource 'admin') is
+ * marked served then completed; a dine-in order stays open for its table.
  */
 export function afterCreateFor(orderSource: string | undefined): PendingOrderAfterCreate {
-  if (orderSource === 'takeaway' || orderSource === 'admin') return { markServed: true, complete: true };
+  if (orderSource === 'takeaway') return { markServed: false, complete: true };
+  if (orderSource === 'admin') return { markServed: true, complete: true };
   return { markServed: false, complete: false };
 }
 

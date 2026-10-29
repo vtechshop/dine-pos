@@ -170,7 +170,8 @@ describe('OFF-S2-01 enqueue order into IndexedDB', () => {
       errorReason: null,
       serverId: null,
       syncedAt: null,
-      afterCreate: { markServed: true, complete: true },
+      // Takeaway completes straight from pending — cashiers may not set 'served'
+      afterCreate: { markServed: false, complete: true },
     });
     expect(stored?.queuedAt).toBe(new Date(clock).toISOString());
   });
@@ -287,6 +288,17 @@ describe('OFF-S2-07 successful sync marks synced', () => {
     expect(stored.syncStatus).toBe('synced');
     expect(stored.syncedAt).toBe(new Date(clock).toISOString());
     expect(await getPendingCount(HOTEL_A)).toBe(0);
+    // Takeaway goes straight to completed — a cashier's 'served' request is refused (403)
+    expect(server.updateOrderStatus).not.toHaveBeenCalledWith('srv-1', 'served');
+    expect(server.completeOrder).toHaveBeenCalledWith('srv-1');
+    expect(server.orders.get(record.offlineId)?.status).toBe('completed');
+  });
+
+  it('marks a delivery order served, then completes it', async () => {
+    const record = await enqueueOrder(HOTEL_A, orderPayload({ orderSource: 'admin', isParcel: true }));
+    const server = new FakeServer();
+    useServer(server);
+    await syncNow(HOTEL_A);
     expect(server.updateOrderStatus).toHaveBeenCalledWith('srv-1', 'served');
     expect(server.completeOrder).toHaveBeenCalledWith('srv-1');
     expect(server.orders.get(record.offlineId)?.status).toBe('completed');
