@@ -855,8 +855,10 @@ export function NewOrderPanel() {
       const created = await createOrder(payload);
 
       if (orderType !== 'dine-in') {
-        // Skip kitchen queue for takeaway/delivery — mark served immediately so completeOrder doesn't 400
-        if (orderType === 'takeaway' || orderType === 'delivery') {
+        // Takeaway: the server lets it go straight from pending to completed. Cashiers may
+        // not set 'served' (403 "Access denied"), so don't send that step for takeaway.
+        // Delivery still needs 'served' before completion.
+        if (orderType === 'delivery') {
           await updateOrderStatus(created._id, 'served');
         }
         await completeOrder(created._id);
