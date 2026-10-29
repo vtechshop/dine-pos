@@ -10,7 +10,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
 import { fetchProducts, fetchCategories } from '../../api/products';
 import { fetchTables } from '../../api/tables';
-import { createOrder, completeOrder, updateOrderStatus } from '../../api/orders';
+import { createOrder, completeOrder } from '../../api/orders';
 import { validateCoupon, type CouponValidateResult } from '../../api/coupons';
 import { checkGiftVoucher } from '../../api/giftVouchers';
 import { lookupCustomer } from '../../api/loyalty';
@@ -855,12 +855,8 @@ export function NewOrderPanel() {
       const created = await createOrder(payload);
 
       if (orderType !== 'dine-in') {
-        // Takeaway: the server lets it go straight from pending to completed. Cashiers may
-        // not set 'served' (403 "Access denied"), so don't send that step for takeaway.
-        // Delivery still needs 'served' before completion.
-        if (orderType === 'delivery') {
-          await updateOrderStatus(created._id, 'served');
-        }
+        // Takeaway and counter delivery go straight from pending to completed on the server.
+        // Don't send a 'served' step: cashiers may not set it (403 "Access denied").
         await completeOrder(created._id);
       }
 
