@@ -54,6 +54,9 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
           </Link>
         </div>
 
+        {/* Pages can portal a compact toolbar here (the cashier screen puts its KPI strip here) */}
+        <div id="topbar-page-slot" className="flex min-w-0 flex-1 items-center px-4" />
+
         {/* Right controls */}
         <div className="flex items-center gap-1">
           {/* Global search — reservations / orders / customers / tables (admin-only API) */}
