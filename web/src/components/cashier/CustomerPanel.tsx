@@ -1,15 +1,25 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Search, User, Star, ShoppingBag, Calendar, Phone, AlertCircle, X, Plus, Check, Loader2 } from 'lucide-react';
 import { searchCustomers, fetchCustomer, fetchCustomerTransactions, createCustomer } from '../../api/loyalty';
 import { useSettings } from '../../context/SettingsContext';
+import { ApiError } from '../../api/client';
 import { Spinner } from '../ui/Spinner';
 import type { CustomerSummary, CustomerProfile, LoyaltyTransaction } from '../../types/customers';
 
 // ── Quick Create Form ─────────────────────────────────────────────────────────
 
-function QuickCreateForm({ onSuccess, onCancel }: {
+/** The saved customer with this number (the server stores +91XXXXXXXXXX; match on the last 10 digits). */
+async function findByPhone(phone: string): Promise<CustomerSummary | null> {
+  const last10 = phone.replace(/\D/g, '').slice(-10);
+  if (last10.length < 10) return null;
+  const res = await searchCustomers({ phone: last10, limit: 5 });
+  return (res.customers ?? []).find(c => (c.phone ?? '').replace(/\D/g, '').endsWith(last10)) ?? null;
+}
+
+function QuickCreateForm({ onSuccess, onCancel, onOpenExisting }: {
   onSuccess: (c: CustomerProfile) => void;
   onCancel: () => void;
+  onOpenExisting: (c: CustomerSummary) => void;
 }) {
   const [name, setName]       = useState('');
   const [phone, setPhone]     = useState('');
@@ -17,11 +27,13 @@ function QuickCreateForm({ onSuccess, onCancel }: {
   const [birthday, setBirthday] = useState('');
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState<string | null>(null);
+  const [existing, setExisting] = useState<CustomerSummary | null>(null);
 
   async function handleCreate() {
     if (!name.trim() || !phone.trim()) return;
     setSaving(true);
     setError(null);
+    setExisting(null);
     try {
       const res = await createCustomer({
         name: name.trim(),
@@ -31,6 +43,11 @@ function QuickCreateForm({ onSuccess, onCancel }: {
       });
       onSuccess(res.customer);
     } catch (e) {
+      // Number already saved: show that customer instead of a dead-end error
+      if (e instanceof ApiError && e.status === 409) {
+        const found = await findByPhone(phone).catch(() => null);
+        if (found) { setExisting(found); return; }
+      }
       setError(e instanceof Error ? e.message : 'Failed to create customer');
     } finally {
       setSaving(false);
@@ -73,6 +90,30 @@ function QuickCreateForm({ onSuccess, onCancel }: {
         <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
           <AlertCircle size={12} className="text-red-500" />
           <p className="text-xs text-red-600">{error}</p>
+        </div>
+      )}
+
+      {existing && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-medium text-amber-800">This number is already saved for:</p>
+          <div className="mt-2 flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/10 text-sm font-bold text-brand">
+              {existing.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-ink">{existing.name}</p>
+              <p className="text-[11px] text-ink/55">
+                {existing.phone} · {existing.visitCount} visit{existing.visitCount === 1 ? '' : 's'} · {existing.loyaltyBalance} pts
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenExisting(existing)}
+              className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"
+            >
+              Open customer
+            </button>
+          </div>
         </div>
       )}
 
@@ -220,28 +261,36 @@ export function CustomerPanel() {
   const [selected, setSelected] = useState<CustomerSummary | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  const handleSearch = useCallback(async () => {
-    if (!query.trim()) return;
-    let cancelled = false;
+  const [total, setTotal] = useState<number | null>(null);
+
+  // Empty query = list every customer (most recent visit first); otherwise search.
+  const load = useCallback(async (q: string) => {
     setLoading(true);
     setError(null);
     try {
-      const isPhone = /^\d{6,}$/.test(query.trim());
-      const params = isPhone
-        ? { phone: query.trim(), limit: 20 }
-        : { name: query.trim(), limit: 20 };
+      const text = q.trim();
+      const digits = text.replace(/[\s+-]/g, '');
+      const isPhone = /^\d{6,}$/.test(digits);
+      const params = !text
+        ? { limit: 50 }   // server caps a page at 50
+        : isPhone
+          // numbers are saved as +91XXXXXXXXXX — match on the last 10 digits
+          ? { phone: digits.length > 10 ? digits.slice(-10) : digits, limit: 50 }
+          : { name: text, limit: 50 };
       const res = await searchCustomers(params);
-      if (!cancelled) {
-        setResults(res.customers ?? []);
-        setSearched(true);
-      }
+      setResults(res.customers ?? []);
+      setTotal(text ? null : (res.total ?? res.customers?.length ?? 0));
+      setSearched(!!text);
     } catch {
-      if (!cancelled) setError('Customer lookup failed');
+      setError('Customer lookup failed');
     } finally {
-      if (!cancelled) setLoading(false);
+      setLoading(false);
     }
-    return () => { cancelled = true; };
-  }, [query]);
+  }, []);
+
+  const handleSearch = useCallback(() => load(query), [load, query]);
+
+  useEffect(() => { void load(''); }, [load]);
 
   if (selected) {
     return <CustomerDetail summary={selected} sym={sym} onBack={() => setSelected(null)} />;
@@ -269,6 +318,7 @@ export function CustomerPanel() {
             setSelected(summary);
           }}
           onCancel={() => setShowCreate(false)}
+          onOpenExisting={c => { setShowCreate(false); setSelected(c); }}
         />
       </div>
     );
@@ -295,7 +345,7 @@ export function CustomerPanel() {
           <input
             type="text"
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => { setQuery(e.target.value); if (!e.target.value.trim()) void load(''); }}
             onKeyDown={e => { if (e.key === 'Enter') void handleSearch(); }}
             placeholder="Name or phone number…"
             className="w-full rounded-lg border border-border py-2 pl-8 pr-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
@@ -318,17 +368,25 @@ export function CustomerPanel() {
         </div>
       )}
 
-      {/* Empty */}
-      {!searched && (
+      {/* No customers saved yet */}
+      {!searched && !loading && !error && results.length === 0 && (
         <div className="rounded-xl border border-dashed border-border py-10 text-center">
           <User size={22} className="mx-auto mb-2 text-ink/20" />
-          <p className="text-sm text-ink/40">Search by name or phone</p>
+          <p className="text-sm text-ink/40">No customers yet — add one with New Customer</p>
         </div>
       )}
 
       {/* Results */}
       {searched && !loading && results.length === 0 && (
         <p className="text-center text-sm text-ink/40">No customers found</p>
+      )}
+
+      {results.length > 0 && (
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink/40">
+          {searched
+            ? `${results.length} result${results.length === 1 ? '' : 's'}`
+            : `All customers${total !== null ? ` (${total})` : ''}${total !== null && total > results.length ? ` · showing latest ${results.length} — search to find others` : ''}`}
+        </p>
       )}
 
       {results.length > 0 && (
