@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Wallet, Bell, LogOut,
@@ -59,42 +60,58 @@ function getCashierIdentity() {
 // ── Header KPI strip ──────────────────────────────────────────────────────────
 
 function HeaderKpi({
-  report, drawerBalance, sym, offlinePrinters,
+  report, drawerBalance, sym, offlinePrinters, dark = false,
 }: {
   report: DailyReport | null;
   drawerBalance: number;
   sym: string;
   offlinePrinters: number;
+  dark?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 overflow-x-auto pb-0.5 scrollbar-hide">
-      <KpiChip label="Sales"  value={fmtINR(sym, report?.totalSales ?? 0)}                   icon={<TrendingUp size={11} />} accent />
-      <KpiChip label="Bills"  value={String(report?.totalOrders ?? 0)}                        icon={<ShoppingBag size={11} />} />
-      <KpiChip label="Cash"   value={fmtINR(sym, report?.paymentBreakdown?.cash ?? 0)}        icon={<Wallet size={11} />} />
-      <KpiChip label="Drawer" value={fmtINR(sym, drawerBalance)}                              icon={<Wallet size={11} />} />
+    <div className={`flex items-center overflow-x-auto pb-0.5 scrollbar-hide ${dark ? 'gap-2' : 'gap-3'}`}>
+      <KpiChip dark={dark} label="Sales"  value={fmtINR(sym, report?.totalSales ?? 0)}                   icon={<TrendingUp size={11} />} accent />
+      <KpiChip dark={dark} label="Bills"  value={String(report?.totalOrders ?? 0)}                        icon={<ShoppingBag size={11} />} />
+      <KpiChip dark={dark} label="Cash"   value={fmtINR(sym, report?.paymentBreakdown?.cash ?? 0)}        icon={<Wallet size={11} />} />
+      <KpiChip dark={dark} label="Drawer" value={fmtINR(sym, drawerBalance)}                              icon={<Wallet size={11} />} />
       {offlinePrinters > 0 && (
-        <KpiChip label="Printer" value={`${offlinePrinters} offline`} icon={<AlertCircle size={11} />} warn />
+        <KpiChip dark={dark} label="Printer" value={`${offlinePrinters} offline`} icon={<AlertCircle size={11} />} warn />
       )}
     </div>
   );
 }
 
-function KpiChip({ label, value, icon, accent, warn }: {
-  label: string; value: string; icon: React.ReactNode; accent?: boolean; warn?: boolean;
+function KpiChip({ label, value, icon, accent, warn, dark }: {
+  label: string; value: string; icon: React.ReactNode; accent?: boolean; warn?: boolean; dark?: boolean;
 }) {
+  const box = dark
+    ? (accent ? 'border-brand/40 bg-brand/15' : warn ? 'border-amber-400/40 bg-amber-400/10' : 'border-white/10 bg-white/[0.05]')
+    : (accent ? 'border-brand/20 bg-brand/5'  : warn ? 'border-amber-200 bg-amber-50'       : 'border-border bg-canvas');
+  const iconCls = accent ? 'text-brand' : warn ? (dark ? 'text-amber-300' : 'text-amber-500') : (dark ? 'text-white/40' : 'text-ink/35');
+  const valueCls = accent ? 'text-brand' : warn ? (dark ? 'text-amber-300' : 'text-amber-700') : (dark ? 'text-white' : 'text-ink');
   return (
-    <div className={`shrink-0 flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 ${
-      accent ? 'border-brand/20 bg-brand/5' :
-      warn   ? 'border-amber-200 bg-amber-50' :
-               'border-border bg-canvas'
-    }`}>
-      <span className={accent ? 'text-brand' : warn ? 'text-amber-500' : 'text-ink/35'}>{icon}</span>
+    <div className={`shrink-0 flex items-center gap-1.5 rounded-lg border px-2.5 ${dark ? 'py-1' : 'py-1.5'} ${box}`}>
+      <span className={iconCls}>{icon}</span>
       <div>
-        <p className="text-[9px] font-semibold uppercase tracking-wide text-ink/40">{label}</p>
-        <p className={`text-xs font-bold leading-none ${accent ? 'text-brand' : warn ? 'text-amber-700' : 'text-ink'}`}>{value}</p>
+        <p className={`text-[9px] font-semibold uppercase tracking-wide ${dark ? 'text-white/45' : 'text-ink/40'}`}>{label}</p>
+        <p className={`text-xs font-bold leading-none ${valueCls}`}>{value}</p>
       </div>
     </div>
   );
+}
+
+/** The top bar's page slot, on wide screens only (null = render the header inline). */
+function useTopBarSlot(): HTMLElement | null {
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const update = () => setEl(mq.matches ? document.getElementById('topbar-page-slot') : null);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+  return el;
 }
 
 // ── Notification bell (uses NotificationContext) ───────────────────────────────
@@ -105,7 +122,7 @@ const SEVERITY_CLS: Record<'critical' | 'warning' | 'info', string> = {
   info:     'border-blue-200 bg-blue-50 text-blue-700',
 };
 
-function NotificationBell() {
+function NotificationBell({ dark = false }: { dark?: boolean }) {
   const { notifications, unreadCount, markAllRead, dismiss } = useNotifications();
   const [open, setOpen] = useState(false);
 
@@ -123,8 +140,8 @@ function NotificationBell() {
         onClick={handleOpen}
         className={`relative rounded-lg border p-1.5 transition ${
           unreadCount > 0
-            ? 'border-amber-200 bg-amber-50 text-amber-600'
-            : 'border-border text-ink/40 hover:bg-mist'
+            ? (dark ? 'border-amber-400/40 bg-amber-400/10 text-amber-300' : 'border-amber-200 bg-amber-50 text-amber-600')
+            : (dark ? 'border-white/15 text-white/55 hover:bg-white/[0.08]' : 'border-border text-ink/40 hover:bg-mist')
         }`}
         title="Notifications"
       >
@@ -196,6 +213,7 @@ export function CashierPage() {
   const { logout, hotelId } = useAuth();
   const { connected: socketConnected } = useSocket();
   const sym = settings?.currencySymbol ?? '₹';
+  const topBarSlot = useTopBarSlot();
 
   // ── Customer display window ────────────────────────────────────────────────
   const displayWindowRef = useRef<Window | null>(null);
@@ -311,72 +329,74 @@ export function CashierPage() {
       nowMs - new Date(p.lastHeartbeat).getTime() >= 3 * 60_000,
   ).length;
 
+  // dark = rendered inside the dark top bar (wide screens); light = own row (small screens)
+  const actionCls = (dark: boolean) => dark
+    ? 'rounded-lg border border-white/15 p-1.5 text-white/55 transition hover:bg-white/[0.08] hover:text-white'
+    : 'rounded-lg border border-border p-1.5 text-ink/40 hover:bg-mist hover:text-ink/70';
+
+  const headerBar = (dark: boolean) => (
+    <div className={`flex min-w-0 items-center gap-3 ${dark ? 'flex-1' : ''}`}>
+      {/* Profile chip */}
+      <button
+        type="button"
+        onClick={() => setActiveTab('profile')}
+        className={`flex shrink-0 items-center gap-2 rounded-lg px-1.5 py-1 transition ${dark ? 'hover:bg-white/[0.08]' : 'hover:bg-mist'}`}
+        title="My Profile"
+      >
+        <div className={`flex shrink-0 items-center justify-center rounded-full bg-brand/10 font-bold text-brand ${dark ? 'h-7 w-7 bg-brand/20 text-xs' : 'h-8 w-8 text-sm'}`}>
+          {identity.name.charAt(0).toUpperCase()}
+        </div>
+        <div className={`text-left ${dark ? 'hidden xl:block' : 'hidden sm:block'}`}>
+          <p className={`text-xs font-semibold leading-tight ${dark ? 'text-white' : 'text-ink'}`}>{identity.name}</p>
+          <p className={`text-[10px] ${dark ? 'text-white/45' : 'text-ink/45'}`}>
+            {identity.code && `${identity.code} · `}
+            {shift?.status === 'open'
+              ? `Shift open · ${new Date(shift.openedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
+              : 'No active shift'}
+          </p>
+        </div>
+      </button>
+
+      {/* KPI strip */}
+      <div className="min-w-0 flex-1 overflow-x-auto">
+        <HeaderKpi
+          report={report}
+          drawerBalance={drawerBalance}
+          sym={sym}
+          offlinePrinters={offlinePrinters}
+          dark={dark}
+        />
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <NotificationBell dark={dark} />
+        <button type="button" onClick={openCustomerDisplay} className={actionCls(dark)} title="Customer Display (second screen)">
+          <Monitor size={13} />
+        </button>
+        <button type="button" onClick={() => void loadHeader()} className={actionCls(dark)} title="Refresh (F5)">
+          <RefreshCw size={13} />
+        </button>
+        {/* The top bar already has a sign-out button */}
+        {!dark && (
+          <button type="button" onClick={() => void logout()} className={actionCls(dark)} title="Logout">
+            <LogOut size={13} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex h-full flex-col">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="shrink-0 border-b border-border bg-canvas px-4 py-2.5">
-        <div className="flex items-center gap-3">
-          {/* Profile chip */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('profile')}
-            className="flex items-center gap-2 rounded-lg hover:bg-mist px-1.5 py-1 transition"
-            title="My Profile"
-          >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10 text-sm font-bold text-brand">
-              {identity.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="hidden sm:block text-left">
-              <p className="text-xs font-semibold leading-tight text-ink">{identity.name}</p>
-              <p className="text-[10px] text-ink/45">
-                {identity.code && `${identity.code} · `}
-                {shift?.status === 'open'
-                  ? `Shift open · ${new Date(shift.openedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
-                  : 'No active shift'}
-              </p>
-            </div>
-          </button>
-
-          {/* KPI strip */}
-          <div className="flex-1 overflow-x-auto">
-            <HeaderKpi
-              report={report}
-              drawerBalance={drawerBalance}
-              sym={sym}
-              offlinePrinters={offlinePrinters}
-            />
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <NotificationBell />
-            <button
-              type="button"
-              onClick={openCustomerDisplay}
-              className="rounded-lg border border-border p-1.5 text-ink/40 hover:bg-mist hover:text-ink/70"
-              title="Customer Display (second screen)"
-            >
-              <Monitor size={13} />
-            </button>
-            <button
-              type="button"
-              onClick={() => void loadHeader()}
-              className="rounded-lg border border-border p-1.5 text-ink/40 hover:bg-mist"
-              title="Refresh (F5)"
-            >
-              <RefreshCw size={13} />
-            </button>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="rounded-lg border border-border p-1.5 text-ink/40 hover:bg-mist hover:text-ink/70"
-              title="Logout"
-            >
-              <LogOut size={13} />
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* ── Header: in the top bar on wide screens, its own row otherwise ──── */}
+      {topBarSlot
+        ? createPortal(headerBar(true), topBarSlot)
+        : (
+          <header className="shrink-0 border-b border-border bg-canvas px-4 py-2.5">
+            {headerBar(false)}
+          </header>
+        )}
 
       {/* ── Offline banner ─────────────────────────────────────────────────── */}
       <div className="shrink-0 px-4 pt-2">
