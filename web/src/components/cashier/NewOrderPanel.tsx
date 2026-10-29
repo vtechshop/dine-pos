@@ -943,7 +943,8 @@ export function NewOrderPanel() {
   return (
     <div className="flex h-full flex-col gap-4 lg:flex-row">
       {/* ── LEFT: product selection ──────────────────────────────────────────── */}
-      <div className="flex min-w-0 flex-1 flex-col min-h-0 space-y-2.5">
+      {/* The whole column scrolls so the menu gets the height; search + categories stay pinned */}
+      <div className="min-h-0 min-w-0 flex-1 space-y-2.5 overflow-y-auto pr-1">
         {/* Order type */}
         <div className="flex gap-1 rounded-xl border border-border bg-canvas p-1">
           <TypeTab active={orderType === 'dine-in'}  icon={<UtensilsCrossed size={13} />} label="Dine In"   onClick={() => setOrderType('dine-in')} />
@@ -953,58 +954,56 @@ export function NewOrderPanel() {
 
         {/* Order meta form — Dine In */}
         {orderType === 'dine-in' && (
-          <div className="rounded-xl border border-border bg-canvas p-3 space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">Dine In Details</p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[11px] font-medium text-ink/60">Table</label>
-                <select
-                  value={dineIn.tableId}
-                  onChange={e => {
-                    const t = tables.find(x => x._id === e.target.value);
-                    setDineIn(d => ({ ...d, tableId: e.target.value, tableNumber: t ? String(t.number) : '' }));
-                  }}
-                  className="mt-0.5 block w-full rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-                >
-                  <option value="">Walk-in / No table</option>
-                  {tables.map(t => (
-                    <option key={t._id} value={t._id}>T{t.number} ({t.capacity} pax)</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium text-ink/60">Guests</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={dineIn.guestCount}
-                  onChange={e => setDineIn(d => ({ ...d, guestCount: e.target.value }))}
-                  className="mt-0.5 block w-full rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
+          // Table · guests · name · phone on one row on wide screens, notes below
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-canvas p-2 xl:grid-cols-4">
+            <select
+              aria-label="Table"
+              value={dineIn.tableId}
+              onChange={e => {
+                const t = tables.find(x => x._id === e.target.value);
+                setDineIn(d => ({ ...d, tableId: e.target.value, tableNumber: t ? String(t.number) : '' }));
+              }}
+              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            >
+              <option value="">Walk-in / No table</option>
+              {tables.map(t => (
+                <option key={t._id} value={t._id}>T{t.number} ({t.capacity} pax)</option>
+              ))}
+            </select>
+            <div className="relative min-w-0">
+              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-ink/45">Guests</span>
               <input
-                type="text"
-                value={dineIn.customerName}
-                onChange={e => setDineIn(d => ({ ...d, customerName: e.target.value }))}
-                placeholder="Customer name *"
-                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-              />
-              <input
-                type="tel"
-                value={dineIn.phone}
-                onChange={e => setDineIn(d => ({ ...d, phone: e.target.value }))}
-                placeholder="Phone *"
-                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+                type="number"
+                min="1"
+                aria-label="Guests"
+                value={dineIn.guestCount}
+                onChange={e => setDineIn(d => ({ ...d, guestCount: e.target.value }))}
+                className="block w-full rounded-lg border border-border py-1.5 pl-14 pr-2 text-xs text-ink outline-none focus:border-brand/50"
               />
             </div>
             <input
               type="text"
+              aria-label="Customer name"
+              value={dineIn.customerName}
+              onChange={e => setDineIn(d => ({ ...d, customerName: e.target.value }))}
+              placeholder="Customer name *"
+              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            />
+            <input
+              type="tel"
+              aria-label="Phone"
+              value={dineIn.phone}
+              onChange={e => setDineIn(d => ({ ...d, phone: e.target.value }))}
+              placeholder="Phone *"
+              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            />
+            <input
+              type="text"
+              aria-label="Order notes"
               value={dineIn.notes}
               onChange={e => setDineIn(d => ({ ...d, notes: e.target.value }))}
               placeholder="Order notes…"
-              className="block w-full rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+              className="col-span-2 min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50 xl:col-span-4"
             />
           </div>
         )}
@@ -1156,6 +1155,7 @@ export function NewOrderPanel() {
           ) : null
         )}
 
+        <div className="sticky top-0 z-10 space-y-2 bg-mist pb-1">
         {/* Search */}
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/35" />
@@ -1217,6 +1217,7 @@ export function NewOrderPanel() {
             ))}
           </div>
         )}
+        </div>
 
         {/* Recent products strip */}
         {!search && activeCat !== FAVS_CAT && recentProducts.length > 0 && (
@@ -1290,7 +1291,7 @@ export function NewOrderPanel() {
             )}
           </div>
         ) : (
-          <div className="flex-1 min-h-0 grid grid-cols-2 content-start gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 pb-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {visibleProducts.map(p => (
               <ProductCard
                 key={p._id}
