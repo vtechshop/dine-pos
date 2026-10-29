@@ -14,7 +14,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SubscriptionExpired'>;
 
 const SUPPORT_PHONE    = '+916381356683';
 const SUPPORT_WHATSAPP = '916381356683';
-const SUPPORT_EMAIL    = 'support@dinepos.in';
+const SUPPORT_EMAIL    = 'info@happya.in';
 
 const SubscriptionExpiredScreen: React.FC<Props> = ({ navigation, route }) => {
   const { top, bottom } = useSafeAreaInsets();

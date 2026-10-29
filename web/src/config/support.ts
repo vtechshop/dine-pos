@@ -2,7 +2,7 @@
 export const SUPPORT_PHONE         = '+916381356683';
 export const SUPPORT_PHONE_DISPLAY = '+91 63813 56683';
 export const SUPPORT_WHATSAPP      = '916381356683';
-export const SUPPORT_EMAIL         = 'support@dinepos.in';
+export const SUPPORT_EMAIL         = 'info@happya.in';
 
 /** In-app route of the public support page (works signed in or out). */
 export const SUPPORT_PAGE = '/support';
