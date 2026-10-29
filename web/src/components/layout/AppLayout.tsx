@@ -58,7 +58,7 @@ export function AppLayout() {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        <main className="flex flex-1 flex-col overflow-hidden bg-mist">
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-mist">
           <TrialBanner />
           {/* Pages size themselves with h-full; this wrapper is what's left
               below the banner, so the banner can't push their bottom off-screen. */}

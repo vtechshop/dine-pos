@@ -943,7 +943,7 @@ export function NewOrderPanel() {
   return (
     <div className="flex h-full flex-col gap-4 lg:flex-row">
       {/* ── LEFT: product selection ──────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col min-h-0 space-y-3">
+      <div className="flex min-w-0 flex-1 flex-col min-h-0 space-y-3">
         {/* Order type */}
         <div className="flex gap-1 rounded-xl border border-border bg-canvas p-1">
           <TypeTab active={orderType === 'dine-in'}  icon={<UtensilsCrossed size={13} />} label="Dine In"   onClick={() => setOrderType('dine-in')} />
