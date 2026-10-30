@@ -339,7 +339,7 @@ export function NewOrderPanel() {
     orderPrefill, setOrderPrefill,
   } = useCashier();
   const { settings } = useSettings();
-  const { hotelId } = useAuth();
+  const { hotelId, role } = useAuth();
   const isOnline = useIsOnline();
   const sym = settings?.currencySymbol ?? '₹';
   const perms = useCashierPermissions();
@@ -480,7 +480,8 @@ export function NewOrderPanel() {
       fetchCategories(),
       fetchProducts({ available: true } as Parameters<typeof fetchProducts>[0]),
       fetchTables(),
-      fetchProductSalesReport(today),
+      // "Top Today" uses the admin-only product report; cashiers would get 403
+      role === 'admin' ? fetchProductSalesReport(today) : Promise.reject(new Error('admin only')),
     ]);
     if (!cancelled) {
       if (catRes.status === 'fulfilled') {
@@ -533,7 +534,7 @@ export function NewOrderPanel() {
       setProdLoading(false);
     }
     return () => { cancelled = true; };
-  }, [hotelId]);
+  }, [hotelId, role]);
 
   useEffect(() => {
     void loadProducts();
@@ -939,10 +940,10 @@ export function NewOrderPanel() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 lg:flex-row">
+    <div className="flex flex-col gap-4 lg:h-full lg:flex-row">
       {/* ── LEFT: product selection ──────────────────────────────────────────── */}
-      {/* The whole column scrolls so the menu gets the height; search + categories stay pinned */}
-      <div className="min-h-0 min-w-0 flex-1 space-y-2.5 overflow-y-auto pr-1">
+      {/* Wide screens: this column scrolls on its own (search + categories pinned). Narrow: the page scrolls, cart below */}
+      <div className="min-w-0 space-y-2.5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
         {/* Order type */}
         <div className="flex gap-1 rounded-xl border border-border bg-canvas p-1">
           <TypeTab active={orderType === 'dine-in'}  icon={<UtensilsCrossed size={13} />} label="Dine In"   onClick={() => setOrderType('dine-in')} />

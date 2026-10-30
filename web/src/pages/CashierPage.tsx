@@ -16,7 +16,7 @@ import { useSocket } from '../context/SocketContext';
 import { OfflineBanner } from '../components/cashier/OfflineBanner';
 import { syncNow } from '../sync/syncEngine';
 import { useOrderSyncStatus } from '../hooks/useOrderSyncStatus';
-import { fetchDailyReport, fetchPrinterDevices } from '../api/dashboard';
+import { fetchSalesSummary, fetchPrinterDevices } from '../api/dashboard';
 import { NewOrderPanel }          from '../components/cashier/NewOrderPanel';
 import { PendingBillsPanel }      from '../components/cashier/PendingBillsPanel';
 import { HoldBillPanel }          from '../components/cashier/HoldBillPanel';
@@ -211,7 +211,7 @@ export function CashierPage() {
   const navigate = useNavigate();
   const { activeTab, setActiveTab, heldBills, shift, drawerBalance, cart, selectedShiftId } = useCashier();
   const { settings } = useSettings();
-  const { logout, hotelId } = useAuth();
+  const { logout, hotelId, role } = useAuth();
   const { connected: socketConnected } = useSocket();
   const sym = settings?.currencySymbol ?? '₹';
   const topBarSlot = useTopBarSlot();
@@ -270,7 +270,7 @@ export function CashierPage() {
   const loadHeader = useCallback(async () => {
     let cancelled = false;
     const [rptRes, prtRes] = await Promise.allSettled([
-      fetchDailyReport(),
+      fetchSalesSummary(role),   // cashier: own shift; admin: whole day
       fetchPrinterDevices(),
     ]);
     if (!cancelled) {
@@ -279,7 +279,7 @@ export function CashierPage() {
       setNowMs(Date.now());
     }
     return () => { cancelled = true; };
-  }, []);
+  }, [role]);
 
   useEffect(() => {
     void loadHeader();

@@ -10,7 +10,8 @@ import { useCashier } from '../../context/CashierContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { useSocket } from '../../context/SocketContext';
 import { useSettings } from '../../context/SettingsContext';
-import { fetchDailyReport } from '../../api/dashboard';
+import { fetchSalesSummary } from '../../api/dashboard';
+import { useAuth } from '../../context/AuthContext';
 import { fetchCashierOrders } from '../../api/orders';
 import { fetchProductSalesReport } from '../../api/reports';
 import type { DailyReport } from '../../types';
@@ -187,13 +188,17 @@ export function DashboardPanel() {
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
+
   const loadData = useCallback(async () => {
     let cancelled = false;
     const today = new Date().toISOString().split('T')[0] ?? '';
     const [rptRes, ordRes, topRes] = await Promise.allSettled([
-      fetchDailyReport(),
+      fetchSalesSummary(role),   // cashier: own shift; admin: whole day
       fetchCashierOrders(),
-      fetchProductSalesReport(today),
+      // Product sales report is admin-only — don't ask for it as a cashier (403)
+      isAdmin ? fetchProductSalesReport(today) : Promise.reject(new Error('admin only')),
     ]);
     if (!cancelled) {
       if (rptRes.status === 'fulfilled') setReport(rptRes.value);
@@ -207,7 +212,7 @@ export function DashboardPanel() {
       setLoading(false);
     }
     return () => { cancelled = true; };
-  }, []);
+  }, [role, isAdmin]);
 
   useEffect(() => {
     void loadData();
@@ -299,7 +304,7 @@ export function DashboardPanel() {
       {/* ── KPI grid ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         <KpiCard
-          label="Today's Sales"
+          label={isAdmin ? "Today's Sales" : 'Shift Sales'}
           value={fmtINR(sym, report?.totalSales ?? 0)}
           sub={`${report?.totalOrders ?? 0} orders`}
           icon={<TrendingUp size={16} className="text-brand" />}
@@ -307,7 +312,7 @@ export function DashboardPanel() {
           onClick={() => setActiveTab('search')}
         />
         <KpiCard
-          label="Bills Today"
+          label={isAdmin ? 'Bills Today' : 'Bills This Shift'}
           value={String(report?.totalOrders ?? 0)}
           sub={`Avg ${fmtINR(sym, avgBill)}`}
           icon={<ShoppingBag size={16} className="text-ink/50" />}

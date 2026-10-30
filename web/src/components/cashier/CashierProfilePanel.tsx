@@ -6,7 +6,7 @@ import {
 import { useCashier } from '../../context/CashierContext';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
-import { fetchDailyReport } from '../../api/dashboard';
+import { fetchSalesSummary } from '../../api/dashboard';
 import type { DailyReport } from '../../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
 
 export function CashierProfilePanel() {
   const { shift, drawerBalance, drawerMovements } = useCashier();
-  const { logout } = useAuth();
+  const { logout, role } = useAuth();
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
 
@@ -74,13 +74,13 @@ export function CashierProfilePanel() {
   const load = useCallback(async () => {
     let cancelled = false;
     try {
-      const r = await fetchDailyReport();
+      const r = await fetchSalesSummary(role);
       if (!cancelled) { setReport(r); setLoading(false); }
     } catch {
       if (!cancelled) setLoading(false);
     }
     return () => { cancelled = true; };
-  }, []);
+  }, [role]);
 
   useEffect(() => {
     void load();
@@ -162,7 +162,7 @@ export function CashierProfilePanel() {
       {/* ── Today's performance ───────────────────────────────────────────── */}
       <div className="rounded-xl border border-border bg-canvas p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink/40">Today's Performance</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink/40">{role === 'admin' ? "Today's Performance" : 'This Shift'}</p>
           <button
             type="button"
             onClick={() => { setLoading(true); void load(); }}

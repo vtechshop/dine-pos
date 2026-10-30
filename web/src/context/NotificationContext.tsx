@@ -42,7 +42,7 @@ const NotifCtx = createContext<NotifCtxValue | null>(null);
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, role } = useAuth();
   const { shift, drawerBalance } = useCashier();
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
@@ -113,7 +113,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // ── Kitchen delay detection ───────────────────────────────────────────────
   const pollKitchen = useCallback(async () => {
     try {
-      const orders = await fetchKitchenOrders();
+      // /orders/kitchen is kitchen/admin only; other roles read the same active orders
+      // from the cashier list (pending / preparing are all this check looks at)
+      const orders = role === 'kitchen' || role === 'admin'
+        ? await fetchKitchenOrders()
+        : await fetchCashierOrders();
       const nowMs = Date.now();
       const liveIds = new Set<string>();
       for (const o of orders) {
@@ -135,7 +139,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       }
       removeByPrefix('kitchen_delay:', liveIds);
     } catch { /* non-fatal */ }
-  }, [upsert, removeByPrefix]);
+  }, [upsert, removeByPrefix, role]);
 
   // ── Payment pending detection ─────────────────────────────────────────────
   const pollPayments = useCallback(async () => {

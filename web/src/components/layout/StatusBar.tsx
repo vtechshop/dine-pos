@@ -2,7 +2,8 @@ import { useEffect, useCallback, useState } from 'react';
 import { TrendingUp, ShoppingCart, LayoutGrid, Printer, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 import { useLiveOrders } from '../../context/LiveOrdersContext';
-import { fetchDailyReport, fetchPrinterDevices } from '../../api/dashboard';
+import { fetchSalesSummary, fetchPrinterDevices } from '../../api/dashboard';
+import { useAuth } from '../../context/AuthContext';
 import type { DailyReport, PrinterDeviceStatus } from '../../types';
 import { useSettings } from '../../context/SettingsContext';
 
@@ -36,16 +37,18 @@ export function StatusBar() {
   const { connected, reconnecting, reconnectCount } = useSocket();
   const { orders: liveOrders } = useLiveOrders();
   const { settings } = useSettings();
+  const { role } = useAuth();
   const symbol = settings?.currencySymbol ?? '₹';
 
   const [report,  setReport]  = useState<DailyReport | null>(null);
   const [devices, setDevices] = useState<PrinterDeviceStatus[]>([]);
 
   const load = useCallback(async () => {
-    const [r, d] = await Promise.allSettled([fetchDailyReport(), fetchPrinterDevices()]);
+    // Admin: whole day; cashier: own shift; other roles: no sales figures (they'd get 403)
+    const [r, d] = await Promise.allSettled([fetchSalesSummary(role), fetchPrinterDevices()]);
     if (r.status === 'fulfilled') setReport(r.value);
     if (d.status === 'fulfilled') setDevices(d.value);
-  }, []);
+  }, [role]);
 
   // Initial fetch + refresh on every reconnect
   useEffect(() => { void load(); }, [load, reconnectCount]);
