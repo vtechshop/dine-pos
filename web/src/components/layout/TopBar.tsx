@@ -23,9 +23,9 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
 
   return (
     <>
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-ink px-5">
-        {/* Brand */}
-        <div className="flex items-center gap-2.5">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-ink px-3 sm:px-5">
+        {/* Brand — on phones: logo + hotel name only, so the right-hand controls fit */}
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2.5">
           {/* Hamburger — mobile only */}
           <button
             onClick={onMenuClick}
@@ -39,26 +39,27 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
           <Link
             to="/"
             aria-label="Go to home"
-            className="flex items-center gap-2.5 rounded-lg transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+            className="flex min-w-0 items-center gap-2 rounded-lg transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 sm:gap-2.5"
           >
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand">
               <Hotel size={14} className="text-white" />
             </div>
-            <span className="text-base font-bold text-white tracking-tight">Dine POS</span>
+            <span className={`whitespace-nowrap text-base font-bold tracking-tight text-white ${hotelName ? 'hidden sm:inline' : ''}`}>Dine POS</span>
             {hotelName && (
               <>
-                <span className="text-white/25">/</span>
-                <span className="max-w-48 truncate text-sm text-white/65" title={hotelName}>{hotelName}</span>
+                <span className="hidden text-white/25 sm:inline">/</span>
+                <span className="min-w-0 truncate text-sm font-medium text-white/80 sm:max-w-48 sm:font-normal sm:text-white/65" title={hotelName}>{hotelName}</span>
               </>
             )}
           </Link>
         </div>
 
         {/* Pages can portal a compact toolbar here (the cashier screen puts its KPI strip here) */}
-        <div id="topbar-page-slot" className="flex min-w-0 flex-1 items-center px-4" />
+        {/* Wide screens only — the cashier screen uses it from 1024px up */}
+        <div id="topbar-page-slot" className="hidden min-w-0 flex-1 items-center px-4 lg:flex" />
 
         {/* Right controls */}
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
           {/* Global search — reservations / orders / customers / tables (admin-only API) */}
           {role === 'admin' && <div className="mr-2"><GlobalSearch /></div>}
 
@@ -71,7 +72,7 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
           {role === 'admin' && <BroadcastBell />}
 
           {/* Socket status badge */}
-          <div className="mx-2">
+          <div className="mx-1 sm:mx-2">
             {connected ? (
               <LiveBadge label="Live" />
             ) : reconnecting ? (

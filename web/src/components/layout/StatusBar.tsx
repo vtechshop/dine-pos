@@ -17,9 +17,10 @@ interface ChipProps {
 
 function Chip({ icon, label, value, dim }: ChipProps) {
   return (
-    <div className={`flex items-center gap-1.5 ${dim ? 'opacity-50' : ''}`}>
+    <div className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap ${dim ? 'opacity-50' : ''}`} title={label}>
       <span className="text-white/45">{icon}</span>
-      <span className="text-xs text-white/55">{label}</span>
+      {/* Phones: icon + value only */}
+      <span className="hidden text-xs text-white/55 sm:inline">{label}</span>
       <span className="text-xs font-semibold text-white/85 tabular-nums">{value}</span>
     </div>
   );
@@ -59,9 +60,9 @@ export function StatusBar() {
     : '—';
 
   return (
-    <footer className="flex h-10 shrink-0 items-center justify-between border-t border-white/10 bg-ink px-5">
+    <footer className="flex h-10 shrink-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap border-t border-white/10 bg-ink px-3 sm:px-5">
       {/* Left: stat chips */}
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-3 sm:gap-4">
         <Chip icon={<TrendingUp size={12} />}  label="Revenue" value={revenue} dim={!report} />
         <Divider />
         <Chip icon={<ShoppingCart size={12} />} label="Orders"  value={report?.totalOrders ?? '—'} dim={!report} />
@@ -70,7 +71,7 @@ export function StatusBar() {
       </div>
 
       {/* Right: printer + socket + keyboard hints */}
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-3 sm:gap-4">
         {/* Keyboard shortcut hints */}
         <div className="hidden items-center gap-2 xl:flex">
           {(['F1 Search', 'F2 New Order', 'F3 Tables', 'F4 Customers'] as const).map(hint => (
@@ -80,9 +81,9 @@ export function StatusBar() {
         </div>
 
         {/* Printer status — green/gray are semantic online/offline indicators */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5" title={devices.length === 0 ? 'No printer' : printersOnline ? 'Printer OK' : 'Printer offline'}>
           <Printer size={12} className={printersOnline ? 'text-green-500' : 'text-white/35'} />
-          <span className={`text-[10px] ${printersOnline ? 'text-green-400' : 'text-white/35'}`}>
+          <span className={`hidden text-[10px] sm:inline ${printersOnline ? 'text-green-400' : 'text-white/35'}`}>
             {devices.length === 0 ? 'No printer' : printersOnline ? 'Printer OK' : 'Printer offline'}
           </span>
         </div>
