@@ -24,13 +24,13 @@ function statusOf(i: AggregatorIntegration): { status: Status; hint: string } {
 
 const DOT: Record<Status, string> = {
   online:  'bg-emerald-400',
-  offline: 'bg-white/30',
+  offline: 'bg-ink/25',
   error:   'bg-red-500',
 };
 
 const TEXT: Record<Status, string> = {
   online:  'text-emerald-300',
-  offline: 'text-white/40',
+  offline: 'text-ink/40',
   error:   'text-red-400',
 };
 
@@ -72,7 +72,7 @@ export function PlatformStatus() {
             type="button"
             onClick={() => navigate('/integrations')}
             title={`${label}: ${hint}`}
-            className="flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-white/75 transition-colors hover:bg-white/[0.12]"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-mist px-2.5 py-1 text-[11px] font-medium text-ink/75 transition-colors hover:bg-border/50"
           >
             <span className={`h-1.5 w-1.5 rounded-full ${DOT[status]}`} />
             {label}

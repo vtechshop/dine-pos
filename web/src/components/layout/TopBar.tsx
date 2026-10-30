@@ -23,14 +23,14 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
 
   return (
     <>
-      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-ink px-3 sm:px-5">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-canvas px-3 sm:px-5">
         {/* Brand — on phones: logo + hotel name only, so the right-hand controls fit */}
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2.5">
           {/* Hamburger — mobile only */}
           <button
             onClick={onMenuClick}
             aria-label="Open navigation"
-            className="rounded-lg p-1.5 text-white/40 hover:bg-white/[0.08] hover:text-white md:hidden"
+            className="rounded-lg p-1.5 text-ink/50 hover:bg-mist hover:text-ink md:hidden"
           >
             <Menu size={18} />
           </button>
@@ -44,11 +44,11 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand">
               <Hotel size={14} className="text-white" />
             </div>
-            <span className={`whitespace-nowrap text-base font-bold tracking-tight text-white ${hotelName ? 'hidden sm:inline' : ''}`}>Dine POS</span>
+            <span className={`whitespace-nowrap text-base font-bold tracking-tight text-ink ${hotelName ? 'hidden sm:inline' : ''}`}>Dine POS</span>
             {hotelName && (
               <>
-                <span className="hidden text-white/25 sm:inline">/</span>
-                <span className="min-w-0 truncate text-sm font-medium text-white/80 sm:max-w-48 sm:font-normal sm:text-white/65" title={hotelName}>{hotelName}</span>
+                <span className="hidden text-ink/25 sm:inline">/</span>
+                <span className="min-w-0 truncate text-sm font-medium text-ink/85 sm:max-w-48 sm:font-normal sm:text-ink/65" title={hotelName}>{hotelName}</span>
               </>
             )}
           </Link>
@@ -76,29 +76,29 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             {connected ? (
               <LiveBadge label="Live" />
             ) : reconnecting ? (
-              <span className="animate-pulse rounded-full bg-yellow-600 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-white">
+              <span className="animate-pulse rounded-full bg-amber-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-white">
                 Reconnecting
               </span>
             ) : (
-              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-white/40">
+              <span className="rounded-full bg-mist px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-ink/45">
                 Offline
               </span>
             )}
           </div>
 
-          <div className="h-4 w-px bg-white/15" />
+          <div className="h-4 w-px bg-border" />
 
           {/* User / sign-out */}
           <div className="flex items-center gap-1.5 pl-1">
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/20 ring-1 ring-brand/30">
               <User size={13} className="text-brand" />
             </div>
-            <span className="hidden text-sm text-white/70 sm:block">{roleLabel}</span>
+            <span className="hidden text-sm text-ink/70 sm:block">{roleLabel}</span>
             <button
               data-testid="logout-btn"
               onClick={() => setConfirmLogout(true)}
               aria-label="Sign out"
-              className="ml-1 rounded-lg p-1.5 text-white/45 transition-colors hover:bg-white/[0.08] hover:text-white/80"
+              className="ml-1 rounded-lg p-1.5 text-ink/45 transition-colors hover:bg-mist hover:text-ink"
             >
               <LogOut size={15} />
             </button>

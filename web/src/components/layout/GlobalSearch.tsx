@@ -52,7 +52,7 @@ export function GlobalSearch() {
 
   return (
     <div ref={boxRef} className="relative hidden w-64 md:block xl:w-80">
-      <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+      <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink/35" />
       <input
         value={q}
         onChange={e => { setQ(e.target.value); setOpen(true); }}
@@ -60,9 +60,9 @@ export function GlobalSearch() {
         onKeyDown={e => { if (e.key === 'Escape') { setOpen(false); (e.target as HTMLInputElement).blur(); } }}
         placeholder="Search reservations, orders, customers…"
         aria-label="Search"
-        className="h-8 w-full rounded-lg bg-white/[0.08] pl-8 pr-8 text-xs text-white placeholder:text-white/40 outline-none focus:bg-white/[0.12] focus:ring-1 focus:ring-white/20"
+        className="h-8 w-full rounded-lg border border-border bg-mist pl-8 pr-8 text-xs text-ink placeholder:text-ink/40 outline-none focus:border-brand/40 focus:bg-canvas focus:ring-1 focus:ring-brand/20"
       />
-      {loading && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-white/40" />}
+      {loading && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-ink/35" />}
 
       {showPanel && (
         <div className="absolute left-0 right-0 top-10 z-50 max-h-[70vh] overflow-y-auto rounded-xl border border-border bg-canvas py-1 shadow-xl">

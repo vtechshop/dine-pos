@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Search, ShoppingCart, X, Plus, Minus, Trash2,
   UtensilsCrossed, ShoppingBag, Truck, ChevronRight,
@@ -16,6 +16,7 @@ import { checkGiftVoucher } from '../../api/giftVouchers';
 import { lookupCustomer } from '../../api/loyalty';
 import type { LoyaltyLookupResult } from '../../api/loyalty';
 import { enqueueOrder, newOfflineId, afterCreateFor } from '../../utils/offlineQueue';
+import { printBill } from '../../utils/printBill';
 import { useIsOnline } from './OfflineBanner';
 import { classifySyncError } from '../../sync/syncEngine';
 import {
@@ -71,39 +72,79 @@ function ProductCard({
   sym: string;
 }) {
   const isVeg = product.isVeg !== false;
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImg = !!product.image && !imgFailed;
+  const variantCount = (product.variants ?? []).length;
+  const options = variantCount > 0 || (product.modifierGroups ?? []).length > 0;
   return (
-    <div className={`group relative rounded-xl border transition ${
+    <div className={`group relative flex flex-col overflow-hidden rounded-xl border bg-canvas transition ${
       product.isAvailable
-        ? 'border-border bg-canvas hover:border-brand/30 hover:shadow-sm'
-        : 'border-border/50 bg-mist/60 opacity-60'
+        ? 'border-border hover:border-brand/40 hover:shadow-sm'
+        : 'border-border opacity-60'
     }`}>
       <button
         type="button"
         onClick={() => onAdd(product)}
         disabled={!product.isAvailable}
-        className="flex w-full flex-col px-3 py-2 text-left active:scale-[0.98]"
+        aria-label={`Add ${product.name}`}
+        className="flex flex-1 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:cursor-not-allowed"
       >
-        <div className="mb-1 flex items-center justify-between gap-1 pr-4">
-          <span className={`h-3 w-3 shrink-0 rounded-sm border ${isVeg ? 'border-emerald-500' : 'border-red-500'}`}>
-            <span className={`block h-1.5 w-1.5 m-[2px] rounded-full ${isVeg ? 'bg-emerald-500' : 'bg-red-500'}`} />
+        {/* Photo — fixed 16:10 frame so cards don't jump while images load */}
+        <div className="relative aspect-[16/10] w-full bg-mist">
+          {showImg ? (
+            <img
+              src={product.image}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              onError={() => setImgFailed(true)}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <UtensilsCrossed size={22} className="text-ink/15" />
+            </div>
+          )}
+          <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+            product.isAvailable ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+          }`}>
+            {product.isAvailable ? 'Available' : 'Unavailable'}
           </span>
-          <span className="text-xs font-bold text-ink">{fmtINR(sym, product.price)}</span>
         </div>
-        <p className="text-xs font-medium leading-tight text-ink line-clamp-2">{product.name}</p>
-        {product.stock !== undefined && product.stock >= 0 && product.stock <= 5 && (
-          <p className="mt-1 text-[10px] text-amber-500">Only {product.stock} left</p>
-        )}
-        {!product.isAvailable && (
-          <p className="mt-1 text-[10px] text-ink/40">Unavailable</p>
-        )}
+
+        <div className="flex flex-1 flex-col gap-1 p-2.5">
+          <div className="flex items-start gap-1.5">
+            <span title={isVeg ? 'Veg' : 'Non-veg'} className={`mt-0.5 h-3 w-3 shrink-0 rounded-sm border ${isVeg ? 'border-green-600' : 'border-red-600'}`}>
+              <span className={`m-[2px] block h-1.5 w-1.5 rounded-full ${isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
+            </span>
+            <p className="line-clamp-2 text-[13px] font-medium leading-tight text-ink">{product.name}</p>
+          </div>
+          {variantCount > 0 && (
+            <p className="text-[11px] text-ink/50">{variantCount} size{variantCount === 1 ? '' : 's'}</p>
+          )}
+          {product.stock !== undefined && product.stock >= 0 && product.stock <= 5 && (
+            <p className="text-[11px] text-amber-600">Only {product.stock} left</p>
+          )}
+          <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+            <span className="text-sm font-bold text-ink">
+              {variantCount > 0 && <span className="text-[11px] font-normal text-ink/50">from </span>}
+              {fmtINR(sym, product.price)}
+            </span>
+            {product.isAvailable && (
+              <span className="rounded-lg bg-brand px-2.5 py-1 text-[11px] font-semibold text-white transition group-hover:bg-brand/90">
+                {options ? 'Choose' : 'Add'}
+              </span>
+            )}
+          </div>
+        </div>
       </button>
       <button
         type="button"
         onClick={() => onToggleFav(product._id)}
-        className="absolute right-2 top-2 rounded-full p-0.5 text-ink/20 transition hover:text-amber-400"
+        className="absolute right-2 top-2 rounded-full bg-white/85 p-1 text-ink/35 shadow-sm transition hover:text-amber-500"
         aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
       >
-        <Star size={11} className={isFav ? 'fill-amber-400 text-amber-400' : ''} />
+        <Star size={12} className={isFav ? 'fill-amber-400 text-amber-400' : ''} />
       </button>
     </div>
   );
@@ -127,21 +168,30 @@ function CatButton({ active, onClick, children }: { active: boolean; onClick: ()
 
 // ── Cart item row ─────────────────────────────────────────────────────────────
 
-function CartRow({ item, onQty, onRemove, onNotes, sym }: {
+function CartRow({ item, onQty, onRemove, onNotes, sym, image }: {
   item: CartItem;
   onQty: (id: string, qty: number) => void;
   onRemove: (id: string) => void;
   onNotes: (id: string, notes: string) => void;
   sym: string;
+  image?: string;
 }) {
   const [editNotes, setEditNotes] = useState(false);
   const [draft, setDraft] = useState(item.notes);
+  const [imgFailed, setImgFailed] = useState(false);
   const unitPrice = item.price + (item.modifierTotal ?? 0);
   const total = unitPrice * item.quantity;
 
   return (
     <div className="border-b border-border/60 pb-2.5 pt-2.5 last:border-0 last:pb-0">
       <div className="flex items-start gap-2">
+        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg bg-mist">
+          {image && !imgFailed ? (
+            <img src={image} alt="" loading="lazy" onError={() => setImgFailed(true)} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center"><UtensilsCrossed size={13} className="text-ink/20" /></div>
+          )}
+        </div>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium leading-tight text-ink truncate">{item.productName}</p>
           {item.variantName && (
@@ -377,6 +427,7 @@ export function NewOrderPanel() {
   const [prodLoading, setProdLoading] = useState(true);
   const [activeCat, setActiveCat]   = useState<string>('');
   const pillsRef = useRef<HTMLDivElement>(null);
+  const billRef  = useRef<HTMLDivElement>(null);
   const [search, setSearch]         = useState('');
 
   // ── Favorites (hotel-scoped localStorage) ──────────────────────────────────
@@ -577,9 +628,19 @@ export function NewOrderPanel() {
   }
 
   // ── Filtered product list ──────────────────────────────────────────────────
+  // A product's category may arrive as an id or as { _id, name }
+  const categoryIdOf = (p: Product): string =>
+    p.category && typeof p.category === 'object' ? String(p.category._id) : String(p.category ?? '');
+  const categoryCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of products) m.set(categoryIdOf(p), (m.get(categoryIdOf(p)) ?? 0) + 1);
+    return m;
+  }, [products]); // eslint-disable-line react-hooks/exhaustive-deps
+  const productImages = useMemo(() => new Map(products.map(p => [p._id, p.image])), [products]);
+
   const visibleProducts = products.filter(p => {
     if (activeCat === FAVS_CAT) return favorites.includes(p._id);
-    const inCat = !activeCat || String(p.category) === activeCat;
+    const inCat = !activeCat || categoryIdOf(p) === activeCat;
     const inSearch = !search ||
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       (p.shortCode ?? '').toLowerCase().includes(search.toLowerCase());
@@ -764,7 +825,8 @@ export function NewOrderPanel() {
   }
 
   // ── Submit order ───────────────────────────────────────────────────────────
-  async function handleConfirmOrder() {
+  // pay=false is a KOT: the order goes to the kitchen and is paid later from Pending Bills.
+  async function handleConfirmOrder(opts: { pay: boolean; print: boolean } = { pay: true, print: false }) {
     if (cart.length === 0) return;
     setSubmitting(true);
     setSubmitError(null);
@@ -871,10 +933,19 @@ export function NewOrderPanel() {
       pendingPayload = payload;
       const created = await createOrder(payload);
 
-      if (orderType !== 'dine-in') {
+      const paidNow = opts.pay && orderType !== 'dine-in';
+      if (paidNow) {
         // Takeaway and counter delivery go straight from pending to completed on the server.
         // Don't send a 'served' step: cashiers may not set it (403 "Access denied").
         await completeOrder(created._id);
+      }
+
+      if (opts.print) {
+        printBill(
+          { ...created, status: paidNow ? 'completed' : created.status, paymentMethod: paidNow ? payMethod : null },
+          { hotelName: settings?.hotelName, address: settings?.address, phone: settings?.phone,
+            gstNumber: settings?.gstNumber, footerText: settings?.footerText, currencySymbol: sym },
+        );
       }
 
       setSavedOffline(false);
@@ -899,7 +970,7 @@ export function NewOrderPanel() {
         try {
           await enqueueOrder(hotelId, pendingPayload, {
             offlineId,
-            afterCreate: afterCreateFor(pendingPayload.orderSource),
+            afterCreate: opts.pay ? afterCreateFor(pendingPayload.orderSource) : { markServed: false, complete: false },
           });
           setSavedOffline(true);
           setWaReceiptPhone(
@@ -924,12 +995,14 @@ export function NewOrderPanel() {
   // ── Split / cash validation ────────────────────────────────────────────────
   const splitTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) + (parseFloat(splitCard) || 0);
   const splitOk = payMethod !== 'split' || Math.abs(splitTotal - grandTotal) < 0.5;
-  const cashOk  = payMethod !== 'cash'  || (parseFloat(cashGiven) || 0) >= grandTotal;
+  // Blank "cash received" means exact cash; a typed amount must cover the bill
+  const cashOk  = payMethod !== 'cash'  || cashGiven.trim() === '' || (parseFloat(cashGiven) || 0) >= grandTotal;
   const customerOk =
     orderType === 'dine-in'  ? (dineIn.customerName.trim() !== '' && dineIn.phone.trim() !== '') :
     orderType === 'takeaway' ? (takeAway.customerName.trim() !== '' && takeAway.phone.trim() !== '') :
     (delivery.customerName.trim() !== '' && delivery.phone.trim() !== '');
   const canConfirm = cart.length > 0 && splitOk && cashOk && customerOk;
+  const canKot     = cart.length > 0 && customerOk;
 
   // ── Success overlay ────────────────────────────────────────────────────────
   if (successOrder) {
@@ -959,7 +1032,10 @@ export function NewOrderPanel() {
     <div className="flex flex-col gap-4 lg:h-full lg:flex-row">
       {/* ── Category rail (wide screens; phones use the pill row) ─────────────── */}
       <nav aria-label="Categories" className="hidden w-36 shrink-0 flex-col gap-1 overflow-y-auto rounded-xl border border-border bg-canvas p-1.5 lg:flex xl:w-44">
-        <CatButton active={!activeCat} onClick={() => { setSearch(''); setActiveCat(''); }}>All</CatButton>
+        <CatButton active={!activeCat} onClick={() => { setSearch(''); setActiveCat(''); }}>
+          <span className="flex-1">All</span>
+          <span className="text-[10px] opacity-60">{products.length}</span>
+        </CatButton>
         <CatButton active={activeCat === FAVS_CAT} onClick={() => { setSearch(''); setActiveCat(activeCat === FAVS_CAT ? '' : FAVS_CAT); }}>
           <Star size={11} className={activeCat === FAVS_CAT ? 'fill-white' : 'fill-amber-400 text-amber-400'} />
           <span className="flex-1">Favorites</span>
@@ -967,7 +1043,8 @@ export function NewOrderPanel() {
         </CatButton>
         {categories.map(cat => (
           <CatButton key={cat._id} active={activeCat === cat._id} onClick={() => { setSearch(''); setActiveCat(activeCat === cat._id ? '' : cat._id); }}>
-            {cat.name}
+            <span className="flex-1">{cat.name}</span>
+            <span className="text-[10px] opacity-60">{categoryCounts.get(String(cat._id)) ?? 0}</span>
           </CatButton>
         ))}
       </nav>
@@ -1111,7 +1188,7 @@ export function NewOrderPanel() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2 pb-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5 pb-2">
             {visibleProducts.map(p => (
               <ProductCard
                 key={p._id}
@@ -1124,11 +1201,25 @@ export function NewOrderPanel() {
             ))}
           </div>
         )}
+
+        {/* Narrow screens: the bill sits below the menu — keep a shortcut to it in view */}
+        {cart.length > 0 && (
+          <div className="sticky bottom-0 z-10 pb-1 pt-2 lg:hidden">
+            <button
+              type="button"
+              onClick={() => billRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              className="flex w-full items-center justify-between rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white shadow-lg"
+            >
+              <span>View order · {cart.reduce((s, i) => s + i.quantity, 0)} item{cart.reduce((s, i) => s + i.quantity, 0) === 1 ? '' : 's'}</span>
+              <span>{fmtINR(sym, grandTotal)}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── RIGHT: cart + payment ────────────────────────────────────────────── */}
       {/* Scrolls on its own on wide screens so the page itself never scrolls */}
-      <div className="w-full shrink-0 space-y-3 lg:min-h-0 lg:w-80 lg:overflow-y-auto lg:pr-1 xl:w-96">
+      <div ref={billRef} className="w-full shrink-0 scroll-mt-4 space-y-3 lg:min-h-0 lg:w-80 lg:overflow-y-auto lg:pr-1 xl:w-96">
         {/* Order type */}
         <div className="flex gap-1 rounded-xl border border-border bg-canvas p-1">
           <TypeTab active={orderType === 'dine-in'}  icon={<UtensilsCrossed size={13} />} label="Dine In"   onClick={() => setOrderType('dine-in')} />
@@ -1343,7 +1434,7 @@ export function NewOrderPanel() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ShoppingCart size={16} className="text-ink/40" />
-            <span className="text-sm font-semibold text-ink">Cart</span>
+            <span className="text-sm font-semibold text-ink">Order Summary</span>
             {cart.length > 0 && (
               <span className="rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
                 {cart.reduce((s, i) => s + i.quantity, 0)}
@@ -1365,7 +1456,7 @@ export function NewOrderPanel() {
         {cart.length === 0 && (
           <div className="rounded-xl border border-dashed border-border py-8 text-center">
             <ShoppingCart size={20} className="mx-auto mb-2 text-ink/20" />
-            <p className="text-xs text-ink/40">Add products to cart</p>
+            <p className="text-xs text-ink/40">No items yet. Pick from the menu to start the order.</p>
           </div>
         )}
 
@@ -1380,6 +1471,7 @@ export function NewOrderPanel() {
                 onRemove={removeFromCart}
                 onNotes={updateItemNotes}
                 sym={sym}
+                image={productImages.get(item.productId)}
               />
             ))}
           </div>
@@ -1516,22 +1608,6 @@ export function NewOrderPanel() {
           </div>
         )}
 
-        {/* Payment section */}
-        {cart.length > 0 && showPayment && (
-          <div className="rounded-xl border border-border bg-canvas p-3">
-            <PaymentPanel
-              grandTotal={grandTotal}
-              sym={sym}
-              method={payMethod}
-              setMethod={setPayMethod}
-              splitCash={splitCash} setSplitCash={setSplitCash}
-              splitUpi={splitUpi}   setSplitUpi={setSplitUpi}
-              splitCard={splitCard} setSplitCard={setSplitCard}
-              cashGiven={cashGiven} setCashGiven={setCashGiven}
-            />
-          </div>
-        )}
-
         {/* Error */}
         {submitError && (
           <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
@@ -1540,49 +1616,116 @@ export function NewOrderPanel() {
           </div>
         )}
 
-        {/* Action buttons — stay visible at the bottom of the cart */}
+        {/* Bill footer: payment choice + actions, always visible at the bottom */}
         {cart.length > 0 && (
-          <div className="sticky bottom-0 grid grid-cols-2 gap-2 bg-mist pb-0.5 pt-2">
-
-            <button
-              type="button"
-              onClick={handleHold}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 py-2.5 text-sm font-semibold text-amber-700 transition hover:bg-amber-100"
-            >
-              Hold Bill
-            </button>
-
-            {!showPayment ? (
-              <button
-                type="button"
-                onClick={() => setShowPayment(true)}
-                className="flex items-center justify-center gap-1.5 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white transition hover:bg-brand/90"
-              >
-                Take Payment
-                <ChevronRight size={14} />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void handleConfirmOrder()}
-                disabled={submitting || !canConfirm}
-                className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
-              >
-                {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                {submitting ? 'Placing…' : orderType === 'dine-in' ? 'Send to Kitchen' : 'Confirm & Pay'}
+          <div className="sticky bottom-0 space-y-2 border-t border-border bg-mist pb-0.5 pt-2">
+            {/* Payable amount — always in view (same preview figures as the breakdown above) */}
+            <div className="flex items-end justify-between gap-2 px-0.5">
+              <span className="text-[11px] leading-tight text-ink/55">
+                Subtotal {fmtINR(sym, subtotal)} · Tax {fmtINR(sym, taxTotal)}
+                {subtotal + taxTotal + deliveryChargeAmt - grandTotal > 0.005 && (
+                  <> · Saved {fmtINR(sym, subtotal + taxTotal + deliveryChargeAmt - grandTotal)}</>
+                )}
+              </span>
+              <span className="shrink-0 text-lg font-bold text-ink">{fmtINR(sym, grandTotal)}</span>
+            </div>
+            {/* Payment choice */}
+            <div className="flex gap-1 rounded-lg border border-border bg-canvas p-1">
+              {(['cash', 'upi', 'card', 'split'] as const).map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => { setPayMethod(m); if (m === 'split') setShowPayment(true); }}
+                  className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition ${
+                    payMethod === m ? 'bg-brand text-white' : 'text-ink/60 hover:bg-mist'
+                  }`}
+                >
+                  {m === 'upi' ? 'UPI' : m.charAt(0).toUpperCase() + m.slice(1)}
+                </button>
+              ))}
+            </div>
+            {payMethod === 'cash' && !showPayment && (
+              <button type="button" onClick={() => setShowPayment(true)} className="text-[11px] font-medium text-brand hover:underline">
+                Cash received / change
               </button>
             )}
-          </div>
-        )}
+            {showPayment && (
+              <div className="rounded-xl border border-border bg-canvas p-3">
+                <PaymentPanel
+                  grandTotal={grandTotal}
+                  sym={sym}
+                  method={payMethod}
+                  setMethod={setPayMethod}
+                  splitCash={splitCash} setSplitCash={setSplitCash}
+                  splitUpi={splitUpi}   setSplitUpi={setSplitUpi}
+                  splitCard={splitCard} setSplitCard={setSplitCard}
+                  cashGiven={cashGiven} setCashGiven={setCashGiven}
+                />
+                <button type="button" onClick={() => setShowPayment(false)} className="mt-2 w-full text-center text-[11px] text-ink/40 hover:text-ink/60">
+                  Hide
+                </button>
+              </div>
+            )}
 
-        {showPayment && cart.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowPayment(false)}
-            className="w-full text-center text-xs text-ink/40 hover:text-ink/60"
-          >
-            ← Back to cart
-          </button>
+            {/* Hold · KOT · KOT & Print */}
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={handleHold}
+                className="rounded-xl border border-amber-200 bg-amber-50 py-2.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+              >
+                Hold
+              </button>
+              <button
+                type="button"
+                title="Send to kitchen, pay later from Pending Bills"
+                onClick={() => void handleConfirmOrder({ pay: false, print: false })}
+                disabled={submitting || !canKot}
+                className="rounded-xl bg-ink py-2.5 text-xs font-semibold text-white transition hover:bg-ink/85 disabled:opacity-50"
+              >
+                KOT
+              </button>
+              <button
+                type="button"
+                title="Send to kitchen and print the bill"
+                onClick={() => void handleConfirmOrder({ pay: false, print: true })}
+                disabled={submitting || !canKot}
+                className="rounded-xl bg-ink py-2.5 text-xs font-semibold text-white transition hover:bg-ink/85 disabled:opacity-50"
+              >
+                KOT &amp; Print
+              </button>
+            </div>
+
+            {/* Pay · Pay & Print */}
+            {orderType === 'dine-in' ? (
+              <p className="text-center text-[11px] text-ink/50">
+                Dine-in: send the KOT now and take payment from Pending Bills.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmOrder({ pay: true, print: false })}
+                  disabled={submitting || !canConfirm}
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  Pay {fmtINR(sym, grandTotal)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmOrder({ pay: true, print: true })}
+                  disabled={submitting || !canConfirm}
+                  className="rounded-xl border border-emerald-600 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50"
+                >
+                  Pay &amp; Print
+                </button>
+              </div>
+            )}
+            {!customerOk && (
+              <p className="text-center text-[11px] text-amber-700">Enter the customer name and phone above to continue.</p>
+            )}
+          </div>
         )}
       </div>
 

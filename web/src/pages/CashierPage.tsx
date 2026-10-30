@@ -330,26 +330,27 @@ export function CashierPage() {
       nowMs - new Date(p.lastHeartbeat).getTime() >= 3 * 60_000,
   ).length;
 
-  // dark = rendered inside the dark top bar (wide screens); light = own row (small screens)
+  // inTopBar = rendered inside the (light) top bar on wide screens; otherwise its own row.
+  // Only the layout differs — colours are the same light style in both places.
   const actionCls = (dark: boolean) => dark
     ? 'rounded-lg border border-white/15 p-1.5 text-white/55 transition hover:bg-white/[0.08] hover:text-white'
     : 'rounded-lg border border-border p-1.5 text-ink/40 hover:bg-mist hover:text-ink/70';
 
-  const headerBar = (dark: boolean) => (
-    <div className={`flex min-w-0 items-center gap-3 ${dark ? 'flex-1' : ''}`}>
+  const headerBar = (inTopBar: boolean) => (
+    <div className={`flex min-w-0 items-center gap-3 ${inTopBar ? 'flex-1' : ''}`}>
       {/* Profile chip */}
       <button
         type="button"
         onClick={() => setActiveTab('profile')}
-        className={`flex shrink-0 items-center gap-2 rounded-lg px-1.5 py-1 transition ${dark ? 'hover:bg-white/[0.08]' : 'hover:bg-mist'}`}
+        className={`flex shrink-0 items-center gap-2 rounded-lg px-1.5 py-1 transition hover:bg-mist`}
         title="My Profile"
       >
-        <div className={`flex shrink-0 items-center justify-center rounded-full bg-brand/10 font-bold text-brand ${dark ? 'h-7 w-7 bg-brand/20 text-xs' : 'h-8 w-8 text-sm'}`}>
+        <div className={`flex shrink-0 items-center justify-center rounded-full bg-brand/10 font-bold text-brand ${inTopBar ? 'h-7 w-7 text-xs' : 'h-8 w-8 text-sm'}`}>
           {identity.name.charAt(0).toUpperCase()}
         </div>
-        <div className={`text-left ${dark ? 'hidden xl:block' : 'hidden sm:block'}`}>
-          <p className={`text-xs font-semibold leading-tight ${dark ? 'text-white' : 'text-ink'}`}>{identity.name}</p>
-          <p className={`text-[10px] ${dark ? 'text-white/45' : 'text-ink/45'}`}>
+        <div className={`text-left ${inTopBar ? 'hidden xl:block' : 'hidden sm:block'}`}>
+          <p className="text-xs font-semibold leading-tight text-ink">{identity.name}</p>
+          <p className="text-[10px] text-ink/45">
             {identity.code && `${identity.code} · `}
             {shift?.status === 'open'
               ? `Shift open · ${new Date(shift.openedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
@@ -365,25 +366,25 @@ export function CashierPage() {
           drawerBalance={drawerBalance}
           sym={sym}
           offlinePrinters={offlinePrinters}
-          dark={dark}
+          dark={false}
         />
       </div>
 
       {/* Jump to a screen by name */}
-      <CashierQuickSearch dark={dark} />
+      <CashierQuickSearch />
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <NotificationBell dark={dark} />
-        <button type="button" onClick={openCustomerDisplay} className={actionCls(dark)} title="Customer Display (second screen)">
+        <NotificationBell />
+        <button type="button" onClick={openCustomerDisplay} className={actionCls(false)} title="Customer Display (second screen)">
           <Monitor size={13} />
         </button>
-        <button type="button" onClick={() => void loadHeader()} className={actionCls(dark)} title="Refresh (F5)">
+        <button type="button" onClick={() => void loadHeader()} className={actionCls(false)} title="Refresh (F5)">
           <RefreshCw size={13} />
         </button>
         {/* The top bar already has a sign-out button */}
-        {!dark && (
-          <button type="button" onClick={() => void logout()} className={actionCls(dark)} title="Logout">
+        {!inTopBar && (
+          <button type="button" onClick={() => void logout()} className={actionCls(false)} title="Logout">
             <LogOut size={13} />
           </button>
         )}

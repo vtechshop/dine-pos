@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Outlet, Navigate } from 'react-router-dom';
+import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { TopBar } from './TopBar';
@@ -13,6 +13,7 @@ import { TrialBanner } from './TrialBanner';
 export function AppLayout() {
   const { isAuthenticated, logout } = useAuth();
   const { socket } = useSocket();
+  const { pathname } = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [maintenance, setMaintenance] = useState<{ active: boolean; message: string } | null>(null);
 
@@ -52,7 +53,7 @@ export function AppLayout() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-ink">
+    <div className="flex h-full flex-col overflow-hidden bg-mist">
       <TopBar onMenuClick={() => setSidebarOpen(true)} />
 
       <div className="flex flex-1 overflow-hidden">
@@ -67,7 +68,8 @@ export function AppLayout() {
           </div>
         </main>
 
-        <RightPanel />
+        {/* The cashier POS has its own order summary on the right */}
+        {!pathname.startsWith('/cashier') && <RightPanel />}
       </div>
 
       <StatusBar />
