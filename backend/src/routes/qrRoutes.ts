@@ -37,6 +37,7 @@ import Guest from '../models/Guest';
 import CustomerProfile from '../models/CustomerProfile';
 import Order from '../models/Order';
 import DailyCounter from '../models/DailyCounter';
+import { nextCustomerId } from '../utils/customerId';
 import { resolveHotelStatus } from '../middleware/auth';
 import { sendError } from '../utils/sendError';
 import { logger } from '../utils/logger';
@@ -73,16 +74,7 @@ const qrWriteLimiter = makeRateLimiter({
 });
 
 // ── Shared helper: generate a per-hotel CustomerProfile sequential ID ─────────
-const generateCustomerId = async (hotelId: string): Promise<string> => {
-  const key = `CUST-${hotelId}`;
-  const counter = await DailyCounter.findOneAndUpdate(
-    { key },
-    { $inc: { seq: 1 }, $setOnInsert: { key } },
-    { upsert: true, new: true }
-  );
-  const shortId = hotelId.slice(-6).toUpperCase();
-  return `CUST-${shortId}-${String(counter!.seq).padStart(4, '0')}`;
-};
+const generateCustomerId = nextCustomerId;
 
 // ── Shared helper: validate hotel is active + has required features ────────────
 async function validateHotelForQR(

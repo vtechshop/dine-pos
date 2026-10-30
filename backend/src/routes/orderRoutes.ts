@@ -5,6 +5,7 @@ import Hotel from '../models/Hotel';
 import Product from '../models/Product';
 import ModifierGroup from '../models/ModifierGroup';
 import DailyCounter from '../models/DailyCounter';
+import { nextCustomerId } from '../utils/customerId';
 import TableSession from '../models/TableSession';
 import Guest from '../models/Guest';
 import CustomerProfile from '../models/CustomerProfile';
@@ -838,13 +839,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
               });
 
               if (!profile && cleanName) {
-                const counterKey = `CUST-${req.hotelId}`;
-                const counter = await DailyCounter.findOneAndUpdate(
-                  { key: counterKey },
-                  { $inc: { seq: 1 }, $setOnInsert: { key: counterKey } },
-                  { upsert: true, new: true }
-                );
-                const newCustomerId = `CUST-${req.hotelId!.slice(-6).toUpperCase()}-${String(counter!.seq).padStart(4, '0')}`;
+                const newCustomerId = await nextCustomerId(req.hotelId!);
                 profile = await CustomerProfile.create({
                   hotelId:     new mongoose.Types.ObjectId(req.hotelId),
                   customerId:  newCustomerId,
