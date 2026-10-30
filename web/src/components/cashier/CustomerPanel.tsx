@@ -408,7 +408,7 @@ export function CustomerPanel() {
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-xs font-semibold text-brand">{c.loyaltyBalance ?? 0} pts</p>
-                  <p className="text-[10px] text-ink/40">{c.visitCount} visits</p>
+                  <p className="text-[10px] text-ink/40">{c.visitCount} visit{c.visitCount === 1 ? '' : 's'}</p>
                 </div>
               </div>
             </button>

@@ -30,6 +30,7 @@ import Settings from '../models/Settings';
 import CustomerProfile from '../models/CustomerProfile';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
 import DailyCounter from '../models/DailyCounter';
+import { nextCustomerId } from '../utils/customerId';
 import { getLoyaltyConfig, adjustPoints, calculateMaxRedeemablePoints, calculateRedeemValue, calculateTier, resolveOrgLoyalty } from '../utils/loyaltyUtils';
 import OrganizationCustomer from '../models/OrganizationCustomer';
 import { normalizePhone } from '../utils/phoneUtils';
@@ -38,16 +39,8 @@ import crypto from 'crypto';
 import { getMessagingProvider } from '../services/messagingProvider';
 import { logger } from '../utils/logger';
 
-async function generateCustomerId(hotelId: string): Promise<string> {
-  const key     = `LOYALTYCUST-${hotelId}`;
-  const counter = await DailyCounter.findOneAndUpdate(
-    { key },
-    { $inc: { seq: 1 }, $setOnInsert: { key } },
-    { upsert: true, new: true },
-  );
-  const shortId = hotelId.slice(-6).toUpperCase();
-  return `CUST-${shortId}-${String(counter!.seq).padStart(4, '0')}`;
-}
+// Shared with order/QR auto-create so customer IDs never collide
+const generateCustomerId = nextCustomerId;
 
 // ── Segment helpers ───────────────────────────────────────────────────────────
 
@@ -329,7 +322,8 @@ router.post('/customers', requireCashierOrAdmin, async (req: AuthRequest, res: R
 
     res.status(201).json({ customer });
   } catch (err: any) {
-    if (err.code === 11000) {
+    // Only a duplicate phone is the customer's problem; any other duplicate key is ours
+    if (err.code === 11000 && err.keyPattern?.phone) {
       res.status(409).json({ message: 'A customer with this phone number already exists' });
       return;
     }
