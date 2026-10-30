@@ -3,6 +3,7 @@ import {
   RefreshCw, CreditCard, Printer, Trash2, AlertCircle,
   ShoppingBag, UtensilsCrossed, Truck, Clock, GitBranch,
 } from 'lucide-react';
+import { ApiError } from '../../api/client';
 import { fetchCashierOrders, cancelOrder, patchOrderPayment, completeOrder } from '../../api/orders';
 import { reprintJob, fetchReceiptJobs } from '../../api/billing';
 import { PaymentModal } from './PaymentModal';
@@ -197,13 +198,22 @@ function OrderRow({
           onConfirm={async (result: PaymentResult) => {
             // Bug C3 + H7: PATCH /orders/:id/payment (cashier-permitted endpoint)
             // now includes tipAmount and additionalDiscount so they are persisted.
-            await patchOrderPayment(
-              order._id,
-              result.method,
-              result.splitDetails,
-              result.tipAmount || undefined,
-              result.additionalDiscount || undefined,
-            );
+            try {
+              await patchOrderPayment(
+                order._id,
+                result.method,
+                result.splitDetails,
+                result.tipAmount || undefined,
+                result.additionalDiscount || undefined,
+              );
+            } catch (e) {
+              // Paid already (e.g. from another screen): refresh the list when this window closes
+              if (e instanceof ApiError && /already completed/i.test(e.message)) {
+                paymentCompletedRef.current = true;
+                throw new Error('This bill is already paid. Close this window to refresh the list.');
+              }
+              throw e;
+            }
             await completeOrder(order._id);
             paymentCompletedRef.current = true;
           }}
@@ -298,14 +308,17 @@ export function PendingBillsPanel() {
     return () => clearInterval(t);
   }, [load]);
 
+  // /orders/cashier also returns today's paid orders — those are not pending bills
+  const pending = orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled');
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/40">Pending Bills</h2>
         <div className="flex items-center gap-2">
-          {orders.length > 0 && (
+          {pending.length > 0 && (
             <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">
-              {orders.length} pending
+              {pending.length} pending
             </span>
           )}
           <button
@@ -318,7 +331,7 @@ export function PendingBillsPanel() {
         </div>
       </div>
 
-      {loading && orders.length === 0 && (
+      {loading && pending.length === 0 && (
         <div className="flex justify-center py-8"><Spinner /></div>
       )}
 
@@ -329,7 +342,7 @@ export function PendingBillsPanel() {
         </div>
       )}
 
-      {!loading && orders.length === 0 && !error && (
+      {!loading && pending.length === 0 && !error && (
         <div className="rounded-xl border border-dashed border-border py-10 text-center">
           <CreditCard size={24} className="mx-auto mb-2 text-ink/20" />
           <p className="text-sm font-medium text-ink/40">No pending bills</p>
@@ -338,7 +351,7 @@ export function PendingBillsPanel() {
       )}
 
       <div className="space-y-2.5">
-        {orders.map(order => (
+        {pending.map(order => (
           <OrderRow
             key={order._id}
             order={order}

@@ -774,15 +774,15 @@ export function PaymentModal({
                   to PaymentMethod union in shared types.
                 </p>
               </div>
-
-              {/* Error */}
-              {error && (
-                <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
-                  <AlertCircle size={13} className="text-red-500" />
-                  <p className="text-xs text-red-600">{error}</p>
-                </div>
-              )}
             </div>
+          </div>
+        )}
+
+        {/* Error — next to the buttons so it is never scrolled out of sight */}
+        {!done && error && (
+          <div role="alert" className="mx-5 mt-2 flex shrink-0 items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
+            <AlertCircle size={13} className="shrink-0 text-red-500" />
+            <p className="text-xs text-red-600">{error}</p>
           </div>
         )}
 

@@ -221,7 +221,8 @@ export function DashboardPanel() {
   }, [loadData]);
 
   // Derived counts
-  const pendingCount = orders.filter(o => o.status === 'served' || o.status === 'pending').length;
+  // Same rule as Pending Bills: every unpaid, uncancelled order
+  const pendingCount = orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length;
   const recentOrders = orders
     .filter(o => o.status === 'completed' || o.status === 'cancelled')
     .slice(0, 6);
