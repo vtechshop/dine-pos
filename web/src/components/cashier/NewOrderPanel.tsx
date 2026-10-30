@@ -109,6 +109,22 @@ function ProductCard({
   );
 }
 
+// ── Category rail button ──────────────────────────────────────────────────────
+
+function CatButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-xs font-semibold leading-tight transition ${
+        active ? 'bg-brand text-white' : 'text-ink/65 hover:bg-mist hover:text-ink'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 // ── Cart item row ─────────────────────────────────────────────────────────────
 
 function CartRow({ item, onQty, onRemove, onNotes, sym }: {
@@ -941,219 +957,24 @@ export function NewOrderPanel() {
 
   return (
     <div className="flex flex-col gap-4 lg:h-full lg:flex-row">
-      {/* ── LEFT: product selection ──────────────────────────────────────────── */}
+      {/* ── Category rail (wide screens; phones use the pill row) ─────────────── */}
+      <nav aria-label="Categories" className="hidden w-36 shrink-0 flex-col gap-1 overflow-y-auto rounded-xl border border-border bg-canvas p-1.5 lg:flex xl:w-44">
+        <CatButton active={!activeCat} onClick={() => { setSearch(''); setActiveCat(''); }}>All</CatButton>
+        <CatButton active={activeCat === FAVS_CAT} onClick={() => { setSearch(''); setActiveCat(activeCat === FAVS_CAT ? '' : FAVS_CAT); }}>
+          <Star size={11} className={activeCat === FAVS_CAT ? 'fill-white' : 'fill-amber-400 text-amber-400'} />
+          <span className="flex-1">Favorites</span>
+          {favorites.length > 0 && <span className="text-[10px] opacity-70">{favorites.length}</span>}
+        </CatButton>
+        {categories.map(cat => (
+          <CatButton key={cat._id} active={activeCat === cat._id} onClick={() => { setSearch(''); setActiveCat(activeCat === cat._id ? '' : cat._id); }}>
+            {cat.name}
+          </CatButton>
+        ))}
+      </nav>
+
+      {/* ── MIDDLE: menu (search + items) ─────────────────────────────────────── */}
       {/* Wide screens: this column scrolls on its own (search + categories pinned). Narrow: the page scrolls, cart below */}
       <div className="min-w-0 space-y-2.5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
-        {/* Order type */}
-        <div className="flex gap-1 rounded-xl border border-border bg-canvas p-1">
-          <TypeTab active={orderType === 'dine-in'}  icon={<UtensilsCrossed size={13} />} label="Dine In"   onClick={() => setOrderType('dine-in')} />
-          <TypeTab active={orderType === 'takeaway'} icon={<ShoppingBag size={13} />}     label="Takeaway"  onClick={() => setOrderType('takeaway')} />
-          <TypeTab active={orderType === 'delivery'} icon={<Truck size={13} />}            label="Delivery"  onClick={() => setOrderType('delivery')} />
-        </div>
-
-        {/* Order meta form — Dine In */}
-        {orderType === 'dine-in' && (
-          // Table · guests · name · phone on one row on wide screens, notes below
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-canvas p-2 xl:grid-cols-4">
-            <select
-              aria-label="Table"
-              value={dineIn.tableId}
-              onChange={e => {
-                const t = tables.find(x => x._id === e.target.value);
-                setDineIn(d => ({ ...d, tableId: e.target.value, tableNumber: t ? String(t.number) : '' }));
-              }}
-              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-            >
-              <option value="">Walk-in / No table</option>
-              {tables.map(t => (
-                <option key={t._id} value={t._id}>T{t.number} ({t.capacity} pax)</option>
-              ))}
-            </select>
-            <div className="relative min-w-0">
-              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-ink/45">Guests</span>
-              <input
-                type="number"
-                min="1"
-                aria-label="Guests"
-                value={dineIn.guestCount}
-                onChange={e => setDineIn(d => ({ ...d, guestCount: e.target.value }))}
-                className="block w-full rounded-lg border border-border py-1.5 pl-14 pr-2 text-xs text-ink outline-none focus:border-brand/50"
-              />
-            </div>
-            <input
-              type="text"
-              aria-label="Customer name"
-              value={dineIn.customerName}
-              onChange={e => setDineIn(d => ({ ...d, customerName: e.target.value }))}
-              placeholder="Customer name *"
-              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-            />
-            <input
-              type="tel"
-              aria-label="Phone"
-              value={dineIn.phone}
-              onChange={e => setDineIn(d => ({ ...d, phone: e.target.value }))}
-              placeholder="Phone *"
-              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-            />
-            <input
-              type="text"
-              aria-label="Order notes"
-              value={dineIn.notes}
-              onChange={e => setDineIn(d => ({ ...d, notes: e.target.value }))}
-              placeholder="Order notes…"
-              className="col-span-2 min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50 xl:col-span-4"
-            />
-          </div>
-        )}
-
-        {/* Order meta form — Takeaway */}
-        {orderType === 'takeaway' && (
-          // One row on wide screens so the menu below gets the height
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-canvas p-2 xl:grid-cols-3">
-            <input
-              type="text"
-              aria-label="Customer name"
-              value={takeAway.customerName}
-              onChange={e => setTakeAway(d => ({ ...d, customerName: e.target.value }))}
-              placeholder="Customer name *"
-              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-            />
-            <input
-              type="tel"
-              aria-label="Phone"
-              value={takeAway.phone}
-              onChange={e => setTakeAway(d => ({ ...d, phone: e.target.value }))}
-              placeholder="Phone *"
-              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-            />
-            <input
-              type="text"
-              aria-label="Order notes"
-              value={takeAway.notes}
-              onChange={e => setTakeAway(d => ({ ...d, notes: e.target.value }))}
-              placeholder="Order notes…"
-              className="col-span-2 min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50 xl:col-span-1"
-            />
-          </div>
-        )}
-
-        {/* Order meta form — Delivery */}
-        {orderType === 'delivery' && (
-          <div className="rounded-xl border border-border bg-canvas p-2 space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                value={delivery.customerName}
-                onChange={e => setDelivery(d => ({ ...d, customerName: e.target.value }))}
-                placeholder="Customer name *"
-                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-              />
-              <input
-                type="tel"
-                value={delivery.phone}
-                onChange={e => setDelivery(d => ({ ...d, phone: e.target.value }))}
-                placeholder="Phone *"
-                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-              />
-            </div>
-            <input
-              type="text"
-              value={delivery.address}
-              onChange={e => setDelivery(d => ({ ...d, address: e.target.value }))}
-              placeholder="Delivery address *"
-              className="block w-full rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                value={delivery.deliveryPartner}
-                onChange={e => setDelivery(d => ({ ...d, deliveryPartner: e.target.value }))}
-                placeholder="Delivery partner"
-                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-              />
-              <input
-                type="number"
-                min="0"
-                value={delivery.deliveryCharge}
-                onChange={e => setDelivery(d => ({ ...d, deliveryCharge: e.target.value }))}
-                placeholder="Delivery charge"
-                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ── Loyalty lookup widget (takeaway / delivery) ──────────────────── */}
-        {orderType !== 'dine-in' && (
-          loyaltyLoading ? (
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-canvas px-3 py-2 text-[11px] text-ink/40">
-              <Loader2 size={12} className="animate-spin" />
-              Looking up loyalty…
-            </div>
-          ) : loyaltyInfo ? (
-            <div className="rounded-xl border border-border bg-canvas p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Star size={12} className="text-brand" />
-                  <span className="text-[11px] font-semibold text-ink">{loyaltyInfo.customer.name}</span>
-                  <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${
-                    loyaltyInfo.customer.tier === 'Platinum' ? 'bg-slate-100 text-slate-700 border-slate-300' :
-                    loyaltyInfo.customer.tier === 'Gold'     ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                    loyaltyInfo.customer.tier === 'Silver'   ? 'bg-gray-100 text-gray-600 border-gray-200' :
-                                                               'bg-orange-50 text-orange-700 border-orange-200'
-                  }`}>{loyaltyInfo.customer.tier}</span>
-                </div>
-                <span className="text-[11px] font-bold tabular-nums text-brand">
-                  {(loyaltyInfo.customer as any).orgLoyaltyBalance !== undefined
-                    ? <>{((loyaltyInfo.customer as any).orgLoyaltyBalance as number).toLocaleString()} org pts</>
-                    : <>{loyaltyInfo.customer.loyaltyBalance.toLocaleString()} pts</>}
-                </span>
-              </div>
-              {loyaltyInfo.customer.loyaltyOptOut ? (
-                <p className="text-[10px] text-ink/40">Customer opted out of loyalty</p>
-              ) : !isOnline && loyaltyInfo.redeemablePoints > 0 ? (
-                <p className="text-[10px] text-amber-600">Loyalty redemption requires an internet connection</p>
-              ) : loyaltyInfo.redeemablePoints > 0 && loyaltyInfo.config ? (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[10px] text-ink/50">
-                    <span>Redeem {loyaltyRedemption} pts → {sym}{Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))} off</span>
-                    <span>Max: {loyaltyInfo.redeemablePoints} pts</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={loyaltyInfo.redeemablePoints}
-                    step={loyaltyInfo.config.minimumRedeemPoints || 1}
-                    value={loyaltyRedemption}
-                    onChange={e => setLoyaltyRedemption(Number(e.target.value))}
-                    className="w-full accent-brand"
-                    disabled={!isOnline}
-                  />
-                  {loyaltyRedemption > 0 && (
-                    <div className="flex items-center justify-between rounded-lg bg-brand/10 px-2 py-1">
-                      <span className="text-[10px] font-medium text-brand">Loyalty discount applied</span>
-                      <span className="text-[11px] font-bold text-brand">
-                        -{sym}{Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-[10px] text-ink/40">
-                  {loyaltyInfo.redeemablePoints === 0
-                    ? (() => {
-                        const orgBal = (loyaltyInfo.customer as any).orgLoyaltyBalance;
-                        const bal = orgBal !== undefined ? orgBal : loyaltyInfo.customer.loyaltyBalance;
-                        return `Balance: ${bal} pts (below minimum redeem threshold)`;
-                      })()
-                    : 'Loyalty not enabled'}
-                </p>
-              )}
-            </div>
-          ) : null
-        )}
-
         <div className="sticky top-0 z-10 space-y-2 bg-mist pb-1">
         {/* Search */}
         <div className="relative">
@@ -1175,7 +996,7 @@ export function NewOrderPanel() {
 
         {/* Category tabs (with Favorites) */}
         {!search && (
-          <div ref={pillsRef} className="flex gap-1.5 overflow-x-auto px-0.5 pb-1 scrollbar-hide">
+          <div ref={pillsRef} className="flex gap-1.5 overflow-x-auto px-0.5 pb-1 scrollbar-hide lg:hidden">
             <button
               type="button"
               onClick={() => { pillsRef.current?.scrollTo({ left: 0 }); setActiveCat(''); }}
@@ -1308,6 +1129,216 @@ export function NewOrderPanel() {
       {/* ── RIGHT: cart + payment ────────────────────────────────────────────── */}
       {/* Scrolls on its own on wide screens so the page itself never scrolls */}
       <div className="w-full shrink-0 space-y-3 lg:min-h-0 lg:w-80 lg:overflow-y-auto lg:pr-1 xl:w-96">
+        {/* Order type */}
+        <div className="flex gap-1 rounded-xl border border-border bg-canvas p-1">
+          <TypeTab active={orderType === 'dine-in'}  icon={<UtensilsCrossed size={13} />} label="Dine In"   onClick={() => setOrderType('dine-in')} />
+          <TypeTab active={orderType === 'takeaway'} icon={<ShoppingBag size={13} />}     label="Takeaway"  onClick={() => setOrderType('takeaway')} />
+          <TypeTab active={orderType === 'delivery'} icon={<Truck size={13} />}            label="Delivery"  onClick={() => setOrderType('delivery')} />
+        </div>
+
+        {/* Order meta form — Dine In */}
+        {orderType === 'dine-in' && (
+          // Table · guests / name · phone, notes below
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-canvas p-2">
+            <select
+              aria-label="Table"
+              value={dineIn.tableId}
+              onChange={e => {
+                const t = tables.find(x => x._id === e.target.value);
+                setDineIn(d => ({ ...d, tableId: e.target.value, tableNumber: t ? String(t.number) : '' }));
+              }}
+              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            >
+              <option value="">Walk-in / No table</option>
+              {tables.map(t => (
+                <option key={t._id} value={t._id}>T{t.number} ({t.capacity} pax)</option>
+              ))}
+            </select>
+            <div className="relative min-w-0">
+              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-ink/45">Guests</span>
+              <input
+                type="number"
+                min="1"
+                aria-label="Guests"
+                value={dineIn.guestCount}
+                onChange={e => setDineIn(d => ({ ...d, guestCount: e.target.value }))}
+                className="block w-full rounded-lg border border-border py-1.5 pl-14 pr-2 text-xs text-ink outline-none focus:border-brand/50"
+              />
+            </div>
+            <input
+              type="text"
+              aria-label="Customer name"
+              value={dineIn.customerName}
+              onChange={e => setDineIn(d => ({ ...d, customerName: e.target.value }))}
+              placeholder="Customer name *"
+              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            />
+            <input
+              type="tel"
+              aria-label="Phone"
+              value={dineIn.phone}
+              onChange={e => setDineIn(d => ({ ...d, phone: e.target.value }))}
+              placeholder="Phone *"
+              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            />
+            <input
+              type="text"
+              aria-label="Order notes"
+              value={dineIn.notes}
+              onChange={e => setDineIn(d => ({ ...d, notes: e.target.value }))}
+              placeholder="Order notes…"
+              className="col-span-2 min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            />
+          </div>
+        )}
+
+        {/* Order meta form — Takeaway */}
+        {orderType === 'takeaway' && (
+          // Name · phone, notes below
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-canvas p-2">
+            <input
+              type="text"
+              aria-label="Customer name"
+              value={takeAway.customerName}
+              onChange={e => setTakeAway(d => ({ ...d, customerName: e.target.value }))}
+              placeholder="Customer name *"
+              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            />
+            <input
+              type="tel"
+              aria-label="Phone"
+              value={takeAway.phone}
+              onChange={e => setTakeAway(d => ({ ...d, phone: e.target.value }))}
+              placeholder="Phone *"
+              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            />
+            <input
+              type="text"
+              aria-label="Order notes"
+              value={takeAway.notes}
+              onChange={e => setTakeAway(d => ({ ...d, notes: e.target.value }))}
+              placeholder="Order notes…"
+              className="col-span-2 min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            />
+          </div>
+        )}
+
+        {/* Order meta form — Delivery */}
+        {orderType === 'delivery' && (
+          <div className="rounded-xl border border-border bg-canvas p-2 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={delivery.customerName}
+                onChange={e => setDelivery(d => ({ ...d, customerName: e.target.value }))}
+                placeholder="Customer name *"
+                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+              />
+              <input
+                type="tel"
+                value={delivery.phone}
+                onChange={e => setDelivery(d => ({ ...d, phone: e.target.value }))}
+                placeholder="Phone *"
+                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+              />
+            </div>
+            <input
+              type="text"
+              value={delivery.address}
+              onChange={e => setDelivery(d => ({ ...d, address: e.target.value }))}
+              placeholder="Delivery address *"
+              className="block w-full rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={delivery.deliveryPartner}
+                onChange={e => setDelivery(d => ({ ...d, deliveryPartner: e.target.value }))}
+                placeholder="Delivery partner"
+                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+              />
+              <input
+                type="number"
+                min="0"
+                value={delivery.deliveryCharge}
+                onChange={e => setDelivery(d => ({ ...d, deliveryCharge: e.target.value }))}
+                placeholder="Delivery charge"
+                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ── Loyalty lookup widget (takeaway / delivery) ──────────────────── */}
+        {orderType !== 'dine-in' && (
+          loyaltyLoading ? (
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-canvas px-3 py-2 text-[11px] text-ink/40">
+              <Loader2 size={12} className="animate-spin" />
+              Looking up loyalty…
+            </div>
+          ) : loyaltyInfo ? (
+            <div className="rounded-xl border border-border bg-canvas p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Star size={12} className="text-brand" />
+                  <span className="text-[11px] font-semibold text-ink">{loyaltyInfo.customer.name}</span>
+                  <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${
+                    loyaltyInfo.customer.tier === 'Platinum' ? 'bg-slate-100 text-slate-700 border-slate-300' :
+                    loyaltyInfo.customer.tier === 'Gold'     ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                    loyaltyInfo.customer.tier === 'Silver'   ? 'bg-gray-100 text-gray-600 border-gray-200' :
+                                                               'bg-orange-50 text-orange-700 border-orange-200'
+                  }`}>{loyaltyInfo.customer.tier}</span>
+                </div>
+                <span className="text-[11px] font-bold tabular-nums text-brand">
+                  {(loyaltyInfo.customer as any).orgLoyaltyBalance !== undefined
+                    ? <>{((loyaltyInfo.customer as any).orgLoyaltyBalance as number).toLocaleString()} org pts</>
+                    : <>{loyaltyInfo.customer.loyaltyBalance.toLocaleString()} pts</>}
+                </span>
+              </div>
+              {loyaltyInfo.customer.loyaltyOptOut ? (
+                <p className="text-[10px] text-ink/40">Customer opted out of loyalty</p>
+              ) : !isOnline && loyaltyInfo.redeemablePoints > 0 ? (
+                <p className="text-[10px] text-amber-600">Loyalty redemption requires an internet connection</p>
+              ) : loyaltyInfo.redeemablePoints > 0 && loyaltyInfo.config ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] text-ink/50">
+                    <span>Redeem {loyaltyRedemption} pts → {sym}{Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))} off</span>
+                    <span>Max: {loyaltyInfo.redeemablePoints} pts</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={loyaltyInfo.redeemablePoints}
+                    step={loyaltyInfo.config.minimumRedeemPoints || 1}
+                    value={loyaltyRedemption}
+                    onChange={e => setLoyaltyRedemption(Number(e.target.value))}
+                    className="w-full accent-brand"
+                    disabled={!isOnline}
+                  />
+                  {loyaltyRedemption > 0 && (
+                    <div className="flex items-center justify-between rounded-lg bg-brand/10 px-2 py-1">
+                      <span className="text-[10px] font-medium text-brand">Loyalty discount applied</span>
+                      <span className="text-[11px] font-bold text-brand">
+                        -{sym}{Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-[10px] text-ink/40">
+                  {loyaltyInfo.redeemablePoints === 0
+                    ? (() => {
+                        const orgBal = (loyaltyInfo.customer as any).orgLoyaltyBalance;
+                        const bal = orgBal !== undefined ? orgBal : loyaltyInfo.customer.loyaltyBalance;
+                        return `Balance: ${bal} pts (below minimum redeem threshold)`;
+                      })()
+                    : 'Loyalty not enabled'}
+                </p>
+              )}
+            </div>
+          ) : null
+        )}
+
         {/* Cart header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
