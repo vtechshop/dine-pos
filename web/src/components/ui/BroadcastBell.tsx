@@ -97,7 +97,7 @@ export function BroadcastBell() {
         onClick={() => setOpen(o => !o)}
         aria-label="Announcements"
         title="Announcements"
-        className="relative flex h-8 w-8 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/[0.08] hover:text-white"
+        className="relative flex h-8 w-8 items-center justify-center rounded-lg text-ink/50 transition-colors hover:bg-mist hover:text-ink"
       >
         <Megaphone size={16} />
         {unread > 0 && (

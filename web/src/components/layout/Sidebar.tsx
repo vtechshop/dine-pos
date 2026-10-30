@@ -164,7 +164,7 @@ function NavItemRow({ item }: { item: NavItem }) {
         `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
           isActive
             ? 'bg-brand text-white'
-            : 'text-white/70 hover:bg-white/[0.08] hover:text-white'
+            : 'text-ink/70 hover:bg-mist hover:text-ink'
         }`
       }
     >
@@ -173,7 +173,7 @@ function NavItemRow({ item }: { item: NavItem }) {
           <Icon size={16} />
           <span className="flex-1">{label}</span>
           {hint && (
-            <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-orange-200' : 'text-white/40'}`}>
+            <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-white/60' : 'text-ink/35'}`}>
               {hint}
             </span>
           )}
@@ -211,13 +211,13 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
                   isActive
                     ? 'bg-brand text-white'
-                    : 'text-white/70 hover:bg-white/[0.08] hover:text-white'
+                    : 'text-ink/70 hover:bg-mist hover:text-ink'
                 }`}
               >
                 <Icon size={16} />
                 <span className="flex-1 text-left">{item.label}</span>
                 {item.hint && (
-                  <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-orange-200' : 'text-white/40'}`}>
+                  <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-white/60' : 'text-ink/35'}`}>
                     {item.hint}
                   </span>
                 )}
@@ -260,7 +260,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         {NAV_GROUPS.map((group, gi) => (
           <div key={gi}>
             {group.heading && (
-              <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-white/40">
+              <p className="mb-1 px-3 text-[9px] font-semibold uppercase tracking-widest text-ink/35">
                 {group.heading}
               </p>
             )}
@@ -287,17 +287,17 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-52 flex-col border-r border-white/10 bg-ink transition-transform duration-200 ease-in-out md:static md:h-full md:shrink-0 md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed inset-y-0 left-0 z-50 flex w-52 flex-col border-r border-border bg-canvas transition-transform duration-200 ease-in-out md:static md:h-full md:shrink-0 md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         {/* Mobile close header */}
-        <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 md:hidden">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-white/45">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2 md:hidden">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-ink/45">
             Navigation
           </span>
           <button
             onClick={onClose}
             aria-label="Close navigation"
-            className="rounded-lg p-1 text-white/50 hover:bg-white/[0.08] hover:text-white"
+            className="rounded-lg p-1 text-ink/50 hover:bg-mist hover:text-ink"
           >
             <X size={15} />
           </button>
@@ -308,8 +308,8 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
         {navContent}
 
-        <div className="border-t border-white/10 px-4 py-3">
-          <p className="text-[10px] text-white/35">Dine POS Web · v1.0</p>
+        <div className="border-t border-border px-4 py-3">
+          <p className="text-[10px] text-ink/35">Dine POS Web · v1.0</p>
         </div>
       </aside>
     </>

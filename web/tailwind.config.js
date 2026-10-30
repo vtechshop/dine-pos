@@ -14,10 +14,10 @@ export default {
       colors: {
         // CSS-variable-based palette — enables opacity modifiers (bg-brand/20, text-ink/40, etc.)
         // Variables are defined in src/index.css as space-separated RGB channels
-        brand:  'rgb(var(--brand) / <alpha-value>)',   // #E8380D — primary CTA / accent
-        ink:    'rgb(var(--ink)   / <alpha-value>)',   // #1C0800 — shell bg + primary text
+        brand:  'rgb(var(--brand) / <alpha-value>)',   // #1F2937 — primary action / selected states
+        ink:    'rgb(var(--ink)   / <alpha-value>)',   // #202938 — primary text, dark surfaces
         canvas: 'rgb(var(--canvas)/ <alpha-value>)',   // #FDFAF7 — lightest surface
-        mist:   'rgb(var(--mist)  / <alpha-value>)',   // #FFF6EE — main content background
+        mist:   'rgb(var(--mist)  / <alpha-value>)',   // #F5F6F8 — page background
         border: 'rgb(var(--border)/ <alpha-value>)',   // #E8D5C0 — dividers and input borders
       },
     },

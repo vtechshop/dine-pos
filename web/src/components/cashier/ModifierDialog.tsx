@@ -255,6 +255,28 @@ export function ModifierDialog({ product, sym, onConfirm, onClose }: ModifierDia
               </button>
             </div>
           </div>
+          {/* Quick add for bulk orders */}
+          <div className="flex flex-wrap justify-end gap-1.5">
+            {[2, 5, 10].map(n => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setQty(q => Math.min(999, q + n))}
+                className="rounded-lg border border-border bg-mist px-2.5 py-1 text-xs font-semibold text-ink/70 hover:bg-canvas"
+              >
+                +{n}
+              </button>
+            ))}
+            {qty > 1 && (
+              <button
+                type="button"
+                onClick={() => setQty(1)}
+                className="rounded-lg px-2 py-1 text-xs font-medium text-ink/45 hover:text-ink/70"
+              >
+                Reset
+              </button>
+            )}
+          </div>
 
           {/* Notes */}
           <div className="space-y-1">

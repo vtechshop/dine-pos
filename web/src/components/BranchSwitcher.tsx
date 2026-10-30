@@ -74,44 +74,44 @@ export function BranchSwitcher() {
     <div ref={dropdownRef} className="relative mx-3 mb-2">
       <button
         onClick={() => setOpen(v => !v)}
-        className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-left text-xs text-white/80 hover:bg-white/[0.10] transition-colors"
+        className="flex w-full items-center gap-2 rounded-lg border border-border bg-mist px-3 py-2 text-left text-xs text-ink/80 hover:bg-border/40 transition-colors"
         disabled={switching}
       >
-        <GitBranch size={13} className="shrink-0 text-white/50" />
+        <GitBranch size={13} className="shrink-0 text-ink/45" />
         <span className="flex-1 truncate leading-tight">
-          <span className="block text-[9px] uppercase tracking-widest text-white/40">{activeLabel}</span>
-          <span className="block truncate font-medium text-white/90">{activeName}</span>
+          <span className="block text-[9px] uppercase tracking-widest text-ink/40">{activeLabel}</span>
+          <span className="block truncate font-medium text-ink">{activeName}</span>
         </span>
         {switching
-          ? <Loader2 size={13} className="shrink-0 animate-spin text-white/40" />
-          : <ChevronDown size={13} className={`shrink-0 text-white/40 transition-transform ${open ? 'rotate-180' : ''}`} />
+          ? <Loader2 size={13} className="shrink-0 animate-spin text-ink/40" />
+          : <ChevronDown size={13} className={`shrink-0 text-ink/40 transition-transform ${open ? 'rotate-180' : ''}`} />
         }
       </button>
 
       {error && (
-        <div className="mt-1 flex items-center gap-1.5 rounded-lg bg-red-500/15 px-2 py-1.5 text-[10px] text-red-300">
+        <div className="mt-1 flex items-center gap-1.5 rounded-lg bg-red-50 px-2 py-1.5 text-[10px] text-red-600">
           <AlertCircle size={11} />
           <span>{error}</span>
         </div>
       )}
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-white/10 bg-[#1c1c1e] py-1 shadow-xl">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-border bg-canvas py-1 shadow-xl">
           {/* HQ option */}
           <button
             onClick={handleSwitchToOrg}
-            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-white/[0.08] ${!isInBranchContext ? 'text-white' : 'text-white/60'}`}
+            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-mist ${!isInBranchContext ? 'font-semibold text-ink' : 'text-ink/60'}`}
           >
             <Building2 size={12} className="shrink-0" />
             <span className="flex-1 truncate">
-              <span className="block text-[9px] uppercase tracking-widest text-white/35">Headquarters</span>
+              <span className="block text-[9px] uppercase tracking-widest text-ink/35">Headquarters</span>
               <span className="block truncate">{context.orgHotelName}</span>
             </span>
-            {!isInBranchContext && <span className="text-[9px] text-green-400">active</span>}
+            {!isInBranchContext && <span className="text-[9px] text-green-600">active</span>}
           </button>
 
           {context.branches.length > 0 && (
-            <div className="mx-2 my-1 border-t border-white/[0.06]" />
+            <div className="mx-2 my-1 border-t border-border" />
           )}
 
           {context.branches.map(branch => {
@@ -126,19 +126,19 @@ export function BranchSwitcher() {
                   isSuspended
                     ? 'cursor-not-allowed opacity-40'
                     : isActive
-                      ? 'text-white hover:bg-white/[0.08]'
-                      : 'text-white/60 hover:bg-white/[0.08] hover:text-white'
+                      ? 'font-semibold text-ink hover:bg-mist'
+                      : 'text-ink/60 hover:bg-mist hover:text-ink'
                 }`}
               >
                 <GitBranch size={12} className="shrink-0" />
                 <span className="flex-1 truncate">
                   {branch.branchCode && (
-                    <span className="block text-[9px] uppercase tracking-widest text-white/35">{branch.branchCode}</span>
+                    <span className="block text-[9px] uppercase tracking-widest text-ink/35">{branch.branchCode}</span>
                   )}
                   <span className="block truncate">{branch.branchName || branch.hotelName}</span>
                 </span>
-                {isActive && <span className="text-[9px] text-green-400">active</span>}
-                {isSuspended && <span className="text-[9px] text-red-400">off</span>}
+                {isActive && <span className="text-[9px] text-green-600">active</span>}
+                {isSuspended && <span className="text-[9px] text-red-500">off</span>}
               </button>
             );
           })}

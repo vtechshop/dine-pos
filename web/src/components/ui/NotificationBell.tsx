@@ -7,7 +7,7 @@ export function NotificationBell() {
   return (
     <button
       onClick={markRead}
-      className="relative rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+      className="relative rounded-lg p-2 text-ink/50 transition-colors hover:bg-mist hover:text-ink"
       title={unreadCount > 0 ? `${unreadCount} new order${unreadCount > 1 ? 's' : ''}` : 'No new orders'}
       aria-label="Notifications"
     >

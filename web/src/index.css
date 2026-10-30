@@ -18,16 +18,17 @@
   #root {
     height: 100%;
     overflow: hidden;
-    background-color: rgb(var(--ink));
+    background-color: rgb(var(--mist));
   }
 
   :root {
     /* Space-separated RGB — enables Tailwind opacity modifiers (bg-brand/20, text-ink/40) */
-    --brand:  232 56 13;   /* #E8380D — primary CTA */
-    --ink:    28 8 0;      /* #1C0800 — shell bg + primary text */
-    --canvas: 253 250 247; /* #FDFAF7 — lightest surface */
-    --mist:   255 246 238; /* #FFF6EE — main content background */
-    --border: 232 213 192; /* #E8D5C0 — dividers and input borders */
+    /* Light POS palette: grey page, white cards, navy for primary/selected */
+    --brand:  31 41 55;    /* #1F2937 — primary action, active nav, selected states */
+    --ink:    32 41 56;    /* #202938 — primary text, dark surfaces */
+    --canvas: 255 255 255; /* #FFFFFF — cards and panels */
+    --mist:   245 246 248; /* #F5F6F8 — page background */
+    --border: 229 231 235; /* #E5E7EB — dividers and input borders */
   }
 
   /* RC2: Keyboard focus ring — visible only on keyboard navigation, not mouse clicks */
