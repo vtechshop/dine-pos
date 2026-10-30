@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   RefreshCw, CreditCard, Printer, Trash2, AlertCircle,
-  ShoppingBag, UtensilsCrossed, Truck, Clock, GitBranch,
+  ShoppingBag, UtensilsCrossed, Truck, Clock, GitBranch, RotateCcw,
 } from 'lucide-react';
+import { printBill } from '../../utils/printBill';
 import { ApiError } from '../../api/client';
 import { fetchCashierOrders, cancelOrder, patchOrderPayment, completeOrder } from '../../api/orders';
 import { reprintJob, fetchReceiptJobs } from '../../api/billing';
@@ -58,6 +59,7 @@ function OrderRow({
   onRefresh: () => void;
 }) {
   const perms = useCashierPermissions();
+  const { settings } = useSettings();
   const [expanded, setExpanded] = useState(false);
   const [showPay, setShowPay] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
@@ -141,15 +143,29 @@ function OrderRow({
               >
                 <GitBranch size={13} />
               </button>
-              {receiptJob && (
+              {/* Print bill — every bill, paid or not, through this PC's printer */}
+              <button
+                type="button"
+                title="Print bill"
+                onClick={() => printBill(order, {
+                  hotelName: settings?.hotelName, address: settings?.address, phone: settings?.phone,
+                  gstNumber: settings?.gstNumber, footerText: settings?.footerText, currencySymbol: sym,
+                })}
+                className="flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-xs font-medium text-ink/60 hover:bg-mist"
+              >
+                <Printer size={13} />
+                <span className="hidden sm:inline">Print</span>
+              </button>
+              {/* Re-send an already printed receipt to the receipt printer (needs permission) */}
+              {receiptJob && perms.canVoidOrder && (
                 <button
                   type="button"
-                  title={perms.canVoidOrder ? 'Reprint' : 'Reprint — permission required'}
-                  onClick={() => { if (perms.canVoidOrder) void handleReprint(); }}
-                  disabled={reprinting || !perms.canVoidOrder}
+                  title="Reprint on receipt printer"
+                  onClick={() => void handleReprint()}
+                  disabled={reprinting}
                   className="rounded-lg border border-border p-1.5 text-ink/40 hover:bg-mist disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {reprinting ? <Spinner size="sm" /> : <Printer size={13} />}
+                  {reprinting ? <Spinner size="sm" /> : <RotateCcw size={13} />}
                 </button>
               )}
               {role === 'cashier' ? (

@@ -5,6 +5,9 @@ import {
 } from 'lucide-react';
 import { fetchLoyaltyConfig, searchCustomers, fetchCustomer } from '../../api/loyalty';
 import { useAuth } from '../../context/AuthContext';
+import { useSettings } from '../../context/SettingsContext';
+import QRCode from 'react-qr-code';
+import { generateUpiUri } from '../../utils/upiHelpers';
 import { Spinner } from '../ui/Spinner';
 import { logAuditEntry } from '../../utils/auditLog';
 import { getCashierName, getCashierId } from '../../utils/cashierIdentity';
@@ -322,6 +325,8 @@ export function PaymentModal({
   onConfirm, onClose,
 }: PaymentModalProps) {
   const { hotelId } = useAuth();
+  const { settings } = useSettings();
+  const upiId = settings?.upiId?.trim() ?? '';
 
   // Payment method
   const [method, setMethod] = useState<PayMethod>('cash');
@@ -581,10 +586,25 @@ export function PaymentModal({
               {/* UPI QR inputs */}
               {method === 'upi_qr' && (
                 <div className="space-y-2">
-                  <div className="rounded-xl border border-border bg-mist px-4 py-3 text-center">
-                    <p className="text-xs text-ink/60">Show QR code — verify payment before confirming</p>
-                    <p className="text-xl font-bold text-ink mt-0.5">{fmtINR(sym, finalTotal)}</p>
-                  </div>
+                  {upiId ? (
+                    <div className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-white px-4 py-3">
+                      <QRCode
+                        value={generateUpiUri(upiId, settings?.hotelName ?? '', finalTotal, `Order ${orderNumber ?? ''}`.trim())}
+                        size={168}
+                        bgColor="#ffffff"
+                        fgColor="#1a1a1a"
+                      />
+                      <p className="text-xl font-bold text-ink">{fmtINR(sym, finalTotal)}</p>
+                      <p className="text-[11px] text-ink/50">Customer scans with any UPI app · {upiId}</p>
+                      <p className="text-[11px] font-medium text-amber-700">Check the money has arrived before you confirm</p>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center">
+                      <p className="text-xs font-semibold text-amber-800">No UPI ID set up, so no QR to show</p>
+                      <p className="mt-0.5 text-[11px] text-amber-700">Ask your admin to add the hotel's UPI ID in Settings → Contact → UPI ID.</p>
+                      <p className="mt-1 text-xl font-bold text-ink">{fmtINR(sym, finalTotal)}</p>
+                    </div>
+                  )}
                   <input
                     type="text"
                     value={payRef}
