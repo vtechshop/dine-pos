@@ -208,3 +208,11 @@ export async function deleteIngredient(id: string): Promise<void> {
 export async function fetchLowStockIngredients(): Promise<{ ingredients: Ingredient[] }> {
   return apiFetch('/ingredients/alerts/low-stock');
 }
+
+/** Mark a dish in / out of stock from the POS (cashier, kitchen, admin). */
+export async function setProductAvailability(productId: string, isAvailable: boolean): Promise<{ _id: string; isAvailable: boolean }> {
+  return apiFetch(`/products/${productId}/availability`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isAvailable }),
+  });
+}

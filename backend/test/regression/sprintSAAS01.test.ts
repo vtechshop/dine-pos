@@ -177,7 +177,8 @@ describe('SAAS-17–20  GET /api/saas/status trial countdown fields', () => {
 
 describe('SAAS-21–24  TrialBanner component', () => {
   const banner = readWeb('components/layout/TrialBanner.tsx');
-  const layout = readWeb('components/layout/AppLayout.tsx');
+  // The trial notice moved from a full-width row in AppLayout to a pill in the top bar
+  const layout = readWeb('components/layout/TopBar.tsx');
 
   test('SAAS-23: TrialBanner component file exists and exports TrialBanner', () => {
     expect(banner).toContain('export function TrialBanner');
@@ -200,7 +201,7 @@ describe('SAAS-21–24  TrialBanner component', () => {
     expect(banner).toContain('return null');
   });
 
-  test('SAAS-27: AppLayout imports and renders TrialBanner', () => {
+  test('SAAS-27: the app shell (top bar) imports and renders TrialBanner', () => {
     expect(layout).toContain('TrialBanner');
     expect(layout).toContain('<TrialBanner');
   });

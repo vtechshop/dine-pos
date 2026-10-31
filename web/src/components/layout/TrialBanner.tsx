@@ -35,7 +35,7 @@ export function TrialBanner() {
 
   return isUrgent ? (
     <Link to="/subscription" title={`${full} — subscribe now`} className={cls}>
-      {short}<span className="hidden sm:inline"> · Subscribe</span>
+      {short}<span className="hidden sm:inline"> · Subscribe Now</span>
     </Link>
   ) : (
     <span title={full} className={cls}>{short}</span>
