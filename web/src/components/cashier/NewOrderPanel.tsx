@@ -69,9 +69,13 @@ function dishInitials(name: string): string {
 // ── Product card ──────────────────────────────────────────────────────────────
 
 function ProductCard({
-  product, onAdd, onToggleFav, isFav, sym, showPhoto = true,
+  product, onAdd, onToggleFav, isFav, sym, showPhoto = true, cartQty = 0, onDec,
 }: {
   showPhoto?: boolean;
+  /** How many of this dish are in the order (all its lines) */
+  cartQty?: number;
+  /** Take one off; undefined when the dish has several different lines (sizes / add-ons) */
+  onDec?: () => void;
   product: Product;
   onAdd: (p: Product) => void;
   onToggleFav: (id: string) => void;
@@ -85,9 +89,11 @@ function ProductCard({
   const options = variantCount > 0 || (product.modifierGroups ?? []).length > 0;
   return (
     <div className={`group relative flex flex-col overflow-hidden rounded-xl border bg-canvas shadow-sm transition ${
-      product.isAvailable
-        ? 'border-border hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md'
-        : 'border-border opacity-60'
+      !product.isAvailable
+        ? 'border-border opacity-60'
+        : cartQty > 0
+          ? 'border-brand/60 ring-1 ring-brand/25 hover:shadow-md'
+          : 'border-border hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md'
     }`}>
       <button
         type="button"
@@ -149,7 +155,8 @@ function ProductCard({
               {variantCount > 0 && <span className="text-[11px] font-normal text-ink/50">from </span>}
               {fmtINR(sym, product.price)}
             </span>
-            {product.isAvailable && (
+            {product.isAvailable && cartQty > 0 && <span aria-hidden className="h-[26px] w-[88px]" />}
+            {product.isAvailable && cartQty === 0 && (
               <span className="rounded-md bg-action px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition duration-150 group-hover:bg-coffee group-hover:shadow-md group-active:bg-action-press group-active:shadow-none">
                 {options ? 'Choose' : 'Add'}
               </span>
@@ -157,6 +164,31 @@ function ProductCard({
           </div>
         </div>
       </button>
+      {/* In the order: − qty + in place of Add */}
+      {product.isAvailable && cartQty > 0 && (
+        <div className="absolute bottom-2.5 right-2.5 flex items-center overflow-hidden rounded-md bg-action text-white shadow-sm">
+          <button
+            type="button"
+            onClick={onDec}
+            disabled={!onDec}
+            aria-label={`Remove one ${product.name}`}
+            title={onDec ? 'Remove one' : 'This dish has different sizes / add-ons in the order — change them in Order Summary'}
+            className="flex h-[26px] w-7 items-center justify-center transition-colors hover:bg-coffee active:bg-action-press disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Minus size={13} />
+          </button>
+          <span aria-label={`${cartQty} in order`} className="min-w-[1.75rem] text-center text-xs font-bold tabular-nums">{cartQty}</span>
+          <button
+            type="button"
+            onClick={() => onAdd(product)}
+            aria-label={`Add one more ${product.name}`}
+            title={options ? 'Add another (choose size / add-ons)' : 'Add one more'}
+            className="flex h-[26px] w-7 items-center justify-center transition-colors hover:bg-coffee active:bg-action-press"
+          >
+            <Plus size={13} />
+          </button>
+        </div>
+      )}
       <button
         type="button"
         onClick={() => onToggleFav(product._id)}
@@ -667,6 +699,16 @@ export function NewOrderPanel() {
     for (const p of products) m.set(categoryIdOf(p), (m.get(categoryIdOf(p)) ?? 0) + 1);
     return m;
   }, [products]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Quantity of each dish in the order (all its lines: sizes / add-ons are separate lines)
+  const cartByProduct = useMemo(() => {
+    const m = new Map<string, { qty: number; lines: CartItem[] }>();
+    for (const item of cart) {
+      const e = m.get(item.productId) ?? { qty: 0, lines: [] };
+      e.qty += item.quantity; e.lines.push(item);
+      m.set(item.productId, e);
+    }
+    return m;
+  }, [cart]);
   const menuHasPhotos = useMemo(() => products.some(p => !!p.image), [products]);
   const productImages = useMemo(() => new Map(products.map(p => [p._id, p.image])), [products]);
 
@@ -1233,6 +1275,11 @@ export function NewOrderPanel() {
                 onToggleFav={toggleFav}
                 isFav={favorites.includes(p._id)}
                 showPhoto={menuHasPhotos}
+                cartQty={cartByProduct.get(p._id)?.qty ?? 0}
+                onDec={(() => {
+                  const lines = cartByProduct.get(p._id)?.lines ?? [];
+                  return lines.length === 1 ? () => updateQty(lines[0]!.id, lines[0]!.quantity - 1) : undefined;
+                })()}
                 sym={sym}
               />
             ))}
