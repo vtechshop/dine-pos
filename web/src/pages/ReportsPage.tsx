@@ -60,6 +60,7 @@ import { fetchGiftVoucherStats, type GiftVoucherStats } from '../api/giftVoucher
 import { ApiError } from '../api/client';
 import { Spinner } from '../components/ui/Spinner';
 import { useSettings } from '../context/SettingsContext';
+import { CHART_COLORS } from '../theme/palette';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -284,12 +285,12 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 // ── Expense categories ────────────────────────────────────────────────────────
 
 const EXP_CATEGORIES: Array<{ id: Expense['category']; label: string; color: string }> = [
-  { id: 'ingredients', label: 'Ingredients', color: '#E65100' },
-  { id: 'utilities',   label: 'Utilities',   color: '#1565C0' },
-  { id: 'staff',       label: 'Staff',       color: '#6A1B9A' },
-  { id: 'maintenance', label: 'Maintenance', color: '#2E7D32' },
-  { id: 'rent',        label: 'Rent',        color: '#C62828' },
-  { id: 'other',       label: 'Other',       color: '#616161' },
+  { id: 'ingredients', label: 'Ingredients', color: CHART_COLORS[0] },
+  { id: 'utilities',   label: 'Utilities',   color: CHART_COLORS[1] },
+  { id: 'staff',       label: 'Staff',       color: CHART_COLORS[3] },
+  { id: 'maintenance', label: 'Maintenance', color: CHART_COLORS[6] },
+  { id: 'rent',        label: 'Rent',        color: CHART_COLORS[2] },
+  { id: 'other',       label: 'Other',       color: CHART_COLORS[7] },
 ];
 
 // ── Main page ─────────────────────────────────────────────────────────────────

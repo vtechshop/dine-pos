@@ -22,13 +22,35 @@
   }
 
   :root {
-    /* Space-separated RGB — enables Tailwind opacity modifiers (bg-brand/20, text-ink/40) */
-    /* Light POS palette: grey page, white cards, navy for primary/selected */
-    --brand:  31 41 55;    /* #1F2937 — primary action, active nav, selected states */
-    --ink:    32 41 56;    /* #202938 — primary text, dark surfaces */
-    --canvas: 255 255 255; /* #FFFFFF — cards and panels */
-    --mist:   245 246 248; /* #F5F6F8 — page background */
-    --border: 229 231 235; /* #E5E7EB — dividers and input borders */
+    /* Space-separated RGB — enables Tailwind opacity modifiers (bg-brand/20, text-ink/40).
+       Theme: burgundy + coral + soft pink on warm cream. Every colour in the app comes
+       from these tokens (see tailwind.config.js and src/theme/palette.ts). */
+    --brand:      241 107 101; /* #F16B65 coral — primary buttons, active/selected fills */
+    --brand-ink:  142  53  75; /* #8E354B — accent TEXT (links, prices); coral text is too faint on cream */
+    --burgundy:   100  30  50; /* #641E32 — sidebar, secondary buttons, dark surfaces (bg-ink) */
+    --wine:       142  53  75; /* #8E354B — secondary burgundy, hovers */
+    --blush:      255 170 165; /* #FFAAA5 soft pink — highlights, chart accent */
+    --petal:      252 228 225; /* #FCE4E1 light pink — tints, selected rows */
+    --ink:         51  37  42; /* #33252A — primary text */
+    --muted:      128 109 112; /* #806D70 — secondary text */
+    --canvas:     255 252 247; /* #FFFCF7 ivory — cards, header, inputs */
+    --mist:       245 235 221; /* #F5EBDD warm cream — page background */
+    --border:     232 217 204; /* #E8D9CC — dividers and input borders */
+    --success:     67 134 106; /* #43866A */
+    --warning:    212 154  67; /* #D49A43 */
+    --danger:     200  76  84; /* #C84C54 */
+  }
+
+  /* Tables: cream and ivory alternating rows (:where = no specificity, so a row's own
+     highlight/selected classes still win) */
+  :where(tbody tr:nth-child(even)) {
+    background-color: rgb(var(--mist) / 0.45);
+  }
+
+  /* Smooth hover / state changes on interactive elements */
+  button, a, [role='button'] {
+    transition-property: color, background-color, border-color, box-shadow, opacity;
+    transition-duration: 150ms;
   }
 
   /* RC2: Keyboard focus ring — visible only on keyboard navigation, not mouse clicks */

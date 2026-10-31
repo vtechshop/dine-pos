@@ -817,7 +817,7 @@ export function PaymentModal({
               type="button"
               onClick={() => void handleConfirm()}
               disabled={confirming || !canConfirm}
-              className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+              className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand/90 disabled:opacity-60"
             >
               {confirming
                 ? <><Loader2 size={14} className="animate-spin" /> Processing…</>

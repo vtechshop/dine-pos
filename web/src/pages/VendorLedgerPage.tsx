@@ -26,13 +26,13 @@ const METHOD_META: Record<VendorPaymentMethod, { label: string; icon: React.Reac
 };
 
 const ENTRY_META: Record<LedgerEntryType, { label: string; color: string }> = {
-  grn:             { label: 'GRN Received',    color: '#dc2626' },
-  payment:         { label: 'Payment Made',    color: '#059669' },
-  opening_balance: { label: 'Opening Balance', color: '#2563eb' },
-  adjustment:      { label: 'Adjustment',      color: '#d97706' },
-  debit_note:      { label: 'Debit Note',      color: '#dc2626' },
-  credit_note:     { label: 'Credit Note',     color: '#059669' },
-  purchase:        { label: 'Purchase',        color: '#7c3aed' },
+  grn:             { label: 'GRN Received',    color: '#C84C54' },
+  payment:         { label: 'Payment Made',    color: '#43866A' },
+  opening_balance: { label: 'Opening Balance', color: '#7D5A7A' },
+  adjustment:      { label: 'Adjustment',      color: '#B6843B' },
+  debit_note:      { label: 'Debit Note',      color: '#C84C54' },
+  credit_note:     { label: 'Credit Note',     color: '#43866A' },
+  purchase:        { label: 'Purchase',        color: '#8E354B' },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -379,7 +379,7 @@ function VendorStatementPanel({
                   <tr key={e._id} className="hover:bg-mist/50">
                     <td className="whitespace-nowrap px-4 py-2.5 text-ink/60">{fmtDate(e.createdAt)}</td>
                     <td className="px-4 py-2.5">
-                      <span className="font-medium" style={{ color: meta?.color ?? '#64748b' }}>{meta?.label ?? e.entryType}</span>
+                      <span className="font-medium" style={{ color: meta?.color ?? '#806D70' }}>{meta?.label ?? e.entryType}</span>
                       {e.referenceNumber && <span className="ml-1 text-ink/40">· {e.referenceNumber}</span>}
                       {e.description && <p className="mt-0.5 text-[10px] text-ink/30 truncate max-w-[200px]">{e.description}</p>}
                     </td>
@@ -828,7 +828,7 @@ export function VendorLedgerPage() {
                       <tr key={e._id} className="hover:bg-mist/50">
                         <td className="whitespace-nowrap px-5 py-2.5 text-ink/60">{fmtDate(e.createdAt)}</td>
                         <td className="px-5 py-2.5">
-                          <span className="font-semibold" style={{ color: meta?.color ?? '#64748b' }}>
+                          <span className="font-semibold" style={{ color: meta?.color ?? '#806D70' }}>
                             {meta?.label ?? e.entryType}
                           </span>
                         </td>
