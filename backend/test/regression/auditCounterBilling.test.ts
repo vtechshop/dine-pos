@@ -50,11 +50,14 @@ describe('BILL-12 — counterBillingOrderUpdates', () => {
   it('counter orders: completed with the counter payment method', () => {
     expect(counter.filter).toMatchObject(scope);
     expect(counter.filter.paymentMethod).toEqual({ $ne: 'razorpay' });
+    // Orders already paid at the counter (paymentTime set) are not re-charged
+    expect(counter.filter.paymentTime).toBeNull();
     expect(counter.update).toEqual({ $set: { paymentMethod: 'cash', status: 'completed' } });
   });
 
-  it('prepaid online orders: completed but payment method untouched', () => {
-    expect(prepaid.filter).toMatchObject({ ...scope, paymentMethod: 'razorpay' });
+  it('orders paid ahead (online, or at the counter): completed but payment method untouched', () => {
+    expect(prepaid.filter).toMatchObject(scope);
+    expect((prepaid.filter as any).$or).toEqual([{ paymentMethod: 'razorpay' }, { paymentTime: { $ne: null } }]);
     expect(prepaid.update).toEqual({ $set: { status: 'completed' } });
     expect(JSON.stringify(prepaid.update)).not.toContain('paymentMethod');
   });

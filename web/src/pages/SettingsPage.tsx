@@ -644,6 +644,34 @@ function StaffSection() {
   );
 }
 
+// ── Order flow: pay before kitchen ────────────────────────────────────────────
+
+function OrderFlowCard({ settings, refresh }: { settings: Settings; refresh: () => Promise<void> }) {
+  const [on, setOn] = useState(settings.payBeforeKitchen ?? false);
+  const { save, saving, msg } = useSave(refresh);
+  return (
+    <SectionCard title="Order Flow">
+      <label className="flex cursor-pointer items-start gap-2.5">
+        <input
+          type="checkbox"
+          checked={on}
+          onChange={e => setOn(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-brand"
+        />
+        <span>
+          <span className="block text-sm font-medium text-ink">Pay before kitchen</span>
+          <span className="mt-0.5 block text-xs text-ink/55">
+            Orders go to the kitchen only after the customer pays. Unpaid orders (counter, waiter,
+            QR cash) wait in Pending Bills with no KOT; taking payment sends them to the kitchen.
+            Online-paid and Swiggy/Zomato orders are not affected.
+          </span>
+        </span>
+      </label>
+      <SaveRow onSave={() => void save({ payBeforeKitchen: on })} saving={saving} msg={msg} />
+    </SectionCard>
+  );
+}
+
 // ── PrintersSection ───────────────────────────────────────────────────────────
 
 type PrinterDraft = {
@@ -758,6 +786,8 @@ function PrintersSection({ settings, refresh }: { settings: Settings; refresh: (
         </label>
         <SaveRow onSave={() => void save(d)} saving={saving} msg={msg} />
       </SectionCard>
+
+      <OrderFlowCard settings={settings} refresh={refresh} />
 
       <SectionCard title="Kitchen Display PIN">
         <p className="mb-4 text-xs text-ink/50">

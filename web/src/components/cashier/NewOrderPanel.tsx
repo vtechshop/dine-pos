@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Search, ShoppingCart, X, Plus, Minus, Trash2,
-  UtensilsCrossed, ShoppingBag, Truck, ChevronRight,
+  UtensilsCrossed, ShoppingBag, Truck, ChevronRight, ChevronLeft,
   AlertCircle, Check, Loader2, Star, ScanBarcode,
 } from 'lucide-react';
 import { useCashier, calcCartTotals, type CartItem, type HeldBill } from '../../context/CashierContext';
@@ -63,8 +63,9 @@ function TypeTab({ active, icon, label, onClick }: { active: boolean; icon: Reac
 // ── Product card ──────────────────────────────────────────────────────────────
 
 function ProductCard({
-  product, onAdd, onToggleFav, isFav, sym,
+  product, onAdd, onToggleFav, isFav, sym, showPhoto = true,
 }: {
+  showPhoto?: boolean;
   product: Product;
   onAdd: (p: Product) => void;
   onToggleFav: (id: string) => void;
@@ -89,7 +90,9 @@ function ProductCard({
         aria-label={`Add ${product.name}`}
         className="flex flex-1 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:cursor-not-allowed"
       >
-        {/* Photo — fixed 16:10 frame so cards don't jump while images load */}
+        {/* Photo — fixed 16:10 frame so cards don't jump while images load.
+            Skipped entirely when the menu has no photos, so cards stay compact. */}
+        {showPhoto ? (
         <div className="relative aspect-[16/10] w-full bg-mist">
           {showImg ? (
             <img
@@ -111,6 +114,15 @@ function ProductCard({
             {product.isAvailable ? 'Available' : 'Unavailable'}
           </span>
         </div>
+        ) : (
+          <div className="px-2.5 pt-2.5">
+            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+              product.isAvailable ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+            }`}>
+              {product.isAvailable ? 'Available' : 'Unavailable'}
+            </span>
+          </div>
+        )}
 
         <div className="flex flex-1 flex-col gap-1 p-2.5">
           <div className="flex items-start gap-1.5">
@@ -410,6 +422,8 @@ export function NewOrderPanel() {
   const { hotelId, role } = useAuth();
   const isOnline = useIsOnline();
   const sym = settings?.currencySymbol ?? '₹';
+  // Pay before kitchen: orders are paid while placing them and only then reach the kitchen
+  const payFirst = settings?.payBeforeKitchen === true;
   const perms = useCashierPermissions();
 
   // Hotel-scoped localStorage keys
@@ -430,6 +444,14 @@ export function NewOrderPanel() {
   const [activeCat, setActiveCat]   = useState<string>('');
   const pillsRef = useRef<HTMLDivElement>(null);
   const billRef  = useRef<HTMLDivElement>(null);
+  // Category list open/closed, remembered on this device
+  const [railOpen, setRailOpen] = useState<boolean>(() => {
+    try { return localStorage.getItem('pos_cat_rail') !== 'closed'; } catch { return true; }
+  });
+  const toggleRail = (open: boolean) => {
+    setRailOpen(open);
+    try { localStorage.setItem('pos_cat_rail', open ? 'open' : 'closed'); } catch { /* private mode */ }
+  };
   const [search, setSearch]         = useState('');
 
   // ── Favorites (hotel-scoped localStorage) ──────────────────────────────────
@@ -638,6 +660,7 @@ export function NewOrderPanel() {
     for (const p of products) m.set(categoryIdOf(p), (m.get(categoryIdOf(p)) ?? 0) + 1);
     return m;
   }, [products]); // eslint-disable-line react-hooks/exhaustive-deps
+  const menuHasPhotos = useMemo(() => products.some(p => !!p.image), [products]);
   const productImages = useMemo(() => new Map(products.map(p => [p._id, p.image])), [products]);
 
   const visibleProducts = products.filter(p => {
@@ -879,6 +902,7 @@ export function NewOrderPanel() {
         couponCode: appliedCoupon?.code || undefined,
         giftVoucherCode: appliedVoucher?.code || undefined,
         paymentMethod: payMethod,
+        ...(opts.pay && payFirst ? { payNow: true } : {}),
         ...(splitDetails ? { splitDetails } : {}),
         offlineId,
       };
@@ -935,8 +959,11 @@ export function NewOrderPanel() {
       pendingPayload = payload;
       const created = await createOrder(payload);
 
-      const paidNow = opts.pay && orderType !== 'dine-in';
-      if (paidNow) {
+      // Pay before kitchen: the server records the payment (payNow) and the order goes to the
+      // kitchen paid; it is closed later when handed over / served. Otherwise takeaway and
+      // delivery paid now are closed straight away.
+      const completeNow = opts.pay && !payFirst && orderType !== 'dine-in';
+      if (completeNow) {
         // Takeaway and counter delivery go straight from pending to completed on the server.
         // Don't send a 'served' step: cashiers may not set it (403 "Access denied").
         await completeOrder(created._id);
@@ -944,7 +971,8 @@ export function NewOrderPanel() {
 
       if (opts.print) {
         printBill(
-          { ...created, status: paidNow ? 'completed' : created.status, paymentMethod: paidNow ? payMethod : null },
+          { ...created, status: completeNow ? 'completed' : created.status,
+            paymentMethod: completeNow || created.paymentTime ? payMethod : null },
           { hotelName: settings?.hotelName, address: settings?.address, phone: settings?.phone,
             gstNumber: settings?.gstNumber, footerText: settings?.footerText, currencySymbol: sym },
         );
@@ -972,7 +1000,7 @@ export function NewOrderPanel() {
         try {
           await enqueueOrder(hotelId, pendingPayload, {
             offlineId,
-            afterCreate: opts.pay ? afterCreateFor(pendingPayload.orderSource) : { markServed: false, complete: false },
+            afterCreate: opts.pay && !payFirst ? afterCreateFor(pendingPayload.orderSource) : { markServed: false, complete: false },
           });
           setSavedOffline(true);
           setWaReceiptPhone(
@@ -1033,7 +1061,15 @@ export function NewOrderPanel() {
   return (
     <div className="flex flex-col gap-4 lg:h-full lg:flex-row">
       {/* ── Category rail (wide screens; phones use the pill row) ─────────────── */}
-      <nav aria-label="Categories" className="hidden w-36 shrink-0 flex-col gap-1 overflow-y-auto rounded-xl border border-border bg-canvas p-1.5 lg:flex xl:w-44">
+      <nav aria-label="Categories" className={`hidden w-36 shrink-0 flex-col gap-1 overflow-y-auto rounded-xl border border-border bg-canvas p-1.5 xl:w-44 ${railOpen ? 'lg:flex' : ''}`}>
+        <button
+          type="button"
+          onClick={() => toggleRail(false)}
+          title="Hide categories"
+          className="mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink/45 hover:bg-mist hover:text-ink/70"
+        >
+          Categories <ChevronLeft size={14} />
+        </button>
         <CatButton active={!activeCat} onClick={() => { setSearch(''); setActiveCat(''); }}>
           <span className="flex-1">All</span>
           <span className="text-[10px] opacity-60">{products.length}</span>
@@ -1056,7 +1092,18 @@ export function NewOrderPanel() {
       <div className="min-w-0 space-y-2.5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
         <div className="sticky top-0 z-10 space-y-2 bg-mist pb-1">
         {/* Search */}
-        <div className="relative">
+        <div className="flex items-center gap-2">
+        {!railOpen && (
+          <button
+            type="button"
+            onClick={() => toggleRail(true)}
+            title="Show categories"
+            className="hidden shrink-0 items-center gap-1 rounded-lg border border-border bg-canvas px-2.5 py-2 text-xs font-semibold text-ink/65 hover:bg-mist lg:flex"
+          >
+            <ChevronRight size={14} /> Categories
+          </button>
+        )}
+        <div className="relative min-w-0 flex-1">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/35" />
           <input
             id="cashier-bill-search"
@@ -1072,10 +1119,11 @@ export function NewOrderPanel() {
             </button>
           )}
         </div>
+        </div>
 
         {/* Category tabs (with Favorites) */}
         {!search && (
-          <div ref={pillsRef} className="flex gap-1.5 overflow-x-auto px-0.5 pb-1 scrollbar-hide lg:hidden">
+          <div ref={pillsRef} className={`flex gap-1.5 overflow-x-auto px-0.5 pb-1 scrollbar-hide ${railOpen ? 'lg:hidden' : ''}`}>
             <button
               type="button"
               onClick={() => { pillsRef.current?.scrollTo({ left: 0 }); setActiveCat(''); }}
@@ -1190,7 +1238,7 @@ export function NewOrderPanel() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5 pb-2">
+          <div className="grid grid-cols-2 gap-2.5 pb-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
             {visibleProducts.map(p => (
               <ProductCard
                 key={p._id}
@@ -1198,6 +1246,7 @@ export function NewOrderPanel() {
                 onAdd={handleAddProduct}
                 onToggleFav={toggleFav}
                 isFav={favorites.includes(p._id)}
+                showPhoto={menuHasPhotos}
                 sym={sym}
               />
             ))}
@@ -1221,7 +1270,7 @@ export function NewOrderPanel() {
 
       {/* ── RIGHT: cart + payment ────────────────────────────────────────────── */}
       {/* Scrolls on its own on wide screens so the page itself never scrolls */}
-      <div ref={billRef} className="w-full shrink-0 scroll-mt-4 space-y-3 lg:min-h-0 lg:w-80 lg:overflow-y-auto lg:pr-1 xl:w-96">
+      <div ref={billRef} className="w-full shrink-0 scroll-mt-4 space-y-3 lg:min-h-0 lg:w-96 lg:overflow-y-auto lg:pr-1 xl:w-[26rem] 2xl:w-[30rem]">
         {/* Order type */}
         <div className="flex gap-1 rounded-xl border border-border bg-canvas p-1">
           <TypeTab active={orderType === 'dine-in'}  icon={<UtensilsCrossed size={13} />} label="Dine In"   onClick={() => setOrderType('dine-in')} />
@@ -1632,7 +1681,7 @@ export function NewOrderPanel() {
               <span className="shrink-0 text-lg font-bold text-ink">{fmtINR(sym, grandTotal)}</span>
             </div>
             {/* Payment choice — not for dine-in, which is paid later from Pending Bills */}
-            {orderType !== 'dine-in' && (<>
+            {(orderType !== 'dine-in' || payFirst) && (<>
             <div className="flex gap-1 rounded-lg border border-border bg-canvas p-1">
               {(['cash', 'upi', 'card', 'split'] as const).map(m => (
                 <button
@@ -1673,6 +1722,7 @@ export function NewOrderPanel() {
             </>)}
 
             {/* Hold · KOT · KOT & Print  (KOT = Kitchen Order Ticket: sends the order to the kitchen) */}
+            {!payFirst && (
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
@@ -1704,14 +1754,26 @@ export function NewOrderPanel() {
                 <span className="text-[10px] font-normal opacity-75">+ print bill</span>
               </button>
             </div>
+            )}
 
             {/* Pay · Pay & Print */}
-            {orderType === 'dine-in' ? (
+            {orderType === 'dine-in' && !payFirst ? (
               <p className="text-center text-[11px] text-ink/50">
                 Dine-in: send the KOT now and take payment from Pending Bills.
               </p>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
+              <div className={`grid gap-2 ${payFirst ? 'grid-cols-[0.8fr_1.2fr_1fr]' : 'grid-cols-2'}`}>
+                {payFirst && (
+                  <button
+                    type="button"
+                    title="Save this cart for later without sending it anywhere"
+                    onClick={handleHold}
+                    className="flex flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                  >
+                    Hold
+                    <span className="text-[10px] font-normal opacity-75">save for later</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => void handleConfirmOrder({ pay: true, print: false })}
@@ -1730,6 +1792,9 @@ export function NewOrderPanel() {
                   Pay &amp; Print
                 </button>
               </div>
+            )}
+            {payFirst && (
+              <p className="text-center text-[11px] text-ink/50">Orders go to the kitchen after payment.</p>
             )}
             {!customerOk && (
               <p className="text-center text-[11px] text-amber-700">Enter the customer name and phone above to continue.</p>

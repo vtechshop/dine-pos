@@ -8,7 +8,7 @@ import { RightPanel } from './RightPanel';
 import { StatusBar } from './StatusBar';
 import { MaintenancePage } from '../../pages/MaintenancePage';
 import { getPublicRemoteConfig } from '../../api/remoteConfig';
-import { TrialBanner } from './TrialBanner';
+
 
 export function AppLayout() {
   const { isAuthenticated, logout } = useAuth();
@@ -60,7 +60,6 @@ export function AppLayout() {
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-mist">
-          <TrialBanner />
           {/* Pages size themselves with h-full; this wrapper is what's left
               below the banner, so the banner can't push their bottom off-screen. */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

@@ -9,6 +9,7 @@ import { PlatformStatus } from './PlatformStatus';
 import { GlobalSearch } from './GlobalSearch';
 import { BroadcastBell } from '../ui/BroadcastBell';
 import { LiveBadge } from '../ui/LiveBadge';
+import { TrialBanner } from './TrialBanner';
 
 export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { hotelName, logout, role } = useAuth();
@@ -65,6 +66,9 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
 
           {/* Swiggy / Zomato status — integrations API is admin-only + feature-gated */}
           {role === 'admin' && aggregatorEnabled && <PlatformStatus />}
+
+          {/* Free-trial days left (was a full-width banner) */}
+          <TrialBanner />
 
           {/* Notification bell — live orders (all roles) */}
           <NotificationBell />

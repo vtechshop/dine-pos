@@ -48,6 +48,8 @@ export interface Settings {
   kitchenPrinterAddress?: string;
   cashierPrinterAddress?: string;
   kotAutoPrint?: boolean;
+  /** Unpaid orders reach the kitchen only after payment */
+  payBeforeKitchen?: boolean;
   qrGuestTimeoutMinutes?: number;
   roleImageAdmin?: string;
   isSetupComplete?: boolean;
