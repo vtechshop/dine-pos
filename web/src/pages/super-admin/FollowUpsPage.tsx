@@ -86,7 +86,7 @@ export function FollowUpsPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search leads…"
-            className="w-full rounded-lg border border-border bg-canvas pl-8 pr-3 py-2 text-sm text-ink placeholder:text-ink/30 focus:outline-none focus:border-brand/50"
+            className="search-input w-full pl-8 pr-3 py-2 text-sm"
           />
         </div>
 

@@ -543,7 +543,7 @@ function ItemAvailabilityTab({ onToast }: { onToast: (type: 'success' | 'error',
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search products or categories…"
-          className="flex-1 min-w-[200px] rounded-lg border border-border bg-canvas px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30"
+          className="search-input flex-1 min-w-[200px] px-3 py-2 text-sm"
         />
         <button
           type="button"

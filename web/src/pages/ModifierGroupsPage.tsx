@@ -757,7 +757,7 @@ export function ModifierGroupsPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search modifier groups…"
-            className="w-full rounded-lg border border-border py-2 pl-8 pr-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
+            className="search-input w-full py-2 pl-8 pr-3 text-sm"
           />
           {search && (
             <button type="button" onClick={() => setSearch('')}

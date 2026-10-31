@@ -83,7 +83,7 @@ export function HoldBillPanel({ onResume }: { onResume?: () => void }) {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Search held bills…"
-            className="w-full rounded-lg border border-border bg-canvas py-2 pl-8 pr-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
+            className="search-input w-full py-2 pl-8 pr-3 text-sm"
           />
         </div>
       )}

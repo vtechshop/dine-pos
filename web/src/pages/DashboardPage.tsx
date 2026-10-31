@@ -609,7 +609,7 @@ export function DashboardPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search table… (F1)"
-              className="h-8 w-full rounded-lg sm:w-48 border border-border bg-mist pl-8 pr-3 text-xs text-ink placeholder:text-ink/40 outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20 transition-colors"
+              className="search-input h-8 w-full sm:w-48 pl-8 pr-3 text-xs"
             />
           </div>
 

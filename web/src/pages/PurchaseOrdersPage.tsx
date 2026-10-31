@@ -387,7 +387,7 @@ function PODrawer({
                 onFocus={() => setVendorOpen(true)}
                 onBlur={() => setTimeout(() => setVendorOpen(false), 150)}
                 placeholder="Search vendor…"
-                className="w-full rounded-lg border border-border bg-mist px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+                className="search-input w-full px-3 py-2 text-sm"
               />
               {selectedVendor && (
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink/40">{selectedVendor.vendorCode}</span>
@@ -972,7 +972,7 @@ export function PurchaseOrdersPage() {
               <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/30" />
               <input type="search" value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search POs…"
-                className="w-full rounded-lg border border-border bg-mist py-1.5 pl-8 pr-3 text-xs text-ink outline-none focus:border-brand/50" />
+                className="search-input w-full py-1.5 pl-8 pr-3 text-xs" />
             </div>
             <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
               className="rounded-lg border border-border bg-mist px-2.5 py-1.5 text-xs text-ink outline-none" />

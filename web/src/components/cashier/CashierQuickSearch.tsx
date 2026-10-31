@@ -78,11 +78,9 @@ export function CashierQuickSearch({ dark = false }: { dark?: boolean }) {
         onBlur={() => setTimeout(() => setOpen(false), 120)}
         onKeyDown={onKeyDown}
         placeholder="Search: drawer, sales…  ( / )"
-        className={`w-full rounded-lg border py-1.5 pl-8 pr-2 text-xs outline-none transition ${
-          dark
-            ? 'border-white/15 bg-white/[0.06] text-white placeholder-white/35 focus:border-white/30 focus:bg-white/[0.1]'
-            : 'border-border bg-canvas text-ink placeholder-ink/35 focus:border-brand/50'
-        }`}
+        className={dark
+          ? 'w-full rounded-lg border border-white/15 bg-white/[0.06] py-1.5 pl-8 pr-2 text-xs text-white placeholder-white/35 outline-none transition focus:border-white/30 focus:bg-white/[0.1]'
+          : 'search-input w-full py-1.5 pl-8 pr-2 text-xs'}
       />
       {open && q.trim() && (
         <div className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-border bg-canvas py-1 shadow-lg">

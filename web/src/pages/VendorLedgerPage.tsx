@@ -179,7 +179,7 @@ function PaymentDrawer({
                 onChange={e => { setVendorSearch(e.target.value); setShowDropdown(true); setVendorId(''); setSelectedVendor(null); }}
                 onFocus={() => setShowDropdown(true)}
                 placeholder="Search vendor…"
-                className="w-full rounded-lg border border-border bg-mist py-2 pl-8 pr-3 text-xs text-ink outline-none focus:border-brand/50"
+                className="search-input w-full py-2 pl-8 pr-3 text-xs"
               />
               {showDropdown && filteredVendors.length > 0 && (
                 <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-border bg-canvas shadow-lg">
@@ -658,7 +658,7 @@ export function VendorLedgerPage() {
               <input value={payVendorSearch} onChange={e => setPayVendorSearch(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && loadPayments()}
                 placeholder="Search vendor, ref…"
-                className="w-full rounded-lg border border-border bg-mist py-1.5 pl-8 pr-3 text-xs text-ink outline-none focus:border-brand/50" />
+                className="search-input w-full py-1.5 pl-8 pr-3 text-xs" />
             </div>
             <input type="date" value={payFrom} onChange={e => setPayFrom(e.target.value)}
               className="rounded-lg border border-border bg-mist px-2.5 py-1.5 text-xs text-ink outline-none" />

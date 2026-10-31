@@ -68,11 +68,11 @@ function SumRow({
   return (
     <div className={`flex items-baseline justify-between ${bold ? 'pt-2 mt-1 border-t border-border' : ''}`}>
       <div>
-        <span className={`text-xs ${bold ? 'font-semibold text-ink' : 'text-ink/55'}`}>{label}</span>
+        <span className={`text-xs ${bold ? 'text-sm font-semibold text-burgundy' : 'text-ink/55'}`}>{label}</span>
         {sub && <span className="ml-1 text-[10px] text-ink/35">{sub}</span>}
       </div>
       <span className={`tabular-nums text-xs ${
-        bold    ? 'text-base font-bold text-brand' :
+        bold    ? 'text-2xl font-extrabold leading-none tracking-tight text-burgundy' :
         accent  ? 'font-semibold text-brand' :
         negative ? 'font-medium text-emerald-600' :
                   'font-medium text-ink'
@@ -817,6 +817,7 @@ export function PaymentModal({
               type="button"
               onClick={() => void handleConfirm()}
               disabled={confirming || !canConfirm}
+              aria-busy={confirming}
               className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand/90 disabled:opacity-60"
             >
               {confirming

@@ -2,6 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  /* Search fields (product, customer, global, bill search): firmer warm-beige border,
+     coral border + soft ring on focus, readable placeholder. Size/padding stay with
+     each field's own classes. */
+  .search-input {
+    border: 1px solid rgb(var(--border-strong));
+    background-color: rgb(var(--canvas));
+    color: rgb(var(--ink));
+    border-radius: 0.5rem;
+    outline: none;
+    transition: border-color 150ms, box-shadow 150ms;
+  }
+  .search-input::placeholder {
+    color: rgb(var(--muted));
+    opacity: 1;
+  }
+  .search-input:hover {
+    border-color: rgb(var(--wine) / 0.45);
+  }
+  .search-input:focus {
+    border-color: rgb(var(--brand));
+    box-shadow: 0 0 0 3px rgb(var(--brand) / 0.18);
+  }
+}
+
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;
@@ -36,6 +61,7 @@
     --canvas:     255 252 247; /* #FFFCF7 ivory — cards, header, inputs */
     --mist:       245 235 221; /* #F5EBDD warm cream — page background */
     --border:     232 217 204; /* #E8D9CC — dividers and input borders */
+    --border-strong: 214 190 168; /* #D6BEA8 — search fields, a step firmer than --border */
     --success:     67 134 106; /* #43866A */
     --warning:    212 154  67; /* #D49A43 */
     --danger:     200  76  84; /* #C84C54 */
@@ -49,8 +75,38 @@
 
   /* Smooth hover / state changes on interactive elements */
   button, a, [role='button'] {
-    transition-property: color, background-color, border-color, box-shadow, opacity;
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
     transition-duration: 150ms;
+  }
+
+  /* Disabled buttons: inactive but readable. Filled coral / burgundy buttons turn into a
+     light-pink chip with deep-rose text instead of fading their white text away. These
+     beat the per-button `disabled:opacity-*` utilities on purpose (higher specificity). */
+  button.bg-brand:disabled,
+  button.bg-ink:disabled {
+    opacity: 1;
+    background-color: rgb(var(--petal));
+    color: rgb(var(--wine) / 0.75);
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+  button.border-brand:disabled {
+    opacity: 1;
+    border-color: rgb(var(--border-strong));
+    color: rgb(var(--muted));
+    background-color: transparent;
+    cursor: not-allowed;
+  }
+  /* Working (aria-busy): keeps its colour so it reads as "in progress", not "unavailable" */
+  button.bg-brand[aria-busy='true']:disabled {
+    background-color: rgb(var(--brand) / 0.85);
+    color: #fff;
+    cursor: progress;
+  }
+  button.bg-ink[aria-busy='true']:disabled {
+    background-color: rgb(var(--burgundy) / 0.85);
+    color: #fff;
+    cursor: progress;
   }
 
   /* RC2: Keyboard focus ring — visible only on keyboard navigation, not mouse clicks */

@@ -629,7 +629,7 @@ function ReviewPanel({
               placeholder="Search products…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="h-8 flex-1 rounded-lg border border-border bg-canvas px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10"
+              className="search-input h-8 flex-1 px-3 text-sm"
             />
             {(['all', 'veg', 'nonveg'] as const).map(f => (
               <button

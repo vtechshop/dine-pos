@@ -125,7 +125,7 @@ export function BillSearchPanel() {
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') void handleSearch(1); }}
             placeholder="Order #, table, customer name…"
-            className="w-full rounded-lg border border-border py-2 pl-8 pr-8 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
+            className="search-input w-full py-2 pl-8 pr-8 text-sm"
           />
           {query && (
             <button type="button" onClick={() => setQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/35 hover:text-ink/60">

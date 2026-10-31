@@ -650,7 +650,7 @@ export function OrdersPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Order # / table / customer"
-              className="h-8 w-44 rounded-lg border border-border bg-mist pl-7 pr-3 text-xs text-ink placeholder-ink/30 outline-none focus:border-brand/50"
+              className="search-input h-8 w-44 pl-7 pr-3 text-xs"
             />
           </div>
 
