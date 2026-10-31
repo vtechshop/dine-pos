@@ -316,7 +316,7 @@ function HourlyRevenueCard({ symbol }: { symbol: string }) {
                     className="absolute bottom-0 left-0 right-0 rounded-sm"
                     style={{
                       height: barH > 0 ? `${barH}px` : '1px',
-                      backgroundColor: barH > 0 ? PALETTE.coral : PALETTE.border,
+                      backgroundColor: barH > 0 ? PALETTE.espresso : PALETTE.border,
                       opacity: barH > 0 ? 0.6 : 0.2,
                     }}
                   />

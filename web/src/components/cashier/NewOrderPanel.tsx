@@ -78,7 +78,7 @@ function ProductCard({
   const variantCount = (product.variants ?? []).length;
   const options = variantCount > 0 || (product.modifierGroups ?? []).length > 0;
   return (
-    <div className={`group relative flex flex-col overflow-hidden rounded-xl border bg-canvas transition ${
+    <div className={`group relative flex flex-col overflow-hidden rounded-xl border bg-canvas shadow-sm transition ${
       product.isAvailable
         ? 'border-border hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md'
         : 'border-border opacity-60'
@@ -93,7 +93,7 @@ function ProductCard({
         {/* Photo — fixed 16:10 frame so cards don't jump while images load.
             Skipped entirely when the menu has no photos, so cards stay compact. */}
         {showPhoto ? (
-        <div className="relative aspect-[16/10] w-full bg-mist">
+        <div className="relative aspect-[16/10] w-full bg-ivory 2xl:aspect-[2/1]">
           {showImg ? (
             <img
               src={product.image}
@@ -101,16 +101,16 @@ function ProductCard({
               loading="lazy"
               decoding="async"
               onError={() => setImgFailed(true)}
-              className="h-full w-full object-contain p-1.5"
+              className="absolute inset-0 h-full w-full object-cover"
             />
           ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-wine/30">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-mocha/50">
               <UtensilsCrossed size={22} />
               <span className="text-[10px] font-medium">No photo</span>
             </div>
           )}
           <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-            product.isAvailable ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+            product.isAvailable ? 'bg-white/95 text-green-700 ring-1 ring-green-200' : 'bg-white/95 text-red-600 ring-1 ring-red-200'
           }`}>
             {product.isAvailable ? 'Available' : 'Unavailable'}
           </span>
@@ -118,7 +118,7 @@ function ProductCard({
         ) : (
           <div className="px-2.5 pt-2.5">
             <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-              product.isAvailable ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+              product.isAvailable ? 'bg-white/95 text-green-700 ring-1 ring-green-200' : 'bg-white/95 text-red-600 ring-1 ring-red-200'
             }`}>
               {product.isAvailable ? 'Available' : 'Unavailable'}
             </span>
@@ -144,7 +144,7 @@ function ProductCard({
               {fmtINR(sym, product.price)}
             </span>
             {product.isAvailable && (
-              <span className="rounded-lg bg-brand px-2.5 py-1 text-[11px] font-semibold text-white transition group-hover:bg-brand/90">
+              <span className="rounded-md bg-brand px-2.5 py-1 text-[11px] font-semibold text-white transition group-hover:bg-coffee">
                 {options ? 'Choose' : 'Add'}
               </span>
             )}
@@ -171,7 +171,7 @@ function CatButton({ active, onClick, children }: { active: boolean; onClick: ()
       type="button"
       onClick={onClick}
       className={`flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-xs font-semibold leading-tight transition ${
-        active ? 'bg-brand text-white shadow-sm' : 'bg-mist text-burgundy hover:bg-petal'
+        active ? 'bg-brand text-white shadow-sm' : 'text-ink/75 hover:bg-beige/70 hover:text-ink'
       }`}
     >
       {children}
@@ -447,7 +447,7 @@ export function NewOrderPanel() {
   const billRef  = useRef<HTMLDivElement>(null);
   // Category list open/closed, remembered on this device
   const [railOpen, setRailOpen] = useState<boolean>(() => {
-    try { return localStorage.getItem('pos_cat_rail') !== 'closed'; } catch { return true; }
+    try { return localStorage.getItem('pos_cat_rail') === 'open'; } catch { return false; }
   });
   const toggleRail = (open: boolean) => {
     setRailOpen(open);
@@ -1126,7 +1126,7 @@ export function NewOrderPanel() {
               type="button"
               onClick={() => { pillsRef.current?.scrollTo({ left: 0 }); setActiveCat(''); }}
               className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                !activeCat ? 'border border-brand bg-brand text-white shadow-sm' : 'border border-transparent bg-mist text-burgundy hover:bg-petal'
+                !activeCat ? 'border border-brand bg-brand text-white shadow-sm' : 'border border-border bg-canvas text-ink/80 hover:border-mocha/40 hover:bg-ivory'
               }`}
             >
               All
@@ -1137,7 +1137,7 @@ export function NewOrderPanel() {
               className={`shrink-0 flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 activeCat === FAVS_CAT
                   ? 'bg-amber-400 text-white'
-                  : 'border border-transparent bg-mist text-burgundy hover:bg-petal'
+                  : 'border border-border bg-canvas text-ink/80 hover:border-mocha/40 hover:bg-ivory'
               }`}
             >
               <Star size={10} className={activeCat === FAVS_CAT ? 'fill-white' : 'fill-amber-400'} />
@@ -1154,7 +1154,7 @@ export function NewOrderPanel() {
                 type="button"
                 onClick={() => setActiveCat(activeCat === cat._id ? '' : cat._id)}
                 className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                  activeCat === cat._id ? 'border border-brand bg-brand text-white shadow-sm' : 'border border-transparent bg-mist text-burgundy hover:bg-petal'
+                  activeCat === cat._id ? 'border border-brand bg-brand text-white shadow-sm' : 'border border-border bg-canvas text-ink/80 hover:border-mocha/40 hover:bg-ivory'
                 }`}
               >
                 {cat.name}
@@ -1239,7 +1239,7 @@ export function NewOrderPanel() {
             <button
               type="button"
               onClick={() => billRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              className="flex w-full items-center justify-between rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white shadow-lg"
+              className="flex w-full items-center justify-between rounded-xl bg-coffee px-4 py-3 text-sm font-semibold text-white shadow-lg"
             >
               <span>View order · {cart.reduce((s, i) => s + i.quantity, 0)} item{cart.reduce((s, i) => s + i.quantity, 0) === 1 ? '' : 's'}</span>
               <span>{fmtINR(sym, grandTotal)}</span>
@@ -1250,7 +1250,7 @@ export function NewOrderPanel() {
 
       {/* ── RIGHT: cart + payment ────────────────────────────────────────────── */}
       {/* Scrolls on its own on wide screens so the page itself never scrolls */}
-      <div ref={billRef} className="w-full shrink-0 scroll-mt-4 space-y-3 lg:min-h-0 lg:w-96 lg:overflow-y-auto lg:pr-1 xl:w-[26rem] 2xl:w-[30rem]">
+      <div ref={billRef} className="w-full shrink-0 scroll-mt-4 space-y-3 lg:min-h-0 lg:w-96 lg:overflow-y-auto lg:rounded-xl lg:border lg:border-border lg:bg-canvas lg:p-3 lg:shadow-sm xl:w-[26rem] 2xl:w-[30rem]">
         {/* Order type */}
         <div className="flex gap-1 rounded-xl border border-border bg-canvas p-1">
           <TypeTab active={orderType === 'dine-in'}  icon={<UtensilsCrossed size={13} />} label="Dine In"   onClick={() => setOrderType('dine-in')} />
@@ -1653,20 +1653,20 @@ export function NewOrderPanel() {
                 )}
               </div>
               <div className="mt-1.5 flex items-baseline justify-between gap-2 border-t border-border pt-1.5">
-                <span className="text-sm font-semibold text-burgundy">Total payable</span>
-                <span className="text-[1.75rem] font-extrabold leading-none tracking-tight text-burgundy">{fmtINR(sym, grandTotal)}</span>
+                <span className="text-sm font-semibold text-coffee">Total payable</span>
+                <span className="text-[1.75rem] font-extrabold leading-none tracking-tight text-brand">{fmtINR(sym, grandTotal)}</span>
               </div>
             </div>
             {/* Payment choice — not for dine-in, which is paid later from Pending Bills */}
             {(orderType !== 'dine-in' || payFirst) && (<>
-            <div className="flex gap-1.5 rounded-lg border border-border bg-mist p-1.5">
+            <div className="grid grid-cols-4 gap-1.5">
               {(['cash', 'upi', 'card', 'split'] as const).map(m => (
                 <button
                   key={m}
                   type="button"
                   onClick={() => { setPayMethod(m); if (m === 'split') setShowPayment(true); }}
-                  className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition ${
-                    payMethod === m ? 'bg-brand text-white shadow-sm' : 'text-burgundy hover:bg-petal'
+                  className={`rounded-lg border py-2 text-xs font-semibold transition ${
+                    payMethod === m ? 'border-brand bg-ivory text-brand shadow-sm' : 'border-border bg-canvas text-ink/65 hover:border-mocha/50 hover:bg-ivory'
                   }`}
                 >
                   {m === 'upi' ? 'UPI' : m.charAt(0).toUpperCase() + m.slice(1)}
@@ -1705,7 +1705,7 @@ export function NewOrderPanel() {
                 type="button"
                 title="Save this cart for later without sending it anywhere"
                 onClick={handleHold}
-                className="flex flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                className="flex flex-col items-center justify-center rounded-xl border border-border bg-ivory py-1.5 text-xs font-semibold text-ink transition hover:bg-beige"
               >
                 Hold
                 <span className="text-[10px] font-normal opacity-75 [@media(max-height:820px)]:hidden">save for later</span>
@@ -1716,7 +1716,7 @@ export function NewOrderPanel() {
                 onClick={() => void handleConfirmOrder({ pay: false, print: false })}
                 disabled={submitting || !canKot}
                 aria-busy={submitting}
-                className="flex flex-col items-center justify-center rounded-xl bg-ink py-1.5 text-xs font-semibold text-white transition hover:bg-ink/85 disabled:opacity-50"
+                className="flex flex-col items-center justify-center rounded-xl border border-border bg-beige py-1.5 text-xs font-semibold text-coffee transition hover:bg-beige/60 disabled:opacity-50"
               >
                 KOT
                 <span className="text-[10px] font-normal opacity-75 [@media(max-height:820px)]:hidden">send to kitchen</span>
@@ -1727,7 +1727,7 @@ export function NewOrderPanel() {
                 onClick={() => void handleConfirmOrder({ pay: false, print: true })}
                 disabled={submitting || !canKot}
                 aria-busy={submitting}
-                className="flex flex-col items-center justify-center rounded-xl bg-ink py-1.5 text-xs font-semibold text-white transition hover:bg-ink/85 disabled:opacity-50"
+                className="flex flex-col items-center justify-center rounded-xl border border-border bg-beige py-1.5 text-xs font-semibold text-coffee transition hover:bg-beige/60 disabled:opacity-50"
               >
                 KOT &amp; Print
                 <span className="text-[10px] font-normal opacity-75 [@media(max-height:820px)]:hidden">+ print bill</span>
@@ -1747,7 +1747,7 @@ export function NewOrderPanel() {
                     type="button"
                     title="Save this cart for later without sending it anywhere"
                     onClick={handleHold}
-                    className="flex flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                    className="flex flex-col items-center justify-center rounded-xl border border-border bg-ivory py-1.5 text-xs font-semibold text-ink transition hover:bg-beige"
                   >
                     Hold
                     <span className="text-[10px] font-normal opacity-75 [@media(max-height:820px)]:hidden">save for later</span>
@@ -1758,7 +1758,7 @@ export function NewOrderPanel() {
                   onClick={() => void handleConfirmOrder({ pay: true, print: false })}
                   disabled={submitting || !canConfirm}
                   aria-busy={submitting}
-                  className="flex items-center justify-center gap-1.5 rounded-xl bg-brand py-3 text-base font-bold text-white shadow-md transition hover:bg-brand/90 disabled:opacity-50"
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-coffee py-3 text-base font-bold text-white shadow-md transition hover:bg-coffee/90 disabled:opacity-50"
                 >
                   {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                   Pay {fmtINR(sym, grandTotal)}

@@ -125,16 +125,16 @@ const CSS = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    /* Theme: deep burgundy display with coral / soft-pink accents (matches the POS) */
-    --bg: #3A1220;
-    --surface: #641E32;
-    --border: #8E354B;
-    --muted: #B8868F;
-    --text: #FFFCF7;
-    --text-sub: #F5EBDD;
-    --brand: #F16B65;
-    --brand-light: #FFAAA5;
-    --green: #7FC4A4;
+    /* Theme: deep coffee display with espresso / warm-ivory accents (matches the POS) */
+    --bg: #2E2017;
+    --surface: #4A3325;
+    --border: #6B4D38;
+    --muted: #B9A897;
+    --text: #F5F1EA;
+    --text-sub: #EAE3D9;
+    --brand: #C49A6C;
+    --brand-light: #E2C7A5;
+    --green: #8CC2A8;
   }
 
   body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; }
