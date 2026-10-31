@@ -62,7 +62,21 @@ const SOURCE_BADGE: Record<string, { label: string; cls: string }> = {
   qr:        { label: 'QR',       cls: 'bg-violet-50 text-violet-600' },
   swiggy:    { label: 'Swiggy',   cls: 'bg-orange-50 text-orange-600' },
   zomato:    { label: 'Zomato',   cls: 'bg-red-50 text-red-600'       },
+  admin:     { label: 'Delivery', cls: 'bg-sky-50 text-sky-700'       },
 };
+
+// ── Source filter (server-side, so it covers every page of results) ──────────
+// Counter delivery orders are stored with source 'admin'.
+const SOURCE_FILTERS = [
+  { key: 'all',      label: 'All sources' },
+  { key: 'dine-in',  label: 'Dine In'     },
+  { key: 'takeaway', label: 'Takeaway'    },
+  { key: 'admin',    label: 'Delivery'    },
+  { key: 'swiggy',   label: 'Swiggy'      },
+  { key: 'zomato',   label: 'Zomato'      },
+  { key: 'qr',       label: 'QR'          },
+] as const;
+type SourceFilter = typeof SOURCE_FILTERS[number]['key'];
 
 // ── Status filter tabs ────────────────────────────────────────────────────────
 
@@ -480,9 +494,20 @@ function OrderDetailDrawer({ order, sym, upiId, hotelName, onClose, onUpdated }:
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyState({ status, rangeMode, search }: {
-  status: StatusFilter; rangeMode: RangeMode; search: string;
+function EmptyState({ status, rangeMode, search, source }: {
+  status: StatusFilter; rangeMode: RangeMode; search: string; source: SourceFilter;
 }) {
+  if (source !== 'all' && !search.trim()) {
+    const label = SOURCE_FILTERS.find(s => s.key === source)?.label ?? source;
+    return (
+      <div className="flex h-52 flex-col items-center justify-center gap-1 text-center">
+        <p className="text-sm font-semibold text-ink/40">No {label} orders</p>
+        <p className="text-xs text-ink/30">
+          {rangeMode === 'all' ? 'None yet.' : 'Try This Month or All Time to see older ones.'}
+        </p>
+      </div>
+    );
+  }
   if (search.trim()) {
     return (
       <div className="flex h-52 flex-col items-center justify-center gap-1 text-center">
@@ -520,6 +545,7 @@ export function OrdersPage() {
   const [rangeMode, setRangeMode] = useState<RangeMode>('today');
   const [date,      setDate]      = useState(todayStr());
   const [status,    setStatus]    = useState<StatusFilter>('all');
+  const [source,    setSource]    = useState<SourceFilter>('all');
   const [search,    setSearch]    = useState('');
   const [orders,    setOrders]    = useState<OrderListItem[]>([]);
   const [total,     setTotal]     = useState(0);
@@ -539,6 +565,7 @@ export function OrdersPage() {
       else if (rangeMode === 'month') { params.from = daysAgoStr(30); params.to = todayStr(); }
       const apiStatus = STATUS_API_PARAM[status];
       if (apiStatus) params.status = apiStatus;
+      if (source !== 'all') params.source = source;
       const res = await fetchOrders(params);
       setOrders(res.orders);
       setTotal(res.total);
@@ -549,9 +576,9 @@ export function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [rangeMode, date, status, page]);
+  }, [rangeMode, date, status, source, page]);
 
-  useEffect(() => { void load(1); }, [rangeMode, date, status]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load(1); }, [rangeMode, date, status, source]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deep link from the Live Orders panel: /orders?order=<id>&q=<orderNumber>.
   // Open that order's drawer once the list has it; otherwise filter to its number.
@@ -703,6 +730,28 @@ export function OrdersPage() {
         })}
       </div>
 
+      {/* Source filter — Swiggy / Zomato / Dine In / … */}
+      <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border bg-canvas px-5 py-2" role="group" aria-label="Filter by source">
+        <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-ink/35">Source</span>
+        {SOURCE_FILTERS.map(s => {
+          const on = source === s.key;
+          return (
+            <button
+              key={s.key}
+              type="button"
+              aria-pressed={on}
+              onClick={() => { setSource(s.key); setSelected(null); }}
+              className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                on ? 'border-coffee bg-coffee text-white' : 'border-border bg-canvas text-umber hover:bg-mist hover:text-coffee'
+              }`}
+            >
+              {s.label}
+              {on && !loading && s.key !== 'all' && <span className="ml-1.5 rounded-full bg-white/20 px-1.5 text-[10px] font-semibold">{total}</span>}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Order list */}
       <div className="flex-1 overflow-y-auto">
         {error && (
@@ -714,7 +763,7 @@ export function OrdersPage() {
         {loading && orders.length === 0 ? (
           <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>
         ) : filtered.length === 0 ? (
-          <EmptyState status={status} rangeMode={rangeMode} search={search} />
+          <EmptyState status={status} rangeMode={rangeMode} search={search} source={source} />
         ) : (
           <>
             {/* Column headers — desktop */}
