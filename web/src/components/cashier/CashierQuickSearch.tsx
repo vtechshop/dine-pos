@@ -11,7 +11,7 @@ const SCREENS: { tab: CashierTab; label: string; words: string }[] = [
   { tab: 'tables',        label: 'Tables',              words: 'tables table dine in seat' },
   { tab: 'kitchen',       label: 'Kitchen Queue',       words: 'kitchen kot queue cooking preparing ready' },
   { tab: 'online-orders', label: 'Online Orders',       words: 'online swiggy zomato delivery aggregator' },
-  { tab: 'search',        label: 'Bill Search',         words: 'bill search find receipt invoice reprint refund' },
+  { tab: 'search',        label: 'Order History',       words: 'order history orders past today bill search find receipt invoice reprint refund' },
   { tab: 'customers',     label: 'Customers',           words: 'customers customer loyalty phone points' },
   { tab: 'shift',         label: 'Shift',               words: 'shift sales cash sales open close total' },
   { tab: 'shift-history', label: 'Shift History',       words: 'shift history past shifts z report' },
