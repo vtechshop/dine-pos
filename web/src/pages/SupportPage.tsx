@@ -3,6 +3,7 @@ import { ArrowLeft, Phone, MessageCircle, Mail, ChevronRight } from 'lucide-reac
 import {
   SUPPORT_PHONE, SUPPORT_PHONE_DISPLAY, SUPPORT_EMAIL, supportWhatsAppUrl,
 } from '../config/support';
+import { useAuth } from '../context/AuthContext';
 
 // Public support page — reachable from the login, register and other screens
 // without signing in. Every option opens the user's own app (phone, WhatsApp,
@@ -40,6 +41,7 @@ const OPTIONS = [
 
 export function SupportPage() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   // Go back where the user came from; fall back to login on a direct visit.
   const goBack = () => (window.history.length > 1 ? navigate(-1) : navigate('/login'));
 
@@ -95,11 +97,12 @@ export function SupportPage() {
           </ul>
         </div>
 
-        <p className="mt-6 text-center text-sm text-ink/50">
+        {/* Signed-in staff (opened from the sidebar) don't need sign-in / trial links */}
+        {!isAuthenticated && <p className="mt-6 text-center text-sm text-ink/50">
           <Link to="/login" className="font-medium text-brand hover:underline">Sign in</Link>
           <span className="text-ink/30"> · </span>
           <Link to="/register" className="font-medium text-brand hover:underline">Start Free Trial</Link>
-        </p>
+        </p>}
       </div>
     </div>
   );
