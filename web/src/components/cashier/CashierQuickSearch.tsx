@@ -66,7 +66,8 @@ export function CashierQuickSearch({ dark = false }: { dark?: boolean }) {
   }
 
   return (
-    <div className="relative w-48 shrink-0 xl:w-60">
+    // Flexes into the space the KPI chips leave (they get their full width first)
+    <div className="relative min-w-[7.5rem] max-w-[16rem] flex-1">
       <Search size={13} className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 ${dark ? 'text-white/40' : 'text-ink/35'}`} />
       <input
         ref={inputRef}
