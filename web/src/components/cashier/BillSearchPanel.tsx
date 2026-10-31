@@ -54,6 +54,15 @@ export function BillSearchPanel() {
 
 type HistoryFilter = 'all' | 'paid' | 'unpaid';
 
+/** Where an order came from, as the cashier thinks of it (counter delivery is stored as 'admin') */
+function historySource(o: CashierOrderItem): string {
+  if (o.orderSource === 'admin') return o.isParcel ? 'delivery' : 'counter';
+  return o.orderSource || 'counter';
+}
+const HISTORY_SOURCE_LABEL: Record<string, string> = { ...SOURCE_LABEL, counter: 'Counter' };
+// Always offered, in this order; any other source appears after them when it has orders today
+const HISTORY_SOURCES = ['dine-in', 'takeaway', 'delivery', 'swiggy', 'zomato', 'qr'];
+
 function historyStatus(o: CashierOrderItem): { label: string; cls: string } {
   if (o.status === 'completed') return { label: 'Paid', cls: 'bg-emerald-50 text-emerald-700' };
   if (o.status === 'payment_pending') return { label: 'Waiting for payment', cls: 'bg-amber-50 text-amber-700' };
@@ -69,6 +78,7 @@ function TodayOrderHistory() {
   const [error, setError]     = useState<string | null>(null);
   const [query, setQuery]     = useState('');
   const [filter, setFilter]   = useState<HistoryFilter>('all');
+  const [source, setSource]   = useState<string>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -93,7 +103,16 @@ function TodayOrderHistory() {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [orders]);
 
+  // Source chips: the usual ones plus anything else seen today, each with today's count
+  const sourceCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const o of today) m.set(historySource(o), (m.get(historySource(o)) ?? 0) + 1);
+    return m;
+  }, [today]);
+  const sourceKeys = [...HISTORY_SOURCES, ...[...sourceCounts.keys()].filter(k => !HISTORY_SOURCES.includes(k))];
+
   const shown = today.filter(o => {
+    if (source !== 'all' && historySource(o) !== source) return false;
     const paid = o.status === 'completed' || !!o.paymentTime;
     if (filter === 'paid' && !paid) return false;
     if (filter === 'unpaid' && paid) return false;
@@ -146,6 +165,23 @@ function TodayOrderHistory() {
         </div>
       </div>
 
+      {/* Source filter: Dine In / Takeaway / Delivery / Swiggy / Zomato / QR … */}
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by source">
+        {['all', ...sourceKeys].map(k => {
+          const n = k === 'all' ? today.length : (sourceCounts.get(k) ?? 0);
+          const on = source === k;
+          return (
+            <button key={k} type="button" onClick={() => setSource(k)} aria-pressed={on}
+              className={'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ' + (
+                on ? 'border-coffee bg-coffee text-white' : 'border-border bg-canvas text-umber hover:bg-mist hover:text-coffee'
+              )}>
+              {k === 'all' ? 'All sources' : (HISTORY_SOURCE_LABEL[k] ?? k)}
+              <span className={'rounded-full px-1.5 text-[10px] font-semibold ' + (on ? 'bg-white/20 text-white' : 'bg-mist text-ink/50')}>{n}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {error && (
         <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
           <AlertCircle size={13} className="text-red-500" />
@@ -156,7 +192,12 @@ function TodayOrderHistory() {
       <p className="text-xs text-ink/50">
         {loading && today.length === 0
           ? 'Loading…'
-          : shown.length + ' of ' + today.length + ' order' + (today.length === 1 ? '' : 's') + ' today'}
+          : <>
+              {shown.length + ' of ' + today.length + ' order' + (today.length === 1 ? '' : 's') + ' today'}
+              {(source !== 'all' || filter !== 'all' || query.trim()) && shown.length > 0 && (
+                <> · <span className="font-semibold text-ink/70">{fmtINR(sym, shown.reduce((t, o) => t + (o.grandTotal ?? 0), 0))}</span></>
+              )}
+            </>}
       </p>
 
       {!loading && shown.length === 0 ? (
@@ -176,7 +217,7 @@ function TodayOrderHistory() {
                       <span className="font-mono text-xs font-semibold text-ink">#{order.orderNumber}</span>
                       {order.tableNumber && <span className="rounded bg-mist px-1.5 py-0.5 text-[10px] font-medium text-ink/60">T{order.tableNumber}</span>}
                       <span className={'rounded px-1.5 py-0.5 text-[10px] font-semibold capitalize ' + st.cls}>{st.label}</span>
-                      <span className="text-[10px] text-ink/40">{SOURCE_LABEL[order.orderSource] ?? order.orderSource}</span>
+                      <span className="text-[10px] text-ink/40">{HISTORY_SOURCE_LABEL[historySource(order)] ?? order.orderSource}</span>
                     </div>
                     {order.customerName && <p className="mt-0.5 text-xs text-ink/55">{order.customerName}</p>}
                     <p className="text-[10px] text-ink/40">
