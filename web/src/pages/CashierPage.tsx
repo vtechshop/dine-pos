@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Wallet, Bell, LogOut,
   TrendingUp, ShoppingBag, AlertCircle, RefreshCw,
-  X, Monitor,
+  X, Monitor, Printer,
 } from 'lucide-react';
 import { useShortcut } from '../hooks/useShortcut';
 import { useCashier, calcCartTotals, type CashierTab } from '../context/CashierContext';
@@ -61,38 +61,50 @@ function getCashierIdentity() {
 // ── Header KPI strip ──────────────────────────────────────────────────────────
 
 function HeaderKpi({
-  report, drawerBalance, sym, offlinePrinters, dark = false,
+  report, drawerBalance, sym, offlinePrinters, totalPrinters, dark = false, compact = false,
 }: {
+  /** Tighter chips for the top bar */
+  compact?: boolean;
   report: DailyReport | null;
   drawerBalance: number;
   sym: string;
   offlinePrinters: number;
+  totalPrinters: number;
   dark?: boolean;
 }) {
   return (
-    <div className={`flex items-center overflow-x-auto pb-0.5 scrollbar-hide ${dark ? 'gap-2' : 'gap-3'}`}>
-      <KpiChip dark={dark} label="Sales"  value={fmtINR(sym, report?.totalSales ?? 0)}                   icon={<TrendingUp size={11} />} accent />
-      <KpiChip dark={dark} label="Bills"  value={String(report?.totalOrders ?? 0)}                        icon={<ShoppingBag size={11} />} />
-      <KpiChip dark={dark} label="Cash"   value={fmtINR(sym, report?.paymentBreakdown?.cash ?? 0)}        icon={<Wallet size={11} />} />
-      <KpiChip dark={dark} label="Drawer" value={fmtINR(sym, drawerBalance)}                              icon={<Wallet size={11} />} />
-      {offlinePrinters > 0 && (
-        <KpiChip dark={dark} label="Printer" value={`${offlinePrinters} offline`} icon={<AlertCircle size={11} />} warn />
+    <div className={`flex items-center overflow-x-auto pb-0.5 scrollbar-hide ${compact ? 'gap-1.5' : dark ? 'gap-2' : 'gap-3'}`}>
+      <KpiChip compact={compact} dark={dark} label="Sales"  value={fmtINR(sym, report?.totalSales ?? 0)}                   icon={<TrendingUp size={11} />} accent />
+      <KpiChip compact={compact} dark={dark} label="Bills"  value={String(report?.totalOrders ?? 0)}                        icon={<ShoppingBag size={11} />} />
+      <KpiChip compact={compact} dark={dark} label="Cash"   value={fmtINR(sym, report?.paymentBreakdown?.cash ?? 0)}        icon={<Wallet size={11} />} />
+      <KpiChip compact={compact} dark={dark} label="Drawer" value={fmtINR(sym, drawerBalance)}                              icon={<Wallet size={11} />} />
+      {/* Printers: green when all are online, amber with both counts when any is offline */}
+      {totalPrinters > 0 && (
+        <KpiChip
+          compact={compact} dark={dark} label="Printer"
+          value={offlinePrinters === 0 ? `${totalPrinters} online`
+            : offlinePrinters === totalPrinters ? `${totalPrinters} offline`
+            : `${totalPrinters - offlinePrinters} on · ${offlinePrinters} off`}
+          icon={offlinePrinters === 0 ? <Printer size={11} /> : <AlertCircle size={11} />}
+          ok={offlinePrinters === 0} warn={offlinePrinters > 0}
+        />
       )}
     </div>
   );
 }
 
-function KpiChip({ label, value, icon, accent, warn, dark }: {
-  label: string; value: string; icon: React.ReactNode; accent?: boolean; warn?: boolean; dark?: boolean;
+function KpiChip({ label, value, icon, accent, warn, ok, dark, compact }: {
+  label: string; value: string; icon: React.ReactNode; accent?: boolean; warn?: boolean; ok?: boolean; dark?: boolean; compact?: boolean;
 }) {
   const box = dark
-    ? (accent ? 'border-brand/40 bg-brand/15' : warn ? 'border-amber-400/40 bg-amber-400/10' : 'border-white/10 bg-white/[0.05]')
-    : (accent ? 'border-brand/20 bg-brand/5'  : warn ? 'border-amber-200 bg-amber-50'       : 'border-border bg-canvas');
-  const iconCls = accent ? 'text-brand' : warn ? (dark ? 'text-amber-300' : 'text-amber-500') : (dark ? 'text-white/40' : 'text-ink/35');
-  const valueCls = accent ? 'text-brand' : warn ? (dark ? 'text-amber-300' : 'text-amber-700') : (dark ? 'text-white' : 'text-ink');
+    ? (accent ? 'border-brand/40 bg-brand/15' : warn ? 'border-amber-400/40 bg-amber-400/10' : ok ? 'border-emerald-400/40 bg-emerald-400/10' : 'border-white/10 bg-white/[0.05]')
+    : (accent ? 'border-brand/20 bg-brand/5'  : warn ? 'border-amber-200 bg-amber-50'       : ok ? 'border-emerald-200 bg-emerald-50'       : 'border-border bg-canvas');
+  const iconCls = accent ? 'text-brand' : warn ? (dark ? 'text-amber-300' : 'text-amber-500') : ok ? (dark ? 'text-emerald-300' : 'text-emerald-600') : (dark ? 'text-white/40' : 'text-ink/35');
+  const valueCls = accent ? 'text-brand' : warn ? (dark ? 'text-amber-300' : 'text-amber-700') : ok ? (dark ? 'text-emerald-300' : 'text-emerald-700') : (dark ? 'text-white' : 'text-ink');
   return (
-    <div className={`shrink-0 flex items-center gap-1.5 rounded-lg border px-2.5 ${dark ? 'py-1' : 'py-1.5'} ${box}`}>
-      <span className={iconCls}>{icon}</span>
+    <div className={`shrink-0 flex items-center gap-1.5 rounded-lg border ${compact ? 'px-2 py-1' : dark ? 'px-2.5 py-1' : 'px-2.5 py-1.5'} ${box}`}>
+      {/* Top bar on laptop widths: drop the icons so every chip fits */}
+      <span className={`${iconCls} ${compact ? 'hidden 2xl:inline' : ''}`}>{icon}</span>
       <div>
         <p className={`text-[9px] font-semibold uppercase tracking-wide ${dark ? 'text-white/45' : 'text-ink/40'}`}>{label}</p>
         <p className={`text-xs font-bold leading-none ${valueCls}`}>{value}</p>
@@ -359,14 +371,16 @@ export function CashierPage() {
         </div>
       </button>
 
-      {/* KPI strip */}
-      <div className="min-w-0 flex-1 overflow-x-auto">
+      {/* KPI strip — natural width first; only scrolls if even the shrunk search can't make room */}
+      <div className="min-w-0 overflow-x-auto">
         <HeaderKpi
           report={report}
           drawerBalance={drawerBalance}
           sym={sym}
           offlinePrinters={offlinePrinters}
+          totalPrinters={printers.length}
           dark={false}
+          compact={inTopBar}
         />
       </div>
 
