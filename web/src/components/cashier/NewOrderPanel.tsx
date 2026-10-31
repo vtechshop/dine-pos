@@ -60,6 +60,18 @@ function TypeTab({ active, icon, label, onClick }: { active: boolean; icon: Reac
   );
 }
 
+/** Keep a typed / pasted mobile number to its 10 digits ("+91 98765 43210" → "9876543210"). */
+function cleanPhone(raw: string): string {
+  let d = raw.replace(/\D/g, '');
+  if (d.length > 10 && d.startsWith('91')) d = d.slice(2);
+  if (d.length > 10 && d.startsWith('0')) d = d.slice(1);
+  return d.slice(0, 10);
+}
+const isPhone10 = (v: string) => /^\d{10}$/.test(v);
+/** Red border while a number is started but not yet 10 digits */
+const phoneCls = (v: string, base: string) =>
+  v.length > 0 && !isPhone10(v) ? base.replace('border-border', 'border-red-300') + ' bg-red-50/40' : base;
+
 /** Up to two initials for a dish, used when it has no photo ("Masala Dosa" → "MD"). */
 function dishInitials(name: string): string {
   const words = name.replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/).filter(Boolean);
@@ -1095,10 +1107,10 @@ export function NewOrderPanel() {
   const splitOk = payMethod !== 'split' || Math.abs(splitTotal - grandTotal) < 0.5;
   // Blank "cash received" means exact cash; a typed amount must cover the bill
   const cashOk  = payMethod !== 'cash'  || cashGiven.trim() === '' || (parseFloat(cashGiven) || 0) >= grandTotal;
-  const customerOk =
-    orderType === 'dine-in'  ? (dineIn.customerName.trim() !== '' && dineIn.phone.trim() !== '') :
-    orderType === 'takeaway' ? (takeAway.customerName.trim() !== '' && takeAway.phone.trim() !== '') :
-    (delivery.customerName.trim() !== '' && delivery.phone.trim() !== '');
+  const activeCustomer = orderType === 'dine-in' ? dineIn : orderType === 'takeaway' ? takeAway : delivery;
+  // Mobile number is mandatory and must be exactly 10 digits
+  const phoneOk = isPhone10(activeCustomer.phone);
+  const customerOk = activeCustomer.customerName.trim() !== '' && phoneOk;
   const canConfirm = cart.length > 0 && splitOk && cashOk && customerOk;
   const canKot     = cart.length > 0 && customerOk;
 
@@ -1375,9 +1387,11 @@ export function NewOrderPanel() {
               type="tel"
               aria-label="Phone"
               value={dineIn.phone}
-              onChange={e => setDineIn(d => ({ ...d, phone: e.target.value }))}
-              placeholder="Phone *"
-              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+              onChange={e => setDineIn(d => ({ ...d, phone: cleanPhone(e.target.value) }))}
+              inputMode="numeric"
+              placeholder="10-digit mobile *"
+              title="10-digit mobile number"
+              className={phoneCls(dineIn.phone, 'min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50')}
             />
             <input
               type="text"
@@ -1406,9 +1420,11 @@ export function NewOrderPanel() {
               type="tel"
               aria-label="Phone"
               value={takeAway.phone}
-              onChange={e => setTakeAway(d => ({ ...d, phone: e.target.value }))}
-              placeholder="Phone *"
-              className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+              onChange={e => setTakeAway(d => ({ ...d, phone: cleanPhone(e.target.value) }))}
+              inputMode="numeric"
+              placeholder="10-digit mobile *"
+              title="10-digit mobile number"
+              className={phoneCls(takeAway.phone, 'min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50')}
             />
             <input
               type="text"
@@ -1435,9 +1451,11 @@ export function NewOrderPanel() {
               <input
                 type="tel"
                 value={delivery.phone}
-                onChange={e => setDelivery(d => ({ ...d, phone: e.target.value }))}
-                placeholder="Phone *"
-                className="rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+                onChange={e => setDelivery(d => ({ ...d, phone: cleanPhone(e.target.value) }))}
+                inputMode="numeric"
+                placeholder="10-digit mobile *"
+                title="10-digit mobile number"
+                className={phoneCls(delivery.phone, 'rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50')}
               />
             </div>
             <input
@@ -1854,7 +1872,11 @@ export function NewOrderPanel() {
               <p className="text-center text-[11px] text-ink/50">Orders go to the kitchen after payment.</p>
             )}
             {!customerOk && (
-              <p className="text-center text-[11px] text-amber-700">Enter the customer name and phone above to continue.</p>
+              <p className="text-center text-[11px] text-amber-700">
+                {activeCustomer.phone.length > 0 && !phoneOk
+                  ? `Mobile number must be 10 digits (${activeCustomer.phone.length}/10).`
+                  : 'Enter the customer name and 10-digit mobile number above to continue.'}
+              </p>
             )}
           </div>
         )}

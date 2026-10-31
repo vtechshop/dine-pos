@@ -125,7 +125,7 @@ const POS_NAV: PosNavItem[] = [
   { key: 'tables',        icon: LayoutGrid,      label: 'Tables'        },
   { key: 'kitchen',       icon: ChefHat,         label: 'Kitchen Queue', hint: 'Ctrl+K' },
   { key: 'online-orders', icon: Truck,           label: 'Online Orders', hint: 'Ctrl+O' },
-  { key: 'search',        icon: Search,          label: 'Bill Search',   hint: 'Ctrl+F' },
+  { key: 'search',        icon: Search,          label: 'Order History', hint: 'Ctrl+F' },
   { key: 'customers',     icon: Users,           label: 'Customers',     hint: 'F4'     },
   { key: 'shift',         icon: BarChart2,       label: 'Shift'         },
   { key: 'shift-history', icon: History,         label: 'Shift History'  },
