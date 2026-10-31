@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
-  Wallet, Bell, LogOut,
-  TrendingUp, ShoppingBag, AlertCircle, RefreshCw,
+  Bell, LogOut,
+  AlertCircle, RefreshCw,
   X, Monitor, Printer,
 } from 'lucide-react';
 import { useShortcut } from '../hooks/useShortcut';
@@ -16,7 +16,9 @@ import { useSocket } from '../context/SocketContext';
 import { OfflineBanner } from '../components/cashier/OfflineBanner';
 import { syncNow } from '../sync/syncEngine';
 import { useOrderSyncStatus } from '../hooks/useOrderSyncStatus';
-import { fetchSalesSummary, fetchPrinterDevices } from '../api/dashboard';
+import { fetchPrinterDevices } from '../api/dashboard';
+import { fetchPlatformStatus, type PlatformStatusItem } from '../api/aggregator';
+import { ApiError } from '../api/client';
 import { NewOrderPanel }          from '../components/cashier/NewOrderPanel';
 import { PendingBillsPanel }      from '../components/cashier/PendingBillsPanel';
 import { HoldBillPanel }          from '../components/cashier/HoldBillPanel';
@@ -34,13 +36,9 @@ import { OnlineOrdersPanel }      from '../components/cashier/OnlineOrdersPanel'
 import { ZReportView }            from '../components/cashier/ZReportView';
 import { ShiftHistoryPanel }      from '../components/cashier/ShiftHistoryPanel';
 import { CashierQuickSearch }     from '../components/cashier/CashierQuickSearch';
-import type { DailyReport, PrinterDeviceStatus } from '../types';
+import type { PrinterDeviceStatus } from '../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
-}
 
 function parseJwt(key: string): Record<string, unknown> {
   try {
@@ -60,24 +58,44 @@ function getCashierIdentity() {
 
 // ── Header KPI strip ──────────────────────────────────────────────────────────
 
+const PLATFORM_LABEL: Record<string, string> = { swiggy: 'Swiggy', zomato: 'Zomato' };
+
+/** Swiggy / Zomato state as the cashier needs it: is it taking orders? */
+function platformState(p: PlatformStatusItem): { value: string; ok: boolean; warn: boolean; hint: string } {
+  if (!p.enabled) return { value: 'Offline', ok: false, warn: false, hint: 'Not switched on — ask your admin' };
+  if (p.connectionStatus === 'connected') return { value: 'Online', ok: true, warn: false, hint: 'Connected — receiving orders' };
+  if (p.connectionStatus === 'error') return { value: 'Error', ok: false, warn: true, hint: 'Connection problem — ask your admin' };
+  return { value: 'Offline', ok: false, warn: false, hint: 'Switched on but not connected yet' };
+}
+
 function HeaderKpi({
-  report, drawerBalance, sym, offlinePrinters, totalPrinters, dark = false, compact = false,
+  platforms, onOpenOnline, offlinePrinters, totalPrinters, dark = false, compact = false,
 }: {
   /** Tighter chips for the top bar */
   compact?: boolean;
-  report: DailyReport | null;
-  drawerBalance: number;
-  sym: string;
+  /** Swiggy / Zomato status; empty when the hotel doesn't use them */
+  platforms: PlatformStatusItem[];
+  onOpenOnline: () => void;
   offlinePrinters: number;
   totalPrinters: number;
   dark?: boolean;
 }) {
   return (
     <div className={`flex items-center overflow-x-auto pb-0.5 scrollbar-hide ${compact ? 'gap-1.5' : dark ? 'gap-2' : 'gap-3'}`}>
-      <KpiChip compact={compact} dark={dark} label="Sales"  value={fmtINR(sym, report?.totalSales ?? 0)}                   icon={<TrendingUp size={11} />} accent />
-      <KpiChip compact={compact} dark={dark} label="Bills"  value={String(report?.totalOrders ?? 0)}                        icon={<ShoppingBag size={11} />} />
-      <KpiChip compact={compact} dark={dark} label="Cash"   value={fmtINR(sym, report?.paymentBreakdown?.cash ?? 0)}        icon={<Wallet size={11} />} />
-      <KpiChip compact={compact} dark={dark} label="Drawer" value={fmtINR(sym, drawerBalance)}                              icon={<Wallet size={11} />} />
+      {platforms.map(p => {
+        const st = platformState(p);
+        const label = PLATFORM_LABEL[p.platform] ?? p.platform;
+        return (
+          <button key={p.platform} type="button" onClick={onOpenOnline}
+            title={`${label}: ${st.hint} · ${p.todayOrderCount} order${p.todayOrderCount === 1 ? '' : 's'} today`}
+            className="shrink-0 rounded-lg text-left">
+            <KpiChip compact={compact} dark={dark} label={label}
+              value={p.todayOrderCount > 0 ? `${st.value} · ${p.todayOrderCount}` : st.value}
+              icon={<span className={`block h-2 w-2 rounded-full ${st.ok ? 'bg-emerald-500' : st.warn ? 'bg-red-500' : 'bg-ink/25'}`} />}
+              ok={st.ok} warn={st.warn} />
+          </button>
+        );
+      })}
       {/* Printers: green when all are online, amber with both counts when any is offline */}
       {totalPrinters > 0 && (
         <KpiChip
@@ -221,11 +239,10 @@ function NotificationBell({ dark = false }: { dark?: boolean }) {
 
 export function CashierPage() {
   const navigate = useNavigate();
-  const { activeTab, setActiveTab, heldBills, shift, drawerBalance, cart, selectedShiftId } = useCashier();
+  const { activeTab, setActiveTab, heldBills, shift, cart, selectedShiftId } = useCashier();
   const { settings } = useSettings();
-  const { logout, hotelId, role } = useAuth();
-  const { connected: socketConnected } = useSocket();
-  const sym = settings?.currencySymbol ?? '₹';
+  const { logout, hotelId } = useAuth();
+  const { connected: socketConnected, socket } = useSocket();
   const topBarSlot = useTopBarSlot();
 
   // ── Customer display window ────────────────────────────────────────────────
@@ -275,29 +292,38 @@ export function CashierPage() {
   }, [socketConnected, hotelId]);
 
   // Header data
-  const [report, setReport]     = useState<DailyReport | null>(null);
-  const [printers, setPrinters] = useState<PrinterDeviceStatus[]>([]);
-  const [nowMs, setNowMs]       = useState(() => Date.now());
+  const [platforms, setPlatforms] = useState<PlatformStatusItem[]>([]);
+  const [printers, setPrinters]   = useState<PrinterDeviceStatus[]>([]);
+  const [nowMs, setNowMs]         = useState(() => Date.now());
 
   const loadHeader = useCallback(async () => {
     let cancelled = false;
-    const [rptRes, prtRes] = await Promise.allSettled([
-      fetchSalesSummary(role),   // cashier: own shift; admin: whole day
+    const [platRes, prtRes] = await Promise.allSettled([
+      fetchPlatformStatus(),     // Swiggy / Zomato on/off — fails (hidden) when the hotel has no aggregator feature
       fetchPrinterDevices(),
     ]);
     if (!cancelled) {
-      if (rptRes.status === 'fulfilled') setReport(rptRes.value);
+      if (platRes.status === 'fulfilled') setPlatforms(platRes.value);
+      else if (platRes.reason instanceof ApiError && (platRes.reason.status === 403 || platRes.reason.status === 404)) setPlatforms([]);
       if (prtRes.status === 'fulfilled') setPrinters(prtRes.value);
       setNowMs(Date.now());
     }
     return () => { cancelled = true; };
-  }, [role]);
+  }, []);
 
   useEffect(() => {
     void loadHeader();
     const t = setInterval(() => { void loadHeader(); }, 60_000);
     return () => clearInterval(t);
   }, [loadHeader]);
+
+  // A Swiggy / Zomato order arriving flips the platform to "connected" — refresh right away
+  useEffect(() => {
+    if (!socket) return;
+    const onDelivery = () => { void loadHeader(); };
+    socket.on('new_delivery_order', onDelivery);
+    return () => { socket.off('new_delivery_order', onDelivery); };
+  }, [socket, loadHeader]);
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useShortcut('F2', () => navigate('/cashier'));
@@ -374,9 +400,8 @@ export function CashierPage() {
       {/* KPI strip — natural width first; only scrolls if even the shrunk search can't make room */}
       <div className="min-w-0 overflow-x-auto">
         <HeaderKpi
-          report={report}
-          drawerBalance={drawerBalance}
-          sym={sym}
+          platforms={platforms}
+          onOpenOnline={() => setActiveTab('online-orders')}
           offlinePrinters={offlinePrinters}
           totalPrinters={printers.length}
           dark={false}

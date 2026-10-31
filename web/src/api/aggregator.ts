@@ -77,6 +77,19 @@ export interface WebhookLog {
   createdAt:        string;
 }
 
+// ── Platform on/off (cashier + admin, status only) ───────────────────────────
+
+export interface PlatformStatusItem {
+  platform:         AggregatorPlatform;
+  enabled:          boolean;
+  connectionStatus: 'connected' | 'disconnected' | 'error';
+  lastOrderAt:      string | null;
+  todayOrderCount:  number;
+}
+
+export const fetchPlatformStatus = () =>
+  apiFetch<{ platforms: PlatformStatusItem[] }>('/aggregator/status').then(r => r.platforms);
+
 // ── Integration settings ──────────────────────────────────────────────────────
 
 export const fetchIntegrations = () =>
