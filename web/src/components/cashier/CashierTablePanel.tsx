@@ -3,9 +3,11 @@ import {
   Users, Clock, LayoutGrid, RefreshCw, AlertCircle,
   UtensilsCrossed, CreditCard, Plus,
   Search, X, ChevronRight, ArrowRightLeft, GitMerge, Scissors, UserCog,
-  ShoppingBag, Flame,
+  ShoppingBag, Flame, DoorOpen, UserCheck,
 } from 'lucide-react';
-import { fetchTables, fetchOpenSessions } from '../../api/tables';
+import { fetchTables, fetchOpenSessions, openSession } from '../../api/tables';
+import { fetchSessionBill, markGuestLeft, closeSession } from '../../api/billing';
+import { sumDue } from '../../utils/counterBilling';
 import { fetchCashierOrders } from '../../api/orders';
 import { useCashier } from '../../context/CashierContext';
 import { useSettings } from '../../context/SettingsContext';
@@ -160,6 +162,7 @@ function TableDetailPanel({
   onClose,
   onNewOrder,
   onGoPayment,
+  onChanged,
 }: {
   table: TableWithSession;
   nowMs: number;
@@ -167,9 +170,86 @@ function TableDetailPanel({
   onClose: () => void;
   onNewOrder: () => void;
   onGoPayment: () => void;
+  /** Table status changed here (occupied / released) — reload the floor */
+  onChanged: () => void;
 }) {
   const isOccupied = !!table.session;
   const cfg = STATUS_CONFIG[isOccupied ? 'occupied' : (table.status ?? 'available')]!;
+  const [busy, setBusy]                     = useState(false);
+  const [actionErr, setActionErr]           = useState<string | null>(null);
+  const [confirmRelease, setConfirmRelease] = useState(false);
+
+  // Fresh state whenever another table is picked
+  useEffect(() => { setActionErr(null); setConfirmRelease(false); setBusy(false); }, [table._id]);
+
+  /** Seat guests now; items can be added later. */
+  async function handleOccupy() {
+    setBusy(true); setActionErr(null);
+    try {
+      await openSession(table._id);
+    } catch (err) {
+      // 409 = someone already opened it — the reload shows it as occupied
+      if (!(err instanceof Error && /already/i.test(err.message))) {
+        setActionErr(err instanceof Error ? err.message : 'Could not mark the table occupied');
+      }
+    } finally {
+      setBusy(false);
+      onChanged();
+    }
+  }
+
+  /** Step 1: make sure nothing is owed, then ask to confirm. */
+  async function handleReleaseCheck() {
+    if (!table.session) return;
+    setBusy(true); setActionErr(null);
+    try {
+      const bill = await fetchSessionBill(table.session._id);
+      const active = bill.guests.filter(g => g.guest.status === 'active');
+      const due = active.reduce((t, g) => t + sumDue(g.orders), 0);
+      const inKitchen = active.flatMap(g => g.orders)
+        .filter(o => ['pending', 'preparing', 'ready'].includes(o.status ?? '')).length;
+      if (due > 0.009 || inKitchen > 0) {
+        // Releasing would cancel a bill — cashiers take payment instead; an admin can still release
+        const what = due > 0.009
+          ? `${fmtINR(sym, due)} is still unpaid`
+          : `${inKitchen} order${inKitchen === 1 ? ' is' : 's are'} still in the kitchen`;
+        setActionErr(`${what} on this table. Take payment first — only an admin can release a table with open orders.`);
+      } else {
+        setConfirmRelease(true);
+      }
+    } catch (err) {
+      setActionErr(err instanceof Error ? err.message : 'Could not check this table');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Step 2: mark remaining guests as left and close the session — the table becomes free. */
+  async function handleRelease() {
+    if (!table.session) return;
+    const sessionId = table.session._id;
+    setBusy(true); setActionErr(null);
+    try {
+      const bill = await fetchSessionBill(sessionId);
+      for (const g of bill.guests.filter(x => x.guest.status === 'active')) {
+        if (sumDue(g.orders) > 0.009) throw new Error('A new order arrived on this table — take payment first.');
+        try {
+          await markGuestLeft(sessionId, g.guest._id);
+        } catch (err) {
+          // already left / billed (e.g. a retry) — fine to continue
+          if (!(err instanceof Error && /already/i.test(err.message))) throw err;
+        }
+      }
+      await closeSession(sessionId);
+      onChanged();
+      onClose();
+    } catch (err) {
+      setActionErr(err instanceof Error ? err.message : 'Could not release the table');
+      setConfirmRelease(false);
+      setBusy(false);
+      onChanged();
+    }
+  }
 
   return (
     <div className="rounded-xl border border-border bg-canvas p-4 space-y-4">
@@ -240,7 +320,19 @@ function TableDetailPanel({
             <Plus size={16} />
             Open Table &amp; New Order
           </button>
-        ) : (
+        ) : null}
+        {!isOccupied && (
+          <button
+            type="button"
+            onClick={() => void handleOccupy()}
+            disabled={busy || table.status === 'inactive'}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-semibold text-ink hover:bg-mist"
+          >
+            <UserCheck size={14} />
+            {busy ? 'Marking…' : 'Mark Occupied (seat guests)'}
+          </button>
+        )}
+        {!isOccupied ? null : (
           <>
             <button
               type="button"
@@ -261,7 +353,40 @@ function TableDetailPanel({
               <ShoppingBag size={14} />
               Add More Items
             </button>
+            {confirmRelease ? (
+              <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-semibold text-amber-800">
+                  Release {table.name || `Table ${table.number}`}? Nothing is owed — it will show as free.
+                </p>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setConfirmRelease(false)} disabled={busy}
+                    className="flex-1 rounded-lg border border-border bg-canvas py-2 text-xs font-semibold text-ink hover:bg-mist">
+                    Cancel
+                  </button>
+                  <button type="button" onClick={() => void handleRelease()} disabled={busy}
+                    className="flex-1 rounded-lg bg-action py-2 text-xs font-semibold text-white hover:bg-action-press">
+                    {busy ? 'Releasing…' : 'Release'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleReleaseCheck()}
+                disabled={busy}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-semibold text-ink hover:bg-mist"
+              >
+                <DoorOpen size={14} />
+                {busy ? 'Checking…' : 'Release Table (mark free)'}
+              </button>
+            )}
           </>
+        )}
+        {actionErr && (
+          <div className="flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
+            <AlertCircle size={13} className="mt-0.5 shrink-0 text-red-500" />
+            <p className="text-xs text-red-600">{actionErr}</p>
+          </div>
         )}
       </div>
 
@@ -400,6 +525,11 @@ export function CashierTablePanel() {
   const totalSales     = tables
     .reduce((sum, t) => sum + (t.session?.runningTotal ?? 0), 0);
 
+  // Keep the open detail panel showing fresh data after a reload
+  useEffect(() => {
+    setSelected(prev => (prev ? tables.find(t => t._id === prev._id) ?? null : null));
+  }, [tables]);
+
   function handleSelectTable(t: TableWithSession) {
     setSelected(prev => prev?._id === t._id ? null : t);
   }
@@ -530,6 +660,7 @@ export function CashierTablePanel() {
               onClose={() => setSelected(null)}
               onNewOrder={() => handleNewOrder(selected)}
               onGoPayment={handleGoPayment}
+              onChanged={() => void load()}
             />
 
             {/* Legend */}
