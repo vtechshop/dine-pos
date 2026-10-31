@@ -1,10 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Pencil, Trash2, LayoutGrid, Users,
-  RefreshCw, X, Check, Search, MoreHorizontal,
+  RefreshCw, X, Check, Search, MoreHorizontal, DoorOpen, UserCheck,
 } from 'lucide-react';
 import { TABLE_SHAPES, type Table, type TableShape } from '../types';
-import { fetchTables, createTable, updateTable, deleteTable } from '../api/tables';
+import {
+  fetchTables, createTable, updateTable, deleteTable,
+  fetchOpenSessions, openSession, setTableStatus,
+} from '../api/tables';
+import { fetchSessionBill, markGuestLeft, closeSession } from '../api/billing';
+import { cancelOrder } from '../api/orders';
+import { sumDue } from '../utils/counterBilling';
+import { useSettings } from '../context/SettingsContext';
+import type { BillingOrder } from '../types';
 import { Spinner } from '../components/ui/Spinner';
 import { StatusChip } from '../components/ui/StatusChip';
 import { useAuth } from '../context/AuthContext';
@@ -240,6 +248,129 @@ function DeleteDialog({ table, onConfirm, onCancel, saving }: DeleteDialogProps)
   );
 }
 
+// ── ReleaseDialog — mark an occupied table available ─────────────────────────
+// Admin release, same rules as the Dashboard billing panel: kitchen orders are
+// cancelled, unpaid guests are marked left (orders kept, never deleted), the
+// session is closed. Shows exactly what will happen before confirming.
+
+const KITCHEN = new Set(['pending', 'preparing', 'ready']);
+
+interface ReleasePlan {
+  sessionId:      string | null;
+  kitchenOrders:  BillingOrder[];
+  unpaidServed:   number;
+  activeGuestIds: string[];
+}
+
+function ReleaseDialog({ table, sym, onDone, onCancel }: {
+  table: Table; sym: string; onDone(): void; onCancel(): void;
+}) {
+  useShortcut('Escape', onCancel);
+  const label = table.name || `T${table.number}`;
+  const [plan, setPlan]       = useState<ReleasePlan | null>(null);
+  const [err, setErr]         = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
+
+  useEffect(() => {
+    let off = false;
+    (async () => {
+      try {
+        const sessions = await fetchOpenSessions();
+        const s = sessions.find(x => x._id === table.currentSessionId)
+               ?? sessions.find(x => x.tableNumber === String(table.number));
+        if (!s) {
+          if (!off) setPlan({ sessionId: null, kitchenOrders: [], unpaidServed: 0, activeGuestIds: [] });
+          return;
+        }
+        const bill   = await fetchSessionBill(s._id);
+        const active = bill.guests.filter(g => g.guest.status === 'active');
+        const orders = active.flatMap(g => g.orders);
+        if (!off) setPlan({
+          sessionId:      s._id,
+          kitchenOrders:  orders.filter(o => KITCHEN.has(o.status ?? '')),
+          unpaidServed:   sumDue(orders.filter(o => !KITCHEN.has(o.status ?? ''))),
+          activeGuestIds: active.map(g => g.guest._id),
+        });
+      } catch (e) {
+        if (!off) setErr(e instanceof Error ? e.message : 'Could not read this table');
+      }
+    })();
+    return () => { off = true; };
+  }, [table]);
+
+  async function confirm() {
+    if (!plan) return;
+    setWorking(true); setErr(null);
+    try {
+      if (plan.sessionId) {
+        for (const o of plan.kitchenOrders) await cancelOrder(o._id);
+        for (const gid of plan.activeGuestIds) {
+          try { await markGuestLeft(plan.sessionId, gid); }
+          catch (e) { if (!(e instanceof Error && /already/i.test(e.message))) throw e; }
+        }
+        await closeSession(plan.sessionId);
+      } else {
+        // Marked occupied without a dining session — just flip the status
+        await setTableStatus(table._id, 'available');
+      }
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not release the table');
+      setWorking(false);
+    }
+  }
+
+  const kitchenTotal = plan?.kitchenOrders.reduce((t, o) => t + o.grandTotal, 0) ?? 0;
+  const nothingOwed  = !!plan && plan.kitchenOrders.length === 0 && plan.unpaidServed < 0.01;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+      <div className="w-full max-w-sm rounded-2xl bg-canvas p-6 shadow-2xl">
+        <h3 className="mb-2 text-sm font-semibold text-ink">Mark Table {label} available?</h3>
+        {!plan && !err && <div className="flex justify-center py-6"><Spinner /></div>}
+        {plan && (
+          nothingOwed ? (
+            <p className="mb-5 text-xs leading-relaxed text-ink/55">
+              Nothing is owed on this table. It will show as free and can be seated again.
+            </p>
+          ) : (
+            <>
+              <p className="mb-3 text-xs leading-relaxed text-ink/55">
+                Frees the table without taking payment. This can’t be undone.
+              </p>
+              <div className="mb-5 space-y-2 rounded-xl border border-border bg-mist px-4 py-3 text-xs">
+                <div className="flex justify-between gap-3">
+                  <span className="text-ink/55">Kitchen orders to cancel</span>
+                  <span className="font-semibold tabular-nums text-ink">
+                    {plan.kitchenOrders.length}{plan.kitchenOrders.length > 0 && ` · ${sym}${Math.round(kitchenTotal).toLocaleString('en-IN')}`}
+                  </span>
+                </div>
+                {plan.unpaidServed >= 0.01 && (
+                  <div className="flex justify-between gap-3 border-t border-border pt-2">
+                    <span className="font-medium text-red-600">Served but unpaid (not collected)</span>
+                    <span className="font-bold tabular-nums text-red-600">{sym}{Math.round(plan.unpaidServed).toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+              </div>
+            </>
+          )
+        )}
+        {err && <p className="mb-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} disabled={working}
+            className="rounded-lg border border-border px-4 py-2 text-xs font-medium text-ink/50 hover:bg-ink/5">
+            Cancel
+          </button>
+          <button onClick={() => void confirm()} disabled={!plan || working}
+            className={`rounded-lg px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 ${nothingOwed ? 'bg-action hover:bg-action-press' : 'bg-red-600 hover:bg-red-700'}`}>
+            {working ? 'Releasing…' : 'Mark Available'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Card border by status ─────────────────────────────────────────────────────
 
 function cardBorderCls(status: Table['status']): string {
@@ -266,6 +397,9 @@ export function TablesPage() {
   const [drawerMode,   setDrawerMode]   = useState<'add' | 'edit' | null>(null);
   const [editTarget,   setEditTarget]   = useState<Table | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Table | null>(null);
+  const [releaseTarget, setReleaseTarget] = useState<Table | null>(null);
+  const { settings } = useSettings();
+  const sym = settings?.currencySymbol ?? '₹';
   const [moreOpen,     setMoreOpen]     = useState<string | null>(null);
   const [search,       setSearch]       = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -366,6 +500,21 @@ export function TablesPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  /** Seat guests: opens a dining session, which marks the table occupied. */
+  async function handleOccupy(t: Table) {
+    setMoreOpen(null);
+    setError(null);
+    try {
+      await openSession(t._id);
+    } catch (e) {
+      // 409 = already has a session — the reload shows it as occupied
+      if (!(e instanceof Error && /already/i.test(e.message))) {
+        setError(e instanceof Error ? e.message : 'Could not mark the table occupied');
+      }
+    }
+    void load();
   }
 
   const hasFilter = !!(search || statusFilter);
@@ -552,6 +701,25 @@ export function TablesPage() {
                               <Pencil size={12} />
                               Edit Table
                             </button>
+                            {table.status === 'occupied' ? (
+                              <button
+                                role="menuitem"
+                                onClick={() => { setMoreOpen(null); setReleaseTarget(table); }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink/70 hover:bg-mist"
+                              >
+                                <DoorOpen size={12} />
+                                Mark Available
+                              </button>
+                            ) : table.status !== 'inactive' && (
+                              <button
+                                role="menuitem"
+                                onClick={() => void handleOccupy(table)}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink/70 hover:bg-mist"
+                              >
+                                <UserCheck size={12} />
+                                Mark Occupied
+                              </button>
+                            )}
                             <div className="mx-2 border-t border-border" />
                             <button
                               role="menuitem"
@@ -581,6 +749,16 @@ export function TablesPage() {
           onClose={closeDrawer}
           saving={saving}
           error={formErr}
+        />
+      )}
+
+      {/* ── Mark available (release) dialog ─────────────────────────────── */}
+      {releaseTarget !== null && (
+        <ReleaseDialog
+          table={releaseTarget}
+          sym={sym}
+          onDone={() => { setReleaseTarget(null); void load(); }}
+          onCancel={() => setReleaseTarget(null)}
         />
       )}
 
