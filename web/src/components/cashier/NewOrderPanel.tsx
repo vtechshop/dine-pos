@@ -8,7 +8,7 @@ import { useCashier, calcCartTotals, type CartItem, type HeldBill } from '../../
 import { ModifierDialog, type ModifierResult } from './ModifierDialog';
 import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
-import { fetchProducts, fetchCategories } from '../../api/products';
+import { fetchProducts, fetchCategories, setProductAvailability } from '../../api/products';
 import { fetchTables } from '../../api/tables';
 import { createOrder, completeOrder } from '../../api/orders';
 import { validateCoupon, type CouponValidateResult } from '../../api/coupons';
@@ -69,8 +69,10 @@ function dishInitials(name: string): string {
 // ── Product card ──────────────────────────────────────────────────────────────
 
 function ProductCard({
-  product, onAdd, onToggleFav, isFav, sym, showPhoto = true, cartQty = 0, onDec,
+  product, onAdd, onToggleFav, isFav, sym, showPhoto = true, cartQty = 0, onDec, onToggleStock,
 }: {
+  /** Mark the dish in / out of stock (cashier, kitchen, admin) */
+  onToggleStock?: (p: Product) => void;
   showPhoto?: boolean;
   /** How many of this dish are in the order (all its lines) */
   cartQty?: number;
@@ -90,7 +92,7 @@ function ProductCard({
   return (
     <div className={`group relative flex flex-col overflow-hidden rounded-xl border bg-canvas shadow-sm transition ${
       !product.isAvailable
-        ? 'border-border opacity-60'
+        ? 'border-border bg-ivory/60'
         : cartQty > 0
           ? 'border-brand/60 ring-1 ring-brand/25 hover:shadow-md'
           : 'border-border hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md'
@@ -100,7 +102,7 @@ function ProductCard({
         onClick={() => onAdd(product)}
         disabled={!product.isAvailable}
         aria-label={`Add ${product.name}`}
-        className="flex flex-1 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:cursor-not-allowed"
+        className={`flex flex-1 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:cursor-not-allowed ${product.isAvailable ? '' : 'opacity-55'}`}
       >
         {/* Photo — fixed 16:10 frame so cards don't jump while images load.
             Skipped entirely when the menu has no photos, so cards stay compact. */}
@@ -121,20 +123,10 @@ function ProductCard({
               <span className="select-none text-3xl font-semibold tracking-wide text-mocha/60">{dishInitials(product.name)}</span>
             </div>
           )}
-          <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-            product.isAvailable ? 'bg-white/95 text-green-700 ring-1 ring-green-200' : 'bg-white/95 text-red-600 ring-1 ring-red-200'
-          }`}>
-            {product.isAvailable ? 'Available' : 'Unavailable'}
-          </span>
         </div>
         ) : (
-          <div className="px-2.5 pt-2.5">
-            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-              product.isAvailable ? 'bg-white/95 text-green-700 ring-1 ring-green-200' : 'bg-white/95 text-red-600 ring-1 ring-red-200'
-            }`}>
-              {product.isAvailable ? 'Available' : 'Unavailable'}
-            </span>
-          </div>
+          // keeps room for the stock toggle that sits over this corner
+          <div aria-hidden className="h-[30px]" />
         )}
 
         <div className="flex flex-1 flex-col gap-1 p-2.5">
@@ -163,6 +155,19 @@ function ProductCard({
             )}
           </div>
         </div>
+      </button>
+      {/* Stock status — tap to mark out of stock / back in stock */}
+      <button
+        type="button"
+        onClick={() => onToggleStock?.(product)}
+        disabled={!onToggleStock}
+        title={product.isAvailable ? 'Tap to mark out of stock' : 'Tap to mark back in stock'}
+        aria-label={product.isAvailable ? `Mark ${product.name} out of stock` : `Mark ${product.name} back in stock`}
+        className={`absolute left-2 top-2 z-[1] rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 transition hover:ring-2 disabled:cursor-default disabled:hover:ring-1 ${
+          product.isAvailable ? 'bg-white/95 text-green-700 ring-green-200 hover:ring-green-300' : 'bg-white text-red-600 ring-red-200 hover:ring-red-300'
+        }`}
+      >
+        {product.isAvailable ? 'Available' : 'Out of stock'}
       </button>
       {/* In the order: − qty + in place of Add */}
       {product.isAvailable && cartQty > 0 && (
@@ -608,7 +613,7 @@ export function NewOrderPanel() {
     const today = new Date().toISOString().split('T')[0];
     const [catRes, prodRes, tableRes, topRes] = await Promise.allSettled([
       fetchCategories(),
-      fetchProducts({ available: true } as Parameters<typeof fetchProducts>[0]),
+      fetchProducts(),   // all dishes: out-of-stock ones show greyed and can be switched back on
       fetchTables(),
       // "Top Today" uses the admin-only product report; cashiers would get 403
       role === 'admin' ? fetchProductSalesReport(today) : Promise.reject(new Error('admin only')),
@@ -761,7 +766,24 @@ export function NewOrderPanel() {
   }, [orderType, takeAway.phone, delivery.phone, grandTotal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Add to cart (via modifier dialog or direct) ────────────────────────────
+  // Mark a dish out of stock / back in stock (cashier, kitchen, admin)
+  const canToggleStock = role === 'admin' || role === 'cashier' || role === 'kitchen';
+  async function handleToggleStock(p: Product) {
+    const next = !p.isAvailable;
+    const ok = window.confirm(next
+      ? `Mark "${p.name}" back in stock?`
+      : `Mark "${p.name}" as out of stock? It can't be ordered (here or by QR) until it's back.`);
+    if (!ok) return;
+    try {
+      await setProductAvailability(p._id, next);
+      setProducts(prev => prev.map(x => x._id === p._id ? { ...x, isAvailable: next } : x));
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Could not change stock status');
+    }
+  }
+
   function handleAddProduct(p: Product) {
+    if (!p.isAvailable) return;
     const hasVariants = (p.variants ?? []).length > 0;
     const hasModifiers = (p.modifierGroups ?? []).length > 0;
     if (!hasVariants && !hasModifiers) {
@@ -1275,6 +1297,7 @@ export function NewOrderPanel() {
                 onToggleFav={toggleFav}
                 isFav={favorites.includes(p._id)}
                 showPhoto={menuHasPhotos}
+                onToggleStock={canToggleStock ? handleToggleStock : undefined}
                 cartQty={cartByProduct.get(p._id)?.qty ?? 0}
                 onDec={(() => {
                   const lines = cartByProduct.get(p._id)?.lines ?? [];

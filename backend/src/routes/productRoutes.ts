@@ -8,6 +8,7 @@ import Ingredient from '../models/Ingredient';
 import ModifierGroup from '../models/ModifierGroup';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
+import { requireActiveStaff } from '../middleware/staffAuth';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
 import { makeRateLimiter } from '../utils/rateLimiter';
@@ -317,6 +318,40 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     res.json(product);
   } catch (error) {
     sendError(res, 400, 'Invalid data', error);
+  }
+});
+
+// PATCH /api/products/:id/availability — mark a dish in / out of stock from the POS.
+// Cashier, kitchen and admin (a deactivated staff member is refused by requireActiveStaff).
+// Changes nothing but isAvailable. A stock-tracked dish with 0 left cannot be switched
+// back on here — that needs a restock in Inventory first.
+router.patch('/:id/availability', requireActiveStaff, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!['admin', 'cashier', 'kitchen'].includes(req.role ?? '')) {
+      return res.status(403).json({ message: 'Access denied.' });
+    }
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid product id' });
+    }
+    const isAvailable = req.body?.isAvailable;
+    if (typeof isAvailable !== 'boolean') {
+      return res.status(400).json({ message: 'isAvailable must be true or false' });
+    }
+    const product = await Product.findOne({ _id: req.params.id, hotelId: req.hotelId, isDeleted: { $ne: true } })
+      .select('name stock isAvailable').lean() as { name: string; stock?: number; isAvailable: boolean } | null;
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    if (isAvailable && product.stock === 0) {
+      return res.status(409).json({
+        code: 'NO_STOCK',
+        message: `${product.name} has 0 left in stock. Add stock in Inventory to sell it again.`,
+      });
+    }
+    await Product.updateOne({ _id: req.params.id, hotelId: req.hotelId }, { $set: { isAvailable } });
+    logAudit(req, isAvailable ? 'product.back_in_stock' : 'product.out_of_stock', 'product', req.params.id, { name: product.name });
+    invalidateProductCache(req.hotelId!);
+    res.json({ _id: req.params.id, isAvailable });
+  } catch (error) {
+    sendError(res, 500, 'Server error', error);
   }
 });
 
