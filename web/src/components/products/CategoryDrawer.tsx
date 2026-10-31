@@ -14,7 +14,7 @@ interface Props {
 
 const BLANK: CategoryInput = {
   name:      '',
-  color:     '#F16B65',
+  color:     '#805A3B',
   icon:      'restaurant',
   isActive:  true,
   sortOrder: 0,

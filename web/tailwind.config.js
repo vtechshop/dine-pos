@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 
-// Theme: burgundy + coral + soft pink on warm cream. All colours come from the CSS
+// Theme: espresso brown + warm ivory. All colours come from the CSS
 // variables in src/index.css (space-separated RGB, so opacity modifiers work).
 const v = name => `rgb(var(--${name}) / <alpha-value>)`;
 
@@ -32,14 +32,13 @@ function scale(base, baseStep) {
   return out;
 }
 
-const success = scale('#43866A', 600);
-const danger  = scale('#C84C54', 600);
-const warning = scale('#D49A43', 500);
-const coral   = scale('#F16B65', 500);
-const warmGray = scale('#806D70', 500);  // greys lean warm to sit on cream
-const mauve   = scale('#7D5A7A', 600);   // "info" (was blue) — distinct from danger red
-const wine    = scale('#8E354B', 600);   // purple / violet accents
-const blush   = scale('#FFAAA5', 300);   // pink accents
+const success = scale('#4F8A70', 600);
+const danger  = scale('#D85D5D', 500);
+const warning = scale('#D5A04C', 500);
+const brown   = scale('#A17B5C', 500);   // "orange" / "pink" accents become warm brown (no strong orange)
+const warmGray = scale('#91877E', 500);  // greys lean warm to sit on ivory
+const slate   = scale('#6F7F8C', 600);   // "info" (was blue) — calm, distinct from brown and red
+const lavender = scale('#7A6F8F', 600);  // purple / violet accents, muted
 
 export default {
   // The app is light-only. Without this, Tailwind's default ('media') applies
@@ -53,39 +52,40 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+      },
       colors: {
-        brand:    v('brand'),     // #F16B65 coral — primary buttons, active / selected fills
-        ink:      v('ink'),       // #33252A — primary text
-        canvas:   v('canvas'),    // #FFFCF7 ivory — cards, header, inputs
-        mist:     v('mist'),      // #F5EBDD warm cream — page background
-        border:   v('border'),    // #E8D9CC — dividers and input borders
-        burgundy: v('burgundy'),  // #641E32 — sidebar, secondary buttons
-        wine:     v('wine'),      // #8E354B — secondary burgundy
-        blush:    v('blush'),     // #FFAAA5 soft pink
-        petal:    v('petal'),     // #FCE4E1 light pink
-        muted:    v('muted'),     // #806D70 — secondary text
-        success:  v('success'),   // #43866A
-        warning:  v('warning'),   // #D49A43
-        danger:   v('danger'),    // #C84C54
+        brand:   v('brand'),    // #805A3B espresso — primary buttons, active / selected
+        ink:     v('ink'),      // #35291F — primary text
+        canvas:  v('canvas'),   // #FFFFFF — cards, header, inputs
+        mist:    v('mist'),     // #F3F0EB — page background
+        border:  v('border'),   // #E5DED5 — dividers and input borders
+        coffee:  v('coffee'),   // #4A3325 deep coffee — Pay, dark surfaces
+        mocha:   v('mocha'),    // #A17B5C secondary brown
+        ivory:   v('ivory'),    // #F5F1EA warm ivory — sidebar, soft panels
+        beige:   v('beige'),    // #EAE3D9 light beige — hover / neutral buttons
+        muted:   v('muted'),    // #91877E — secondary text
+        success: v('success'),  // #4F8A70
+        warning: v('warning'),  // #D5A04C
+        danger:  v('danger'),   // #D85D5D
         // Status scales derived from the theme (see note above)
         green: success, emerald: success, teal: success,
         red: danger, rose: danger,
         amber: warning, yellow: warning,
-        orange: coral,
+        orange: brown, pink: brown,
         gray: warmGray, slate: warmGray, neutral: warmGray, zinc: warmGray, stone: warmGray,
-        blue: mauve, sky: mauve, indigo: mauve,
-        purple: wine, violet: wine,
-        pink: blush,
+        blue: slate, sky: slate, indigo: slate,
+        purple: lavender, violet: lavender,
       },
-      // Accent text uses the deeper rose: coral text is too faint on cream.
       textColor: { brand: v('brand-ink') },
-      // Dark surfaces (bg-ink buttons, bg-ink/5 header tints) are burgundy, not text-dark.
-      backgroundColor: { ink: v('burgundy') },
+      // Dark surfaces (bg-ink buttons, bg-ink/5 header tints) are deep coffee.
+      backgroundColor: { ink: v('coffee') },
       boxShadow: {
-        sm: '0 1px 2px 0 rgb(100 30 50 / 0.06), 0 1px 3px 0 rgb(100 30 50 / 0.05)',
-        DEFAULT: '0 2px 6px -1px rgb(100 30 50 / 0.08), 0 1px 3px -1px rgb(100 30 50 / 0.06)',
-        md: '0 6px 14px -4px rgb(100 30 50 / 0.12)',
-        lg: '0 12px 24px -8px rgb(100 30 50 / 0.16)',
+        sm: '0 1px 2px 0 rgb(74 51 37 / 0.05), 0 1px 3px 0 rgb(74 51 37 / 0.04)',
+        DEFAULT: '0 2px 6px -1px rgb(74 51 37 / 0.07), 0 1px 3px -1px rgb(74 51 37 / 0.05)',
+        md: '0 6px 14px -4px rgb(74 51 37 / 0.10)',
+        lg: '0 12px 24px -8px rgb(74 51 37 / 0.14)',
       },
     },
   },

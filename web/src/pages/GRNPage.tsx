@@ -17,10 +17,10 @@ import { useSettings } from '../context/SettingsContext';
 type Tab = 'receive' | 'list' | 'reports';
 
 const STATUS_META: Record<GRNStatus, { label: string; color: string; bg: string }> = {
-  pending:   { label: 'Pending',   color: '#806D70', bg: '#F5EBDD' },
-  partial:   { label: 'Partial',   color: '#B6843B', bg: '#F8EFE1' },
-  completed: { label: 'Completed', color: '#43866A', bg: '#E1ECE7' },
-  cancelled: { label: 'Cancelled', color: '#C84C54', bg: '#F6E2E4' },
+  pending:   { label: 'Pending',   color: '#91877E', bg: '#EAE3D9' },
+  partial:   { label: 'Partial',   color: '#B78943', bg: '#F8F0E2' },
+  completed: { label: 'Completed', color: '#4F8A70', bg: '#E3ECE8' },
+  cancelled: { label: 'Cancelled', color: '#D85D5D', bg: '#F9E5E5' },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -240,7 +240,7 @@ function ReceiveDrawer({
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs font-semibold text-brand">{po.poNumber}</span>
                           <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize"
-                            style={{ color: po.status === 'partially_received' ? '#B6843B' : '#43866A', backgroundColor: po.status === 'partially_received' ? '#F8EFE1' : '#E1ECE7' }}>
+                            style={{ color: po.status === 'partially_received' ? '#B78943' : '#4F8A70', backgroundColor: po.status === 'partially_received' ? '#F8F0E2' : '#E3ECE8' }}>
                             {po.status.replace('_', ' ')}
                           </span>
                         </div>

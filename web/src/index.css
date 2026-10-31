@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 @layer components {
-  /* Search fields (product, customer, global, bill search): firmer warm-beige border,
-     coral border + soft ring on focus, readable placeholder. Size/padding stay with
-     each field's own classes. */
+  /* Search fields (product, customer, global, bill search): firm warm border, espresso
+     border + soft ring on focus, readable placeholder. Size/padding stay with each
+     field's own classes. */
   .search-input {
     border: 1px solid rgb(var(--border-strong));
     background-color: rgb(var(--canvas));
@@ -19,11 +19,11 @@
     opacity: 1;
   }
   .search-input:hover {
-    border-color: rgb(var(--wine) / 0.45);
+    border-color: rgb(var(--mocha) / 0.55);
   }
   .search-input:focus {
     border-color: rgb(var(--brand));
-    box-shadow: 0 0 0 3px rgb(var(--brand) / 0.18);
+    box-shadow: 0 0 0 3px rgb(var(--brand) / 0.16);
   }
 }
 
@@ -46,31 +46,36 @@
     background-color: rgb(var(--mist));
   }
 
-  :root {
-    /* Space-separated RGB — enables Tailwind opacity modifiers (bg-brand/20, text-ink/40).
-       Theme: burgundy + coral + soft pink on warm cream. Every colour in the app comes
-       from these tokens (see tailwind.config.js and src/theme/palette.ts). */
-    --brand:      241 107 101; /* #F16B65 coral — primary buttons, active/selected fills */
-    --brand-ink:  142  53  75; /* #8E354B — accent TEXT (links, prices); coral text is too faint on cream */
-    --burgundy:   100  30  50; /* #641E32 — sidebar, secondary buttons, dark surfaces (bg-ink) */
-    --wine:       142  53  75; /* #8E354B — secondary burgundy, hovers */
-    --blush:      255 170 165; /* #FFAAA5 soft pink — highlights, chart accent */
-    --petal:      252 228 225; /* #FCE4E1 light pink — tints, selected rows */
-    --ink:         51  37  42; /* #33252A — primary text */
-    --muted:      128 109 112; /* #806D70 — secondary text */
-    --canvas:     255 252 247; /* #FFFCF7 ivory — cards, header, inputs */
-    --mist:       245 235 221; /* #F5EBDD warm cream — page background */
-    --border:     232 217 204; /* #E8D9CC — dividers and input borders */
-    --border-strong: 214 190 168; /* #D6BEA8 — search fields, a step firmer than --border */
-    --success:     67 134 106; /* #43866A */
-    --warning:    212 154  67; /* #D49A43 */
-    --danger:     200  76  84; /* #C84C54 */
+  body {
+    font-feature-settings: 'cv11', 'ss01';   /* Inter: straight-sided digits read well on bills */
+    -webkit-font-smoothing: antialiased;
   }
 
-  /* Tables: cream and ivory alternating rows (:where = no specificity, so a row's own
-     highlight/selected classes still win) */
+  :root {
+    /* Space-separated RGB — enables Tailwind opacity modifiers (bg-brand/20, text-ink/40).
+       Theme: espresso brown + warm ivory. Every colour in the app comes from these
+       tokens (see tailwind.config.js and src/theme/palette.ts). */
+    --brand:       128  90  59; /* #805A3B espresso — primary buttons, active/selected */
+    --brand-ink:   128  90  59; /* #805A3B — accent text (links, prices, totals) */
+    --coffee:       74  51  37; /* #4A3325 deep coffee — Pay, dark surfaces (bg-ink) */
+    --mocha:       161 123  92; /* #A17B5C secondary brown — hovers, secondary accents */
+    --ivory:       245 241 234; /* #F5F1EA warm ivory — sidebar, soft panels */
+    --beige:       234 227 217; /* #EAE3D9 light beige — hover / neutral buttons / tints */
+    --ink:          53  41  31; /* #35291F — primary text */
+    --muted:       145 135 126; /* #91877E — secondary text */
+    --canvas:      255 255 255; /* #FFFFFF — cards, header, inputs */
+    --mist:        243 240 235; /* #F3F0EB — page background */
+    --border:      229 222 213; /* #E5DED5 — dividers and input borders */
+    --border-strong: 214 204 191; /* #D6CCBF — search fields, a step firmer than --border */
+    --success:      79 138 112; /* #4F8A70 */
+    --warning:     213 160  76; /* #D5A04C */
+    --danger:      216  93  93; /* #D85D5D */
+  }
+
+  /* Tables: white and warm-ivory alternating rows (:where = no specificity, so a row's
+     own highlight/selected classes still win) */
   :where(tbody tr:nth-child(even)) {
-    background-color: rgb(var(--mist) / 0.45);
+    background-color: rgb(var(--ivory) / 0.7);
   }
 
   /* Smooth hover / state changes on interactive elements */
@@ -79,14 +84,15 @@
     transition-duration: 150ms;
   }
 
-  /* Disabled buttons: inactive but readable. Filled coral / burgundy buttons turn into a
-     light-pink chip with deep-rose text instead of fading their white text away. These
-     beat the per-button `disabled:opacity-*` utilities on purpose (higher specificity). */
+  /* Disabled buttons: inactive but readable. Filled espresso / coffee buttons turn into a
+     beige chip with brown text instead of fading their white text away. These beat the
+     per-button `disabled:opacity-*` utilities on purpose (higher specificity). */
   button.bg-brand:disabled,
-  button.bg-ink:disabled {
+  button.bg-ink:disabled,
+  button.bg-coffee:disabled {
     opacity: 1;
-    background-color: rgb(var(--petal));
-    color: rgb(var(--wine) / 0.75);
+    background-color: rgb(var(--beige));
+    color: rgb(var(--muted));
     box-shadow: none;
     cursor: not-allowed;
   }
@@ -103,8 +109,9 @@
     color: #fff;
     cursor: progress;
   }
-  button.bg-ink[aria-busy='true']:disabled {
-    background-color: rgb(var(--burgundy) / 0.85);
+  button.bg-ink[aria-busy='true']:disabled,
+  button.bg-coffee[aria-busy='true']:disabled {
+    background-color: rgb(var(--coffee) / 0.85);
     color: #fff;
     cursor: progress;
   }
