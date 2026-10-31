@@ -42,6 +42,14 @@ export async function updateTable(
   });
 }
 
+/** Set a table's status. The server refuses 'available' while a session is open (close it instead). */
+export async function setTableStatus(id: string, status: Table['status']): Promise<Table> {
+  return apiFetch<Table>(`/tables/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
 export async function deleteTable(id: string): Promise<void> {
   await apiFetch<unknown>(`/tables/${id}`, { method: 'DELETE' });
 }

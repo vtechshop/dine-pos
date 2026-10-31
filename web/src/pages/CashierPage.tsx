@@ -241,7 +241,10 @@ export function CashierPage() {
   const navigate = useNavigate();
   const { activeTab, setActiveTab, heldBills, shift, cart, selectedShiftId } = useCashier();
   const { settings } = useSettings();
-  const { logout, hotelId } = useAuth();
+  const { logout, hotelId, role } = useAuth();
+  // Admins reach this billing screen via New Order; their own top bar already has
+  // search, notifications and the Swiggy / Zomato pills, so only billing tools show here.
+  const isAdmin = role === 'admin';
   const { connected: socketConnected, socket } = useSocket();
   const topBarSlot = useTopBarSlot();
 
@@ -376,8 +379,8 @@ export function CashierPage() {
 
   const headerBar = (inTopBar: boolean) => (
     <div className={`flex min-w-0 items-center gap-3 ${inTopBar ? 'flex-1' : ''}`}>
-      {/* Profile chip */}
-      <button
+      {/* Profile chip (cashier / waiter only) */}
+      {!isAdmin && <button
         type="button"
         onClick={() => setActiveTab('profile')}
         className={`flex shrink-0 items-center gap-2 rounded-lg px-1.5 py-1 transition hover:bg-mist`}
@@ -395,12 +398,12 @@ export function CashierPage() {
               : 'No active shift'}
           </p>
         </div>
-      </button>
+      </button>}
 
       {/* KPI strip — natural width first; only scrolls if even the shrunk search can't make room */}
       <div className="min-w-0 overflow-x-auto">
         <HeaderKpi
-          platforms={platforms}
+          platforms={isAdmin ? [] : platforms}
           onOpenOnline={() => setActiveTab('online-orders')}
           offlinePrinters={offlinePrinters}
           totalPrinters={printers.length}
@@ -410,11 +413,11 @@ export function CashierPage() {
       </div>
 
       {/* Jump to a screen by name */}
-      <CashierQuickSearch />
+      {!isAdmin && <CashierQuickSearch />}
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <NotificationBell />
+        {!isAdmin && <NotificationBell />}
         <button type="button" onClick={openCustomerDisplay} className={actionCls(false)} title="Customer Display (second screen)">
           <Monitor size={13} />
         </button>
