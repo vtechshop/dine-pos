@@ -639,6 +639,37 @@ router.get(
   },
 );
 
+// GET /api/aggregator/status — Swiggy / Zomato on/off for the cashier top bar.
+// Read-only and status-only: no credentials, no settings, never creates records.
+router.get(
+  '/status',
+  authMiddleware,
+  requireCashierOrAdmin,
+  requireFeature('aggregator'),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const hotelId = req.hotelId!;
+      const today   = new Date(); today.setHours(0, 0, 0, 0);
+      const docs = await AggregatorIntegration.find({ hotelId, platform: { $in: PLATFORMS } })
+        .select('platform enabled connectionStatus lastOrderAt')
+        .lean();
+      const platforms = await Promise.all(PLATFORMS.map(async platform => {
+        const d = docs.find(x => x.platform === platform) as any;
+        return {
+          platform,
+          enabled:          !!d?.enabled,
+          connectionStatus: (d?.connectionStatus ?? 'disconnected') as IAggregatorIntegration['connectionStatus'],
+          lastOrderAt:      d?.lastOrderAt ?? null,
+          todayOrderCount:  await Order.countDocuments({ hotelId, orderSource: platform, createdAt: { $gte: today } }),
+        };
+      }));
+      res.json({ platforms });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || 'Server error' });
+    }
+  },
+);
+
 // GET /api/aggregator/integrations/:platform
 router.get(
   '/integrations/:platform',
