@@ -14,6 +14,10 @@ import { singleFlight } from '../utils/singleFlight';
 import { sendError } from '../utils/sendError';
 import DailySnapshot from '../models/DailySnapshot';
 import Alert from '../models/Alert';
+import Hotel from '../models/Hotel';
+import { ensureDailySnapshot } from '../utils/ensureDailySnapshot';
+import { todayBusinessDate, yesterdayBusinessDate } from '../utils/businessDate';
+import { logger } from '../utils/logger';
 
 const router = Router();
 router.use(authMiddleware);
@@ -27,8 +31,19 @@ function todayUTC(): string {
 
 function validateDate(date: string): string | null {
   if (!DATE_RE.test(date)) return 'date must be YYYY-MM-DD';
-  if (date > todayUTC())   return 'date cannot be in the future';
+  // India is ahead of UTC: just after local midnight the local date is already tomorrow in UTC terms
+  const latest = [todayUTC(), todayBusinessDate()].sort()[1];
+  if (date > latest)       return 'date cannot be in the future';
   return null;
+}
+
+/** Build a missed nightly summary on demand; never fails the request. */
+async function catchUpSnapshot(hotelId: string, date: string): Promise<void> {
+  try {
+    await singleFlight(`snapfill:${hotelId}:${date}`, () => ensureDailySnapshot(hotelId, date));
+  } catch (err) {
+    logger.warn('[ai] snapshot catch-up failed', { hotelId, date, err: String(err) });
+  }
 }
 
 // ─── GET /api/ai/alerts ───────────────────────────────────────────────────────
@@ -109,6 +124,10 @@ router.get('/recommendations', async (req: AuthRequest, res: Response) => {
     const hotelId  = req.hotelId!;
     const hotelOId = new mongoose.Types.ObjectId(hotelId);
 
+    // Yesterday's summary may have been missed overnight — build it now if so
+    const hotel = await Hotel.findById(hotelOId, { timezone: 1 }).lean();
+    await catchUpSnapshot(hotelId, yesterdayBusinessDate((hotel as { timezone?: string } | null)?.timezone ?? 'Asia/Kolkata'));
+
     // Find the latest available snapshot so we don't 404 during business hours
     // when today's snapshot hasn't been generated yet.
     const snap = await DailySnapshot.findOne({ hotelId: hotelOId }).sort({ date: -1 }).lean();
@@ -154,6 +173,9 @@ router.get('/recommendations/:date', async (req: AuthRequest, res: Response) => 
 
     const cached = await getCachedRecommendations(hotelId, date);
     if (cached) return res.json(cached);
+
+    // A past day whose nightly summary was missed — build it from that day's orders
+    await catchUpSnapshot(hotelId, date);
 
     const result = await singleFlight(`recs:${hotelId}:${date}`, () => buildRecommendations(hotelId, date));
     if (!result) {
