@@ -36,8 +36,38 @@ import WalletTransaction from '../models/WalletTransaction';
 import { resolveCoupon, CouponResult } from '../utils/couponUtils';
 import { isDueAtCounter } from '../utils/counterBilling';
 import { isQuickServiceOrder } from '../utils/quickService';
+import { payBeforeKitchenEnabled, isHeldForCounterPayment } from '../utils/payBeforeKitchen';
 
 const router = Router();
+
+/** Payment methods the counter can take in person (online Razorpay is never counter-paid). */
+const COUNTER_PAY_METHODS = ['cash', 'upi', 'upi_intent', 'upi_qr', 'upi_collect', 'card', 'split'];
+
+/** Tell kitchen screens and dashboards about an order that has entered the kitchen. */
+function emitNewOrder(hotelId: string, order: any): void {
+  const room = `hotel_${hotelId}`;
+  const roomClients = io.sockets.adapter.rooms.get(room)?.size ?? 0;
+  logger.info('Emitting new_order', { room, clientsInRoom: roomClients, orderId: String(order._id) });
+  io.to(room).emit('new_order', {
+    _id:           order._id,
+    orderNumber:   order.orderNumber,
+    tableNumber:   order.tableNumber,
+    customerName:  order.customerName,
+    customerPhone: order.customerPhone,
+    grandTotal:    order.grandTotal,
+    itemCount:     order.items.length,
+    orderSource:   order.orderSource,
+    notes:         order.notes || undefined,
+    createdAt:     order.createdAt,
+    items:         order.items.map((i: any) => ({
+      productName:   i.productName,
+      quantity:      i.quantity,
+      price:         i.price,
+      variantName:   i.variantName   || undefined,
+      modifierNames: (i.selectedModifiers || []).map((m: any) => m.modifierOptionName).filter(Boolean),
+    })),
+  });
+}
 
 // ── C1: Server-side monetary recalculation ───────────────────────────────────
 // The backend is the single source of truth for all monetary values.
@@ -524,10 +554,12 @@ router.get('/cashier', requireCashierOrAdmin, async (req: AuthRequest, res: Resp
         $or: [
           { status: { $in: ['pending', 'preparing', 'ready', 'served'] } },
           { status: 'completed', completedAt: { $gte: startOfDay } },
+          // Held for counter payment (pay before kitchen) — online orders excluded
+          { status: 'payment_pending', paymentMethod: { $ne: 'razorpay' } },
         ],
       },
       {
-        orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1,
+        orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1, paymentTime: 1,
         status: 1, paymentMethod: 1, grandTotal: 1, subtotal: 1, taxTotal: 1, discountAmount: 1,
         orderSource: 1, isParcel: 1, createdAt: 1, completedBy: 1, completedAt: 1, cashierId: 1,
         'items.productName': 1, 'items.quantity': 1, 'items.price': 1, 'items.total': 1,
@@ -989,6 +1021,22 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       walletCustomerId:    walletCustomerOId,
       grandTotal:          finalGrandTotal,
     });
+
+    // ── Pay before kitchen ───────────────────────────────────────────────────
+    // payNow: the counter took payment while placing the order — it goes to the
+    // kitchen already paid. Otherwise, if the hotel holds unpaid orders, park it in
+    // 'payment_pending' (no kitchen list, no new_order, no KOT) until POST /:id/pay.
+    const payNow = b.payNow === true && (req.role === 'cashier' || req.role === 'admin');
+    if (payNow) {
+      if (!COUNTER_PAY_METHODS.includes(String(b.paymentMethod))) {
+        return res.status(400).json({ message: 'Choose Cash, UPI, Card or Split to take payment.' });
+      }
+      order.paymentTime = new Date();
+    } else if (b.paymentMethod !== 'razorpay' && await payBeforeKitchenEnabled(req.hotelId!)) {
+      order.status = 'payment_pending';
+    }
+    const heldForPayment = order.status === 'payment_pending';
+
     // ── Atomic transaction: persist order + deduct stock atomically ──────────
     // order.save() and both stock-deduction writes must succeed or fail together.
     // KOT print, guest total, stock-response read, and socket emit run AFTER
@@ -1213,7 +1261,8 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     logger.info('Order saved', { orderId: String(order._id), orderNumber: order.orderNumber, hotelId: req.hotelId });
 
     // ── Phase 7: Fire-and-forget KOT print ───────────────────────────────────
-    scheduleKOTPrint(req.hotelId!, {
+    // An order held for payment gets its KOT when it is paid (POST /:id/pay).
+    if (!heldForPayment) scheduleKOTPrint(req.hotelId!, {
       _id:         order._id,
       orderNumber: order.orderNumber,
       tableNumber: order.tableNumber,
@@ -1247,28 +1296,8 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       }));
     }
 
-    const room = `hotel_${req.hotelId}`;
-    const roomClients = io.sockets.adapter.rooms.get(room)?.size ?? 0;
-    logger.info('Emitting new_order', { room, clientsInRoom: roomClients, orderId: String(order._id) });
-    io.to(room).emit('new_order', {
-      _id:           order._id,
-      orderNumber:   order.orderNumber,
-      tableNumber:   order.tableNumber,
-      customerName:  order.customerName,
-      customerPhone: order.customerPhone,
-      grandTotal:    order.grandTotal,
-      itemCount:     order.items.length,
-      orderSource:   order.orderSource,
-      notes:         (order as any).notes || undefined,
-      createdAt:     (order as any).createdAt,
-      items:         order.items.map((i: any) => ({
-        productName:   i.productName,
-        quantity:      i.quantity,
-        price:         i.price,
-        variantName:   i.variantName   || undefined,
-        modifierNames: (i.selectedModifiers || []).map((m: any) => m.modifierOptionName).filter(Boolean),
-      })),
-    });
+    // Held orders are announced to the kitchen when they are paid (POST /:id/pay).
+    if (!heldForPayment) emitNewOrder(req.hotelId!, order);
 
     const responseBody: Record<string, unknown> = { ...order.toObject(), stockUpdates };
     if (ingredientShortfalls.size > 0) {
@@ -2005,6 +2034,97 @@ router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res
     logAudit(req, 'order.payment_updated', 'order', String(updated._id), {
       paymentMethod, splitDetails: splitDetails?.length, tipAmount, additionalDiscount,
     });
+    res.json(updated);
+  } catch (error) {
+    sendError(res, 500, 'Server error', error);
+  }
+});
+
+// ── POST /api/orders/:id/pay — take payment at the counter before the order is closed ──
+// - Held for payment (pay before kitchen): recorded as paid and released to the kitchen
+//   ('payment_pending' → 'pending') with its KOT and new_order.
+// - Already in the kitchen (pending / preparing / ready / served): recorded as paid; it stays
+//   in the kitchen and is closed later (handed over / served → completed).
+// Online (Razorpay) orders are never paid here — only a verified online payment releases them.
+router.post('/:id/pay', requireCashierOrAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid order id' });
+    }
+    const paymentMethod = String(req.body?.paymentMethod ?? '');
+    if (!COUNTER_PAY_METHODS.includes(paymentMethod)) {
+      return res.status(400).json({ message: 'Choose Cash, UPI, Card or Split to take payment.' });
+    }
+
+    const order = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId }).lean() as any;
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order.status === 'completed' || order.status === 'cancelled') {
+      return res.status(409).json({ code: 'ORDER_CLOSED', message: `This bill is already ${order.status === 'completed' ? 'paid and closed' : 'cancelled'}.` });
+    }
+    if (order.paymentTime) {
+      return res.status(409).json({ code: 'ALREADY_PAID', message: 'This bill is already paid.' });
+    }
+    if (order.status === 'payment_pending' && !isHeldForCounterPayment(order)) {
+      return res.status(409).json({ code: 'ONLINE_PAYMENT_PENDING', message: 'This is an online order waiting for its online payment.' });
+    }
+
+    let splitDetails: { cash: number; upi: number; card: number } | undefined;
+    if (paymentMethod === 'split') {
+      const sd = req.body?.splitDetails ?? {};
+      splitDetails = { cash: Number(sd.cash) || 0, upi: Number(sd.upi) || 0, card: Number(sd.card) || 0 };
+      const total = splitDetails.cash + splitDetails.upi + splitDetails.card;
+      if (Object.values(splitDetails).some(v => v < 0) || Math.abs(total - order.grandTotal) > 1) {
+        return res.status(400).json({ message: `Split amounts must add up to the bill total (${Number(order.grandTotal).toFixed(2)}).` });
+      }
+    }
+
+    const held = isHeldForCounterPayment(order);
+    const set: Record<string, unknown> = { paymentMethod, paymentTime: new Date() };
+    if (splitDetails) set.splitDetails = splitDetails;
+    if (held) set.status = 'pending';
+
+    // Conditional write: only one payment can win, and only from the state we checked.
+    const updated = await Order.findOneAndUpdate(
+      {
+        _id: req.params.id, hotelId: req.hotelId, paymentTime: null,
+        status: held ? 'payment_pending' : { $in: ['pending', 'preparing', 'ready', 'served'] },
+      },
+      { $set: set },
+      { new: true },
+    );
+    if (!updated) {
+      return res.status(409).json({ code: 'ORDER_CHANGED', message: 'This bill changed while you were paying. Refresh and try again.' });
+    }
+
+    // A paid order is no longer owed at the table (see counterBilling). Orders that were
+    // held never added to the guest total, so only kitchen orders need taking off.
+    if (!held && order.guestId && isDueAtCounter(order)) {
+      await Guest.updateOne(
+        { _id: order.guestId, hotelId: req.hotelId },
+        [{ $set: { totalAmount: { $max: [0, { $subtract: ['$totalAmount', Number(order.grandTotal) || 0] }] } } }],
+      );
+    }
+
+    logAudit(req, 'order.paid', 'order', String(updated._id), {
+      orderNumber: updated.orderNumber, paymentMethod, grandTotal: updated.grandTotal, releasedToKitchen: held,
+    });
+
+    if (held) {
+      scheduleKOTPrint(req.hotelId!, {
+        _id:          updated._id,
+        orderNumber:  updated.orderNumber,
+        tableNumber:  updated.tableNumber,
+        customerName: updated.customerName,
+        items:        updated.items as { productName: string; quantity: number }[],
+        notes:        updated.notes,
+        orderSource:  updated.orderSource,
+        createdAt:    (updated as any).createdAt,
+        sessionId:    updated.sessionId,
+        guestId:      (updated as any).guestId ?? undefined,
+      }).catch(() => {});
+      emitNewOrder(req.hotelId!, updated);
+    }
+
     res.json(updated);
   } catch (error) {
     sendError(res, 500, 'Server error', error);

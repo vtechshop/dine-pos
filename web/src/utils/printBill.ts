@@ -17,6 +17,8 @@ export interface PrintableBill {
   grandTotal: number;
   paymentMethod?: string | null;
   status: string;
+  /** Set when paid at the counter before the order is closed */
+  paymentTime?: string | null;
 }
 
 export interface BillHeader {
@@ -37,7 +39,7 @@ export function billHtml(bill: PrintableBill, h: BillHeader): string {
   const when = new Date(bill.createdAt).toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
-  const paid = bill.status === 'completed';
+  const paid = bill.status === 'completed' || !!bill.paymentTime;
   const where = bill.isParcel ? 'Takeaway' : bill.tableNumber ? `Table ${bill.tableNumber}` : '';
 
   const rows = bill.items.map(i => `

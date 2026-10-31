@@ -13,6 +13,7 @@ import { logger } from '../utils/logger';
 import { scheduleKOTPrint } from '../utils/printUtils';
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
 import GatewayFactory from '../services/payment/GatewayFactory';
+import { payBeforeKitchenEnabled } from '../utils/payBeforeKitchen';
 
 const router = Router();
 
@@ -262,7 +263,8 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
       }
     }
 
-    const orderStatus     = isRazorpayOrder ? 'payment_pending' : 'pending';
+    // Pay before kitchen: a cash order waits at the counter until it is paid.
+    const orderStatus     = isRazorpayOrder || await payBeforeKitchenEnabled(String(hotelId)) ? 'payment_pending' : 'pending';
     const paymentMethodDb = isRazorpayOrder ? 'razorpay' : 'cash';
 
     const grandTotal = subtotal + taxTotal;

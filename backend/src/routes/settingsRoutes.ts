@@ -107,7 +107,7 @@ const SETTINGS_ALLOWED_FIELDS = new Set([
   'currencySymbol', 'currency', 'defaultTaxPercent', 'printerWidth', 'footerText',
   'qrGuestTimeoutMinutes', 'gstNumber', 'fssaiNumber', 'panNumber',
   'bankName', 'bankAccountNumber', 'bankIfscCode', 'bankAccountHolder', 'upiId',
-  'printerMode', 'kitchenPrinterAddress', 'cashierPrinterAddress', 'kotAutoPrint',
+  'printerMode', 'kitchenPrinterAddress', 'cashierPrinterAddress', 'kotAutoPrint', 'payBeforeKitchen',
   'loyaltySettings', 'kitchenPin',
 ]);
 

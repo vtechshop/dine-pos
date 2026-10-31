@@ -68,6 +68,7 @@ export interface ISettings extends Document {
   kitchenPrinterAddress: string;   // Bluetooth MAC for KOT in dual mode
   cashierPrinterAddress: string;   // Bluetooth MAC for receipts in dual mode
   kotAutoPrint: boolean;           // KitchenDisplay auto-prints KOT on new_order
+  payBeforeKitchen: boolean;       // when on, unpaid orders are held from the kitchen until paid
   // ── QR Session Timeout (Architecture v1.1) ──────────────────────────────
   qrGuestTimeoutMinutes: number;   // idle QR guests expire after this many minutes
   // ── Loyalty (Architecture v1.1) ─────────────────────────────────────────
@@ -176,6 +177,7 @@ const SettingsSchema: Schema = new Schema(
     kitchenPrinterAddress:  { type: String, default: '' },
     cashierPrinterAddress:  { type: String, default: '' },
     kotAutoPrint:           { type: Boolean, default: true },
+    payBeforeKitchen:       { type: Boolean, default: false },
 
     // ── QR Session Timeout (Architecture v1.1) ────────────────────────────
     qrGuestTimeoutMinutes:  { type: Number, default: 15, min: 1, max: 180 },

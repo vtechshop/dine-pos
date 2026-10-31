@@ -28,6 +28,10 @@ describe('billHtml', () => {
     expect(billHtml({ ...bill, status: 'completed', paymentMethod: 'upi' }, {})).toContain('PAID · UPI');
   });
 
+  it('marks an order paid at the counter (still in the kitchen) as paid', () => {
+    expect(billHtml({ ...bill, status: 'preparing', paymentMethod: 'cash', paymentTime: '2026-10-31T10:00:00Z' }, {})).toContain('PAID · CASH');
+  });
+
   it('escapes text so names cannot inject HTML', () => {
     const html = billHtml(bill, { hotelName: 'A & B <Cafe>' });
     expect(html).toContain('&lt;b&gt;zxvcv&lt;/b&gt;');

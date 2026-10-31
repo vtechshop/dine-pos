@@ -50,6 +50,7 @@ import { io } from '../server';
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
 import GatewayFactory from '../services/payment/GatewayFactory';
 import { isDueAtCounter } from '../utils/counterBilling';
+import { payBeforeKitchenEnabled } from '../utils/payBeforeKitchen';
 
 const router = Router();
 
@@ -348,6 +349,8 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     const validSource = isKiosk ? 'kiosk' : 'qr';
     // Kiosk supports cash or Razorpay; QR is always Razorpay
     const kioskWantsRazorpay = isKiosk && String(reqPaymentMethod || '').toLowerCase() === 'razorpay';
+    // Pay before kitchen: kiosk cash orders are held until the counter takes payment
+    const heldForCounter = isKiosk && !kioskWantsRazorpay && await payBeforeKitchenEnabled(String(hotelId));
 
     let guest: any;
     let rawGuestToken = '';
@@ -606,7 +609,8 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       notes:          String(notes ?? '').slice(0, 200),
       orderSource:    validSource,
       paymentMethod:  (validSource === 'qr' || kioskWantsRazorpay) ? 'razorpay' : 'cash',
-      status:         (validSource === 'qr' || kioskWantsRazorpay) ? 'payment_pending' : 'pending',
+      // Pay before kitchen: a kiosk cash order also waits at the counter until it is paid.
+      status:         (validSource === 'qr' || kioskWantsRazorpay || heldForCounter) ? 'payment_pending' : 'pending',
       sessionId:      guest.sessionId,
       guestId:        guest._id,
     };
@@ -642,7 +646,7 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
 
     // ── Kiosk cash: immediate KOT + socket emit.
     // QR and kiosk Razorpay orders stay payment_pending until qr-verify releases them.
-    if (validSource === 'kiosk' && !kioskWantsRazorpay) {
+    if (validSource === 'kiosk' && !kioskWantsRazorpay && !heldForCounter) {
       scheduleKOTPrint(String(hotelId), {
         _id:          order._id,
         orderNumber:  order.orderNumber,

@@ -70,6 +70,8 @@ export interface CashierOrderItem {
   items: { productName: string; quantity: number; price: number; total: number }[];
   createdAt: string;
   completedAt?: string | null;
+  /** Set once the counter has taken payment (the order may still be in the kitchen) */
+  paymentTime?: string | null;
 }
 
 export async function fetchCashierOrders(): Promise<CashierOrderItem[]> {
@@ -105,6 +107,8 @@ export interface CreateOrderPayload {
   paymentMethod?: 'cash' | 'upi' | 'card' | 'split';
   splitDetails?: { cash: number; upi: number; card: number };
   offlineId?: string;
+  /** Counter took payment while placing the order — it goes to the kitchen already paid */
+  payNow?: boolean;
 }
 
 export async function createOrder(payload: CreateOrderPayload): Promise<CashierOrderItem> {
@@ -163,5 +167,21 @@ export async function patchOrderPayment(
       ...(tipAmount          ? { tipAmount }          : {}),
       ...(additionalDiscount ? { additionalDiscount } : {}),
     }),
+  });
+}
+
+/**
+ * Take payment at the counter for an order that is not closed yet (POST /orders/:id/pay).
+ * A held order (pay before kitchen) is released to the kitchen; an order already in the
+ * kitchen is marked paid and stays there until it is handed over / served.
+ */
+export async function payOrder(
+  orderId: string,
+  paymentMethod: string,
+  splitDetails?: { cash: number; upi: number; card: number },
+): Promise<CashierOrderItem> {
+  return apiFetch<CashierOrderItem>(`/orders/${orderId}/pay`, {
+    method: 'POST',
+    body: JSON.stringify({ paymentMethod, ...(splitDetails ? { splitDetails } : {}) }),
   });
 }

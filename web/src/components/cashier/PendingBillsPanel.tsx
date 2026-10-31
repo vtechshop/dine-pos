@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   RefreshCw, CreditCard, Printer, Trash2, AlertCircle,
-  ShoppingBag, UtensilsCrossed, Truck, Clock, GitBranch, RotateCcw,
+  ShoppingBag, UtensilsCrossed, Truck, Clock, GitBranch, RotateCcw, Check,
 } from 'lucide-react';
 import { printBill } from '../../utils/printBill';
 import { ApiError } from '../../api/client';
-import { fetchCashierOrders, cancelOrder, patchOrderPayment, completeOrder } from '../../api/orders';
+import { fetchCashierOrders, cancelOrder, patchOrderPayment, completeOrder, payOrder } from '../../api/orders';
 import { reprintJob, fetchReceiptJobs } from '../../api/billing';
 import { PaymentModal } from './PaymentModal';
 import { OrderTimelineModal } from './OrderTimelineModal';
@@ -70,6 +70,23 @@ function OrderRow({
 
   const ageMs = nowMs - new Date(order.createdAt).getTime();
   const isOld = ageMs > 20 * 60_000;
+  // Pay before kitchen states
+  const held = order.status === 'payment_pending';            // unpaid, kept from the kitchen
+  const paid = !!order.paymentTime && !held;                   // paid, cooking or ready
+  const readyToHand = order.status === 'ready' || order.status === 'served';
+  const [handingOver, setHandingOver] = useState(false);
+
+  async function handleHandOver() {
+    setHandingOver(true);
+    try {
+      await completeOrder(order._id);
+      onRefresh();
+    } catch (e) {
+      setReprintErr(e instanceof Error ? e.message : 'Could not close the bill');
+    } finally {
+      setHandingOver(false);
+    }
+  }
   const receiptJob = jobs.find(j => j.orderId === order._id && j.jobType === 'receipt');
 
   async function handleReprint() {
@@ -113,7 +130,13 @@ function OrderRow({
               {order.tableNumber && (
                 <span className="rounded bg-mist px-1.5 py-0.5 text-[10px] font-medium text-ink/60">T{order.tableNumber}</span>
               )}
-              {isOld && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Waiting</span>}
+              {held ? (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">Waiting for payment</span>
+              ) : paid ? (
+                <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-800">
+                  Paid · {readyToHand ? 'ready' : 'in kitchen'}
+                </span>
+              ) : isOld && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Waiting</span>}
             </div>
             {order.customerName && <p className="text-xs text-ink/55">{order.customerName}</p>}
             <p className="mt-0.5 text-[10px] text-ink/40 flex items-center gap-1">
@@ -188,14 +211,32 @@ function OrderRow({
                   <Trash2 size={13} />
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setShowPay(true)}
-                className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"
-              >
-                <CreditCard size={11} />
-                Pay
-              </button>
+              {paid ? (
+                readyToHand ? (
+                  <button
+                    type="button"
+                    title="Food is ready — close the bill once the customer has it"
+                    onClick={() => void handleHandOver()}
+                    disabled={handingOver}
+                    className="flex items-center gap-1 rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-60"
+                  >
+                    {handingOver ? <Spinner size="sm" /> : <Check size={11} />}
+                    Handed over
+                  </button>
+                ) : (
+                  <span className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5 text-xs font-semibold text-green-700">Paid</span>
+                )
+              ) : (
+                <button
+                  type="button"
+                  title={held ? 'Take payment — the order then goes to the kitchen' : 'Take payment'}
+                  onClick={() => setShowPay(true)}
+                  className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"
+                >
+                  <CreditCard size={11} />
+                  Pay
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -212,25 +253,35 @@ function OrderRow({
           taxTotal={order.taxTotal}
           appliedDiscount={order.discountAmount ?? 0}
           onConfirm={async (result: PaymentResult) => {
-            // Bug C3 + H7: PATCH /orders/:id/payment (cashier-permitted endpoint)
-            // now includes tipAmount and additionalDiscount so they are persisted.
+            // Food already ready / served → pay and close the bill (as before).
+            // Held for payment or still being cooked → record the payment only: a held order
+            // goes to the kitchen now, a cooking one stays there until handed over / served.
+            const closeNow = readyToHand;
             try {
-              await patchOrderPayment(
-                order._id,
-                result.method,
-                result.splitDetails,
-                result.tipAmount || undefined,
-                result.additionalDiscount || undefined,
-              );
+              // PATCH /orders/:id/payment carries tip and post-order discount (and, when
+              // closing, the payment method the completion keeps).
+              if (closeNow || result.tipAmount || result.additionalDiscount) {
+                await patchOrderPayment(
+                  order._id,
+                  result.method,
+                  result.splitDetails,
+                  result.tipAmount || undefined,
+                  result.additionalDiscount || undefined,
+                );
+              }
+              if (closeNow) {
+                await completeOrder(order._id);
+              } else {
+                await payOrder(order._id, result.method, result.method === 'split' ? result.splitDetails : undefined);
+              }
             } catch (e) {
               // Paid already (e.g. from another screen): refresh the list when this window closes
-              if (e instanceof ApiError && /already completed/i.test(e.message)) {
+              if (e instanceof ApiError && (/already completed/i.test(e.message) || e.code === 'ALREADY_PAID' || e.code === 'ORDER_CLOSED')) {
                 paymentCompletedRef.current = true;
                 throw new Error('This bill is already paid. Close this window to refresh the list.');
               }
               throw e;
             }
-            await completeOrder(order._id);
             paymentCompletedRef.current = true;
           }}
           onClose={() => {
