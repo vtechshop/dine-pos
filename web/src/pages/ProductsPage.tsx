@@ -347,7 +347,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search… (F1)"
-            className="h-8 w-48 rounded-lg border border-border pl-8 pr-3 text-xs outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+            className="search-input h-8 w-48 pl-8 pr-3 text-xs"
           />
         </div>
 

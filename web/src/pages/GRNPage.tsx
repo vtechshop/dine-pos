@@ -216,7 +216,7 @@ function ReceiveDrawer({
                 <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/30" />
                 <input type="search" value={poSearch} onChange={e => setPOSearch(e.target.value)}
                   placeholder="Search PO number or vendor…"
-                  className="w-full rounded-lg border border-border bg-mist py-2 pl-8 pr-3 text-xs text-ink outline-none focus:border-brand/50" />
+                  className="search-input w-full py-2 pl-8 pr-3 text-xs" />
               </div>
             </div>
             <div className="flex-1 overflow-y-auto">
@@ -701,7 +701,7 @@ export function GRNPage() {
               <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/30" />
               <input type="search" value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search GRNs…"
-                className="w-full rounded-lg border border-border bg-mist py-1.5 pl-8 pr-3 text-xs text-ink outline-none focus:border-brand/50" />
+                className="search-input w-full py-1.5 pl-8 pr-3 text-xs" />
             </div>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
               className="rounded-lg border border-border bg-mist px-2.5 py-1.5 text-xs text-ink outline-none">

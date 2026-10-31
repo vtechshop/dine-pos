@@ -572,7 +572,7 @@ export function InventoryIntelligencePage() {
                             <input
                               type="text" placeholder="Search…" value={stockSearch}
                               onChange={e => setStockSearch(e.target.value)}
-                              className="pl-6 pr-2 py-0.5 text-[11px] border border-border rounded bg-mist w-28 focus:outline-none focus:border-brand/40"
+                              className="search-input pl-6 pr-2 py-0.5 text-[11px] rounded w-28"
                             />
                           </div>
                           <select value={stockFilter} onChange={e => setStockFilter(e.target.value as 'all' | 'low' | 'out')}

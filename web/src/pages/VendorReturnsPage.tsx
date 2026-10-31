@@ -287,7 +287,7 @@ function CreateDrawer({
                 value={vendorSearch}
                 onChange={e => { setVendorSearch(e.target.value); if (selectedVendor) clearVendor(); }}
                 onFocus={() => vendorResults.length > 0 && setShowVendorDrop(true)}
-                className="w-full rounded-lg border border-border bg-canvas py-2 pl-9 pr-9 text-sm text-ink placeholder:text-ink/30 focus:border-brand focus:outline-none"
+                className="search-input w-full py-2 pl-9 pr-9 text-sm"
               />
               {selectedVendor && (
                 <button type="button" onClick={clearVendor} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink">
@@ -669,7 +669,7 @@ export function VendorReturnsPage() {
               placeholder="Search by return #, vendor, GRN…"
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(0); }}
-              className="w-full rounded-lg border border-border bg-canvas py-2 pl-9 pr-3 text-sm text-ink placeholder:text-ink/30 focus:border-brand focus:outline-none"
+              className="search-input w-full py-2 pl-9 pr-3 text-sm"
             />
           </div>
 

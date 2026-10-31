@@ -348,7 +348,7 @@ export function CustomerPanel() {
             onChange={e => { setQuery(e.target.value); if (!e.target.value.trim()) void load(''); }}
             onKeyDown={e => { if (e.key === 'Enter') void handleSearch(); }}
             placeholder="Name or phone number…"
-            className="w-full rounded-lg border border-border py-2 pl-8 pr-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
+            className="search-input w-full py-2 pl-8 pr-3 text-sm"
           />
         </div>
         <button

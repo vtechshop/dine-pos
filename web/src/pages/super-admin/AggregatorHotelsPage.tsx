@@ -155,7 +155,7 @@ export function AggregatorHotelsPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search hotel or city…"
-              className="w-full rounded-lg border border-border bg-canvas pl-8 pr-3 py-2 text-sm text-ink placeholder:text-ink/30 focus:outline-none focus:border-brand/50"
+              className="search-input w-full pl-8 pr-3 py-2 text-sm"
             />
           </div>
           {(['all', 'enabled', 'disabled'] as const).map(f => (

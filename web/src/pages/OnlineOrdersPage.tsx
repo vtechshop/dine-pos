@@ -811,7 +811,7 @@ export function OnlineOrdersPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by order number or customer name…"
-          className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink/35 focus:border-brand focus:outline-none"
+          className="search-input w-full px-3 py-2 text-sm"
         />
       </div>
 

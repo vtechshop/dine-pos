@@ -431,7 +431,7 @@ export function CustomersPage() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Name or phone… (F4)"
-                className="h-8 w-52 rounded-lg border border-border bg-mist pl-8 pr-3 text-xs text-ink placeholder-ink/30 outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+                className="search-input h-8 w-52 pl-8 pr-3 text-xs"
               />
             </div>
             <div className="flex items-center gap-1">

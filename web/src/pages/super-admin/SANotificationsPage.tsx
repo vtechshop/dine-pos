@@ -332,7 +332,7 @@ export function SANotificationsPage() {
             placeholder="Search notifications…"
             value={searchQ}
             onChange={e => setSearchQ(e.target.value)}
-            className="w-52 rounded-lg border border-border bg-canvas py-1.5 pl-8 pr-8 text-sm text-ink placeholder-ink/30 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+            className="search-input w-52 py-1.5 pl-8 pr-8 text-sm"
           />
           {searchQ && (
             <button

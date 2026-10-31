@@ -60,7 +60,7 @@ export function GlobalSearch() {
         onKeyDown={e => { if (e.key === 'Escape') { setOpen(false); (e.target as HTMLInputElement).blur(); } }}
         placeholder="Search reservations, orders, customers…"
         aria-label="Search"
-        className="h-8 w-full rounded-lg border border-border bg-mist pl-8 pr-8 text-xs text-ink placeholder:text-ink/40 outline-none focus:border-brand/40 focus:bg-canvas focus:ring-1 focus:ring-brand/20"
+        className="search-input h-8 w-full pl-8 pr-8 text-xs"
       />
       {loading && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-ink/35" />}
 

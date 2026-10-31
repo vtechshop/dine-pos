@@ -63,7 +63,7 @@ export function DemoRequestsPage() {
               value={filter.search}
               onChange={e => set({ search: e.target.value })}
               placeholder="Search company, phone…"
-              className="w-52 rounded-lg border border-border bg-canvas pl-8 pr-3 py-2 text-sm text-ink placeholder:text-ink/30 focus:outline-none focus:border-brand/50"
+              className="search-input w-52 pl-8 pr-3 py-2 text-sm"
             />
           </div>
           <select

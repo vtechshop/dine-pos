@@ -416,7 +416,7 @@ export function TablesPage() {
               onChange={e => setSearch(e.target.value)}
               placeholder="Search tables…"
               aria-label="Search tables"
-              className="h-8 w-44 rounded-lg border border-border bg-canvas pl-8 pr-3 text-xs text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+              className="search-input h-8 w-44 pl-8 pr-3 text-xs"
             />
           </div>
 

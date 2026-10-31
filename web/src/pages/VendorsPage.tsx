@@ -811,7 +811,7 @@ export function VendorsPage() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search vendors…"
-                className="w-full rounded-lg border border-border bg-mist py-1.5 pl-8 pr-3 text-xs text-ink outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20"
+                className="search-input w-full py-1.5 pl-8 pr-3 text-xs"
               />
             </div>
             {(['all', 'active', 'inactive'] as const).map(f => (

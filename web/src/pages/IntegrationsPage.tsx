@@ -605,7 +605,7 @@ function WebhookLogsTable() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search order ID or event…"
-          className="ml-auto h-8 w-52 rounded-lg border border-border bg-mist px-3 text-xs text-ink placeholder:text-ink/30 focus:border-brand focus:outline-none"
+          className="search-input ml-auto h-8 w-52 px-3 text-xs"
         />
 
         {/* Platform filter */}

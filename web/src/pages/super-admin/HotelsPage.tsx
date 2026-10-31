@@ -100,7 +100,7 @@ export function HotelsPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by name, owner, or phone…"
-            className="w-full rounded-lg border border-border bg-canvas py-2.5 pl-9 pr-4 text-sm text-ink placeholder-ink/40 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
+            className="search-input w-full py-2.5 pl-9 pr-4 text-sm"
           />
         </div>
         <button

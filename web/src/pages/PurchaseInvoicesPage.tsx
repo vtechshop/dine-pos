@@ -515,7 +515,7 @@ function InvoiceFormDrawer({
                 onChange={e => searchVendors(e.target.value)}
                 placeholder="Search vendor…"
                 disabled={isEdit}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink/30 focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-60"
+                className="search-input w-full bg-surface px-3 py-2 text-sm disabled:opacity-60"
               />
               {vendorResults.length > 0 && (
                 <div className="absolute top-full left-0 right-0 z-10 mt-1 rounded-xl border border-border bg-canvas shadow-xl overflow-hidden">
