@@ -100,14 +100,14 @@ function RevenueChart({ points }: { points: { date: string; revenue: number; ord
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 240, height: 100 }}>
         <defs>
           <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="var(--color-brand, #6366f1)" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="var(--color-brand, #6366f1)" stopOpacity="0.02" />
+            <stop offset="0%"   stopColor="var(--color-brand, #641E32)" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="var(--color-brand, #641E32)" stopOpacity="0.02" />
           </linearGradient>
         </defs>
         <path d={areaPath} fill="url(#revGrad)" />
-        <path d={linePath} fill="none" stroke="var(--color-brand, #6366f1)" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d={linePath} fill="none" stroke="var(--color-brand, #641E32)" strokeWidth="1.5" strokeLinejoin="round" />
         {pts.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="var(--color-brand, #6366f1)" />
+          <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="var(--color-brand, #641E32)" />
         ))}
       </svg>
       <div className="mt-1 flex justify-between text-[10px] text-ink/30">
@@ -136,13 +136,13 @@ function RevenueTrendChart({ points }: { points: CompletedTrendsPoint[] }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 240, height: 100 }}>
         <defs>
           <linearGradient id="revTrendGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="#6366f1" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#6366f1" stopOpacity="0.02" />
+            <stop offset="0%"   stopColor="#641E32" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#641E32" stopOpacity="0.02" />
           </linearGradient>
         </defs>
         <path d={areaPath} fill="url(#revTrendGrad)" />
-        <path d={linePath} fill="none" stroke="#6366f1" strokeWidth="1.5" strokeLinejoin="round" />
-        {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="2" fill="#6366f1" />)}
+        <path d={linePath} fill="none" stroke="#641E32" strokeWidth="1.5" strokeLinejoin="round" />
+        {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="2" fill="#641E32" />)}
       </svg>
       <div className="mt-1 flex justify-between text-[10px] text-ink/30">
         <span>{pts[0]?.date}</span><span>{pts[pts.length - 1]?.date}</span>
@@ -166,7 +166,7 @@ function OrderVolumeChart({ points }: { points: CompletedTrendsPoint[] }) {
         {points.map((p, i) => {
           const barH = (p.orders / maxOrders) * (H - PAD * 2);
           const x    = PAD + i * slotW + (slotW - barW) / 2;
-          return <rect key={i} x={x} y={H - PAD - barH} width={barW} height={barH} fill="#10b981" rx={1} />;
+          return <rect key={i} x={x} y={H - PAD - barH} width={barW} height={barH} fill="#43866A" rx={1} />;
         })}
       </svg>
       <div className="mt-1 flex justify-between text-[10px] text-ink/30">

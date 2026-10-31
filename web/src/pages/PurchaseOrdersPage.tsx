@@ -21,13 +21,13 @@ import { useSettings } from '../context/SettingsContext';
 type Tab = 'all' | 'draft' | 'pending_approval' | 'approved' | 'sent' | 'received' | 'cancelled' | 'reports';
 
 const STATUS_META: Record<POStatus, { label: string; color: string; bg: string }> = {
-  draft:              { label: 'Draft',             color: '#64748b', bg: '#f1f5f9' },
-  pending_approval:   { label: 'Pending',           color: '#d97706', bg: '#fef3c7' },
-  approved:           { label: 'Approved',          color: '#059669', bg: '#d1fae5' },
-  sent:               { label: 'Sent',              color: '#0284c7', bg: '#e0f2fe' },
-  partially_received: { label: 'Part. Received',   color: '#7c3aed', bg: '#ede9fe' },
-  received:           { label: 'Received',          color: '#16a34a', bg: '#dcfce7' },
-  cancelled:          { label: 'Cancelled',         color: '#dc2626', bg: '#fee2e2' },
+  draft:              { label: 'Draft',             color: '#806D70', bg: '#F5EBDD' },
+  pending_approval:   { label: 'Pending',           color: '#B6843B', bg: '#F8EFE1' },
+  approved:           { label: 'Approved',          color: '#43866A', bg: '#E1ECE7' },
+  sent:               { label: 'Sent',              color: '#7D5A7A', bg: '#EAE5EA' },
+  partially_received: { label: 'Part. Received',   color: '#8E354B', bg: '#EDDFE2' },
+  received:           { label: 'Received',          color: '#43866A', bg: '#E1ECE7' },
+  cancelled:          { label: 'Cancelled',         color: '#C84C54', bg: '#F6E2E4' },
 };
 
 const TABS: Array<{ id: Tab; label: string; statusFilter?: POStatus }> = [

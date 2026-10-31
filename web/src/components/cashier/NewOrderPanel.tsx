@@ -1757,7 +1757,7 @@ export function NewOrderPanel() {
                   type="button"
                   onClick={() => void handleConfirmOrder({ pay: true, print: false })}
                   disabled={submitting || !canConfirm}
-                  className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90 disabled:opacity-50"
                 >
                   {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                   Pay {fmtINR(sym, grandTotal)}
@@ -1766,7 +1766,7 @@ export function NewOrderPanel() {
                   type="button"
                   onClick={() => void handleConfirmOrder({ pay: true, print: true })}
                   disabled={submitting || !canConfirm}
-                  className="rounded-xl border border-emerald-600 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50"
+                  className="rounded-xl border border-brand py-2.5 text-sm font-semibold text-brand transition hover:bg-brand/10 disabled:opacity-50"
                 >
                   Pay &amp; Print
                 </button>

@@ -21,6 +21,7 @@ import { useShortcut } from '../hooks/useShortcut';
 import { MorningBriefCard } from '../components/ai/MorningBriefCard';
 import { fetchLatestBrief } from '../api/morningBrief';
 import type { MorningBrief } from '../api/morningBrief';
+import { PALETTE } from '../theme/palette';
 
 // ── New-order badge state ──────────────────────────────────────────────────────
 // Tracked separately so socket events do NOT re-render the full table grid.
@@ -315,7 +316,7 @@ function HourlyRevenueCard({ symbol }: { symbol: string }) {
                     className="absolute bottom-0 left-0 right-0 rounded-sm"
                     style={{
                       height: barH > 0 ? `${barH}px` : '1px',
-                      backgroundColor: barH > 0 ? '#E8380D' : '#E8D5C0',
+                      backgroundColor: barH > 0 ? PALETTE.coral : PALETTE.border,
                       opacity: barH > 0 ? 0.6 : 0.2,
                     }}
                   />

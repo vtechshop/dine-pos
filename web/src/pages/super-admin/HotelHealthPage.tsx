@@ -222,7 +222,7 @@ function ScoreGauge({ score }: { score: number }) {
   const radius = 42;
   const circumference = 2 * Math.PI * radius;
   const dash = (score / 100) * circumference;
-  const stroke = score >= 75 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444';
+  const stroke = score >= 75 ? '#43866A' : score >= 50 ? '#D49A43' : '#C84C54';
   const textColor = score >= 75 ? 'text-green-600' : score >= 50 ? 'text-amber-600' : 'text-red-600';
 
   return (
