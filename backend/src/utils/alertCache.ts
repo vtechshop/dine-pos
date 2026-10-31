@@ -57,10 +57,12 @@ export async function setCachedRecommendations(
   date:     string,
   payload:  unknown,
   isToday:  boolean,
+  /** Override, e.g. the short-lived "today so far" live view */
+  ttlSeconds?: number,
 ): Promise<void> {
   const redis = getRedisClient();
   if (!redis) return;
-  const ttl = isToday ? REC_TTL_TODAY : REC_TTL_PAST;
+  const ttl = ttlSeconds ?? (isToday ? REC_TTL_TODAY : REC_TTL_PAST);
   try {
     await redis.setex(recKey(hotelId, date), ttl, JSON.stringify(payload));
   } catch { /* best-effort */ }
