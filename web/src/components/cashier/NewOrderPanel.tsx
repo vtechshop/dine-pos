@@ -269,7 +269,7 @@ function CartRow({ item, onQty, onRemove, onNotes, sym, image }: {
 function PaymentPanel({
   grandTotal, sym, method, setMethod,
   splitCash, setSplitCash, splitUpi, setSplitUpi, splitCard, setSplitCard,
-  cashGiven, setCashGiven,
+  cashGiven, setCashGiven, showMethods = true,
 }: {
   grandTotal: number; sym: string;
   method: PayMethod; setMethod: (m: PayMethod) => void;
@@ -277,6 +277,8 @@ function PaymentPanel({
   splitUpi: string; setSplitUpi: (v: string) => void;
   splitCard: string; setSplitCard: (v: string) => void;
   cashGiven: string; setCashGiven: (v: string) => void;
+  /** false when the caller already shows the Cash / UPI / Card / Split choice */
+  showMethods?: boolean;
 }) {
   const METHODS: { key: PayMethod; label: string }[] = [
     { key: 'cash', label: 'Cash' },
@@ -293,7 +295,7 @@ function PaymentPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-1 rounded-lg border border-border p-1">
+      <div className={`flex gap-1 rounded-lg border border-border p-1 ${showMethods ? '' : 'hidden'}`}>
         {METHODS.map(m => (
           <button
             key={m.key}
@@ -333,7 +335,7 @@ function PaymentPanel({
             type="number"
             value={cashGiven}
             onChange={e => setCashGiven(e.target.value)}
-            placeholder={`Amount given (min ${fmtINR(sym, grandTotal)})`}
+            placeholder="Cash received (optional — for change)"
             className="w-full rounded-lg border border-border px-3 py-2 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
           />
           {cashGivenNum > 0 && (
@@ -1629,7 +1631,8 @@ export function NewOrderPanel() {
               </span>
               <span className="shrink-0 text-lg font-bold text-ink">{fmtINR(sym, grandTotal)}</span>
             </div>
-            {/* Payment choice */}
+            {/* Payment choice — not for dine-in, which is paid later from Pending Bills */}
+            {orderType !== 'dine-in' && (<>
             <div className="flex gap-1 rounded-lg border border-border bg-canvas p-1">
               {(['cash', 'upi', 'card', 'split'] as const).map(m => (
                 <button
@@ -1660,39 +1663,45 @@ export function NewOrderPanel() {
                   splitUpi={splitUpi}   setSplitUpi={setSplitUpi}
                   splitCard={splitCard} setSplitCard={setSplitCard}
                   cashGiven={cashGiven} setCashGiven={setCashGiven}
+                  showMethods={false}
                 />
                 <button type="button" onClick={() => setShowPayment(false)} className="mt-2 w-full text-center text-[11px] text-ink/40 hover:text-ink/60">
                   Hide
                 </button>
               </div>
             )}
+            </>)}
 
-            {/* Hold · KOT · KOT & Print */}
+            {/* Hold · KOT · KOT & Print  (KOT = Kitchen Order Ticket: sends the order to the kitchen) */}
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
+                title="Save this cart for later without sending it anywhere"
                 onClick={handleHold}
-                className="rounded-xl border border-amber-200 bg-amber-50 py-2.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                className="flex flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
               >
                 Hold
+                <span className="text-[10px] font-normal opacity-75">save for later</span>
               </button>
               <button
                 type="button"
-                title="Send to kitchen, pay later from Pending Bills"
+                title="Kitchen Order Ticket — sends the order to the kitchen; pay later from Pending Bills"
                 onClick={() => void handleConfirmOrder({ pay: false, print: false })}
                 disabled={submitting || !canKot}
-                className="rounded-xl bg-ink py-2.5 text-xs font-semibold text-white transition hover:bg-ink/85 disabled:opacity-50"
+                className="flex flex-col items-center justify-center rounded-xl bg-ink py-2 text-xs font-semibold text-white transition hover:bg-ink/85 disabled:opacity-50"
               >
                 KOT
+                <span className="text-[10px] font-normal opacity-75">send to kitchen</span>
               </button>
               <button
                 type="button"
-                title="Send to kitchen and print the bill"
+                title="Send to the kitchen and print the customer's bill"
                 onClick={() => void handleConfirmOrder({ pay: false, print: true })}
                 disabled={submitting || !canKot}
-                className="rounded-xl bg-ink py-2.5 text-xs font-semibold text-white transition hover:bg-ink/85 disabled:opacity-50"
+                className="flex flex-col items-center justify-center rounded-xl bg-ink py-2 text-xs font-semibold text-white transition hover:bg-ink/85 disabled:opacity-50"
               >
                 KOT &amp; Print
+                <span className="text-[10px] font-normal opacity-75">+ print bill</span>
               </button>
             </div>
 
