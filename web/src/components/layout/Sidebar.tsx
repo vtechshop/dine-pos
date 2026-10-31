@@ -161,19 +161,19 @@ function NavItemRow({ item }: { item: NavItem }) {
       to={to}
       end={end}
       className={({ isActive }) =>
-        `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+        `group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors duration-150 ${
           isActive
-            ? 'bg-beige font-semibold text-brand shadow-[inset_3px_0_0_rgb(var(--brand))]'
-            : 'text-ink/70 hover:bg-beige/70 hover:text-ink'
+            ? 'bg-beige font-semibold text-brand before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r-full before:bg-brand'
+            : 'text-umber hover:bg-beige/60 hover:text-coffee'
         }`
       }
     >
       {({ isActive }) => (
         <>
-          <Icon size={16} />
+          <Icon size={16} className={`shrink-0 transition-colors ${isActive ? 'text-brand' : 'text-clay group-hover:text-coffee'}`} />
           <span className="flex-1">{label}</span>
           {hint && (
-            <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-brand/70' : 'text-ink/35'}`}>
+            <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-brand/70' : 'text-clay/70'}`}>
               {hint}
             </span>
           )}
@@ -208,16 +208,16 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               <button
                 key={item.key}
                 onClick={() => { setActiveTab(item.key); navigate('/cashier'); }}
-                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+                className={`group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors duration-150 ${
                   isActive
-                    ? 'bg-beige font-semibold text-brand shadow-[inset_3px_0_0_rgb(var(--brand))]'
-                    : 'text-ink/70 hover:bg-beige/70 hover:text-ink'
+                    ? 'bg-beige font-semibold text-brand before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r-full before:bg-brand'
+                    : 'text-umber hover:bg-beige/60 hover:text-coffee'
                 }`}
               >
-                <Icon size={16} />
+                <Icon size={16} className={`shrink-0 transition-colors ${isActive ? 'text-brand' : 'text-clay group-hover:text-coffee'}`} />
                 <span className="flex-1 text-left">{item.label}</span>
                 {item.hint && (
-                  <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-brand/70' : 'text-ink/35'}`}>
+                  <span className={`text-[9px] font-mono font-semibold ${isActive ? 'text-brand/70' : 'text-clay/70'}`}>
                     {item.hint}
                   </span>
                 )}
@@ -287,7 +287,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-52 flex-col border-r border-border bg-ivory transition-transform duration-200 ease-in-out md:static md:h-full md:shrink-0 md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed inset-y-0 left-0 z-50 flex w-52 flex-col border-r border-border bg-mist transition-transform duration-200 ease-in-out md:static md:h-full md:shrink-0 md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         {/* Mobile close header */}
         <div className="flex items-center justify-between border-b border-border px-3 py-2 md:hidden">
