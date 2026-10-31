@@ -11,12 +11,18 @@ import { ApiError } from '../../api/client';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Local calendar dates (toISOString is UTC, which is a day behind just after midnight in India)
+function localDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDate(new Date());
 }
 
 function yesterday(): string {
-  return new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const d = new Date(); d.setDate(d.getDate() - 1);
+  return localDate(d);
 }
 
 function fmtRupee(n: number, sym = '₹'): string {
@@ -180,9 +186,13 @@ export function RecommendationsPage() {
         {!loading && notFound && (
           <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
             <p className="text-3xl">📭</p>
-            <p className="text-sm font-medium text-ink">No data available for {date}.</p>
+            <p className="text-sm font-medium text-ink">
+              {date === todayStr() ? 'No finished day to analyse yet.' : `No sales recorded on ${date}.`}
+            </p>
             <p className="text-xs text-ink/50 max-w-xs">
-              Select a date when the restaurant was open.
+              {date === todayStr()
+                ? 'Recommendations are worked out from a full day of sales. Today’s are ready after the day closes.'
+                : 'Pick a day when the restaurant took orders.'}
             </p>
           </div>
         )}
@@ -197,6 +207,12 @@ export function RecommendationsPage() {
         {/* Data */}
         {!loading && data && (
           <>
+            {/* Today has no full day yet — say which day is shown */}
+            {date === todayStr() && data.date && data.date !== date && (
+              <div className="rounded-xl border border-border bg-mist px-4 py-3 text-xs text-ink/60">
+                Today’s sales are analysed after the day closes. Showing the latest finished day: <span className="font-semibold text-ink">{data.date}</span>.
+              </div>
+            )}
             {/* AI Insight */}
             {data.insightSource === 'unavailable' || !data.insight ? (
               <div className="rounded-xl border border-border bg-canvas p-4 flex items-center gap-3">
