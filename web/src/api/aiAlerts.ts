@@ -53,6 +53,8 @@ export interface SlowMover {
 
 export interface RecommendationSet {
   date:            string;
+  /** true = today so far, worked out live from today's orders */
+  live?:           boolean;
   generatedAt:     string;
   insightSource:   'cache' | 'gemini' | 'unavailable';
   insight:         string | null;
@@ -103,6 +105,11 @@ export function fetchAlertsByDate(date: string): Promise<AlertResult> {
 
 export function fetchRecommendations(): Promise<RecommendationSet> {
   return apiFetch('/ai/recommendations');
+}
+
+/** Today so far (live). 404 until today has a sale. */
+export function fetchLiveRecommendations(): Promise<RecommendationSet> {
+  return apiFetch('/ai/recommendations/live');
 }
 
 export function fetchRecommendationsByDate(date: string): Promise<RecommendationSet> {

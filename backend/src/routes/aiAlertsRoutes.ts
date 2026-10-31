@@ -16,6 +16,7 @@ import DailySnapshot from '../models/DailySnapshot';
 import Alert from '../models/Alert';
 import Hotel from '../models/Hotel';
 import { ensureDailySnapshot } from '../utils/ensureDailySnapshot';
+import { liveItemsForDay } from '../utils/liveDayItems';
 import { todayBusinessDate, yesterdayBusinessDate } from '../utils/businessDate';
 import { logger } from '../utils/logger';
 
@@ -156,6 +157,41 @@ router.get('/recommendations', async (req: AuthRequest, res: Response) => {
       return res.status(429).json({ code: 'AI_QUOTA_EXCEEDED', message: (err as any).message });
     }
     sendError(res, 500, 'Failed to build recommendations', err);
+  }
+});
+
+// ─── GET /api/ai/recommendations/live ────────────────────────────────────────
+// Today so far, straight from today's orders. Nothing is saved (a part-day
+// snapshot would skew trends); cached 5 min. 404 until today has a sale.
+// Declared before /:date so "live" is not read as a date.
+
+const LIVE_REC_TTL = 5 * 60;
+
+router.get('/recommendations/live', async (req: AuthRequest, res: Response) => {
+  try {
+    const hotelId = req.hotelId!;
+    const hotel   = await Hotel.findById(hotelId, { timezone: 1 }).lean();
+    const tz      = (hotel as { timezone?: string } | null)?.timezone ?? 'Asia/Kolkata';
+    const date    = todayBusinessDate(tz);
+    const cacheKey = `${date}:live`;
+
+    const cached = await getCachedRecommendations(hotelId, cacheKey);
+    if (cached) return res.json(cached);
+
+    const result = await singleFlight(`recs-live:${hotelId}:${date}`, async () => {
+      const items = await liveItemsForDay(hotelId, date, tz);
+      return items.length ? buildRecommendations(hotelId, date, items) : null;
+    });
+    if (!result) return res.status(404).json({ message: 'No sales yet today.' });
+
+    const payload = { ...result, live: true };
+    await setCachedRecommendations(hotelId, cacheKey, payload, true, LIVE_REC_TTL);
+    return res.json(payload);
+  } catch (err) {
+    if ((err as any)?.code === 'AI_QUOTA_EXCEEDED') {
+      return res.status(429).json({ code: 'AI_QUOTA_EXCEEDED', message: (err as any).message });
+    }
+    sendError(res, 500, 'Failed to build live recommendations', err);
   }
 });
 

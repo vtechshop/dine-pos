@@ -4,6 +4,7 @@ import { useSettings } from '../../context/SettingsContext';
 import {
   fetchRecommendations,
   fetchRecommendationsByDate,
+  fetchLiveRecommendations,
   type RecommendationSet,
   type MenuItemScore,
 } from '../../api/aiAlerts';
@@ -107,7 +108,7 @@ function LoadingSkeleton() {
 export function RecommendationsPage() {
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
-  const [date, setDate] = useState<string>(yesterday());
+  const [date, setDate] = useState<string>(todayStr());
   const [data, setData] = useState<RecommendationSet | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -119,10 +120,17 @@ export function RecommendationsPage() {
     setError(null);
     setData(null);
     try {
-      const result = d === todayStr()
-        ? await fetchRecommendations()
-        : await fetchRecommendationsByDate(d);
-      setData(result);
+      if (d === todayStr()) {
+        // Today: live from today's orders; before the first sale, the latest finished day
+        try {
+          setData(await fetchLiveRecommendations());
+        } catch (e) {
+          if (!(e instanceof ApiError && e.status === 404)) throw e;
+          setData(await fetchRecommendations());
+        }
+      } else {
+        setData(await fetchRecommendationsByDate(d));
+      }
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 404) {
         setNotFound(true);
@@ -187,11 +195,11 @@ export function RecommendationsPage() {
           <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
             <p className="text-3xl">📭</p>
             <p className="text-sm font-medium text-ink">
-              {date === todayStr() ? 'No finished day to analyse yet.' : `No sales recorded on ${date}.`}
+              {date === todayStr() ? 'No sales yet today.' : `No sales recorded on ${date}.`}
             </p>
             <p className="text-xs text-ink/50 max-w-xs">
               {date === todayStr()
-                ? 'Recommendations are worked out from a full day of sales. Today’s are ready after the day closes.'
+                ? 'Live recommendations appear here after the first order of the day.'
                 : 'Pick a day when the restaurant took orders.'}
             </p>
           </div>
@@ -207,10 +215,15 @@ export function RecommendationsPage() {
         {/* Data */}
         {!loading && data && (
           <>
-            {/* Today has no full day yet — say which day is shown */}
-            {date === todayStr() && data.date && data.date !== date && (
+            {/* Say what is shown: today live, or the latest finished day */}
+            {data.live ? (
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-500" />
+                <span><span className="font-semibold">Live — today so far.</span> Updates every 5 minutes as orders come in; the final picture is ready after the day closes.</span>
+              </div>
+            ) : date === todayStr() && data.date && data.date !== date && (
               <div className="rounded-xl border border-border bg-mist px-4 py-3 text-xs text-ink/60">
-                Today’s sales are analysed after the day closes. Showing the latest finished day: <span className="font-semibold text-ink">{data.date}</span>.
+                No sales yet today. Showing the latest finished day: <span className="font-semibold text-ink">{data.date}</span>.
               </div>
             )}
             {/* AI Insight */}

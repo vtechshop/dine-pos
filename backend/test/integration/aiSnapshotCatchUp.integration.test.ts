@@ -98,3 +98,36 @@ test('another hotel’s orders never leak into the summary', async () => {
   const snap = await DailySnapshot.findOne({ hotelId: mine._id, date }).lean() as any;
   expect(snap.totalOrders).toBe(3);
 });
+
+// ── Live: today so far ───────────────────────────────────────────────────────
+
+test('live view shows today so far from today’s orders, and saves nothing', async () => {
+  const today = todayBusinessDate(IST);
+  const h = await hotelWithSales(today);
+  const r = await request(app).get('/api/ai/recommendations/live').set(auth(tokenFor(String(h._id), 'admin')));
+  expect(r.status).toBe(200);
+  expect(r.body.live).toBe(true);
+  expect(r.body.date).toBe(today);
+  const names = r.body.menuEngineering.map((i: any) => i.productName).sort();
+  expect(names).toEqual(['Black Tea', 'Masala Dosa']);
+  const dosa = r.body.menuEngineering.find((i: any) => i.productName === 'Masala Dosa');
+  expect(dosa.qty).toBe(3);
+  expect(await DailySnapshot.countDocuments({ hotelId: h._id })).toBe(0);
+});
+
+test('live view says no sales yet before the first order of the day', async () => {
+  const h = await hotelWithSales(daysAgo(1)); // only yesterday
+  const r = await request(app).get('/api/ai/recommendations/live').set(auth(tokenFor(String(h._id), 'admin')));
+  expect(r.status).toBe(404);
+});
+
+test('live view ignores cancelled orders and other hotels', async () => {
+  const today = todayBusinessDate(IST);
+  const h = await hotelWithSales(today);
+  await hotelWithSales(today); // another hotel
+  await Order.updateMany({ hotelId: h._id, grandTotal: 60 }, { $set: { status: 'cancelled' } }); // the Black Tea order
+  const r = await request(app).get('/api/ai/recommendations/live').set(auth(tokenFor(String(h._id), 'admin')));
+  expect(r.status).toBe(200);
+  expect(r.body.menuEngineering.map((i: any) => i.productName)).toEqual(['Masala Dosa']);
+  expect(r.body.menuEngineering[0].qty).toBe(3);
+});

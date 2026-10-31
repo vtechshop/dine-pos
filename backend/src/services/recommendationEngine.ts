@@ -7,6 +7,7 @@ import DailySnapshot from '../models/DailySnapshot';
 import { generateNarrative } from '../utils/geminiNarrative';
 import { getCachedNarrative, setCachedNarrative, hashNarrativeInput } from '../utils/aiReportCache';
 import { consumeAiQuota } from '../utils/aiUsageTracker';
+import type { IItemMetric } from '../models/HourlyMetrics';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -254,20 +255,28 @@ Total: 60–90 words. Direct, professional tone.`;
 export async function buildRecommendations(
   hotelId: string,
   date:    string,
+  /** Today-so-far dish sales (live view) — used instead of the saved DailySnapshot */
+  liveItems?: IItemMetric[],
 ): Promise<RecommendationSet | null> {
   const today    = new Date().toISOString().slice(0, 10);
   const hotelOId = new mongoose.Types.ObjectId(hotelId);
 
-  // Use allItems (top 100 by revenue, has both qty and revenue) — no Order scan needed
-  const snap = await DailySnapshot.findOne(
-    { hotelId: hotelOId, date },
-    { allItems: 1, topItems: 1, totalRevenue: 1 },
-  ).lean();
+  let items: IItemMetric[];
+  if (liveItems) {
+    items = liveItems;
+  } else {
+    // Use allItems (top 100 by revenue, has both qty and revenue) — no Order scan needed
+    const snap = await DailySnapshot.findOne(
+      { hotelId: hotelOId, date },
+      { allItems: 1, topItems: 1, totalRevenue: 1 },
+    ).lean();
+    items = snap?.allItems ?? [];
+  }
 
-  if (!snap || snap.allItems.length === 0) return null;
+  if (items.length === 0) return null;
 
   // ── Classification (all Node.js) ──────────────────────────────────────────
-  const classified    = classifyItems(snap.allItems);
+  const classified    = classifyItems(items);
   const stars         = classified.filter((i) => i.quadrant === 'star');
   const plowHorses    = classified.filter((i) => i.quadrant === 'plow_horse');
   const puzzles       = classified.filter((i) => i.quadrant === 'puzzle');
