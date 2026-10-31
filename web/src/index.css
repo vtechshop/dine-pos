@@ -62,7 +62,12 @@
     --ivory:       245 241 234; /* #F5F1EA warm ivory — sidebar, soft panels */
     --beige:       234 227 217; /* #EAE3D9 light beige — hover / neutral buttons / tints */
     --ink:          53  41  31; /* #35291F — primary text */
-    --muted:       145 135 126; /* #91877E — secondary text */
+    --muted:       129 118 109; /* #81766D — secondary text */
+    --umber:       103  88  75; /* #67584B — muted dark brown: nav text, unselected categories, labels */
+    --clay:        129 117 104; /* #817568 — nav icons */
+    --paper:       251 249 245; /* #FBF9F5 light ivory — total section, photo frames */
+    --action:      104  70  47; /* #68462F — important actions (Add, Pay); hover = coffee */
+    --action-press: 61  42  32; /* #3D2A20 — pressed state of important actions */
     --canvas:      255 255 255; /* #FFFFFF — cards, header, inputs */
     --mist:        243 240 235; /* #F3F0EB — page background */
     --border:      229 222 213; /* #E5DED5 — dividers and input borders */
@@ -89,7 +94,8 @@
      per-button `disabled:opacity-*` utilities on purpose (higher specificity). */
   button.bg-brand:disabled,
   button.bg-ink:disabled,
-  button.bg-coffee:disabled {
+  button.bg-coffee:disabled,
+  button.bg-action:disabled {
     opacity: 1;
     background-color: rgb(var(--beige));
     color: rgb(var(--muted));
@@ -110,7 +116,8 @@
     cursor: progress;
   }
   button.bg-ink[aria-busy='true']:disabled,
-  button.bg-coffee[aria-busy='true']:disabled {
+  button.bg-coffee[aria-busy='true']:disabled,
+  button.bg-action[aria-busy='true']:disabled {
     background-color: rgb(var(--coffee) / 0.85);
     color: #fff;
     cursor: progress;

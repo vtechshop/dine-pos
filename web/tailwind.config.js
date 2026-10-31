@@ -65,7 +65,12 @@ export default {
         mocha:   v('mocha'),    // #A17B5C secondary brown
         ivory:   v('ivory'),    // #F5F1EA warm ivory — sidebar, soft panels
         beige:   v('beige'),    // #EAE3D9 light beige — hover / neutral buttons
-        muted:   v('muted'),    // #91877E — secondary text
+        muted:   v('muted'),    // #81766D — secondary text
+        umber:   v('umber'),    // #67584B — nav text, unselected categories, labels
+        clay:    v('clay'),     // #817568 — nav icons
+        paper:   v('paper'),    // #FBF9F5 light ivory — total section, photo frames
+        action:  v('action'),   // #68462F — important actions (Add, Pay)
+        'action-press': v('action-press'), // #3D2A20 — pressed
         success: v('success'),  // #4F8A70
         warning: v('warning'),  // #D5A04C
         danger:  v('danger'),   // #D85D5D

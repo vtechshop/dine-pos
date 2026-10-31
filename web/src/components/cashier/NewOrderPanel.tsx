@@ -60,6 +60,12 @@ function TypeTab({ active, icon, label, onClick }: { active: boolean; icon: Reac
   );
 }
 
+/** Up to two initials for a dish, used when it has no photo ("Masala Dosa" → "MD"). */
+function dishInitials(name: string): string {
+  const words = name.replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? words[0]![0]! + words[1]![0]! : (words[0] ?? '?').slice(0, 2)).toUpperCase();
+}
+
 // ── Product card ──────────────────────────────────────────────────────────────
 
 function ProductCard({
@@ -93,7 +99,7 @@ function ProductCard({
         {/* Photo — fixed 16:10 frame so cards don't jump while images load.
             Skipped entirely when the menu has no photos, so cards stay compact. */}
         {showPhoto ? (
-        <div className="relative aspect-[16/10] w-full bg-ivory 2xl:aspect-[2/1]">
+        <div className="relative aspect-[16/10] w-full bg-paper 2xl:aspect-[2/1]">
           {showImg ? (
             <img
               src={product.image}
@@ -104,9 +110,9 @@ function ProductCard({
               className="absolute inset-0 h-full w-full object-cover"
             />
           ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-mocha/50">
-              <UtensilsCrossed size={22} />
-              <span className="text-[10px] font-medium">No photo</span>
+            // No photo saved (or it failed to load): the dish's initials on a soft ivory tone
+            <div aria-hidden className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-paper via-ivory to-beige/80">
+              <span className="select-none text-3xl font-semibold tracking-wide text-mocha/60">{dishInitials(product.name)}</span>
             </div>
           )}
           <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
@@ -144,7 +150,7 @@ function ProductCard({
               {fmtINR(sym, product.price)}
             </span>
             {product.isAvailable && (
-              <span className="rounded-md bg-brand px-2.5 py-1 text-[11px] font-semibold text-white transition group-hover:bg-coffee">
+              <span className="rounded-md bg-action px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition duration-150 group-hover:bg-coffee group-hover:shadow-md group-active:bg-action-press group-active:shadow-none">
                 {options ? 'Choose' : 'Add'}
               </span>
             )}
@@ -171,7 +177,7 @@ function CatButton({ active, onClick, children }: { active: boolean; onClick: ()
       type="button"
       onClick={onClick}
       className={`flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-xs font-semibold leading-tight transition ${
-        active ? 'bg-brand text-white shadow-sm' : 'text-ink/75 hover:bg-beige/70 hover:text-ink'
+        active ? 'bg-brand text-white shadow-sm' : 'text-umber transition-colors duration-150 hover:bg-mist hover:text-coffee'
       }`}
     >
       {children}
@@ -1126,7 +1132,7 @@ export function NewOrderPanel() {
               type="button"
               onClick={() => { pillsRef.current?.scrollTo({ left: 0 }); setActiveCat(''); }}
               className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                !activeCat ? 'border border-brand bg-brand text-white shadow-sm' : 'border border-border bg-canvas text-ink/80 hover:border-mocha/40 hover:bg-ivory'
+                !activeCat ? 'border border-brand bg-brand text-white shadow-sm' : 'border border-border bg-canvas text-umber transition-colors duration-150 hover:bg-mist hover:text-coffee'
               }`}
             >
               All
@@ -1137,7 +1143,7 @@ export function NewOrderPanel() {
               className={`shrink-0 flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 activeCat === FAVS_CAT
                   ? 'bg-amber-400 text-white'
-                  : 'border border-border bg-canvas text-ink/80 hover:border-mocha/40 hover:bg-ivory'
+                  : 'border border-border bg-canvas text-umber transition-colors duration-150 hover:bg-mist hover:text-coffee'
               }`}
             >
               <Star size={10} className={activeCat === FAVS_CAT ? 'fill-white' : 'fill-amber-400'} />
@@ -1154,7 +1160,7 @@ export function NewOrderPanel() {
                 type="button"
                 onClick={() => setActiveCat(activeCat === cat._id ? '' : cat._id)}
                 className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                  activeCat === cat._id ? 'border border-brand bg-brand text-white shadow-sm' : 'border border-border bg-canvas text-ink/80 hover:border-mocha/40 hover:bg-ivory'
+                  activeCat === cat._id ? 'border border-brand bg-brand text-white shadow-sm' : 'border border-border bg-canvas text-umber transition-colors duration-150 hover:bg-mist hover:text-coffee'
                 }`}
               >
                 {cat.name}
@@ -1633,17 +1639,17 @@ export function NewOrderPanel() {
           <div className="sticky bottom-0 space-y-2 rounded-t-xl border border-b-0 border-border bg-canvas px-2.5 pb-1 pt-2 shadow-[0_-4px_12px_-6px_rgb(100_30_50/0.12)]">
             {/* Bill breakdown + total payable — always in view. Same preview figures as before;
                 the server recalculates authoritatively. */}
-            <div className="rounded-xl border border-border bg-mist px-3 py-2">
-              <div className="space-y-0.5 text-xs text-ink/65">
+            <div className="rounded-xl border border-border bg-paper px-3 py-2">
+              <div className="space-y-0.5 text-xs text-muted">
                 {/* Short screens: subtotal and tax share one line so the ordered items stay visible */}
-                <div className="flex justify-between [@media(max-height:820px)]:hidden"><span>Subtotal</span><span className="font-medium text-ink">{fmtINR(sym, subtotal)}</span></div>
-                <div className="flex justify-between [@media(max-height:820px)]:hidden"><span>Tax</span><span className="font-medium text-ink">{fmtINR(sym, taxTotal)}</span></div>
+                <div className="flex justify-between [@media(max-height:820px)]:hidden"><span>Subtotal</span><span className="font-medium text-umber">{fmtINR(sym, subtotal)}</span></div>
+                <div className="flex justify-between [@media(max-height:820px)]:hidden"><span>Tax</span><span className="font-medium text-umber">{fmtINR(sym, taxTotal)}</span></div>
                 <div className="hidden justify-between [@media(max-height:820px)]:flex">
-                  <span>Subtotal <span className="font-medium text-ink">{fmtINR(sym, subtotal)}</span></span>
-                  <span>Tax <span className="font-medium text-ink">{fmtINR(sym, taxTotal)}</span></span>
+                  <span>Subtotal <span className="font-medium text-umber">{fmtINR(sym, subtotal)}</span></span>
+                  <span>Tax <span className="font-medium text-umber">{fmtINR(sym, taxTotal)}</span></span>
                 </div>
                 {deliveryChargeAmt > 0 && (
-                  <div className="flex justify-between"><span>Delivery charge</span><span className="font-medium text-ink">{fmtINR(sym, deliveryChargeAmt)}</span></div>
+                  <div className="flex justify-between"><span>Delivery charge</span><span className="font-medium text-umber">{fmtINR(sym, deliveryChargeAmt)}</span></div>
                 )}
                 {subtotal + taxTotal + deliveryChargeAmt - grandTotal > 0.005 && (
                   <div className="flex justify-between text-green-700">
@@ -1653,8 +1659,8 @@ export function NewOrderPanel() {
                 )}
               </div>
               <div className="mt-1.5 flex items-baseline justify-between gap-2 border-t border-border pt-1.5">
-                <span className="text-sm font-semibold text-coffee">Total payable</span>
-                <span className="text-[1.75rem] font-extrabold leading-none tracking-tight text-brand">{fmtINR(sym, grandTotal)}</span>
+                <span className="text-sm font-semibold text-umber">Total payable</span>
+                <span className="text-[1.95rem] font-extrabold leading-none tracking-tight text-coffee">{fmtINR(sym, grandTotal)}</span>
               </div>
             </div>
             {/* Payment choice — not for dine-in, which is paid later from Pending Bills */}
@@ -1758,7 +1764,7 @@ export function NewOrderPanel() {
                   onClick={() => void handleConfirmOrder({ pay: true, print: false })}
                   disabled={submitting || !canConfirm}
                   aria-busy={submitting}
-                  className="flex items-center justify-center gap-1.5 rounded-xl bg-coffee py-3 text-base font-bold text-white shadow-md transition hover:bg-coffee/90 disabled:opacity-50"
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-action py-3 text-base font-bold text-white shadow-md transition duration-150 hover:bg-coffee hover:shadow-lg active:bg-action-press active:shadow-sm disabled:opacity-50"
                 >
                   {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                   Pay {fmtINR(sym, grandTotal)}
@@ -1768,7 +1774,7 @@ export function NewOrderPanel() {
                   onClick={() => void handleConfirmOrder({ pay: true, print: true })}
                   disabled={submitting || !canConfirm}
                   aria-busy={submitting}
-                  className="rounded-xl border border-brand py-2.5 text-sm font-semibold text-brand transition hover:bg-brand/10 disabled:opacity-50"
+                  className="rounded-xl bg-action py-2.5 text-sm font-semibold text-white shadow-sm transition duration-150 hover:bg-coffee hover:shadow-md active:bg-action-press active:shadow-none disabled:opacity-50"
                 >
                   Pay &amp; Print
                 </button>
