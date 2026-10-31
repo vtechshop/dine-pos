@@ -672,10 +672,7 @@ export function NewOrderPanel() {
     return inCat && inSearch;
   });
 
-  // ── Derived: recent + top today product objects ────────────────────────────
-  const recentProducts = recentIds
-    .map(id => products.find(p => p._id === id))
-    .filter((p): p is Product => !!p && p.isAvailable);
+  // ── Derived: top today product objects ─────────────────────────────────────
 
   const topProducts = topToday
     .map(row => ({ row, product: products.find(p => p.name === row.productName) }))
@@ -1166,24 +1163,6 @@ export function NewOrderPanel() {
         )}
         </div>
 
-        {/* Recent products strip */}
-        {!search && activeCat !== FAVS_CAT && recentProducts.length > 0 && (
-          <div className="flex items-center gap-2">
-            <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-ink/35">Recent</p>
-            <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
-              {recentProducts.map(p => (
-                <button
-                  key={p._id}
-                  type="button"
-                  onClick={() => handleAddProduct(p)}
-                  className="shrink-0 rounded-lg border border-border bg-canvas px-2.5 py-1.5 text-xs font-medium text-ink transition hover:border-brand/30 hover:bg-mist"
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Top today strip */}
         {!search && activeCat !== FAVS_CAT && topProducts.length > 0 && (
