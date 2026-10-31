@@ -4,12 +4,13 @@ import {
   Settings, CalendarDays, ChefHat, CreditCard, Truck, Link2, RefreshCw,
   Store, ShoppingBag, ClipboardList, Wallet, TrendingUp, Sparkles, X, Bot, Sunrise, RotateCcw,
   FileBarChart, FileText, MessageSquare, Bell, Lightbulb, ScanLine, Tag, Gift, Shield,
-  Plus, PauseCircle, Search, Printer, UserCircle, History, Building2,
+  Plus, PauseCircle, Search, Printer, UserCircle, History, Building2, LifeBuoy,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCashier, type CashierTab } from '../../context/CashierContext';
 import { BranchSwitcher } from '../BranchSwitcher';
+import { SUPPORT_PAGE, SUPPORT_PHONE_DISPLAY } from '../../config/support';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -308,8 +309,18 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
         {navContent}
 
-        <div className="border-t border-border px-4 py-3">
-          <p className="text-[10px] text-ink/35">Dine POS Web · v1.0</p>
+        <div className="border-t border-border px-2 py-2">
+          {/* Help is always one click away, for every role */}
+          <NavLink
+            to={SUPPORT_PAGE}
+            onClick={onClose}
+            title={'Call or WhatsApp ' + SUPPORT_PHONE_DISPLAY}
+            className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium text-umber transition hover:bg-beige hover:text-coffee"
+          >
+            <LifeBuoy size={15} className="shrink-0" />
+            Help &amp; Support
+          </NavLink>
+          <p className="px-2 pt-1 text-[10px] text-ink/35">Dine POS Web · v1.0</p>
         </div>
       </aside>
     </>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Flame, CheckCircle, Clock, RefreshCw, AlertCircle,
-  UtensilsCrossed, ChevronRight,
+  UtensilsCrossed, ChevronRight, Search, X,
 } from 'lucide-react';
 import { fetchCashierOrders } from '../../api/orders';
 import { ApiError } from '../../api/client';
@@ -162,6 +162,7 @@ export function KitchenStatusPanel() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [nowMs, setNowMs]           = useState(() => Date.now());
   const [filter, setFilter]         = useState<FilterTab>('all');
+  const [search, setSearch]         = useState('');
 
   const load = useCallback(async () => {
     let cancelled = false;
@@ -200,9 +201,17 @@ export function KitchenStatusPanel() {
     return (nowMs - new Date(o.createdAt).getTime()) / 60_000 >= 20;
   }).length;
 
-  const filtered = filter === 'all'
-    ? orders
-    : orders.filter(o => o.status === filter);
+  // Search: order #, customer, table or dish name (all words must match)
+  const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const filtered = orders.filter(o => {
+    if (filter !== 'all' && o.status !== filter) return false;
+    if (terms.length === 0) return true;
+    const hay = [
+      o.orderNumber, o.customerName, o.tableNumber && `t${o.tableNumber} table ${o.tableNumber}`,
+      ...o.items.map(i => i.productName),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return terms.every(t => hay.includes(t));
+  });
 
   return (
     <div className="space-y-4">
@@ -277,7 +286,25 @@ export function KitchenStatusPanel() {
         </div>
       )}
 
-      {/* Filter tabs */}
+      {/* Search + filter tabs */}
+      <div className="flex flex-wrap items-center gap-2">
+      <div className="relative min-w-[14rem] flex-1">
+        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink/35" />
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search order #, customer, table or dish…"
+          aria-label="Search kitchen orders"
+          className="search-input w-full py-2 pl-8 pr-8 text-sm"
+        />
+        {search && (
+          <button type="button" onClick={() => setSearch('')} aria-label="Clear search"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/35 hover:text-ink/60">
+            <X size={13} />
+          </button>
+        )}
+      </div>
       <div className="flex gap-1">
         {(['all', 'pending', 'preparing', 'ready'] as const).map(tab => (
           <button
@@ -295,6 +322,10 @@ export function KitchenStatusPanel() {
           </button>
         ))}
       </div>
+      </div>
+      {terms.length > 0 && (
+        <p className="text-xs text-ink/50">{filtered.length} order{filtered.length === 1 ? '' : 's'} match “{search.trim()}”</p>
+      )}
 
       {/* Order grid */}
       {loading && orders.length === 0 ? (
@@ -303,9 +334,9 @@ export function KitchenStatusPanel() {
         <div className="rounded-xl border border-dashed border-border py-10 text-center">
           <UtensilsCrossed size={22} className="mx-auto mb-2 text-ink/20" />
           <p className="text-sm text-ink/40">
-            {filter === 'all' ? 'No active kitchen orders' : `No ${filter} orders`}
+            {terms.length > 0 ? 'No orders match your search' : filter === 'all' ? 'No active kitchen orders' : `No ${filter} orders`}
           </p>
-          {filter === 'all' && (
+          {filter === 'all' && terms.length === 0 && (
             <p className="text-xs text-ink/30 mt-1">Kitchen is all clear</p>
           )}
         </div>
