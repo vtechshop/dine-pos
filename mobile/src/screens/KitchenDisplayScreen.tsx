@@ -20,6 +20,7 @@ import { useGlobalToast } from '../context/GlobalToastContext';
 import { NotificationSvc, orderLabel } from '../services/NotificationService';
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import UnreadBadge from '../components/UnreadBadge';
+import KitchenStockModal from '../components/KitchenStockModal';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'KitchenDisplay'>;
@@ -30,6 +31,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [socketLost, setSocketLost] = useState(false);
+  const [stockOpen, setStockOpen] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const mountedRef = useRef(true);
   const { count: kitchenBadge, increment: incKitchenBadge, reset: resetKitchenBadge } = useBadgeCount(BADGE_KEYS.kitchenOrders);
@@ -420,6 +422,11 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
         <View style={styles.headerRight}>
+          {/* Mark dishes in / out of stock */}
+          <TouchableOpacity style={styles.stockBtn} onPress={() => setStockOpen(true)} accessibilityLabel="Stock">
+            <MaterialIcons name="inventory-2" size={16} color={Colors.primary} />
+            <Text style={styles.stockBtnText}>Stock</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.refreshBtn} onPress={loadOrders}>
             <MaterialIcons name="refresh" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
@@ -471,6 +478,8 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </ScrollView>
       )}
+
+      <KitchenStockModal visible={stockOpen} onClose={() => setStockOpen(false)} />
 
       {/* ── New Order Popup (floats over screen) ── */}
       <Modal
@@ -535,6 +544,11 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: FontSize.xl, fontWeight: '900', color: Colors.text },
   headerSub: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  stockBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, height: 36, paddingHorizontal: 12, borderRadius: 18,
+    backgroundColor: Colors.primaryBg, borderWidth: 1, borderColor: Colors.primary,
+  },
+  stockBtnText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary },
   refreshBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center',
