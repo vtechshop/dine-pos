@@ -11,7 +11,7 @@ import { getPublicRemoteConfig } from '../../api/remoteConfig';
 
 
 export function AppLayout() {
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, logout, role } = useAuth();
   const { socket } = useSocket();
   const { pathname } = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -67,8 +67,9 @@ export function AppLayout() {
           </div>
         </main>
 
-        {/* The cashier POS has its own order summary on the right */}
-        {!pathname.startsWith('/cashier') && <RightPanel />}
+        {/* The cashier POS has its own order summary on the right; the kitchen
+            display needs the full width */}
+        {!pathname.startsWith('/cashier') && role !== 'kitchen' && <RightPanel />}
       </div>
 
       <StatusBar />

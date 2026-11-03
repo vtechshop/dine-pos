@@ -6,19 +6,19 @@ import { Spinner } from '../components/ui/Spinner';
 import { ApiError } from '../api/client';
 import { SUPPORT_PHONE, SUPPORT_PHONE_DISPLAY, SUPPORT_PAGE, supportWhatsAppUrl } from '../config/support';
 
-type LoginMode = 'admin' | 'cashier';
+type LoginMode = 'admin' | 'cashier' | 'kitchen';
 
 const APP_VERSION = 'v1.0-rc1';
 
-// All roles land on the table-grid dashboard for the pilot phase.
-// Dedicated cashier/waiter/kitchen views are delivered in a future phase.
 function roleDestination(role: string | null): string {
   // Super admins sign in through this same form (see handleSubmit).
-  return role === 'superadmin' ? '/super-admin/dashboard' : '/dashboard';
+  if (role === 'superadmin') return '/super-admin/dashboard';
+  if (role === 'kitchen')    return '/kitchen';
+  return '/dashboard';
 }
 
 export function LoginPage() {
-  const { isAuthenticated, login, loginCashier, loginSuperAdmin, role } = useAuth();
+  const { isAuthenticated, login, loginCashier, loginKitchen, loginSuperAdmin, role } = useAuth();
   const [mode, setMode]           = useState<LoginMode>('admin');
 
   // Admin fields
@@ -44,7 +44,8 @@ export function LoginPage() {
   function switchMode(next: LoginMode) {
     setMode(next);
     setError(null);
-    if (next === 'cashier') {
+    setPin('');
+    if (next !== 'admin') {
       // Re-read so the panel reflects a hotel linked after this page first mounted
       setDeviceHotelId(localStorage.getItem('pos_device_hotel_id')   ?? '');
       setDeviceHotelName(localStorage.getItem('pos_device_hotel_name') ?? '');
@@ -78,6 +79,8 @@ export function LoginPage() {
             throw hotelErr;
           }
         }
+      } else if (mode === 'kitchen') {
+        await loginKitchen(deviceHotelId, pin.trim());
       } else {
         await loginCashier(deviceHotelId, employeeCode.trim().toUpperCase(), pin);
       }
@@ -106,7 +109,7 @@ export function LoginPage() {
         <div className="rounded-2xl border border-border bg-canvas p-8 shadow-sm">
           {/* Mode tabs */}
           <div className="mb-6 flex overflow-hidden rounded-lg border border-border">
-            {(['admin', 'cashier'] as const).map(m => (
+            {(['admin', 'cashier', 'kitchen'] as const).map(m => (
               <button
                 key={m}
                 type="button"
@@ -117,7 +120,7 @@ export function LoginPage() {
                     : 'text-ink/60 hover:bg-mist'
                 }`}
               >
-                {m === 'admin' ? 'Hotel Admin' : 'Cashier'}
+                {m === 'admin' ? 'Hotel Admin' : m === 'cashier' ? 'Cashier' : 'Kitchen'}
               </button>
             ))}
           </div>
@@ -194,8 +197,8 @@ export function LoginPage() {
                   </div>
                 </div>
 
-                {/* Employee Code */}
-                <div>
+                {/* Employee Code (cashier only — the kitchen uses one shared PIN) */}
+                {mode === 'cashier' && <div>
                   <label htmlFor="employeeCode" className="block text-sm font-medium text-ink/70">
                     Employee Code
                   </label>
@@ -209,12 +212,12 @@ export function LoginPage() {
                     className="mt-1.5 block w-full rounded-lg border border-border px-3.5 py-2.5 text-sm text-ink placeholder-ink/40 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
                     placeholder="e.g. CSH01"
                   />
-                </div>
+                </div>}
 
                 {/* PIN */}
                 <div>
                   <label htmlFor="pin" className="block text-sm font-medium text-ink/70">
-                    PIN
+                    {mode === 'kitchen' ? 'Kitchen PIN' : 'PIN'}
                   </label>
                   <div className="relative mt-1.5">
                     <input
@@ -226,7 +229,7 @@ export function LoginPage() {
                       value={pin}
                       onChange={e => setPin(e.target.value)}
                       className="block w-full rounded-lg border border-border px-3.5 py-2.5 pr-10 text-sm text-ink placeholder-ink/40 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
-                      placeholder="Enter your PIN"
+                      placeholder={mode === 'kitchen' ? 'Enter the kitchen PIN' : 'Enter your PIN'}
                     />
                     <button
                       type="button"
@@ -297,6 +300,8 @@ export function LoginPage() {
             <p className="mt-5 text-center text-[11px] text-ink/40">
               {mode === 'admin'
                 ? 'Hotel Admin · Manager'
+                : mode === 'kitchen'
+                ? 'Kitchen PIN is set by your admin in Settings → Printers'
                 : 'Sign in with your employee code and PIN'}
             </p>
           )}

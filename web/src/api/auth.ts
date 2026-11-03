@@ -42,6 +42,14 @@ export function loginCashierApi(
   });
 }
 
+/** Kitchen display login: the hotel's kitchen PIN (set by the admin in Settings). Token lasts 12 h. */
+export function loginKitchenApi(hotelId: string, pin: string): Promise<{ token: string }> {
+  return apiFetch<{ token: string }>('/auth/kitchen', {
+    method: 'POST',
+    body:   JSON.stringify({ hotelId, pin }),
+  });
+}
+
 // H-02: revoke the refresh token on the server so it cannot generate new access tokens
 export async function logoutApi(refreshToken: string): Promise<void> {
   await apiFetch('/auth/logout', {

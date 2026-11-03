@@ -106,10 +106,19 @@ function AdminOnly({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Redirect cashier away from admin/kitchen pages to their own POS interface
-function CashierRedirect({ children }: { children: React.ReactNode }) {
+// Redirect cashier away from admin/kitchen pages to their own POS interface,
+// and kitchen staff to the Kitchen Display (the only screen they use).
+function CashierRedirect({ children, kitchenPage = false }: { children: React.ReactNode; kitchenPage?: boolean }) {
   const { role } = useAuth();
   if (role === 'cashier') return <Navigate to="/cashier" replace />;
+  if (role === 'kitchen' && !kitchenPage) return <Navigate to="/kitchen" replace />;
+  return <>{children}</>;
+}
+
+// The billing screen is for cashiers/admins; kitchen staff go back to their display
+function NotKitchen({ children }: { children: React.ReactNode }) {
+  const { role } = useAuth();
+  if (role === 'kitchen') return <Navigate to="/kitchen" replace />;
   return <>{children}</>;
 }
 
@@ -184,8 +193,8 @@ export function App() {
                     <Route index element={<Navigate to="/dashboard" replace />} />
                     <Route path="/dashboard"   element={<CashierRedirect><DashboardPage /></CashierRedirect>} />
                     <Route path="/tables"      element={<CashierRedirect><TablesPage /></CashierRedirect>} />
-                    <Route path="/kitchen"     element={<CashierRedirect><KitchenPage /></CashierRedirect>} />
-                    <Route path="/cashier"     element={<CashierPage />} />
+                    <Route path="/kitchen"     element={<CashierRedirect kitchenPage><KitchenPage /></CashierRedirect>} />
+                    <Route path="/cashier"     element={<NotKitchen><CashierPage /></NotKitchen>} />
                     <Route path="/orders"      element={<AdminOnly><Suspense fallback={<PageFallback />}><OrdersPage /></Suspense></AdminOnly>} />
                     <Route path="/customers"   element={<AdminOnly><Suspense fallback={<PageFallback />}><CustomersPage /></Suspense></AdminOnly>} />
                     <Route path="/campaigns"   element={<AdminOnly><Suspense fallback={<PageFallback />}><CampaignsPage /></Suspense></AdminOnly>} />
