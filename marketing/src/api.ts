@@ -4,9 +4,11 @@ const API_BASE  = import.meta.env.VITE_API_URL as string | undefined;
 export interface InquiryResponse {
   message: string;
   id: string;
+  /** The WhatsApp link that was opened — shown as a button in case the new tab was blocked */
+  whatsappUrl?: string;
 }
 
-export const submitDemo = async (body: {
+export interface DemoRequest {
   name: string;
   email: string;
   phone: string;
@@ -15,9 +17,10 @@ export const submitDemo = async (body: {
   preferredDate?: string;
   preferredTime?: string;
   notes?: string;
-}): Promise<InquiryResponse> => {
-  // Open WhatsApp immediately — must be synchronous with the user gesture
-  // so the browser does not treat it as a popup and block it.
+}
+
+/** wa.me link to the DinePOS team with the demo details pre-filled. */
+export function demoWhatsAppUrl(body: DemoRequest): string {
   const lines = [
     "Hi, I'd like to book a free DinePOS demo.",
     '',
@@ -30,12 +33,14 @@ export const submitDemo = async (body: {
     body.preferredTime ? `Preferred time: ${body.preferredTime} IST` : null,
     body.notes         ? `\nI'd like to see: ${body.notes}` : null,
   ].filter((l): l is string => l !== null).join('\n');
+  return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(lines)}`;
+}
 
-  window.open(
-    `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(lines)}`,
-    '_blank',
-    'noopener,noreferrer',
-  );
+export const submitDemo = async (body: DemoRequest): Promise<InquiryResponse> => {
+  // Open WhatsApp immediately — must be synchronous with the user gesture
+  // so the browser does not treat it as a popup and block it.
+  const whatsappUrl = demoWhatsAppUrl(body);
+  window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
 
   // Persist to DB — saves lead, emits new_lead socket event to SA, sends confirmation emails.
   // Fire after WhatsApp so the popup is never blocked, but await so the caller gets a proper id.
@@ -48,12 +53,12 @@ export const submitDemo = async (body: {
       });
       const data = (await res.json().catch(() => ({}))) as { message?: string; id?: string };
       if (res.ok) {
-        return { message: data.message ?? 'Demo booked! We will confirm your slot shortly.', id: String(data.id ?? Date.now()) };
+        return { message: data.message ?? 'Demo booked! We will confirm your slot shortly.', id: String(data.id ?? Date.now()), whatsappUrl };
       }
     } catch { /* non-fatal — WhatsApp already opened */ }
   }
 
-  return { message: 'WhatsApp opened', id: Date.now().toString() };
+  return { message: 'WhatsApp opened', id: Date.now().toString(), whatsappUrl };
 };
 
 export const submitContact = async (body: {

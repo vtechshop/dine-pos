@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, Clock, Monitor, Headphones } from 'lucide-react';
+import { CheckCircle2, Clock, Monitor, Headphones, MessageCircle } from 'lucide-react';
 import { submitDemo } from '../api';
 import { usePageSEO } from '../hooks/usePageSEO';
 
@@ -37,6 +37,7 @@ export function BookDemoPage() {
   );
   const [form, setForm]           = useState<FormState>(BLANK);
   const [submitted, setSubmitted] = useState(false);
+  const [waUrl, setWaUrl]         = useState('');
   const [error, setError]         = useState('');
 
   function set(key: keyof FormState, value: string) {
@@ -52,7 +53,7 @@ export function BookDemoPage() {
     }
     setError('');
     try {
-      await submitDemo({
+      const res = await submitDemo({
         name:          form.name.trim(),
         email:         form.email.trim(),
         phone:         form.phone.trim(),
@@ -62,6 +63,7 @@ export function BookDemoPage() {
         preferredTime: form.preferredTime || undefined,
         notes:         form.notes.trim() || undefined,
       });
+      setWaUrl(res.whatsappUrl ?? '');
       setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Submission failed. Please try again.');
@@ -131,6 +133,21 @@ export function BookDemoPage() {
                 Your details are pre-filled in WhatsApp — just tap Send to confirm your demo slot.
                 We'll reply within a few hours.
               </p>
+              {/* In case the browser blocked the new tab or opened it in the background */}
+              {waUrl && (
+                <>
+                  <a
+                    href={waUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#25D366] px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#1ebe5b]"
+                  >
+                    <MessageCircle size={18} />
+                    Open WhatsApp
+                  </a>
+                  <p className="mt-2 text-xs text-gray-400">WhatsApp didn't open? Tap the button above.</p>
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => { setForm(BLANK); setSubmitted(false); }}
