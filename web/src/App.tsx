@@ -56,6 +56,7 @@ import { KitchenPage } from './pages/KitchenPage';
 import { CashierPage } from './pages/CashierPage';
 import { CustomerDisplayPage } from './pages/CustomerDisplayPage';
 // Heavy pages — code-split to reduce initial JS parse time
+const HelpPage         = lazy(() => import('./pages/HelpPage').then(m => ({ default: m.HelpPage })));
 const OrdersPage       = lazy(() => import('./pages/OrdersPage').then(m => ({ default: m.OrdersPage })));
 const ProductsPage     = lazy(() => import('./pages/ProductsPage').then(m => ({ default: m.ProductsPage })));
 const InventoryPage              = lazy(() => import('./pages/InventoryPage').then(m => ({ default: m.InventoryPage })));
@@ -195,6 +196,7 @@ export function App() {
                     <Route path="/tables"      element={<CashierRedirect><TablesPage /></CashierRedirect>} />
                     <Route path="/kitchen"     element={<CashierRedirect kitchenPage><KitchenPage /></CashierRedirect>} />
                     <Route path="/cashier"     element={<NotKitchen><CashierPage /></NotKitchen>} />
+                    <Route path="/help"        element={<Suspense fallback={<PageFallback />}><HelpPage /></Suspense>} />
                     <Route path="/orders"      element={<AdminOnly><Suspense fallback={<PageFallback />}><OrdersPage /></Suspense></AdminOnly>} />
                     <Route path="/customers"   element={<AdminOnly><Suspense fallback={<PageFallback />}><CustomersPage /></Suspense></AdminOnly>} />
                     <Route path="/campaigns"   element={<AdminOnly><Suspense fallback={<PageFallback />}><CampaignsPage /></Suspense></AdminOnly>} />

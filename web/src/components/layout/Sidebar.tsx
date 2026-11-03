@@ -10,7 +10,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useCashier, type CashierTab } from '../../context/CashierContext';
 import { BranchSwitcher } from '../BranchSwitcher';
-import { SUPPORT_PAGE, SUPPORT_PHONE_DISPLAY } from '../../config/support';
+import { SUPPORT_PHONE_DISPLAY } from '../../config/support';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -312,7 +312,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         <div className="border-t border-border px-2 py-2">
           {/* Help is always one click away, for every role */}
           <NavLink
-            to={SUPPORT_PAGE}
+            to="/help"
             onClick={onClose}
             title={'Call or WhatsApp ' + SUPPORT_PHONE_DISPLAY}
             className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium text-umber transition hover:bg-beige hover:text-coffee"
