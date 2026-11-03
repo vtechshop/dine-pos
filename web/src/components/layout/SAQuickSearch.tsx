@@ -24,7 +24,7 @@ const PAGES: { to: string; label: string; words: string }[] = [
   { to: '/super-admin/aggregator/hotels',    label: 'Delivery · Hotels',         words: 'delivery swiggy zomato hotels integrations enable' },
   { to: '/super-admin/aggregator/monitor',   label: 'Delivery · Monitor',        words: 'delivery swiggy zomato monitor api health menu sync' },
   { to: '/super-admin/aggregator/orders',    label: 'Delivery · Orders',         words: 'delivery swiggy zomato orders feed' },
-  { to: '/super-admin/aggregator/settlement',label: 'Delivery · Settlement',     words: 'delivery swiggy zomato settlement commission payout analytics' },
+  { to: '/super-admin/aggregator/analytics', label: 'Delivery · Analytics',      words: 'delivery swiggy zomato analytics top hotels cities items trends' },
   { to: '/super-admin/aggregator/webhooks',  label: 'Delivery · Webhooks',       words: 'delivery swiggy zomato webhooks log retry' },
   { to: '/super-admin/aggregator/settings',  label: 'Delivery · Settings',       words: 'delivery swiggy zomato settings timeout retry rate limit' },
   { to: '/super-admin/aggregator/audit',     label: 'Delivery · Alerts & Audit', words: 'delivery swiggy zomato alerts audit log' },

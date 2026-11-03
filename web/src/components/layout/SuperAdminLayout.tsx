@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   Activity, BarChart2, Building2, Heart, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Tag,
-  Truck, Hotel, Monitor, ShoppingBag, ReceiptText, Globe2, Settings2, ClipboardList, FileBarChart,
+  Truck, Hotel, Monitor, ShoppingBag, LineChart, Globe2, Settings2, ClipboardList, FileBarChart,
   Users, PhoneCall, CalendarCheck, Kanban, CreditCard, LifeBuoy,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -201,7 +201,7 @@ export function SuperAdminLayout() {
                 { to: '/super-admin/aggregator/hotels',   label: 'Hotels',      icon: <Hotel          size={16} strokeWidth={1.75} /> },
                 { to: '/super-admin/aggregator/monitor',  label: 'Monitor',     icon: <Monitor        size={16} strokeWidth={1.75} /> },
                 { to: '/super-admin/aggregator/orders',   label: 'Orders',      icon: <ShoppingBag    size={16} strokeWidth={1.75} /> },
-                { to: '/super-admin/aggregator/settlement',label:'Settlement',  icon: <ReceiptText    size={16} strokeWidth={1.75} /> },
+                { to: '/super-admin/aggregator/analytics', label: 'Analytics',  icon: <LineChart      size={16} strokeWidth={1.75} /> },
                 { to: '/super-admin/aggregator/webhooks', label: 'Webhooks',    icon: <Globe2         size={16} strokeWidth={1.75} /> },
                 { to: '/super-admin/aggregator/settings', label: 'Settings',    icon: <Settings2      size={16} strokeWidth={1.75} /> },
                 { to: '/super-admin/aggregator/audit',    label: 'Alerts & Audit', icon: <ClipboardList size={16} strokeWidth={1.75} /> },

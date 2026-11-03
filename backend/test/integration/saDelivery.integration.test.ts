@@ -110,11 +110,15 @@ test('webhook log shows size, not the customer payload', async () => {
   expect(JSON.stringify(r.body)).not.toContain('PRIVATE-PAYLOAD');
 });
 
-test('settlement and alerts', async () => {
+test('analytics and alerts; settlement is not a Super Admin view', async () => {
   await seed();
-  const s = await get('/settlement');
-  const sw = s.body.byPlatform.find((p: any) => p.platform === 'swiggy');
-  expect(sw).toMatchObject({ revenue: 400, commission: 80, netPayout: 320 });
+  const an = await get('/analytics');
+  expect(an.status).toBe(200);
+  expect(an.body.topHotels[0]).toMatchObject({ hotelName: 'Malu Hotel', orders: 1, revenue: 400 });
+  expect(an.body.cancellationPct).toBe(50);
+  // Swiggy/Zomato settle with each hotel directly — no settlement endpoint or report here
+  expect((await get('/settlement')).status).toBe(404);
+  expect((await get('/reports/generate?type=settlement')).status).toBe(400);
   const a = await get('/alerts');
   const types = a.body.alerts.map((x: any) => x.type);
   expect(types).toEqual(expect.arrayContaining(['hotel_disconnected', 'webhook_failed']));

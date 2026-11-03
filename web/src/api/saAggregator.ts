@@ -124,16 +124,6 @@ export interface SAGlobalOrder {
   state:        string;
 }
 
-export interface AggSettlementSummary {
-  platform:    string;
-  revenue:     number;
-  commission:  number;
-  pending:     number;
-  complete:    number;
-  refunds:     number;
-  netPayout:   number;
-}
-
 export interface SyncStatus {
   hotelId:        string;
   hotelName:      string;
@@ -188,11 +178,6 @@ export interface AggAnalytics {
   topHotels: { hotelId: string; hotelName: string; orders: number; revenue: number }[];
   topCities:  { city: string; orders: number; revenue: number }[];
   topProducts: { name: string; quantity: number; revenue: number }[];
-}
-
-export interface AggSettlement {
-  byPlatform: AggSettlementSummary[];
-  byHotel:    { hotelId: string; hotelName: string; revenue: number; commission: number; net: number }[];
 }
 
 // ── Per-hotel aggregator on/off (existing endpoint) ───────────────────────────
@@ -272,17 +257,6 @@ export function getGlobalSyncStatus(params?: {
   if (params?.platform && params.platform !== 'all') q.set('platform', params.platform);
   if (params?.status)  q.set('status', params.status);
   return saFetch<{ syncs: SyncStatus[]; total: number }>(`/aggregator/sync-status?${q}`);
-}
-
-// GET /superadmin/aggregator/settlement?from=&to=
-export function getGlobalSettlement(params?: {
-  from?: string;
-  to?:   string;
-}): Promise<AggSettlement> {
-  const q = new URLSearchParams();
-  if (params?.from) q.set('from', params.from);
-  if (params?.to)   q.set('to',   params.to);
-  return saFetch<AggSettlement>(`/aggregator/settlement?${q}`);
 }
 
 // GET /superadmin/aggregator/analytics?from=&to=

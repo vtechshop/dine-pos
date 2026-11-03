@@ -35,7 +35,7 @@ const AggregatorDashboardPage  = lazy(() => import('./pages/super-admin/Aggregat
 const AggregatorHotelsPage     = lazy(() => import('./pages/super-admin/AggregatorHotelsPage').then(m => ({ default: m.AggregatorHotelsPage })));
 const AggregatorMonitorPage    = lazy(() => import('./pages/super-admin/AggregatorMonitorPage').then(m => ({ default: m.AggregatorMonitorPage })));
 const AggregatorOrdersPage     = lazy(() => import('./pages/super-admin/AggregatorOrdersPage').then(m => ({ default: m.AggregatorOrdersPage })));
-const AggregatorSettlementPage = lazy(() => import('./pages/super-admin/AggregatorSettlementPage').then(m => ({ default: m.AggregatorSettlementPage })));
+const AggregatorAnalyticsPage  = lazy(() => import('./pages/super-admin/AggregatorAnalyticsPage').then(m => ({ default: m.AggregatorAnalyticsPage })));
 const AggregatorWebhooksPage   = lazy(() => import('./pages/super-admin/AggregatorWebhooksPage').then(m => ({ default: m.AggregatorWebhooksPage })));
 const AggregatorSettingsPage   = lazy(() => import('./pages/super-admin/AggregatorSettingsPage').then(m => ({ default: m.AggregatorSettingsPage })));
 const AggregatorAuditPage      = lazy(() => import('./pages/super-admin/AggregatorAuditPage').then(m => ({ default: m.AggregatorAuditPage })));
@@ -168,7 +168,8 @@ export function App() {
                       <Route path="/super-admin/aggregator/hotels"      element={<AggregatorHotelsPage />} />
                       <Route path="/super-admin/aggregator/monitor"     element={<AggregatorMonitorPage />} />
                       <Route path="/super-admin/aggregator/orders"      element={<AggregatorOrdersPage />} />
-                      <Route path="/super-admin/aggregator/settlement"  element={<AggregatorSettlementPage />} />
+                      <Route path="/super-admin/aggregator/analytics"   element={<AggregatorAnalyticsPage />} />
+                      <Route path="/super-admin/aggregator/settlement"  element={<Navigate to="/super-admin/aggregator/analytics" replace />} />
                       <Route path="/super-admin/aggregator/webhooks"    element={<AggregatorWebhooksPage />} />
                       <Route path="/super-admin/aggregator/settings"    element={<AggregatorSettingsPage />} />
                       <Route path="/super-admin/aggregator/audit"       element={<AggregatorAuditPage />} />
