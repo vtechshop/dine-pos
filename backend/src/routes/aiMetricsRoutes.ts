@@ -8,6 +8,7 @@ import DailySnapshot from '../models/DailySnapshot';
 import JobRegistry from '../models/JobRegistry';
 import { getHotMetrics, getTopItems } from '../utils/aiMetricsCache';
 import { sendError } from '../utils/sendError';
+import { catchUpSnapshot } from '../utils/ensureDailySnapshot';
 
 const router = Router();
 
@@ -86,6 +87,7 @@ router.get('/metrics/snapshot/:date', authMiddleware, requireFeature('ai'), asyn
     }
     const date = dateStr;
 
+    await catchUpSnapshot(hotelId, date);
     const snapshot = await DailySnapshot.findOne(
       { hotelId: new mongoose.Types.ObjectId(hotelId), date },
     ).lean();

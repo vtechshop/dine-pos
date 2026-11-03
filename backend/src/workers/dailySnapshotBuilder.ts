@@ -8,6 +8,7 @@ import Hotel from '../models/Hotel';
 import { acquireSchedulerLock, releaseSchedulerLock } from '../utils/schedulerLock';
 import { logger } from '../utils/logger';
 import { yesterdayBusinessDate, startOfBusinessDay, endOfBusinessDay } from '../utils/businessDate';
+import { recordAlertsForDay } from '../services/alertEngine';
 
 const DAILY_BATCH_SIZE = 10;
 
@@ -271,7 +272,9 @@ export async function dispatchDailySnapshots(minuteOfDay: number): Promise<void>
         batch.map((h) => {
           const tz      = (h as any).timezone ?? 'Asia/Kolkata';
           const dateStr = yesterdayBusinessDate(tz);
-          return buildDailySnapshot(h._id as mongoose.Types.ObjectId, dateStr, tz);
+          return buildDailySnapshot(h._id as mongoose.Types.ObjectId, dateStr, tz)
+            // Record that day's alerts so the Alerts History tab fills without anyone opening it
+            .then(() => recordAlertsForDay(String(h._id), dateStr));
         }),
       );
       for (let j = 0; j < results.length; j++) {

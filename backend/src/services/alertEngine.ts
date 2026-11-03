@@ -329,6 +329,51 @@ function buildBaseline(
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
+// ─── Save alerts for the History tab ──────────────────────────────────────────
+// Upsert by type + day; types no longer firing that day are marked resolved.
+async function persistAlerts(
+  hotelOId:  mongoose.Types.ObjectId,
+  dedupDate: string,
+  alerts:    SmartAlert[],
+): Promise<void> {
+  if (alerts.length > 0) {
+    await Alert.bulkWrite(alerts.map((a) => ({
+      updateOne: {
+        filter: { hotelId: hotelOId, type: a.type, dedupDate },
+        update: {
+          $set: {
+            severity:   a.severity,
+            title:      a.title,
+            message:    a.message,
+            value:      a.value,
+            baseline:   a.baseline,
+            changePct:  a.changePct,
+            resolvedAt: null,
+          },
+          $setOnInsert: { isRead: false, readAt: null },
+        },
+        upsert: true,
+      },
+    })), { ordered: false }).catch(() => {});
+  }
+  await Alert.updateMany(
+    { hotelId: hotelOId, dedupDate, type: { $nin: alerts.map((a) => a.type) }, resolvedAt: null },
+    { $set: { resolvedAt: new Date() } },
+  ).catch(() => {});
+}
+
+/**
+ * Work out and save a finished day's alerts (History tab). Called after a day's
+ * summary is built. Never throws. Skipped when the date is still "today" by the
+ * UTC clock computeAlerts uses, so a just-closed Indian day isn't read as live.
+ */
+export async function recordAlertsForDay(hotelId: string, date: string): Promise<void> {
+  if (date >= new Date().toISOString().slice(0, 10)) return;
+  try {
+    await computeAlerts(hotelId, date);
+  } catch { /* best-effort */ }
+}
+
 export async function computeAlerts(
   hotelId: string,
   date:    string,
@@ -405,6 +450,8 @@ export async function computeAlerts(
       ]);
       if (kdAlert)  alerts.push(kdAlert);
       if (invAlert) alerts.push(invAlert);
+      // Too little history for trend checks — still record what fired for the History tab
+      await persistAlerts(hotelOId, toBusinessDate(new Date(), 'Asia/Kolkata'), alerts);
       return { date, alerts, checkedAt: new Date().toISOString(), dataSource };
     }
 
@@ -440,34 +487,7 @@ export async function computeAlerts(
 
     // ── Persist alerts to MongoDB (upsert — deduplicate by type+date) ────────
     const dedupDate = toBusinessDate(new Date(), 'Asia/Kolkata');
-    if (alerts.length > 0) {
-      const upsertOps = alerts.map((a) => ({
-        updateOne: {
-          filter: { hotelId: hotelOId, type: a.type, dedupDate },
-          update: {
-            $set: {
-              severity:  a.severity,
-              title:     a.title,
-              message:   a.message,
-              value:     a.value,
-              baseline:  a.baseline,
-              changePct: a.changePct,
-              resolvedAt: null,
-            },
-            $setOnInsert: { isRead: false, readAt: null },
-          },
-          upsert: true,
-        },
-      }));
-      await Alert.bulkWrite(upsertOps, { ordered: false }).catch(() => {});
-
-      // Mark old alerts of types NOT in today's compute as resolved
-      const activeTypes = alerts.map((a) => a.type);
-      await Alert.updateMany(
-        { hotelId: hotelOId, dedupDate, type: { $nin: activeTypes }, resolvedAt: null },
-        { $set: { resolvedAt: new Date() } },
-      ).catch(() => {});
-    }
+    await persistAlerts(hotelOId, dedupDate, alerts);
 
     return { date, alerts, checkedAt: new Date().toISOString(), dataSource };
 
@@ -507,6 +527,7 @@ export async function computeAlerts(
       const alerts: SmartAlert[] = [];
       const cancAlert = detectExcessiveCancellations(current);
       if (cancAlert) alerts.push(cancAlert);
+      await persistAlerts(hotelOId, date, alerts);
       return { date, alerts, checkedAt: new Date().toISOString(), dataSource };
     }
 
@@ -526,34 +547,7 @@ export async function computeAlerts(
     // A-02: use the historical `date` parameter, not today, so past-date alerts
     // dedup against the snapshot date and don't corrupt today's active alerts.
     const dedupDate = date;
-    if (alerts.length > 0) {
-      const upsertOps = alerts.map((a) => ({
-        updateOne: {
-          filter: { hotelId: hotelOId, type: a.type, dedupDate },
-          update: {
-            $set: {
-              severity:  a.severity,
-              title:     a.title,
-              message:   a.message,
-              value:     a.value,
-              baseline:  a.baseline,
-              changePct: a.changePct,
-              resolvedAt: null,
-            },
-            $setOnInsert: { isRead: false, readAt: null },
-          },
-          upsert: true,
-        },
-      }));
-      await Alert.bulkWrite(upsertOps, { ordered: false }).catch(() => {});
-
-      // Mark old alerts of types NOT in today's compute as resolved
-      const activeTypes = alerts.map((a) => a.type);
-      await Alert.updateMany(
-        { hotelId: hotelOId, dedupDate, type: { $nin: activeTypes }, resolvedAt: null },
-        { $set: { resolvedAt: new Date() } },
-      ).catch(() => {});
-    }
+    await persistAlerts(hotelOId, dedupDate, alerts);
 
     return { date, alerts, checkedAt: new Date().toISOString(), dataSource };
   }
