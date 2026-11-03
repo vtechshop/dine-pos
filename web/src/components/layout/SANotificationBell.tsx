@@ -1,9 +1,13 @@
 import { NavLink } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import { useSANotifications } from '../../context/SANotificationsContext';
+import { useSATickets } from '../../context/SATicketsContext';
 
 export function SANotificationBell() {
-  const { unreadCount } = useSANotifications();
+  const { unreadCount: broadcastUnread } = useSANotifications();
+  const { unseen } = useSATickets();
+  // New support tickets count as notifications too
+  const unreadCount = broadcastUnread + unseen.length;
 
   return (
     <NavLink

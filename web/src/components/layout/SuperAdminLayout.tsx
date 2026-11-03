@@ -10,6 +10,17 @@ import { SANotificationBell } from './SANotificationBell';
 import { SAQuickSearch } from './SAQuickSearch';
 import { LeadNotificationProvider } from '../../context/LeadNotificationContext';
 import { LeadToast } from '../ui/LeadToast';
+import { SATicketsProvider, useSATickets } from '../../context/SATicketsContext';
+import { SATicketToast } from '../ui/SATicketToast';
+
+/** Red count of support tickets waiting for a reply */
+function TicketBadge() {
+  const { waiting } = useSATickets();
+  if (waiting.length === 0) return null;
+  return (
+    <span className="ml-auto rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600">{waiting.length}</span>
+  );
+}
 
 export function SuperAdminLayout() {
   const { logout } = useAuth();
@@ -17,6 +28,7 @@ export function SuperAdminLayout() {
   return (
     <LeadNotificationProvider>
     <SANotificationsProvider>
+    <SATicketsProvider>
       <div className="flex h-screen bg-mist">
         {/* Sidebar */}
         <aside className="flex w-56 flex-shrink-0 flex-col border-r border-border bg-canvas">
@@ -156,6 +168,7 @@ export function SuperAdminLayout() {
             >
               <LifeBuoy size={16} strokeWidth={1.75} />
               Support Tickets
+              <TicketBadge />
             </NavLink>
 
             {/* Notification bell — dropdown preview + badge */}
@@ -246,7 +259,9 @@ export function SuperAdminLayout() {
 
       {/* Real-time lead alert toast — appears on any SA page */}
       <LeadToast />
+      <SATicketToast />
 
+    </SATicketsProvider>
     </SANotificationsProvider>
     </LeadNotificationProvider>
   );

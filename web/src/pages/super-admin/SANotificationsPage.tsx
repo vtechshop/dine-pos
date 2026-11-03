@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Bell, Plus, Search, Trash2, AlertCircle, RefreshCw, X } from 'lucide-react';
+import { Bell, Plus, Search, Trash2, AlertCircle, RefreshCw, X, LifeBuoy } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useSATickets } from '../../context/SATicketsContext';
 import { useSANotifications } from '../../context/SANotificationsContext';
 import { type CreateNotificationPayload, type SANotification } from '../../api/superAdmin';
 import { Spinner } from '../../components/ui/Spinner';
@@ -173,6 +175,8 @@ export function SANotificationsPage() {
           </button>
         </div>
       </div>
+
+      <SupportTicketsWaiting />
 
       {/* Fetch error banner */}
       {error && (
@@ -444,6 +448,43 @@ export function SANotificationsPage() {
         </p>
       )}
 
+    </div>
+  );
+}
+
+// ── Support tickets waiting for a reply ─────────────────────────────────────────
+
+function SupportTicketsWaiting() {
+  const { waiting, unseen, markSeen } = useSATickets();
+  // Opening Notifications counts as seeing them (clears the bell count); the
+  // "New" tags are remembered for this visit so they don't vanish at once.
+  const [newIds, setNewIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (unseen.length === 0) return;
+    setNewIds(prev => new Set([...prev, ...unseen.map(t => t._id)]));
+    markSeen();
+  }, [unseen, markSeen]);
+  if (waiting.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-red-200 bg-red-50/60 p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="flex items-center gap-2 text-sm font-semibold text-red-700">
+          <LifeBuoy size={15} /> {waiting.length} support ticket{waiting.length === 1 ? '' : 's'} waiting for a reply
+        </p>
+        <Link to="/super-admin/tickets" className="text-xs font-medium text-brand hover:underline">Open all →</Link>
+      </div>
+      <ul className="divide-y divide-red-100">
+        {waiting.slice(0, 5).map(t => (
+          <li key={t._id}>
+            <Link to={`/super-admin/tickets?id=${t._id}`} className="flex items-center gap-2 py-2 text-sm hover:opacity-80">
+              {newIds.has(t._id) && <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">New</span>}
+              <span className="min-w-0 flex-1 truncate font-medium text-ink">{t.subject}</span>
+              <span className="shrink-0 text-xs text-ink/50">{t.hotelName}</span>
+              <span className="shrink-0 text-[10px] text-ink/40">{t.replies.length > 0 ? 'hotel replied' : 'new'}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import { Link } from 'react-router-dom';
 import { RefreshCw, AlertTriangle, TrendingUp, CreditCard, Smartphone, Trophy } from 'lucide-react';
@@ -88,6 +88,22 @@ const GROWTH_PERIODS: { label: string; value: '7d' | '30d' | '12m' }[] = [
   { label: '12M', value: '12m' },
 ];
 
+function fillGrowthSlots(raw: HotelGrowthPoint[], period: '7d' | '30d' | '12m'): HotelGrowthPoint[] {
+  const key = (y: number, m: number, d?: number) => `${y}-${m}-${d ?? 0}`;
+  const have = new Map(raw.map(p => [key(p._id.year, p._id.month, period === '12m' ? undefined : p._id.day), p]));
+  const out: HotelGrowthPoint[] = [];
+  const now = new Date();
+  const count = period === '7d' ? 7 : period === '30d' ? 30 : 12;
+  for (let i = count - 1; i >= 0; i--) {
+    const d = period === '12m'
+      ? new Date(now.getFullYear(), now.getMonth() - i, 1)
+      : new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    const y = d.getFullYear(), m = d.getMonth() + 1, day = period === '12m' ? undefined : d.getDate();
+    out.push(have.get(key(y, m, day)) ?? { _id: { year: y, month: m, ...(day ? { day } : {}) }, total: 0, approved: 0, trial: 0, active: 0 });
+  }
+  return out;
+}
+
 function GrowthChart() {
   const [period, setPeriod] = useState<'7d' | '30d' | '12m'>('30d');
   const [data,   setData]   = useState<HotelGrowthData | null>(null);
@@ -105,7 +121,9 @@ function GrowthChart() {
     return () => { cancelled = true; };
   }, [period]);
 
-  const points = data?.data ?? [];
+  // One bar per day (7D / 30D) or month (12M), with empty ones at 0, so a quiet
+  // stretch doesn't turn a couple of sign-ups into giant bars.
+  const points = useMemo(() => fillGrowthSlots(data?.data ?? [], period), [data, period]);
   const maxVal = Math.max(1, ...points.map(p => p.total));
 
   // SVG layout — all in viewBox units
@@ -126,7 +144,8 @@ function GrowthChart() {
           <h2 className="text-sm font-semibold text-ink">Hotel Growth</h2>
           {data && (
             <p className="mt-0.5 text-[11px] text-ink/40">
-              {data.totalInPeriod} registrations in period
+              {data.totalInPeriod} new hotel{data.totalInPeriod === 1 ? '' : 's'} signed up
+              {period === '7d' ? ' in the last 7 days' : period === '30d' ? ' in the last 30 days' : ' in the last 12 months'}
             </p>
           )}
         </div>
@@ -155,9 +174,9 @@ function GrowthChart() {
         <div className="flex h-[108px] items-center justify-center text-xs text-ink/40">
           Failed to load chart
         </div>
-      ) : points.length === 0 ? (
+      ) : (data?.totalInPeriod ?? 0) === 0 ? (
         <div className="flex h-[108px] items-center justify-center text-xs text-ink/40">
-          No registrations in this period
+          No new hotels signed up in this period
         </div>
       ) : (
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
@@ -183,7 +202,7 @@ function GrowthChart() {
 
           {/* Bars */}
           {points.map((pt, i) => {
-            const bh = Math.max(2, (pt.total / maxVal) * AH);
+            const bh = pt.total > 0 ? Math.max(2, (pt.total / maxVal) * AH) : 0;
             const bx = PL + i * slotW + (slotW - barW) / 2;
             const by = PT + AH - bh;
             const label = growthLabel(pt, period);
@@ -196,8 +215,18 @@ function GrowthChart() {
                   rx={2}
                   style={{ fill: 'rgb(var(--brand))', opacity: 0.78 }}
                 >
-                  <title>{label}: {pt.total} total ({pt.approved} approved)</title>
+                  <title>{label}: {pt.total} new hotel{pt.total === 1 ? '' : 's'} ({pt.approved} approved)</title>
                 </rect>
+                {/* The count on top of each bar that has sign-ups */}
+                {pt.total > 0 && (
+                  <text
+                    x={bx + barW / 2} y={by - 2}
+                    textAnchor="middle" fontSize={7} fontWeight={700}
+                    style={{ fill: 'rgb(var(--ink))', opacity: 0.7 }}
+                  >
+                    {pt.total}
+                  </text>
+                )}
                 {showLabel && (
                   <text
                     x={bx + barW / 2} y={H - 6}
@@ -579,6 +608,7 @@ export function SADashboardPage() {
             <Smartphone size={13} className="text-ink/50" />
             Device Licensing
           </h2>
+          <p className="-mt-2 mb-3 text-[11px] text-ink/45">Phones, tablets and browsers signed in to a hotel's POS, and how many each plan allows.</p>
           {!dl ? (
             <div className="flex h-20 items-center justify-center">
               <Spinner size="sm" />
@@ -594,9 +624,10 @@ export function SADashboardPage() {
                   <p className="text-xl font-bold tabular-nums text-green-700">{dl.active}</p>
                   <p className="mt-0.5 text-[10px] font-medium text-green-700/70">Active</p>
                 </div>
-                <div className="rounded-lg bg-red-50 px-3 py-2.5">
-                  <p className="text-xl font-bold tabular-nums text-red-600">{dl.blocked}</p>
-                  <p className="mt-0.5 text-[10px] font-medium text-red-700/70">Blocked</p>
+                {/* Inactive = logged out, removed by the hotel admin, or hotel suspended — not an error */}
+                <div className="rounded-lg bg-mist px-3 py-2.5" title="Logged out, removed by the hotel, or the hotel was suspended">
+                  <p className="text-xl font-bold tabular-nums text-ink/60">{dl.blocked}</p>
+                  <p className="mt-0.5 text-[10px] font-medium text-ink/50">Signed out</p>
                 </div>
               </div>
               {dl.byPlan.length === 0 ? (

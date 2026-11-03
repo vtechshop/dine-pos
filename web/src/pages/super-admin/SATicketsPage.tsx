@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useSATickets } from '../../context/SATicketsContext';
 import { LifeBuoy, RefreshCw, Search, Send, Phone, X } from 'lucide-react';
 import {
   fetchTickets, replyToTicket, setTicketStatus,
@@ -55,6 +56,13 @@ export function SATicketsPage() {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
+  // Opening the tickets page counts as seeing new tickets (clears the bell count)
+  const watcher = useSATickets();
+  const markSeenRef = useRef(watcher.markSeen);
+  markSeenRef.current = watcher.markSeen;
+  useEffect(() => () => markSeenRef.current(), []);
+  useEffect(() => { watcher.markSeen(); }, [watcher.waiting.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const counts = useMemo(() => ({
     open:     tickets.filter(isOpen).length,
     resolved: tickets.filter(t => t.status === 'resolved').length,
@@ -83,6 +91,7 @@ export function SATicketsPage() {
 
   function patchLocal(t: SupportTicket) {
     setTickets(prev => prev.map(x => (x._id === t._id ? t : x)));
+    void watcher.refresh();   // update the sidebar / bell counts straight away
   }
 
   async function sendReply() {
