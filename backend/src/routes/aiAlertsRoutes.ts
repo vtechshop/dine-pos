@@ -15,10 +15,9 @@ import { sendError } from '../utils/sendError';
 import DailySnapshot from '../models/DailySnapshot';
 import Alert from '../models/Alert';
 import Hotel from '../models/Hotel';
-import { ensureDailySnapshot } from '../utils/ensureDailySnapshot';
+import { catchUpSnapshot, hotelYesterday, catchUpRecentDaysInBackground } from '../utils/ensureDailySnapshot';
 import { liveItemsForDay } from '../utils/liveDayItems';
 import { todayBusinessDate, yesterdayBusinessDate } from '../utils/businessDate';
-import { logger } from '../utils/logger';
 
 const router = Router();
 router.use(authMiddleware);
@@ -38,15 +37,6 @@ function validateDate(date: string): string | null {
   return null;
 }
 
-/** Build a missed nightly summary on demand; never fails the request. */
-async function catchUpSnapshot(hotelId: string, date: string): Promise<void> {
-  try {
-    await singleFlight(`snapfill:${hotelId}:${date}`, () => ensureDailySnapshot(hotelId, date));
-  } catch (err) {
-    logger.warn('[ai] snapshot catch-up failed', { hotelId, date, err: String(err) });
-  }
-}
-
 // ─── GET /api/ai/alerts ───────────────────────────────────────────────────────
 // Today's smart alerts — reads from HourlyMetrics for live data.
 // Cached 30min in Redis; misses compute from scratch.
@@ -57,6 +47,12 @@ router.get('/alerts', async (req: AuthRequest, res: Response) => {
     const date    = todayUTC();
 
     const cached = await getCachedAlerts(hotelId, date);
+    if (!cached) {
+      // Trend alerts compare with recent days — make sure missed days are filled in
+      const { tz, yesterday } = await hotelYesterday(hotelId);
+      await catchUpSnapshot(hotelId, yesterday);
+      catchUpRecentDaysInBackground(hotelId, 7, tz);
+    }
     if (cached) return res.json(cached);
 
     const result = await singleFlight(`alerts:${hotelId}:${date}`, () => computeAlerts(hotelId, date));

@@ -6,6 +6,8 @@ import { aggregateHotelHour } from '../workers/hourlyAggregator';
 import { buildDailySnapshot } from '../workers/dailySnapshotBuilder';
 import { todayBusinessDate, startOfBusinessDay, endOfBusinessDay, toBusinessDate } from './businessDate';
 import { logger } from './logger';
+import { singleFlight } from './singleFlight';
+import { recordAlertsForDay } from '../services/alertEngine';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -43,6 +45,36 @@ export async function ensureDailySnapshot(hotelId: string, date: string): Promis
   await buildDailySnapshot(hid, date, tz);
 
   const ok = !!(await DailySnapshot.exists({ hotelId: hid, date }));
+  if (ok) await recordAlertsForDay(hotelId, date);
   logger.info('[ensureDailySnapshot] built missing day on demand', { hotelId, date, ok });
   return ok;
+}
+
+/** The hotel's timezone and its business "yesterday". */
+export async function hotelYesterday(hotelId: string): Promise<{ tz: string; yesterday: string }> {
+  const hotel = await Hotel.findById(hotelId, { timezone: 1 }).lean();
+  const tz    = (hotel as { timezone?: string } | null)?.timezone ?? 'Asia/Kolkata';
+  return { tz, yesterday: toBusinessDate(new Date(Date.now() - 86_400_000), tz) };
+}
+
+/** Build a missed nightly summary on demand; never fails the caller. */
+export async function catchUpSnapshot(hotelId: string, date: string): Promise<void> {
+  try {
+    await singleFlight(`snapfill:${hotelId}:${date}`, () => ensureDailySnapshot(hotelId, date));
+  } catch (err) {
+    logger.warn('[ensureDailySnapshot] catch-up failed', { hotelId, date, err: String(err) });
+  }
+}
+
+/**
+ * Fill any missed days in the last `days` (oldest first, one at a time) in the
+ * background — used by 7-day trend views so a gap heals itself. Days without
+ * orders are skipped cheaply.
+ */
+export function catchUpRecentDaysInBackground(hotelId: string, days: number, tz: string): void {
+  void (async () => {
+    for (let n = days; n >= 1; n--) {
+      await catchUpSnapshot(hotelId, toBusinessDate(new Date(Date.now() - n * 86_400_000), tz));
+    }
+  })();
 }

@@ -9,8 +9,37 @@ import {
 } from '../utils/morningBriefCache';
 import { sendError } from '../utils/sendError';
 import { requireAiQuota } from '../utils/aiUsageTracker';
+import DailySnapshot from '../models/DailySnapshot';
+import { catchUpSnapshot, hotelYesterday } from '../utils/ensureDailySnapshot';
+import { singleFlight } from '../utils/singleFlight';
+import { logger } from '../utils/logger';
 
 const router = Router();
+
+// ─── Catch-up for a missed brief ──────────────────────────────────────────────
+// Briefs are built overnight from yesterday's DailySnapshot. If that slot was
+// missed, build yesterday's summary + brief when someone opens it. One try per
+// hotel/day every 30 min, so a Gemini outage can't make every page load retry.
+const BRIEF_RETRY_MS = 30 * 60_000;
+const briefTriedAt   = new Map<string, number>();
+
+async function fillYesterdayBrief(hotelId: string): Promise<void> {
+  try {
+    const { yesterday } = await hotelYesterday(hotelId);
+    const key = hotelId + ':' + yesterday;
+    if (Date.now() - (briefTriedAt.get(key) ?? 0) < BRIEF_RETRY_MS) return;
+    const hid = new mongoose.Types.ObjectId(hotelId);
+    if (await MorningBrief.exists({ hotelId: hid, date: yesterday })) return;
+    briefTriedAt.set(key, Date.now());
+
+    await catchUpSnapshot(hotelId, yesterday);
+    if (!(await DailySnapshot.exists({ hotelId: hid, date: yesterday }))) return; // no sales yesterday
+    const ok = await singleFlight('brief-fill:' + key, () => buildMorningBrief(hotelId, yesterday));
+    if (ok) await invalidateBriefCache(hotelId, yesterday);
+  } catch (err) {
+    logger.warn('[morningBrief] catch-up failed', { hotelId, err: String(err) });
+  }
+}
 router.use(authMiddleware);
 router.use(requireAdmin);
 router.use(requireFeature('ai'));
@@ -21,6 +50,9 @@ router.use(requireFeature('ai'));
 router.get('/morning-brief', async (req: AuthRequest, res: Response) => {
   try {
     const hotelId = req.hotelId!;
+
+    // Missed overnight? Build it now — wait up to 8 s, then let it finish in the background
+    await Promise.race([fillYesterdayBrief(hotelId), new Promise(r => setTimeout(r, 8_000))]);
 
     const cached = await getCachedLatestBrief(hotelId);
     if (cached) return res.json(cached);

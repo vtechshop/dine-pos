@@ -2,11 +2,12 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
   Activity, BarChart2, Building2, Heart, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Tag,
   Truck, Hotel, Monitor, ShoppingBag, ReceiptText, Globe2, Settings2, ClipboardList, FileBarChart,
-  Users, PhoneCall, CalendarCheck, Kanban, CreditCard,
+  Users, PhoneCall, CalendarCheck, Kanban, CreditCard, LifeBuoy,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { SANotificationsProvider } from '../../context/SANotificationsContext';
 import { SANotificationBell } from './SANotificationBell';
+import { SAQuickSearch } from './SAQuickSearch';
 import { LeadNotificationProvider } from '../../context/LeadNotificationContext';
 import { LeadToast } from '../ui/LeadToast';
 
@@ -28,6 +29,11 @@ export function SuperAdminLayout() {
               <p className="text-xs font-bold text-ink leading-none">Super Admin</p>
               <p className="text-[10px] text-ink/40 leading-none mt-0.5">Dine POS</p>
             </div>
+          </div>
+
+          {/* Search any page or hotel */}
+          <div className="border-b border-border px-3 py-2.5">
+            <SAQuickSearch />
           </div>
 
           {/* Nav */}
@@ -137,6 +143,19 @@ export function SuperAdminLayout() {
             >
               <CreditCard size={16} strokeWidth={1.75} />
               Subscriptions
+            </NavLink>
+            <NavLink
+              to="/super-admin/tickets"
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-brand/10 text-brand'
+                    : 'text-ink/70 hover:bg-mist hover:text-ink'
+                }`
+              }
+            >
+              <LifeBuoy size={16} strokeWidth={1.75} />
+              Support Tickets
             </NavLink>
 
             {/* Notification bell — dropdown preview + badge */}

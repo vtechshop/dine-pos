@@ -167,7 +167,7 @@ function GrowthChart() {
               key={frac}
               x1={PL}       y1={PT + AH * (1 - frac)}
               x2={W - PR}   y2={PT + AH * (1 - frac)}
-              style={{ stroke: 'var(--border)' }}
+              style={{ stroke: 'rgb(var(--border))' }}
               strokeWidth={0.5}
             />
           ))}
@@ -176,7 +176,7 @@ function GrowthChart() {
           <text
             x={PL - 3} y={PT + 6}
             textAnchor="end" fontSize={7}
-            style={{ fill: 'var(--ink)', opacity: 0.35 }}
+            style={{ fill: 'rgb(var(--ink))', opacity: 0.35 }}
           >
             {maxVal}
           </text>
@@ -194,7 +194,7 @@ function GrowthChart() {
                   x={bx} y={by}
                   width={barW} height={bh}
                   rx={2}
-                  style={{ fill: 'var(--brand)', opacity: 0.78 }}
+                  style={{ fill: 'rgb(var(--brand))', opacity: 0.78 }}
                 >
                   <title>{label}: {pt.total} total ({pt.approved} approved)</title>
                 </rect>
@@ -202,7 +202,7 @@ function GrowthChart() {
                   <text
                     x={bx + barW / 2} y={H - 6}
                     textAnchor="middle" fontSize={7}
-                    style={{ fill: 'var(--ink)', opacity: 0.4 }}
+                    style={{ fill: 'rgb(var(--ink))', opacity: 0.4 }}
                   >
                     {label}
                   </text>
@@ -215,7 +215,7 @@ function GrowthChart() {
           <line
             x1={PL} y1={PT + AH}
             x2={W - PR} y2={PT + AH}
-            style={{ stroke: 'var(--border)' }}
+            style={{ stroke: 'rgb(var(--border))' }}
             strokeWidth={1}
           />
         </svg>
@@ -501,10 +501,10 @@ export function SADashboardPage() {
           </span>
         )}
         {data!.openTickets > 0 && (
-          <span className="flex items-center gap-1 font-medium text-red-600">
+          <Link to="/super-admin/tickets" className="flex items-center gap-1 font-medium text-red-600 underline-offset-2 hover:underline">
             <AlertTriangle size={13} />
-            {data!.openTickets} open support ticket{data!.openTickets !== 1 ? 's' : ''}
-          </span>
+            {data!.openTickets} open support ticket{data!.openTickets !== 1 ? 's' : ''} — view
+          </Link>
         )}
       </div>
 

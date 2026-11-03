@@ -5,6 +5,7 @@ import { buildDailyReport } from '../services/dailyReport';
 import { buildExecutiveDashboard } from '../services/executiveDashboard';
 import { sendError } from '../utils/sendError';
 import { requireAiQuota } from '../utils/aiUsageTracker';
+import { catchUpSnapshot, hotelYesterday, catchUpRecentDaysInBackground } from '../utils/ensureDailySnapshot';
 
 const router = Router();
 router.use(authMiddleware);
@@ -31,6 +32,8 @@ router.get('/report/:date', requireAiQuota('report'), async (req: AuthRequest, r
       return res.status(400).json({ message: 'date cannot be in the future' });
     }
 
+    // A day whose nightly summary was missed — build it from that day's orders first
+    await catchUpSnapshot(hotelId, date);
     const report = await buildDailyReport(hotelId, date);
 
     if (!report) {
@@ -53,6 +56,10 @@ router.get('/report/:date', requireAiQuota('report'), async (req: AuthRequest, r
 router.get('/dashboard', async (req: AuthRequest, res: Response) => {
   try {
     const hotelId = req.hotelId!;
+    // Heal the 7-day trend: yesterday now, older missed days in the background
+    const { tz, yesterday } = await hotelYesterday(hotelId);
+    await catchUpSnapshot(hotelId, yesterday);
+    catchUpRecentDaysInBackground(hotelId, 7, tz);
     const dashboard = await buildExecutiveDashboard(hotelId);
     return res.json(dashboard);
   } catch (err) {

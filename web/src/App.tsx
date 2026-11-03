@@ -46,6 +46,7 @@ const DemoRequestsPage      = lazy(() => import('./pages/super-admin/DemoRequest
 const FollowUpsPage         = lazy(() => import('./pages/super-admin/FollowUpsPage').then(m => ({ default: m.FollowUpsPage })));
 const LeadDetailPage        = lazy(() => import('./pages/super-admin/LeadDetailPage').then(m => ({ default: m.LeadDetailPage })));
 const LeadPipelinePage         = lazy(() => import('./pages/super-admin/LeadPipelinePage').then(m => ({ default: m.LeadPipelinePage })));
+const SATicketsPage           = lazy(() => import('./pages/super-admin/SATicketsPage').then(m => ({ default: m.SATicketsPage })));
 const SaasSubscriptionsPage    = lazy(() => import('./pages/super-admin/SaasSubscriptionsPage').then(m => ({ default: m.SaasSubscriptionsPage })));
 import { SubscriptionExpiredPage } from './pages/SubscriptionExpiredPage';
 const SubscriptionPage         = lazy(() => import('./pages/SubscriptionPage').then(m => ({ default: m.SubscriptionPage })));
@@ -174,6 +175,7 @@ export function App() {
                       <Route path="/super-admin/aggregator/reports"     element={<AggregatorReportsPage />} />
                       {/* SaaS Billing — subscription management & printer entitlement */}
                       <Route path="/super-admin/subscriptions" element={<SaasSubscriptionsPage />} />
+                      <Route path="/super-admin/tickets"       element={<SATicketsPage />} />
                     </Route>
                   </Route>
 
