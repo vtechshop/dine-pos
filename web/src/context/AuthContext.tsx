@@ -7,7 +7,7 @@ import {
   useMemo,
 } from 'react';
 import type { ReactNode } from 'react';
-import { loginApi, logoutApi, decodeJwtPayload, loginCashierApi, refreshTokenApi } from '../api/auth';
+import { loginApi, logoutApi, decodeJwtPayload, loginCashierApi, loginKitchenApi, refreshTokenApi } from '../api/auth';
 import { configureAuth } from '../api/client';
 import { saLogin } from '../api/superAdmin';
 
@@ -34,6 +34,7 @@ export interface SwitchBranchParams {
 interface AuthContextType extends AuthState {
   login(userId: string, password: string): Promise<void>;
   loginCashier(hotelId: string, employeeCode: string, pin: string): Promise<void>;
+  loginKitchen(hotelId: string, pin: string): Promise<void>;
   loginSuperAdmin(userId: string, password: string): Promise<void>;
   logout(): void;
   setHotelName(name: string): void;
@@ -123,7 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (typeof decoded.role === 'string' ? decoded.role : null);
 
     if (role === 'kitchen' || role === 'waiter') {
-      throw new Error('Kitchen and Waiter access is available on the mobile app only.');
+      throw new Error(role === 'kitchen'
+        ? 'Kitchen staff: use the Kitchen tab and the kitchen PIN.'
+        : 'Waiter access is available on the mobile app only.');
     }
 
     localStorage.setItem(KEYS.token,   res.token);
@@ -179,6 +182,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hotelId:         null,
       hotelName:       null,
       role:            'superadmin',
+      isAuthenticated: true,
+      orgHotelId:      null,
+      orgHotelName:    null,
+    });
+  }, []);
+
+  /** Kitchen display: hotel's kitchen PIN on a device linked to the hotel. */
+  const loginKitchen = useCallback(async (hotelId: string, pin: string) => {
+    const res = await loginKitchenApi(hotelId, pin);
+    const decoded = decodeJwtPayload(res.token);
+    const resolvedHotelId = typeof decoded.hotelId === 'string' ? decoded.hotelId : hotelId;
+
+    localStorage.setItem(KEYS.token,   res.token);
+    localStorage.setItem(KEYS.hotelId, resolvedHotelId);
+    localStorage.setItem(KEYS.role,    'kitchen');
+    localStorage.removeItem(KEYS.refreshToken);   // kitchen tokens are short-lived; no refresh
+
+    setState({
+      token:           res.token,
+      hotelId:         resolvedHotelId,
+      hotelName:       localStorage.getItem(DEVICE_HOTEL_NAME_KEY),
+      role:            'kitchen',
       isAuthenticated: true,
       orgHotelId:      null,
       orgHotelName:    null,
@@ -292,11 +317,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       ...state,
-      login, loginCashier, loginSuperAdmin, logout, setHotelName,
+      login, loginCashier, loginKitchen, loginSuperAdmin, logout, setHotelName,
       switchToBranch, switchToOrg,
       isInBranchContext: state.orgHotelId !== null,
     }),
-    [state, login, loginCashier, loginSuperAdmin, logout, setHotelName, switchToBranch, switchToOrg],
+    [state, login, loginCashier, loginKitchen, loginSuperAdmin, logout, setHotelName, switchToBranch, switchToOrg],
   );
 
   return (
