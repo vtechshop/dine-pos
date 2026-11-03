@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { RefreshCw, Tag, AlertCircle, Check, Smartphone, Globe, GitBranch, Megaphone } from 'lucide-react';
+import { RefreshCw, Tag, AlertCircle, Check, Smartphone, Globe, GitBranch } from 'lucide-react';
 import {
   getDashboard,
   getRemoteConfig,
@@ -215,12 +215,6 @@ export function VersionManagementPage() {
   const dirty = form && origForm ? isDirty(form, origForm) : false;
   const anyError = configError || dashError;
 
-  const broadcastBadge = {
-    info:    'bg-blue-100 text-blue-700',
-    warning: 'bg-amber-100 text-amber-700',
-    success: 'bg-green-100 text-green-700',
-  } as const;
-
   return (
     <div className="space-y-6 p-6">
 
@@ -400,50 +394,6 @@ export function VersionManagementPage() {
           </div>
         )}
 
-        {/* Broadcast */}
-        <div className="mt-5 border-t border-border pt-5 space-y-3">
-          <div className="flex items-center gap-2">
-            <Megaphone size={14} className="text-ink/40" />
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink/40">Broadcast</p>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="sm:col-span-2 space-y-1.5">
-              <FieldLabel htmlFor="broadcastMsg" sub="Shown as a platform-wide banner">
-                Broadcast Message
-              </FieldLabel>
-              <textarea
-                id="broadcastMsg"
-                rows={2}
-                placeholder="Leave blank to hide"
-                value={form?.broadcastMessage ?? ''}
-                onChange={e => setField('broadcastMessage', e.target.value)}
-                disabled={!form || saving}
-                className={textareaCls}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <FieldLabel htmlFor="broadcastType" sub="Controls banner colour">
-                Message Type
-              </FieldLabel>
-              <select
-                id="broadcastType"
-                value={form?.broadcastMessageType ?? 'info'}
-                onChange={e => setField('broadcastMessageType', e.target.value as ConfigForm['broadcastMessageType'])}
-                disabled={!form || saving}
-                className={inputCls}
-              >
-                <option value="info">Info</option>
-                <option value="warning">Warning</option>
-                <option value="success">Success</option>
-              </select>
-              {form?.broadcastMessageType && (
-                <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${broadcastBadge[form.broadcastMessageType]}`}>
-                  {form.broadcastMessageType}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
       </section>
 
       {/* ── Save / Reset ── */}
