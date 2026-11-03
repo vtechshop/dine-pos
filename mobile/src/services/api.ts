@@ -1419,6 +1419,41 @@ export const updateKitchenOrderStatus = async (orderId: string, status: string):
   }
 };
 
+/** Menu items for the kitchen's out-of-stock list (kitchen PIN session). */
+export const getKitchenProducts = async (): Promise<Product[]> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getKitchenToken()]);
+  const res = await staffFetch(`${base}/products`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).message || 'Failed to load menu items');
+  }
+  return res.json();
+};
+
+/**
+ * Mark a dish in / out of stock from the kitchen. The server only changes
+ * isAvailable; a stock-tracked dish with 0 left can't be switched back on
+ * (code NO_STOCK) — that needs a restock in Inventory first.
+ */
+export const setKitchenProductAvailability = async (productId: string, isAvailable: boolean): Promise<void> => {
+  const [base, token] = await Promise.all([getBaseUrl(), getKitchenToken()]);
+  const res = await staffFetch(`${base}/products/${productId}/availability`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ isAvailable }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({})) as { message?: string; code?: string };
+    throw new Error(
+      data.code === 'NO_STOCK'
+        ? 'No stock left for this dish. Restock it in Inventory first.'
+        : data.message || 'Could not update this dish',
+    );
+  }
+};
+
 // ==================== WAITER DISPLAY ====================
 
 const WAITER_TOKEN_KEY = '@hotel_pos_waiter_token';
