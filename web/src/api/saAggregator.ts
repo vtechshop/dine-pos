@@ -2,11 +2,14 @@
 // Base: /api/superadmin/aggregator/*
 // Auth: uses SA JWT (pos_token with role=superadmin)
 //
-// IMPORTANT: Most cross-hotel endpoints below do NOT yet exist in the backend.
-// Endpoints marked with [SA-BACKEND-REQUIRED] need to be implemented
-// in the super admin Express router before the UI can display live data.
-// Feature flags (enable/disable aggregator per hotel) use the EXISTING
-// /superadmin/hotels/:id/features endpoint and work today.
+// This release is READ-ONLY. The GET endpoints below (dashboard, hotels, orders,
+// webhooks, sync-status, settlement, analytics, alerts, audit, settings and
+// reports) exist on the server. Actions that need live Swiggy/Zomato partner
+// API access (per-platform enable/disable, force sync, reset API, clear/retry
+// queue, webhook retry, retry-all-sync, settings update) are not available yet,
+// so there are no client functions for them.
+// The per-hotel aggregator on/off switch uses the existing
+// PUT /superadmin/hotels/:id/features endpoint.
 
 const SA_BASE = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/superadmin`
@@ -154,7 +157,45 @@ export interface AggGlobalSettings {
   maintenanceMode:   boolean;
 }
 
-// ── LIVE: Feature flag per hotel (uses existing endpoint) ─────────────────────
+export interface AggAlert {
+  id:         string;
+  type:       string;
+  severity:   'critical' | 'warning' | 'info';
+  hotelId?:   string;
+  hotelName?: string;
+  message:    string;
+  createdAt:  string;
+  resolved:   boolean;
+}
+
+export interface AggAuditEntry {
+  id:         string;
+  action:     string;
+  hotelId?:   string;
+  hotelName?: string;
+  detail:     string;
+  actorId:    string;
+  createdAt:  string;
+}
+
+export interface AggAnalytics {
+  revenueByDay: { date: string; swiggy: number; zomato: number }[];
+  orderGrowth:  { date: string; count: number }[];
+  acceptancePct: number;
+  cancellationPct: number;
+  refundPct: number;
+  avgPrepMins: number;
+  topHotels: { hotelId: string; hotelName: string; orders: number; revenue: number }[];
+  topCities:  { city: string; orders: number; revenue: number }[];
+  topProducts: { name: string; quantity: number; revenue: number }[];
+}
+
+export interface AggSettlement {
+  byPlatform: AggSettlementSummary[];
+  byHotel:    { hotelId: string; hotelName: string; revenue: number; commission: number; net: number }[];
+}
+
+// ── Per-hotel aggregator on/off (existing endpoint) ───────────────────────────
 
 export function setHotelAggregatorFeature(
   hotelId:   string,
@@ -166,24 +207,14 @@ export function setHotelAggregatorFeature(
   });
 }
 
-export function setHotelPlatformEnabled(
-  hotelId:  string,
-  platform: AggPlatform,
-  enabled:  boolean,
-): Promise<{ message: string }> {
-  // [SA-BACKEND-REQUIRED] POST /superadmin/aggregator/hotels/:hotelId/platform
-  // Body: { platform, enabled }
-  return Promise.reject(new Error(`SA-BACKEND-REQUIRED: POST /superadmin/aggregator/hotels/${hotelId}/platform { platform: "${platform}", enabled: ${enabled} }`));
-}
+// ── Read-only endpoints ───────────────────────────────────────────────────────
 
-// ── SA-BACKEND-REQUIRED endpoints ─────────────────────────────────────────────
-
-// [SA-BACKEND-REQUIRED] GET /superadmin/aggregator/dashboard
+// GET /superadmin/aggregator/dashboard
 export function getAggDashboard(): Promise<AggDashboard> {
   return saFetch<AggDashboard>('/aggregator/dashboard');
 }
 
-// [SA-BACKEND-REQUIRED] GET /superadmin/aggregator/hotels?status=&platform=&page=
+// GET /superadmin/aggregator/hotels?status=&platform=&search=&page=
 export function getHotelAggStatuses(params?: {
   status?:   AggConnStatus | 'all';
   platform?: AggPlatform | 'all';
@@ -198,33 +229,7 @@ export function getHotelAggStatuses(params?: {
   return saFetch<{ hotels: HotelAggStatus[]; total: number }>(`/aggregator/hotels?${q}`);
 }
 
-// [SA-BACKEND-REQUIRED] POST /superadmin/aggregator/hotels/:hotelId/force-sync
-export function forceHotelSync(hotelId: string, platform: AggPlatform): Promise<{ message: string }> {
-  return saFetch<{ message: string }>(`/aggregator/hotels/${hotelId}/force-sync`, {
-    method: 'POST',
-    body:   JSON.stringify({ platform }),
-  });
-}
-
-// [SA-BACKEND-REQUIRED] POST /superadmin/aggregator/hotels/:hotelId/reset-api
-export function resetHotelApi(hotelId: string, platform: AggPlatform): Promise<{ message: string }> {
-  return saFetch<{ message: string }>(`/aggregator/hotels/${hotelId}/reset-api`, {
-    method: 'POST',
-    body:   JSON.stringify({ platform }),
-  });
-}
-
-// [SA-BACKEND-REQUIRED] POST /superadmin/aggregator/hotels/:hotelId/clear-queue
-export function clearHotelQueue(hotelId: string): Promise<{ message: string }> {
-  return saFetch<{ message: string }>(`/aggregator/hotels/${hotelId}/clear-queue`, { method: 'POST' });
-}
-
-// [SA-BACKEND-REQUIRED] POST /superadmin/aggregator/hotels/:hotelId/retry-queue
-export function retryHotelQueue(hotelId: string): Promise<{ message: string }> {
-  return saFetch<{ message: string }>(`/aggregator/hotels/${hotelId}/retry-queue`, { method: 'POST' });
-}
-
-// [SA-BACKEND-REQUIRED] GET /superadmin/aggregator/orders?date=&status=&platform=&hotel=&page=
+// GET /superadmin/aggregator/orders?date=&status=&platform=&hotelId=&page=
 export function getGlobalOrders(params?: {
   date?:     string;
   status?:   string;
@@ -241,7 +246,7 @@ export function getGlobalOrders(params?: {
   return saFetch<{ orders: SAGlobalOrder[]; total: number }>(`/aggregator/orders?${q}`);
 }
 
-// [SA-BACKEND-REQUIRED] GET /superadmin/aggregator/webhooks?platform=&status=&from=&to=&page=
+// GET /superadmin/aggregator/webhooks?platform=&status=&from=&to=&page=
 export function getGlobalWebhooks(params?: {
   platform?: AggPlatform | 'all';
   status?:   string;
@@ -258,12 +263,7 @@ export function getGlobalWebhooks(params?: {
   return saFetch<{ logs: SAWebhookLog[]; total: number }>(`/aggregator/webhooks?${q}`);
 }
 
-// [SA-BACKEND-REQUIRED] POST /superadmin/aggregator/webhooks/:id/retry
-export function retryGlobalWebhook(id: string): Promise<{ message: string }> {
-  return saFetch<{ message: string }>(`/aggregator/webhooks/${id}/retry`, { method: 'POST' });
-}
-
-// [SA-BACKEND-REQUIRED] GET /superadmin/aggregator/sync-status?platform=&status=
+// GET /superadmin/aggregator/sync-status?platform=&status=
 export function getGlobalSyncStatus(params?: {
   platform?: AggPlatform | 'all';
   status?:   string;
@@ -274,97 +274,60 @@ export function getGlobalSyncStatus(params?: {
   return saFetch<{ syncs: SyncStatus[]; total: number }>(`/aggregator/sync-status?${q}`);
 }
 
-// [SA-BACKEND-REQUIRED] POST /superadmin/aggregator/retry-all-sync
-export function retryAllSync(): Promise<{ message: string; queued: number }> {
-  return saFetch<{ message: string; queued: number }>('/aggregator/retry-all-sync', { method: 'POST' });
-}
-
-// [SA-BACKEND-REQUIRED] GET /superadmin/aggregator/settlement?from=&to=&platform=
+// GET /superadmin/aggregator/settlement?from=&to=
 export function getGlobalSettlement(params?: {
   from?: string;
   to?:   string;
-}): Promise<{ byPlatform: AggSettlementSummary[]; byHotel: { hotelId: string; hotelName: string; revenue: number; commission: number; net: number }[] }> {
+}): Promise<AggSettlement> {
   const q = new URLSearchParams();
   if (params?.from) q.set('from', params.from);
   if (params?.to)   q.set('to',   params.to);
-  return saFetch(`/aggregator/settlement?${q}`);
+  return saFetch<AggSettlement>(`/aggregator/settlement?${q}`);
 }
 
-// [SA-BACKEND-REQUIRED] GET /superadmin/aggregator/analytics?from=&to=
-export function getAggAnalytics(from: string, to: string): Promise<{
-  revenueByDay: { date: string; swiggy: number; zomato: number }[];
-  orderGrowth:  { date: string; count: number }[];
-  acceptancePct: number;
-  cancellationPct: number;
-  refundPct: number;
-  avgPrepMins: number;
-  topHotels: { hotelId: string; hotelName: string; orders: number; revenue: number }[];
-  topCities:  { city: string; orders: number; revenue: number }[];
-  topProducts: { name: string; quantity: number; revenue: number }[];
-}> {
-  return saFetch(`/aggregator/analytics?from=${from}&to=${to}`);
+// GET /superadmin/aggregator/analytics?from=&to=
+export function getAggAnalytics(from: string, to: string): Promise<AggAnalytics> {
+  const q = new URLSearchParams({ from, to });
+  return saFetch<AggAnalytics>(`/aggregator/analytics?${q}`);
 }
 
-// [SA-BACKEND-REQUIRED] GET /superadmin/aggregator/alerts
-export function getAggAlerts(): Promise<{
-  alerts: { id: string; type: string; severity: 'critical' | 'warning' | 'info'; hotelId?: string; hotelName?: string; message: string; createdAt: string; resolved: boolean }[];
-}> {
-  return saFetch('/aggregator/alerts');
+// GET /superadmin/aggregator/alerts
+export function getAggAlerts(): Promise<{ alerts: AggAlert[] }> {
+  return saFetch<{ alerts: AggAlert[] }>('/aggregator/alerts');
 }
 
-// [SA-BACKEND-REQUIRED] GET/PUT /superadmin/aggregator/settings
+// GET /superadmin/aggregator/settings (read-only in this release)
 export function getAggSettings(): Promise<AggGlobalSettings> {
   return saFetch<AggGlobalSettings>('/aggregator/settings');
 }
 
-export function updateAggSettings(patch: Partial<AggGlobalSettings>): Promise<{ message: string; settings: AggGlobalSettings }> {
-  return saFetch<{ message: string; settings: AggGlobalSettings }>('/aggregator/settings', {
-    method: 'PUT',
-    body:   JSON.stringify(patch),
-  });
-}
-
-// [SA-BACKEND-REQUIRED] GET /superadmin/aggregator/audit?from=&to=&type=
+// GET /superadmin/aggregator/audit?from=&to=&type=
 export function getAggAudit(params?: { from?: string; to?: string; type?: string }): Promise<{
-  entries: { id: string; action: string; hotelId?: string; hotelName?: string; detail: string; actorId: string; createdAt: string }[];
+  entries: AggAuditEntry[];
 }> {
   const q = new URLSearchParams();
   if (params?.from) q.set('from', params.from);
   if (params?.to)   q.set('to',   params.to);
   if (params?.type) q.set('type', params.type);
-  return saFetch(`/aggregator/audit?${q}`);
+  return saFetch<{ entries: AggAuditEntry[] }>(`/aggregator/audit?${q}`);
 }
 
-// [SA-BACKEND-REQUIRED] GET /superadmin/aggregator/reports/generate?type=&from=&to=&format=
-export function getAggReport(type: string, from: string, to: string): Promise<Blob> {
+// GET /superadmin/aggregator/reports/generate?type=&from=&to=&format=csv → CSV file
+export async function getAggReport(type: string, from: string, to: string): Promise<Blob> {
   const token = localStorage.getItem('sa_token');
-  return fetch(`${SA_BASE}/aggregator/reports/generate?type=${type}&from=${from}&to=${to}&format=csv`, {
-    headers: { Authorization: `Bearer ${token ?? ''}` },
-  }).then(r => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.blob();
+  const q = new URLSearchParams({ type, from, to, format: 'csv' });
+  const res = await fetch(`${SA_BASE}/aggregator/reports/generate?${q}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    signal:  AbortSignal.timeout(60_000),
   });
+  if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem('sa_token');
+      localStorage.removeItem('pos_role');
+      window.location.replace('/super-admin/login');
+      throw new Error('Session expired');
+    }
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return res.blob();
 }
-
-// ── Missing endpoint documentation ────────────────────────────────────────────
-export const SA_AGG_REQUIRED_ENDPOINTS = [
-  'GET  /superadmin/aggregator/dashboard                   — global KPI summary across all hotels',
-  'GET  /superadmin/aggregator/hotels                      — per-hotel Swiggy/Zomato status, store IDs, webhook health',
-  'POST /superadmin/aggregator/hotels/:id/platform         — enable/disable specific platform per hotel',
-  'POST /superadmin/aggregator/hotels/:id/force-sync       — force menu sync for a hotel',
-  'POST /superadmin/aggregator/hotels/:id/reset-api        — rotate/reset API keys',
-  'POST /superadmin/aggregator/hotels/:id/clear-queue      — clear order retry queue',
-  'POST /superadmin/aggregator/hotels/:id/retry-queue      — retry failed queue items',
-  'GET  /superadmin/aggregator/orders                      — global order feed across hotels',
-  'GET  /superadmin/aggregator/webhooks                    — global webhook log with retry',
-  'POST /superadmin/aggregator/webhooks/:id/retry          — retry individual webhook',
-  'GET  /superadmin/aggregator/sync-status                 — global menu sync status',
-  'POST /superadmin/aggregator/retry-all-sync              — retry all failed syncs',
-  'GET  /superadmin/aggregator/settlement                  — cross-hotel settlement data',
-  'GET  /superadmin/aggregator/analytics                   — aggregator analytics (charts, KPIs)',
-  'GET  /superadmin/aggregator/alerts                      — active alert engine output',
-  'GET  /superadmin/aggregator/settings                    — global aggregator settings',
-  'PUT  /superadmin/aggregator/settings                    — update global settings',
-  'GET  /superadmin/aggregator/audit                       — cross-hotel aggregator audit log',
-  'GET  /superadmin/aggregator/reports/generate            — report CSV/PDF generation',
-];

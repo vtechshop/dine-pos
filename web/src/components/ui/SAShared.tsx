@@ -4,28 +4,6 @@
 import { type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
-// ── ApiRequired ────────────────────────────────────────────────────────────────
-
-export function ApiRequired({ endpoints }: { endpoints: string[] }) {
-  return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-      <div className="flex items-start gap-2 mb-2">
-        <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
-        <p className="text-xs font-semibold text-amber-800">
-          Backend endpoints required — feature unavailable until implemented
-        </p>
-      </div>
-      <ul className="space-y-1">
-        {endpoints.map(ep => (
-          <li key={ep} className="font-mono text-[11px] bg-amber-100 text-amber-900 px-2 py-1 rounded">
-            {ep}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 // ── SAStat ─────────────────────────────────────────────────────────────────────
 
 interface SAStatProps {

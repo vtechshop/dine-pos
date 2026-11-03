@@ -1,20 +1,20 @@
-// M10 — Webhook Monitoring
-// Requires: GET /superadmin/aggregator/webhooks, POST /superadmin/aggregator/webhooks/:id/retry
+// Webhook Monitor — messages received from Swiggy/Zomato across all hotels (read-only)
+// Data: GET /superadmin/aggregator/webhooks
 
 import { useEffect, useState, useCallback } from 'react';
-import { RefreshCw, RotateCcw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import {
-  ApiRequired, SABadge, SAPageHeader, SASpin, SAError, fmtDateTime,
+  SABadge, SAPageHeader, SASpin, SAError, fmtDateTime,
 } from '../../components/ui/SAShared';
 import {
-  getGlobalWebhooks, retryGlobalWebhook,
+  getGlobalWebhooks,
   type SAWebhookLog, type AggPlatform,
 } from '../../api/saAggregator';
 
-const WEBHOOK_ENDPOINTS = [
-  'GET  /superadmin/aggregator/webhooks              — global webhook log (hotel, platform, event, status, latency)',
-  'POST /superadmin/aggregator/webhooks/:id/retry    — retry individual failed webhook',
-];
+const csvCell = (v: string | number) => {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
 
 const today = () => new Date().toISOString().slice(0, 10);
 const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
@@ -27,68 +27,81 @@ export function AggregatorWebhooksPage() {
   const [to,        setTo]        = useState(today());
   const [platform,  setPlatform]  = useState<AggPlatform | 'all'>('all');
   const [status,    setStatus]    = useState<string>('all');
-  const [retrying,  setRetrying]  = useState<string | null>(null);
-  const [retryMsg,  setRetryMsg]  = useState<Record<string, string>>({});
+  const [total,     setTotal]     = useState(0);
+  const [page,      setPage]      = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError,   setMoreError]   = useState('');
+
+  const query = useCallback((p: number) => getGlobalWebhooks({
+    from, to,
+    platform: platform !== 'all' ? platform : undefined,
+    status:   status   !== 'all' ? status   : undefined,
+    page:     p,
+  }), [from, to, platform, status]);
 
   const load = useCallback(async () => {
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setMoreError('');
     try {
-      const res = await getGlobalWebhooks({
-        from, to,
-        platform: platform !== 'all' ? platform : undefined,
-        status:   status   !== 'all' ? status   : undefined,
-      });
+      const res = await query(1);
       setLogs(res.logs);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load webhooks');
+      setTotal(res.total);
+      setPage(1);
+    } catch {
+      setError("Couldn't load webhooks. Please try again.");
     } finally {
       setLoading(false);
     }
-  }, [from, to, platform, status]);
+  }, [query]);
 
   useEffect(() => { void load(); }, [load]);
 
-  const handleRetry = async (log: SAWebhookLog) => {
-    setRetrying(log._id);
+  const loadMore = async () => {
+    setLoadingMore(true); setMoreError('');
     try {
-      const res = await retryGlobalWebhook(log._id);
-      setRetryMsg(prev => ({ ...prev, [log._id]: res.message }));
-      void load();
-    } catch (e) {
-      setRetryMsg(prev => ({ ...prev, [log._id]: e instanceof Error ? e.message : 'Failed' }));
+      const next = page + 1;
+      const res  = await query(next);
+      setLogs(prev => {
+        const seen = new Set(prev.map(l => l._id));
+        return [...prev, ...res.logs.filter(l => !seen.has(l._id))];
+      });
+      setTotal(res.total);
+      setPage(next);
+    } catch {
+      setMoreError("Couldn't load more webhooks. Please try again.");
     } finally {
-      setRetrying(null);
+      setLoadingMore(false);
     }
   };
 
-  const failedCount   = logs.filter(l => l.status === 'failed').length;
+  const failedCount  = logs.filter(l => l.status === 'failed').length;
   const successCount  = logs.filter(l => l.status === 'success').length;
   const avgLatency    = logs.length ? Math.round(logs.reduce((s, l) => s + l.latencyMs, 0) / logs.length) : 0;
 
   const exportCSV = () => {
     const rows = logs.map(l => [l.hotelName, l.platform, l.event, l.status, l.latencyMs, l.retryCount, fmtDateTime(l.createdAt)]);
-    const csv = [['Hotel', 'Platform', 'Event', 'Status', 'Latency(ms)', 'Retries', 'Created'], ...rows].map(r => r.join(',')).join('\n');
+    const csv = [['Hotel', 'Platform', 'Event', 'Status', 'Latency(ms)', 'Retries', 'Created'], ...rows].map(r => r.map(csvCell).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
-    Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `webhooks_${from}.csv` }).click();
+    const url  = URL.createObjectURL(blob);
+    Object.assign(document.createElement('a'), { href: url, download: `aggregator-webhooks-${from}-to-${to}.csv` }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <SAPageHeader
         title="Webhook Monitor"
-        sub="Global webhook delivery log across all hotels and platforms"
+        sub="Order messages received from Swiggy & Zomato across all hotels"
         onRefresh={() => void load()}
         refreshing={loading}
         action={
-          <button onClick={exportCSV} className="px-3 py-2 text-xs font-semibold rounded-lg border border-border bg-canvas text-ink/70 hover:bg-mist">
+          <button onClick={exportCSV} disabled={loading || logs.length === 0}
+            className="px-3 py-2 text-xs font-semibold rounded-lg border border-border bg-canvas text-ink/70 hover:bg-mist disabled:opacity-50">
             Export CSV
           </button>
         }
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
-        <ApiRequired endpoints={WEBHOOK_ENDPOINTS} />
-
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
           <input type="date" value={from} max={today()} onChange={e => setFrom(e.target.value)}
@@ -125,7 +138,7 @@ export function AggregatorWebhooksPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-mist">
-                  {['Hotel', 'Platform', 'Event', 'Status', 'Latency', 'Retries', 'Payload', 'Created', ''].map(c => (
+                  {['Hotel', 'Platform', 'Event', 'Status', 'Latency', 'Retries', 'Payload', 'Created', 'Problem'].map(c => (
                     <th key={c} className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-ink/50 whitespace-nowrap">{c}</th>
                   ))}
                 </tr>
@@ -134,7 +147,9 @@ export function AggregatorWebhooksPage() {
                 {logs.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="px-4 py-10 text-center text-sm text-ink/40">
-                      No webhooks — requires <code className="font-mono text-xs bg-mist px-1 rounded">GET /superadmin/aggregator/webhooks</code>
+                      {platform === 'all' && status === 'all'
+                        ? 'No webhooks received in this period — they appear once a hotel connects Swiggy or Zomato.'
+                        : 'No webhooks match these filters.'}
                     </td>
                   </tr>
                 ) : logs.map(l => (
@@ -153,24 +168,27 @@ export function AggregatorWebhooksPage() {
                       {l.payloadBytes >= 1024 ? `${(l.payloadBytes / 1024).toFixed(1)}KB` : `${l.payloadBytes}B`}
                     </td>
                     <td className="px-4 py-3 text-xs text-ink/50 whitespace-nowrap">{fmtDateTime(l.createdAt)}</td>
-                    <td className="px-4 py-3">
-                      {l.status === 'failed' && (
-                        <button
-                          onClick={() => void handleRetry(l)} disabled={retrying === l._id}
-                          className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border border-brand/20 bg-brand/5 text-brand hover:bg-brand/10 disabled:opacity-50"
-                        >
-                          {retrying === l._id ? <RefreshCw size={10} className="animate-spin" /> : <RotateCcw size={10} />}
-                          Retry
-                        </button>
-                      )}
-                      {retryMsg[l._id] && (
-                        <p className="text-[10px] text-ink/50 mt-0.5">{retryMsg[l._id]}</p>
-                      )}
+                    <td className="px-4 py-3 text-[11px] text-red-600 max-w-[220px] truncate" title={l.errorMessage ?? ''}>
+                      {l.errorMessage ?? ''}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!loading && !error && logs.length < total && (
+          <div className="flex flex-col items-center gap-2">
+            {moreError && <p className="text-xs text-red-600">{moreError}</p>}
+            <button
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-canvas px-4 py-2 text-sm font-medium text-ink/70 hover:bg-mist disabled:opacity-50"
+            >
+              {loadingMore && <RefreshCw size={14} className="animate-spin" />}
+              Show more ({logs.length} of {total})
+            </button>
           </div>
         )}
       </div>

@@ -1,70 +1,62 @@
-// M4 + M5 — Platform Monitoring + Menu Sync Monitor
-// All data requires SA backend — /superadmin/aggregator/sync-status & platform health
+// Platform Monitor — connection health + menu sync status (read-only)
+// Data: GET /superadmin/aggregator/dashboard (platformHealth) and /aggregator/sync-status
 
 import { useEffect, useState, useCallback } from 'react';
-import { RefreshCw, AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import {
-  ApiRequired, SAPageHeader, SABadge, SASpin, SAError, fmtAgo,
+  SAPageHeader, SABadge, SASpin, SAError, fmtAgo,
 } from '../../components/ui/SAShared';
 import {
-  getGlobalSyncStatus, retryAllSync,
-  type SyncStatus,
+  getGlobalSyncStatus, getAggDashboard,
+  type SyncStatus, type AggDashboard,
 } from '../../api/saAggregator';
 
-const MONITOR_ENDPOINTS = [
-  'GET  /superadmin/aggregator/dashboard         — platform health (swiggyApi, zomatoApi, webhookServer)',
-  'GET  /superadmin/aggregator/sync-status       — global menu sync status per hotel per platform',
-  'POST /superadmin/aggregator/retry-all-sync    — retry all failed menu syncs',
-];
-
 type SyncStatusFilter = 'all' | 'syncing' | 'failed' | 'success' | 'idle';
+type Health = 'up' | 'down' | 'degraded';
+
+const HEALTH_LABEL: Record<Health, string> = {
+  up:       'Working',
+  degraded: 'Some problems',
+  down:     'Not connected',  // no hotel connected to this platform yet
+};
+
+const FILTER_LABEL: Record<SyncStatusFilter, string> = {
+  all: 'All', failed: 'Failed', syncing: 'Syncing', success: 'Done', idle: 'Idle',
+};
 
 export function AggregatorMonitorPage() {
   const [syncs,     setSyncs]     = useState<SyncStatus[]>([]);
+  const [health,    setHealth]    = useState<AggDashboard['platformHealth'] | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState('');
+  const [healthErr, setHealthErr] = useState(false);
   const [filter,    setFilter]    = useState<SyncStatusFilter>('all');
-  const [retrying,  setRetrying]  = useState(false);
-  const [retryMsg,  setRetryMsg]  = useState('');
 
   const load = useCallback(async () => {
-    setLoading(true); setError('');
-    try {
-      const res = await getGlobalSyncStatus();
-      setSyncs(res.syncs);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load sync status');
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true); setError(''); setHealthErr(false);
+    const [syncRes, dashRes] = await Promise.allSettled([
+      getGlobalSyncStatus(),
+      getAggDashboard(),
+    ]);
+    if (syncRes.status === 'fulfilled') setSyncs(syncRes.value.syncs);
+    else setError("Couldn't load menu sync status. Please try again.");
+    if (dashRes.status === 'fulfilled') setHealth(dashRes.value.platformHealth);
+    else setHealthErr(true);
+    setLoading(false);
   }, []);
 
   useEffect(() => { void load(); }, [load]);
 
-  const handleRetryAll = async () => {
-    setRetrying(true); setRetryMsg('');
-    try {
-      const res = await retryAllSync();
-      setRetryMsg(`Queued ${res.queued} syncs for retry`);
-      void load();
-    } catch (e) {
-      setRetryMsg(e instanceof Error ? e.message : 'Retry failed');
-    } finally {
-      setRetrying(false);
-    }
-  };
-
   const visible = syncs.filter(s => filter === 'all' || s.status === filter);
-  const failed  = syncs.filter(s => s.status === 'failed').length;
 
   function syncBadge(status: SyncStatus['status']) {
     const map: Record<SyncStatus['status'], { label: string; variant: Parameters<typeof SABadge>[0]['variant'] }> = {
-      success: { label: 'Success', variant: 'green' },
+      success: { label: 'Done',    variant: 'green' },
       failed:  { label: 'Failed',  variant: 'red'   },
       syncing: { label: 'Syncing', variant: 'blue'  },
       idle:    { label: 'Idle',    variant: 'gray'  },
     };
-    const { label, variant } = map[status];
+    const { label, variant } = map[status] ?? { label: status, variant: 'gray' as const };
     return <SABadge label={label} variant={variant} />;
   }
 
@@ -72,43 +64,43 @@ export function AggregatorMonitorPage() {
     <div className="h-full flex flex-col overflow-hidden">
       <SAPageHeader
         title="Platform Monitor"
-        sub="Live API health · menu sync status across all hotels"
+        sub="Connection health and menu sync status across all hotels"
         onRefresh={() => void load()}
         refreshing={loading}
-        action={
-          failed > 0 ? (
-            <button
-              onClick={() => void handleRetryAll()} disabled={retrying}
-              className="flex items-center gap-1.5 rounded-lg bg-brand text-canvas px-3 py-2 text-xs font-semibold disabled:opacity-50"
-            >
-              {retrying ? <RefreshCw size={12} className="animate-spin" /> : <RotateCcw size={12} />}
-              Retry All Failed ({failed})
-            </button>
-          ) : null
-        }
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
-        <ApiRequired endpoints={MONITOR_ENDPOINTS} />
-
-        {retryMsg && (
-          <p className="text-xs text-brand bg-brand/5 border border-brand/20 rounded-lg px-3 py-2">{retryMsg}</p>
-        )}
-
-        {/* Platform health — requires backend; show skeleton */}
+        {/* Connection health */}
         <section>
-          <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Platform API Health</p>
-          <div className="grid grid-cols-3 gap-4">
-            {['Swiggy API', 'Zomato API', 'Webhook Server'].map(label => (
-              <div key={label} className="rounded-xl border border-border bg-canvas p-4 flex items-center gap-3">
-                <AlertCircle size={18} className="text-amber-400 shrink-0" />
-                <div>
-                  <p className="text-sm font-bold text-ink">{label}</p>
-                  <p className="text-[10px] text-amber-600">Requires /superadmin/aggregator/dashboard</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Connection Health</p>
+          {loading ? <SASpin /> : health ? (
+            <div className="grid grid-cols-3 gap-4">
+              {([
+                { label: 'Swiggy',         status: health.swiggyApi },
+                { label: 'Zomato',         status: health.zomatoApi },
+                { label: 'Order Receiver', status: health.webhookServer },
+              ] as { label: string; status: Health }[]).map(p => (
+                <div key={p.label} className={`rounded-xl border p-4 flex items-center gap-3 ${
+                  p.status === 'up'   ? 'border-green-200 bg-green-50' :
+                  p.status === 'down' ? 'border-border bg-mist' :
+                                        'border-amber-200 bg-amber-50'
+                }`}>
+                  {p.status === 'up'
+                    ? <CheckCircle2 size={18} className="text-green-600 shrink-0" />
+                    : <AlertCircle  size={18} className={`${p.status === 'down' ? 'text-ink/35' : 'text-amber-600'} shrink-0`} />}
+                  <div>
+                    <p className="text-sm font-bold text-ink">{p.label}</p>
+                    <SABadge
+                      label={HEALTH_LABEL[p.status] ?? p.status}
+                      variant={p.status === 'up' ? 'green' : p.status === 'down' ? 'gray' : 'amber'}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : healthErr ? (
+            <p className="text-sm text-ink/40">Couldn't check connection health right now. Use Refresh to try again.</p>
+          ) : null}
         </section>
 
         {/* Menu sync monitor */}
@@ -124,7 +116,7 @@ export function AggregatorMonitorPage() {
                     filter === f ? 'bg-brand/10 text-brand border-brand/20' : 'border-border text-ink/50 bg-canvas hover:bg-mist'
                   }`}
                 >
-                  {f}
+                  {FILTER_LABEL[f]}
                 </button>
               ))}
             </div>
@@ -135,7 +127,7 @@ export function AggregatorMonitorPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-mist">
-                    {['Hotel', 'Platform', 'Status', 'Synced', 'Failed', 'Retry', 'Last Sync'].map(c => (
+                    {['Hotel', 'Platform', 'Status', 'Synced', 'Failed', 'Waiting', 'Last Sync'].map(c => (
                       <th key={c} className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-ink/50">{c}</th>
                     ))}
                   </tr>
@@ -144,7 +136,9 @@ export function AggregatorMonitorPage() {
                   {visible.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-4 py-10 text-center text-sm text-ink/40">
-                        No sync data — requires <code className="font-mono text-xs bg-mist px-1 rounded">GET /superadmin/aggregator/sync-status</code>
+                        {syncs.length === 0
+                          ? 'No menu syncs yet — they appear once a hotel connects Swiggy or Zomato.'
+                          : 'No menu syncs match this filter.'}
                       </td>
                     </tr>
                   ) : visible.map((s, i) => (
@@ -152,8 +146,8 @@ export function AggregatorMonitorPage() {
                       <td className="px-4 py-3 font-semibold text-ink">{s.hotelName}</td>
                       <td className="px-4 py-3 capitalize text-ink/70">{s.platform}</td>
                       <td className="px-4 py-3">{syncBadge(s.status)}</td>
-                      <td className="px-4 py-3 text-green-700 font-mono">
-                        {s.syncedProducts}p / {s.syncedCategories}c
+                      <td className="px-4 py-3 text-green-700 text-xs">
+                        {s.syncedProducts} items · {s.syncedCategories} categories
                       </td>
                       <td className="px-4 py-3">
                         {s.failedProducts > 0

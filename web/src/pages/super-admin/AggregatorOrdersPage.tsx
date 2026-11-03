@@ -1,16 +1,17 @@
-// M6 — Global Order Monitoring
-// Requires: GET /superadmin/aggregator/orders
+// Order Monitor — Swiggy/Zomato orders across all hotels (read-only)
+// Data: GET /superadmin/aggregator/orders
 
 import { useEffect, useState, useCallback } from 'react';
-import { Search } from 'lucide-react';
+import { Search, RefreshCw } from 'lucide-react';
 import {
-  ApiRequired, SABadge, SAPageHeader, SASpin, SAError, fmtINR, fmtDateTime,
+  SABadge, SAPageHeader, SASpin, SAError, fmtINR, fmtDateTime,
 } from '../../components/ui/SAShared';
 import { getGlobalOrders, type SAGlobalOrder, type AggPlatform } from '../../api/saAggregator';
 
-const ORDERS_ENDPOINTS = [
-  'GET /superadmin/aggregator/orders?date=&status=&platform=&hotelId=&page= — global order feed',
-];
+const csvCell = (v: string | number) => {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -33,20 +34,44 @@ export function AggregatorOrdersPage() {
   const [platform, setPlatform] = useState<AggPlatform | 'all'>('all');
   const [status,   setStatus]   = useState<StatusFilter>('all');
   const [search,   setSearch]   = useState('');
+  const [total,    setTotal]    = useState(0);
+  const [page,     setPage]     = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError,   setMoreError]   = useState('');
 
   const load = useCallback(async () => {
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setMoreError('');
     try {
-      const res = await getGlobalOrders({ date, platform: platform !== 'all' ? platform : undefined });
+      const res = await getGlobalOrders({ date, platform: platform !== 'all' ? platform : undefined, page: 1 });
       setOrders(res.orders);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load orders');
+      setTotal(res.total);
+      setPage(1);
+    } catch {
+      setError("Couldn't load orders. Please try again.");
     } finally {
       setLoading(false);
     }
   }, [date, platform]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const loadMore = async () => {
+    setLoadingMore(true); setMoreError('');
+    try {
+      const next = page + 1;
+      const res  = await getGlobalOrders({ date, platform: platform !== 'all' ? platform : undefined, page: next });
+      setOrders(prev => {
+        const seen = new Set(prev.map(o => o._id));
+        return [...prev, ...res.orders.filter(o => !seen.has(o._id))];
+      });
+      setTotal(res.total);
+      setPage(next);
+    } catch {
+      setMoreError("Couldn't load more orders. Please try again.");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const visible = orders.filter(o => {
     const matchStatus   = status === 'all' || o.status === status;
@@ -68,23 +93,25 @@ export function AggregatorOrdersPage() {
     const csv = [
       ['Order#', 'Hotel', 'Platform', 'Status', 'Revenue', 'Commission', 'Created', 'City'],
       ...rows,
-    ].map(r => r.join(',')).join('\n');
+    ].map(r => r.map(csvCell).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
-    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `sa_orders_${date}.csv` });
-    a.click();
+    const url  = URL.createObjectURL(blob);
+    Object.assign(document.createElement('a'), { href: url, download: `aggregator-orders-${date}.csv` }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <SAPageHeader
         title="Order Monitor"
-        sub="Global order feed across all hotels and platforms"
+        sub="Swiggy & Zomato orders across all hotels"
         onRefresh={() => void load()}
         refreshing={loading}
         action={
           <button
             onClick={exportCSV}
-            className="px-3 py-2 text-xs font-semibold rounded-lg border border-border bg-canvas text-ink/70 hover:bg-mist"
+            disabled={loading || visible.length === 0}
+            className="px-3 py-2 text-xs font-semibold rounded-lg border border-border bg-canvas text-ink/70 hover:bg-mist disabled:opacity-50"
           >
             Export CSV
           </button>
@@ -92,8 +119,6 @@ export function AggregatorOrdersPage() {
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
-        <ApiRequired endpoints={ORDERS_ENDPOINTS} />
-
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
           <input
@@ -162,7 +187,9 @@ export function AggregatorOrdersPage() {
                 {visible.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-10 text-center text-sm text-ink/40">
-                      No orders — requires <code className="font-mono text-xs bg-mist px-1 rounded">GET /superadmin/aggregator/orders</code>
+                      {orders.length === 0
+                        ? 'No Swiggy/Zomato orders on this day.'
+                        : 'No orders match these filters.'}
                     </td>
                   </tr>
                 ) : visible.map(o => (
@@ -183,6 +210,20 @@ export function AggregatorOrdersPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!loading && !error && orders.length < total && (
+          <div className="flex flex-col items-center gap-2">
+            {moreError && <p className="text-xs text-red-600">{moreError}</p>}
+            <button
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-canvas px-4 py-2 text-sm font-medium text-ink/70 hover:bg-mist disabled:opacity-50"
+            >
+              {loadingMore && <RefreshCw size={14} className="animate-spin" />}
+              Show more ({orders.length} of {total})
+            </button>
           </div>
         )}
       </div>

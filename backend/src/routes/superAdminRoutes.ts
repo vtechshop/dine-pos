@@ -38,6 +38,7 @@ if (!process.env.SUPER_ADMIN_JWT_SECRET || process.env.SUPER_ADMIN_JWT_SECRET.le
   throw new Error('[FATAL] SUPER_ADMIN_JWT_SECRET must be set and at least 32 characters long');
 }
 
+import saAggregatorRoutes from './saAggregatorRoutes';
 const router = Router();
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
@@ -1896,5 +1897,8 @@ router.get('/analytics/completed-trends', superAdminAuth, async (_req: Request, 
     return res.json({ points, totalRevenue, totalOrders });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
+
+// ── Delivery (Swiggy / Zomato) — read-only cross-hotel views ─────────────────
+router.use('/aggregator', superAdminAuth, saAggregatorRoutes);
 
 export default router;
