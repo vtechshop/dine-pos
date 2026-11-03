@@ -11,7 +11,6 @@ const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n
 
 const REPORT_TYPES = [
   { type: 'revenue',      label: 'Sales',        desc: 'Sales, commission and net amount per platform per hotel' },
-  { type: 'settlement',   label: 'Settlement',   desc: 'Settlement figures with GST breakdown' },
   { type: 'commission',   label: 'Commission',   desc: 'Commission charged by Swiggy and Zomato' },
   { type: 'cancellation', label: 'Cancellations', desc: 'Cancelled orders with reasons and lost sales' },
   { type: 'refund',       label: 'Refunds',      desc: 'Refunds by hotel, platform and amount' },

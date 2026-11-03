@@ -318,7 +318,7 @@ router.get('/sync-status', async (req: Request, res: Response) => {
   } catch (err) { return sendError(res, 500, 'Failed to load menu sync status', err); }
 });
 
-// ── Settlement + analytics share one order scan ──────────────────────────────
+// ── Analytics (settlement/payouts are left out: Swiggy/Zomato settle with each hotel directly) ──────────────────────────────
 
 async function ordersInRange(start: Date, end: Date) {
   return Order.find(
@@ -327,39 +327,6 @@ async function ordersInRange(start: Date, end: Date) {
       acceptedAt: 1, rejectedAt: 1, estimatedPickupTime: 1, createdAt: 1, 'items.productName': 1, 'items.quantity': 1, 'items.total': 1 },
   ).lean();
 }
-
-router.get('/settlement', async (req: Request, res: Response) => {
-  try {
-    const { start, end } = range(req, 7);
-    const orders = await ordersInRange(start, end);
-    const names  = await hotelNames(orders.map((o: any) => o.hotelId));
-    const byPlatform = PLATFORMS.map(p => {
-      const mine = orders.filter((o: any) => o.orderSource === p && o.status !== 'cancelled');
-      const revenue    = mine.reduce((s: number, o: any) => s + (o.grandTotal || 0), 0);
-      const commission = mine.reduce((s: number, o: any) => s + (o.platformCommission || 0), 0);
-      const refunds    = orders.filter((o: any) => o.orderSource === p).reduce((s: number, o: any) => s + (o.refundAmount || 0), 0);
-      const complete   = mine.filter((o: any) => o.status === 'completed').reduce((s: number, o: any) => s + (o.grandTotal || 0), 0);
-      return {
-        platform: p, revenue: round2(revenue), commission: round2(commission),
-        pending: round2(revenue - complete), complete: round2(complete), refunds: round2(refunds),
-        netPayout: round2(revenue - commission - refunds),
-      };
-    });
-    const hotelMap = new Map<string, { revenue: number; commission: number; refunds: number }>();
-    for (const o of orders as any[]) {
-      const k = String(o.hotelId);
-      const cur = hotelMap.get(k) ?? { revenue: 0, commission: 0, refunds: 0 };
-      if (o.status !== 'cancelled') { cur.revenue += o.grandTotal || 0; cur.commission += o.platformCommission || 0; }
-      cur.refunds += o.refundAmount || 0;
-      hotelMap.set(k, cur);
-    }
-    const byHotel = [...hotelMap.entries()].map(([hotelId, v]) => ({
-      hotelId, hotelName: names.get(hotelId)?.hotelName ?? '—',
-      revenue: round2(v.revenue), commission: round2(v.commission), net: round2(v.revenue - v.commission - v.refunds),
-    })).sort((a, b) => b.revenue - a.revenue);
-    return res.json({ byPlatform, byHotel });
-  } catch (err) { return sendError(res, 500, 'Failed to load settlement', err); }
-});
 
 router.get('/analytics', async (req: Request, res: Response) => {
   try {
@@ -528,7 +495,7 @@ router.get('/reports/generate', async (req: Request, res: Response) => {
     let header: string[] = [];
     let rows: unknown[][] = [];
 
-    if (['revenue', 'commission', 'cancellation', 'refund', 'aggregator', 'settlement'].includes(type)) {
+    if (['revenue', 'commission', 'cancellation', 'refund', 'aggregator'].includes(type)) {
       const filter: Record<string, unknown> = { orderSource: { $in: [...PLATFORMS] }, createdAt: { $gte: start, $lte: end } };
       if (type === 'cancellation') filter.status = 'cancelled';
       if (type === 'refund') filter.refundAmount = { $gt: 0 };
@@ -539,7 +506,7 @@ router.get('/reports/generate', async (req: Request, res: Response) => {
       const names = await hotelNames(orders.map((o: any) => o.hotelId));
       const hn = (o: any) => names.get(String(o.hotelId))?.hotelName ?? '';
 
-      if (type === 'settlement' || type === 'revenue') {
+      if (type === 'revenue') {
         // One row per hotel per platform
         const m = new Map<string, { hotel: string; platform: string; orders: number; revenue: number; commission: number; refunds: number }>();
         for (const o of orders as any[]) {

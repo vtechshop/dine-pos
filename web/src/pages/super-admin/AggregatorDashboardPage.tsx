@@ -145,7 +145,7 @@ export function AggregatorDashboardPage() {
               { to: '/super-admin/aggregator/hotels',     label: 'Hotels',     icon: <Wifi size={18} /> },
               { to: '/super-admin/aggregator/orders',     label: 'Orders',     icon: <ShoppingBag size={18} /> },
               { to: '/super-admin/aggregator/webhooks',   label: 'Webhooks',   icon: <Truck size={18} /> },
-              { to: '/super-admin/aggregator/settlement', label: 'Settlement', icon: <TrendingUp size={18} /> },
+              { to: '/super-admin/aggregator/analytics',  label: 'Analytics',  icon: <TrendingUp size={18} /> },
             ].map(l => (
               <a key={l.to} href={l.to} className="flex items-center gap-2 rounded-xl border border-border bg-canvas p-4 hover:bg-mist transition-colors">
                 <span className="text-brand/60">{l.icon}</span>
