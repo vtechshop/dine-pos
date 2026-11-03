@@ -1,53 +1,54 @@
-// M7 + M8 — Settlement Monitoring + Analytics
-// Requires: GET /superadmin/aggregator/settlement, GET /superadmin/aggregator/analytics
+// Settlement & Analytics — cross-hotel Swiggy/Zomato money and KPIs (read-only)
+// Data: GET /superadmin/aggregator/settlement, GET /superadmin/aggregator/analytics
 
-import { useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { TrendingUp, TrendingDown, RefreshCw, Download } from 'lucide-react';
 import {
-  ApiRequired, SAStat, SAPageHeader, SASpin, SAError, fmtINR,
+  SAStat, SAPageHeader, SASpin, SAError, fmtINR,
 } from '../../components/ui/SAShared';
 import {
   getGlobalSettlement, getAggAnalytics,
-  type AggSettlementSummary,
+  type AggSettlement, type AggAnalytics,
 } from '../../api/saAggregator';
-
-const SETTLEMENT_ENDPOINTS = [
-  'GET /superadmin/aggregator/settlement?from=&to= — cross-hotel settlement (revenue, commission, refunds, net)',
-  'GET /superadmin/aggregator/analytics?from=&to= — aggregator analytics (charts, KPIs, top hotels/cities)',
-];
 
 const today = () => new Date().toISOString().slice(0, 10);
 const daysAgo = (n: number) => {
   const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10);
 };
 
+const csvCell = (v: string | number) => {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
 type AnalyticsTab = 'settlement' | 'analytics';
+
+const EMPTY_PERIOD = 'No Swiggy/Zomato orders in this period.';
 
 export function AggregatorSettlementPage() {
   const [tab,        setTab]        = useState<AnalyticsTab>('settlement');
   const [from,       setFrom]       = useState(daysAgo(7));
   const [to,         setTo]         = useState(today());
-  const [settlement, setSettlement] = useState<{ byPlatform: AggSettlementSummary[]; byHotel: { hotelId: string; hotelName: string; revenue: number; commission: number; net: number }[] } | null>(null);
-  const [analytics,  setAnalytics]  = useState<{
-    acceptancePct: number; cancellationPct: number; refundPct: number; avgPrepMins: number;
-    topHotels: { hotelId: string; hotelName: string; orders: number; revenue: number }[];
-    topCities:  { city: string; orders: number; revenue: number }[];
-    topProducts:{ name: string; quantity: number; revenue: number }[];
-  } | null>(null);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
+  const [settlement, setSettlement] = useState<AggSettlement | null>(null);
+  const [analytics,  setAnalytics]  = useState<AggAnalytics | null>(null);
+  const [loading,    setLoading]    = useState(false);
+  const [settleErr,  setSettleErr]  = useState('');
+  const [analyticsErr, setAnalyticsErr] = useState('');
 
   const load = useCallback(async () => {
-    setLoading(true); setError('');
+    setLoading(true); setSettleErr(''); setAnalyticsErr('');
     const [settleResult, analyticsResult] = await Promise.allSettled([
       getGlobalSettlement({ from, to }),
       getAggAnalytics(from, to),
     ]);
-    if (settleResult.status   === 'fulfilled') setSettlement(settleResult.value);
+    if (settleResult.status === 'fulfilled') setSettlement(settleResult.value);
+    else { setSettlement(null); setSettleErr("Couldn't load settlement figures. Please try again."); }
     if (analyticsResult.status === 'fulfilled') setAnalytics(analyticsResult.value);
-    if (settleResult.status   === 'rejected')   setError(settleResult.reason instanceof Error ? settleResult.reason.message : 'Failed');
+    else { setAnalytics(null); setAnalyticsErr("Couldn't load analytics. Please try again."); }
     setLoading(false);
   }, [from, to]);
+
+  useEffect(() => { void load(); }, [load]);
 
   const exportCSV = () => {
     if (!settlement) return;
@@ -58,30 +59,34 @@ export function AggregatorSettlementPage() {
     const csv = [
       ['Platform', 'Revenue', 'Commission', 'Refunds', 'Net Payout'],
       ...rows,
-    ].map(r => r.join(',')).join('\n');
+    ].map(r => r.map(csvCell).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
     Object.assign(document.createElement('a'), {
-      href: URL.createObjectURL(blob), download: `sa_settlement_${from}_${to}.csv`,
+      href: url, download: `aggregator-settlement-${from}-to-${to}.csv`,
     }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+
+  const byHotel = settlement ? [...settlement.byHotel].sort((a, b) => b.revenue - a.revenue) : [];
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <SAPageHeader
         title="Settlement & Analytics"
-        sub="Cross-hotel revenue, commission, net payout and aggregator KPIs"
+        sub="Swiggy & Zomato sales, commission and payout across all hotels"
         action={
           <div className="flex items-center gap-2">
-            <input type="date" value={from} max={today()} onChange={e => setFrom(e.target.value)}
+            <input type="date" value={from} max={to || today()} onChange={e => setFrom(e.target.value)}
               className="rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink focus:outline-none" />
-            <input type="date" value={to}   max={today()} onChange={e => setTo(e.target.value)}
+            <input type="date" value={to}   min={from} max={today()} onChange={e => setTo(e.target.value)}
               className="rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink focus:outline-none" />
             <button onClick={() => void load()} disabled={loading}
               className="flex items-center gap-1.5 rounded-lg bg-brand text-canvas px-3 py-2 text-xs font-semibold disabled:opacity-50">
-              {loading ? <RefreshCw size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              Load
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+              Refresh
             </button>
-            {settlement && (
+            {settlement && settlement.byPlatform.length > 0 && (
               <button onClick={exportCSV} className="flex items-center gap-1.5 rounded-lg border border-border bg-canvas px-3 py-2 text-xs font-medium text-ink/70 hover:bg-mist">
                 <Download size={12} /> CSV
               </button>
@@ -91,8 +96,6 @@ export function AggregatorSettlementPage() {
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
-        <ApiRequired endpoints={SETTLEMENT_ENDPOINTS} />
-
         {/* Tabs */}
         <div className="flex border-b border-border">
           {(['settlement', 'analytics'] as AnalyticsTab[]).map(t => (
@@ -106,11 +109,11 @@ export function AggregatorSettlementPage() {
           ))}
         </div>
 
-        {error && <SAError message={error} onRetry={() => void load()} />}
         {loading && <SASpin />}
 
         {/* Settlement tab */}
         {!loading && tab === 'settlement' && (
+          settleErr ? <SAError message={settleErr} onRetry={() => void load()} /> :
           settlement ? (
             <div className="space-y-6">
               {/* By platform */}
@@ -120,14 +123,18 @@ export function AggregatorSettlementPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-mist">
-                        {['Platform', 'Revenue', 'Commission', 'Pending', 'Completed', 'Refunds', 'Net Payout'].map(c => (
+                        {['Platform', 'Sales', 'Commission', 'Pending', 'Paid', 'Refunds', 'Net Payout'].map(c => (
                           <th key={c} className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-ink/50">{c}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {settlement.byPlatform.map((s, i) => (
-                        <tr key={i} className="border-b border-border/50 hover:bg-mist/50 last:border-0">
+                      {settlement.byPlatform.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-10 text-center text-sm text-ink/40">{EMPTY_PERIOD}</td>
+                        </tr>
+                      ) : settlement.byPlatform.map((s, i) => (
+                        <tr key={`${s.platform}-${i}`} className="border-b border-border/50 hover:bg-mist/50 last:border-0">
                           <td className="px-4 py-3 font-bold text-ink capitalize">{s.platform}</td>
                           <td className="px-4 py-3 font-mono text-ink">{fmtINR(s.revenue)}</td>
                           <td className="px-4 py-3 font-mono text-red-600">−{fmtINR(s.commission)}</td>
@@ -143,20 +150,20 @@ export function AggregatorSettlementPage() {
               </section>
 
               {/* By hotel */}
-              {settlement.byHotel.length > 0 && (
+              {byHotel.length > 0 && (
                 <section>
                   <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">By Hotel</p>
                   <div className="overflow-x-auto rounded-xl border border-border bg-canvas">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border bg-mist">
-                          {['Hotel', 'Revenue', 'Commission', 'Net'].map(c => (
+                          {['Hotel', 'Sales', 'Commission', 'Net'].map(c => (
                             <th key={c} className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-ink/50">{c}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {settlement.byHotel.sort((a, b) => b.revenue - a.revenue).map(h => (
+                        {byHotel.map(h => (
                           <tr key={h.hotelId} className="border-b border-border/50 hover:bg-mist/50 last:border-0">
                             <td className="px-4 py-3 font-semibold text-ink">{h.hotelName}</td>
                             <td className="px-4 py-3 font-mono text-ink">{fmtINR(h.revenue)}</td>
@@ -170,38 +177,39 @@ export function AggregatorSettlementPage() {
                 </section>
               )}
             </div>
-          ) : (
-            <div className="text-center py-12 text-sm text-ink/40">
-              Set a date range and click Load to fetch settlement data.
-            </div>
-          )
+          ) : null
         )}
 
         {/* Analytics tab */}
         {!loading && tab === 'analytics' && (
+          analyticsErr ? <SAError message={analyticsErr} onRetry={() => void load()} /> :
           analytics ? (
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <SAStat label="Acceptance Rate"   value={`${analytics.acceptancePct}%`}   accent icon={<TrendingUp size={18} />} />
-                <SAStat label="Cancellation Rate" value={`${analytics.cancellationPct}%`} warn={analytics.cancellationPct > 10} icon={<TrendingDown size={18} />} />
-                <SAStat label="Refund Rate"       value={`${analytics.refundPct}%`}       warn={analytics.refundPct > 5} />
-                <SAStat label="Avg Prep Time"     value={`${analytics.avgPrepMins}m`}     sub="minutes" />
+                <SAStat label="Accepted"      value={`${analytics.acceptancePct}%`}   accent icon={<TrendingUp size={18} />} />
+                <SAStat label="Cancelled"     value={`${analytics.cancellationPct}%`} warn={analytics.cancellationPct > 10} icon={<TrendingDown size={18} />} />
+                <SAStat label="Refunded"      value={`${analytics.refundPct}%`}       warn={analytics.refundPct > 5} />
+                <SAStat label="Avg Prep Time" value={`${analytics.avgPrepMins} min`} />
               </div>
 
               {/* Top Hotels */}
               <section>
-                <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Top Hotels by Revenue</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Top Hotels by Sales</p>
                 <div className="overflow-x-auto rounded-xl border border-border bg-canvas">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-mist">
-                        {['#', 'Hotel', 'Orders', 'Revenue'].map(c => (
+                        {['#', 'Hotel', 'Orders', 'Sales'].map(c => (
                           <th key={c} className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-ink/50">{c}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {analytics.topHotels.map((h, i) => (
+                      {analytics.topHotels.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-10 text-center text-sm text-ink/40">{EMPTY_PERIOD}</td>
+                        </tr>
+                      ) : analytics.topHotels.map((h, i) => (
                         <tr key={h.hotelId} className="border-b border-border/50 hover:bg-mist/50 last:border-0">
                           <td className="px-4 py-3 font-mono text-ink/40">{i + 1}</td>
                           <td className="px-4 py-3 font-semibold text-ink">{h.hotelName}</td>
@@ -215,23 +223,48 @@ export function AggregatorSettlementPage() {
               </section>
 
               {/* Top Cities */}
-              <section>
-                <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Top Cities</p>
-                <div className="flex flex-wrap gap-3">
-                  {analytics.topCities.map(c => (
-                    <div key={c.city} className="rounded-xl border border-border bg-canvas px-4 py-3">
-                      <p className="font-bold text-ink">{c.city}</p>
-                      <p className="text-xs text-ink/50">{c.orders} orders · {fmtINR(c.revenue)}</p>
-                    </div>
-                  ))}
-                </div>
-              </section>
+              {analytics.topCities.length > 0 && (
+                <section>
+                  <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Top Cities</p>
+                  <div className="flex flex-wrap gap-3">
+                    {analytics.topCities.map(c => (
+                      <div key={c.city} className="rounded-xl border border-border bg-canvas px-4 py-3">
+                        <p className="font-bold text-ink">{c.city || '—'}</p>
+                        <p className="text-xs text-ink/50">{c.orders} orders · {fmtINR(c.revenue)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Top Items */}
+              {analytics.topProducts.length > 0 && (
+                <section>
+                  <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Top Items</p>
+                  <div className="overflow-x-auto rounded-xl border border-border bg-canvas">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-mist">
+                          {['Item', 'Qty', 'Sales'].map(c => (
+                            <th key={c} className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-ink/50">{c}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {analytics.topProducts.map((p, i) => (
+                          <tr key={`${p.name}-${i}`} className="border-b border-border/50 hover:bg-mist/50 last:border-0">
+                            <td className="px-4 py-3 font-semibold text-ink">{p.name}</td>
+                            <td className="px-4 py-3 font-mono text-ink/70">{p.quantity}</td>
+                            <td className="px-4 py-3 font-mono text-ink">{fmtINR(p.revenue)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
             </div>
-          ) : (
-            <div className="text-center py-12 text-sm text-ink/40">
-              Set a date range and click Load to fetch analytics.
-            </div>
-          )
+          ) : null
         )}
       </div>
     </div>

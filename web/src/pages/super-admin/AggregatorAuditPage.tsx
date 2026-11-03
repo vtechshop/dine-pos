@@ -1,28 +1,22 @@
-// M9 + M12 — Alert Engine + Audit Log
-// Requires: GET /superadmin/aggregator/alerts, GET /superadmin/aggregator/audit
+// Alerts & Audit — Swiggy/Zomato alerts and audit log across all hotels (read-only)
+// Data: GET /superadmin/aggregator/alerts, GET /superadmin/aggregator/audit
 
 import { useEffect, useState, useCallback } from 'react';
 import { Bell, ClipboardList, AlertTriangle, Info, AlertCircle } from 'lucide-react';
 import {
-  ApiRequired, SABadge, SAPageHeader, SASpin, SAError, fmtDateTime,
+  SABadge, SAPageHeader, SASpin, SAError, fmtDateTime,
 } from '../../components/ui/SAShared';
 import {
   getAggAlerts, getAggAudit,
+  type AggAlert as Alert, type AggAuditEntry as AuditEntry,
 } from '../../api/saAggregator';
 
-type Alert = {
-  id: string; type: string; severity: 'critical' | 'warning' | 'info';
-  hotelId?: string; hotelName?: string; message: string; createdAt: string; resolved: boolean;
-};
-type AuditEntry = {
-  id: string; action: string; hotelId?: string; hotelName?: string;
-  detail: string; actorId: string; createdAt: string;
+const csvCell = (v: string | number) => {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-const AUDIT_ENDPOINTS = [
-  'GET /superadmin/aggregator/alerts — active alert engine output (hotel disconnected, webhook failed, etc.)',
-  'GET /superadmin/aggregator/audit  — cross-hotel aggregator audit log (credential changes, syncs, etc.)',
-];
+const SEVERITY_ORDER = ['critical', 'warning', 'info'];
 
 type Tab = 'alerts' | 'audit';
 
@@ -33,25 +27,32 @@ export function AggregatorAuditPage() {
   const [tab,     setTab]     = useState<Tab>('alerts');
   const [alerts,  setAlerts]  = useState<Alert[]>([]);
   const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
+  const [loading, setLoading] = useState(true);
+  const [alertsErr, setAlertsErr] = useState('');
+  const [auditErr,  setAuditErr]  = useState('');
   const [from,    setFrom]    = useState(daysAgo(7));
   const [to,      setTo]      = useState(today());
   const [type,    setType]    = useState('all');
 
   const load = useCallback(async () => {
-    setLoading(true); setError('');
+    setLoading(true); setAlertsErr(''); setAuditErr('');
     const [alertsRes, auditRes] = await Promise.allSettled([
       getAggAlerts(),
       getAggAudit({ from, to, type: type !== 'all' ? type : undefined }),
     ]);
-    if (alertsRes.status  === 'fulfilled') setAlerts(alertsRes.value.alerts);
-    if (auditRes.status   === 'fulfilled') setEntries(auditRes.value.entries);
-    if (alertsRes.status  === 'rejected')  setError(alertsRes.reason instanceof Error ? alertsRes.reason.message : 'Failed');
+    if (alertsRes.status === 'fulfilled') setAlerts(alertsRes.value.alerts);
+    else setAlertsErr("Couldn't load alerts. Please try again.");
+    if (auditRes.status === 'fulfilled') setEntries(auditRes.value.entries);
+    else setAuditErr("Couldn't load the audit log. Please try again.");
     setLoading(false);
   }, [from, to, type]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const sortedAlerts = [...alerts].sort((a, b) =>
+    (a.resolved ? 1 : 0) - (b.resolved ? 1 : 0) ||
+    (SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity)),
+  );
 
   const critical = alerts.filter(a => a.severity === 'critical' && !a.resolved);
   const warning  = alerts.filter(a => a.severity === 'warning'  && !a.resolved);
@@ -64,18 +65,20 @@ export function AggregatorAuditPage() {
 
   const exportAudit = () => {
     const rows = entries.map(e => [e.action, e.hotelName ?? '', e.detail, e.actorId, fmtDateTime(e.createdAt)]);
-    const csv = [['Action', 'Hotel', 'Detail', 'Actor', 'Time'], ...rows].map(r => r.join(',')).join('\n');
+    const csv = [['Action', 'Hotel', 'Detail', 'Actor', 'Time'], ...rows].map(r => r.map(csvCell).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
     Object.assign(document.createElement('a'), {
-      href: URL.createObjectURL(blob), download: `sa_audit_${from}_${to}.csv`,
+      href: url, download: `aggregator-audit-${from}-to-${to}.csv`,
     }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <SAPageHeader
         title="Alerts & Audit"
-        sub="Alert engine · cross-hotel aggregator audit log"
+        sub="Swiggy & Zomato alerts and change history across all hotels"
         onRefresh={() => void load()}
         refreshing={loading}
         action={
@@ -88,8 +91,6 @@ export function AggregatorAuditPage() {
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
-        <ApiRequired endpoints={AUDIT_ENDPOINTS} />
-
         {/* Tabs */}
         <div className="flex border-b border-border">
           <button
@@ -115,11 +116,9 @@ export function AggregatorAuditPage() {
           </button>
         </div>
 
-        {error && <SAError message={error} onRetry={() => void load()} />}
-
         {/* Alerts tab */}
         {tab === 'alerts' && (
-          loading ? <SASpin /> : (
+          loading ? <SASpin /> : alertsErr ? <SAError message={alertsErr} onRetry={() => void load()} /> : (
             <div className="space-y-4">
               {/* Active alert summary */}
               {(critical.length > 0 || warning.length > 0) && (
@@ -142,14 +141,11 @@ export function AggregatorAuditPage() {
               {alerts.length === 0 ? (
                 <div className="text-center py-12">
                   <Bell size={32} className="mx-auto text-ink/20 mb-3" />
-                  <p className="text-sm text-ink/40">No alerts — requires <code className="font-mono text-xs bg-mist px-1 rounded">GET /superadmin/aggregator/alerts</code></p>
+                  <p className="text-sm text-ink/40">No alerts — everything looks fine.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {alerts.sort((a, b) =>
-                    (a.resolved ? 1 : 0) - (b.resolved ? 1 : 0) ||
-                    (['critical', 'warning', 'info'].indexOf(a.severity) - ['critical', 'warning', 'info'].indexOf(b.severity))
-                  ).map(alert => (
+                  {sortedAlerts.map(alert => (
                     <div key={alert.id} className={`rounded-xl border p-4 flex items-start gap-3 ${
                       alert.resolved ? 'border-border bg-canvas opacity-50' :
                       alert.severity === 'critical' ? 'border-red-200 bg-red-50' :
@@ -199,7 +195,7 @@ export function AggregatorAuditPage() {
               <button onClick={() => void load()} className="px-3 py-2 rounded-lg bg-brand text-canvas text-xs font-semibold">Filter</button>
             </div>
 
-            {loading ? <SASpin /> : (
+            {loading ? <SASpin /> : auditErr ? <SAError message={auditErr} onRetry={() => void load()} /> : (
               <div className="overflow-x-auto rounded-xl border border-border bg-canvas">
                 <table className="w-full text-sm">
                   <thead>
@@ -213,7 +209,7 @@ export function AggregatorAuditPage() {
                     {entries.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="px-4 py-10 text-center text-sm text-ink/40">
-                          No audit entries — requires <code className="font-mono text-xs bg-mist px-1 rounded">GET /superadmin/aggregator/audit</code>
+                          No Swiggy/Zomato changes recorded in this period.
                         </td>
                       </tr>
                     ) : entries.map(e => (

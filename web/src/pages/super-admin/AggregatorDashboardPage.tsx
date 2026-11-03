@@ -2,22 +2,24 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import {
   LayoutDashboard, Wifi, WifiOff, ShoppingBag, TrendingUp,
-  AlertCircle, CheckCircle2, Clock, Truck,
+  AlertCircle, CheckCircle2, Clock, Truck, Building2,
 } from 'lucide-react';
 import {
-  ApiRequired, SAStat, SAPageHeader, SABadge, SASpin, SAError,
+  SAStat, SAPageHeader, SABadge, SASpin, SAError, fmtINR,
 } from '../../components/ui/SAShared';
-import { getHotels, type Hotel } from '../../api/superAdmin';
-import {
-  getAggDashboard, type AggDashboard, SA_AGG_REQUIRED_ENDPOINTS,
-} from '../../api/saAggregator';
+import { getAggDashboard, type AggDashboard } from '../../api/saAggregator';
 
-const DASHBOARD_ENDPOINTS = SA_AGG_REQUIRED_ENDPOINTS.slice(0, 1);
+type Health = 'up' | 'down' | 'degraded';
+
+const HEALTH_LABEL: Record<Health, string> = {
+  up:       'Working',
+  degraded: 'Some problems',
+  down:     'Not connected',  // no hotel connected to this platform yet
+};
 
 export function AggregatorDashboardPage() {
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
-  const [hotels,    setHotels]    = useState<Hotel[]>([]);
   const [dashboard, setDashboard] = useState<AggDashboard | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState('');
@@ -26,134 +28,113 @@ export function AggregatorDashboardPage() {
   const load = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true); else setLoading(true);
     setError('');
-    const [hotelsResult, dashResult] = await Promise.allSettled([
-      getHotels({ page: 1 }),
-      getAggDashboard(),
-    ]);
-    if (hotelsResult.status === 'fulfilled') setHotels(hotelsResult.value.hotels);
-    if (dashResult.status   === 'fulfilled') setDashboard(dashResult.value);
-    if (refresh) setRefreshing(false); else setLoading(false);
+    try {
+      setDashboard(await getAggDashboard());
+    } catch {
+      setError("Couldn't load the delivery summary. Please try again.");
+    } finally {
+      if (refresh) setRefreshing(false); else setLoading(false);
+    }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
 
-  // Derived from live hotel list
-  const totalHotels       = hotels.length;
-  const aggregatorEnabled = hotels.filter(h => h.features.aggregator).length;
-  const aggregatorDisabled= hotels.filter(h => !h.features.aggregator).length;
+  const header = (
+    <SAPageHeader
+      title="Delivery Dashboard"
+      sub="Swiggy & Zomato overview across all hotels"
+      onRefresh={() => void load(true)}
+      refreshing={refreshing || loading}
+      action={
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
+          <LayoutDashboard size={12} /> Overview
+        </span>
+      }
+    />
+  );
 
   if (loading) return (
     <div className="h-full flex flex-col">
-      <SAPageHeader title="Delivery Dashboard" sub="Swiggy & Zomato overview across all hotels" />
+      {header}
       <SASpin />
     </div>
   );
 
+  if (error || !dashboard) return (
+    <div className="h-full flex flex-col">
+      {header}
+      <SAError message={error || "Couldn't load the delivery summary. Please try again."} onRetry={() => void load()} />
+    </div>
+  );
+
+  const d = dashboard;
+  const coverage = d.totalHotels
+    ? Math.round(((d.swiggyConnected + d.zomatoConnected - d.bothConnected) / d.totalHotels) * 100)
+    : 0;
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <SAPageHeader
-        title="Delivery Dashboard"
-        sub="Swiggy & Zomato aggregator overview across all hotels"
-        onRefresh={() => void load(true)}
-        refreshing={refreshing}
-        action={
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
-            <LayoutDashboard size={12} /> M1 — Global Overview
-          </span>
-        }
-      />
+      {header}
       <div className="flex-1 overflow-y-auto space-y-6 px-8 py-6">
-        {error && <SAError message={error} onRetry={() => void load()} />}
-
-        {/* Live stats from hotel list */}
+        {/* Hotels */}
         <section>
-          <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Live — Hotel Feature Status</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Hotels</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <SAStat label="Total Hotels" value={totalHotels} icon={<ShoppingBag size={18} />} />
-            <SAStat label="Aggregator Enabled" value={aggregatorEnabled} accent icon={<CheckCircle2 size={18} />} />
-            <SAStat label="Aggregator Disabled" value={aggregatorDisabled} icon={<WifiOff size={18} />} />
-            <SAStat label="Coverage" value={`${totalHotels ? Math.round(aggregatorEnabled / totalHotels * 100) : 0}%`}
-              sub="Hotels with aggregator on" icon={<Wifi size={18} />} />
+            <SAStat label="Total Hotels"     value={d.totalHotels} icon={<Building2 size={18} />} />
+            <SAStat label="On Swiggy"        value={d.swiggyConnected} sub={`of ${d.totalHotels} hotels`} icon={<Wifi size={18} />} />
+            <SAStat label="On Zomato"        value={d.zomatoConnected} sub={`of ${d.totalHotels} hotels`} icon={<Wifi size={18} />} />
+            <SAStat label="On Both"          value={d.bothConnected} accent icon={<CheckCircle2 size={18} />} />
+            <SAStat label="Not Connected"    value={d.disconnected} icon={<WifiOff size={18} />} />
+            <SAStat label="Waiting for Check" value={d.pendingVerification} warn={d.pendingVerification > 0} />
+            <SAStat label="Connection Errors" value={d.failedIntegrations} warn={d.failedIntegrations > 0} icon={<AlertCircle size={18} />} />
+            <SAStat label="Coverage"         value={`${coverage}%`} sub="Hotels on Swiggy or Zomato" />
           </div>
         </section>
 
-        {/* Cross-hotel KPIs — requires SA backend */}
+        {/* Today */}
         <section>
-          <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">
-            Cross-hotel KPIs — requires backend
-          </p>
-          <ApiRequired endpoints={DASHBOARD_ENDPOINTS} />
-
-          {dashboard ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-              <SAStat label="Today Orders"    value={dashboard.todayOrders}    icon={<Clock size={18} />} />
-              <SAStat label="Today Revenue"   value={`${sym}${dashboard.todayRevenue.toLocaleString('en-IN')}`} accent icon={<TrendingUp size={18} />} />
-              <SAStat label="Commission"      value={`${sym}${dashboard.todayCommission.toLocaleString('en-IN')}`} />
-              <SAStat label="Cancellations"   value={dashboard.todayCancelled} warn={dashboard.todayCancelled > 5} icon={<AlertCircle size={18} />} />
-              <SAStat label="Swiggy Connected" value={dashboard.swiggyConnected} sub={`of ${totalHotels} hotels`} />
-              <SAStat label="Zomato Connected" value={dashboard.zomatoConnected} sub={`of ${totalHotels} hotels`} />
-              <SAStat label="Both Platforms"   value={dashboard.bothConnected} accent />
-              <SAStat label="Failed Integrations" value={dashboard.failedIntegrations} warn={dashboard.failedIntegrations > 0} />
-              <SAStat label="Avg Acceptance" value={`${dashboard.avgAcceptancePct}%`} accent />
-              <SAStat label="Avg Prep Time"  value={`${dashboard.avgPrepMins}m`} sub="minutes" icon={<Clock size={18} />} />
-              <SAStat label="Refunds Today"  value={`${sym}${dashboard.todayRefunds.toLocaleString('en-IN')}`} warn={dashboard.todayRefunds > 0} />
-              <SAStat label="Pending Verify" value={dashboard.pendingVerification} warn={dashboard.pendingVerification > 0} />
-            </div>
-          ) : (
-            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-              {['Today Orders', 'Today Revenue', 'Commission', 'Cancellations',
-                'Swiggy Connected', 'Zomato Connected', 'Both Platforms', 'Failed Integrations',
-                'Avg Acceptance', 'Avg Prep Time', 'Refunds Today', 'Pending Verify'].map(l => (
-                <div key={l} className="rounded-xl border border-border bg-canvas p-4">
-                  <div className="h-6 w-12 rounded bg-ink/5 mb-2" />
-                  <p className="text-xs font-semibold text-ink/40">{l}</p>
-                </div>
-              ))}
-            </div>
+          <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Today</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <SAStat label="Orders"         value={d.todayOrders} icon={<ShoppingBag size={18} />} />
+            <SAStat label="Sales"          value={fmtINR(d.todayRevenue, sym)} accent icon={<TrendingUp size={18} />} />
+            <SAStat label="Commission"     value={fmtINR(d.todayCommission, sym)} />
+            <SAStat label="Refunds"        value={fmtINR(d.todayRefunds, sym)} warn={d.todayRefunds > 0} />
+            <SAStat label="Cancelled"      value={d.todayCancelled} warn={d.todayCancelled > 5} icon={<AlertCircle size={18} />} />
+            <SAStat label="Accepted"       value={`${d.avgAcceptancePct}%`} sub="Average across hotels" accent />
+            <SAStat label="Avg Prep Time"  value={`${d.avgPrepMins} min`} icon={<Clock size={18} />} />
+          </div>
+          {d.todayOrders === 0 && (
+            <p className="mt-3 text-xs text-ink/40">No Swiggy or Zomato orders yet today.</p>
           )}
         </section>
 
         {/* Platform health */}
         <section>
-          <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Platform Health</p>
-          {dashboard ? (
-            <div className="grid grid-cols-3 gap-4">
-              {([
-                { label: 'Swiggy API',     status: dashboard.platformHealth.swiggyApi },
-                { label: 'Zomato API',     status: dashboard.platformHealth.zomatoApi },
-                { label: 'Webhook Server', status: dashboard.platformHealth.webhookServer },
-              ] as { label: string; status: 'up' | 'down' | 'degraded' }[]).map(p => (
-                <div key={p.label} className={`rounded-xl border p-4 flex items-center gap-3 ${
-                  p.status === 'up'       ? 'border-green-200 bg-green-50' :
-                  p.status === 'down'     ? 'border-red-200 bg-red-50' :
-                                            'border-amber-200 bg-amber-50'
-                }`}>
-                  {p.status === 'up'     && <CheckCircle2 size={20} className="text-green-600 shrink-0" />}
-                  {p.status === 'down'   && <AlertCircle  size={20} className="text-red-600 shrink-0" />}
-                  {p.status === 'degraded'&&<AlertCircle  size={20} className="text-amber-600 shrink-0" />}
-                  <div>
-                    <p className="text-sm font-bold text-ink">{p.label}</p>
-                    <SABadge
-                      label={p.status}
-                      variant={p.status === 'up' ? 'green' : p.status === 'down' ? 'red' : 'amber'}
-                    />
-                  </div>
+          <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Connection Health</p>
+          <div className="grid grid-cols-3 gap-4">
+            {([
+              { label: 'Swiggy',         status: d.platformHealth.swiggyApi },
+              { label: 'Zomato',         status: d.platformHealth.zomatoApi },
+              { label: 'Order Receiver', status: d.platformHealth.webhookServer },
+            ] as { label: string; status: Health }[]).map(p => (
+              <div key={p.label} className={`rounded-xl border p-4 flex items-center gap-3 ${
+                p.status === 'up'       ? 'border-green-200 bg-green-50' :
+                p.status === 'down'     ? 'border-border bg-mist' :
+                                          'border-amber-200 bg-amber-50'
+              }`}>
+                {p.status === 'up'
+                  ? <CheckCircle2 size={20} className="text-green-600 shrink-0" />
+                  : <AlertCircle  size={20} className={`${p.status === 'down' ? 'text-ink/35' : 'text-amber-600'} shrink-0`} />}
+                <div>
+                  <p className="text-sm font-bold text-ink">{p.label}</p>
+                  <SABadge
+                    label={HEALTH_LABEL[p.status] ?? p.status}
+                    variant={p.status === 'up' ? 'green' : p.status === 'down' ? 'gray' : 'amber'}
+                  />
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-4">
-              {['Swiggy API', 'Zomato API', 'Webhook Server'].map(l => (
-                <div key={l} className="rounded-xl border border-border bg-canvas p-4 flex items-center gap-3">
-                  <div className="h-5 w-5 rounded-full bg-ink/5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-ink/60">{l}</p>
-                    <p className="text-xs text-ink/30">Requires API</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+              </div>
+            ))}
+          </div>
         </section>
 
         {/* Quick links */}
@@ -161,10 +142,10 @@ export function AggregatorDashboardPage() {
           <p className="text-xs font-bold uppercase tracking-wide text-ink/40 mb-3">Quick Links</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { to: '/super-admin/aggregator/hotels',     label: 'Hotel Integrations', icon: <Wifi size={18} /> },
-              { to: '/super-admin/aggregator/orders',     label: 'Order Monitor',      icon: <ShoppingBag size={18} /> },
-              { to: '/super-admin/aggregator/webhooks',   label: 'Webhooks',           icon: <Truck size={18} /> },
-              { to: '/super-admin/aggregator/settlement', label: 'Settlement',         icon: <TrendingUp size={18} /> },
+              { to: '/super-admin/aggregator/hotels',     label: 'Hotels',     icon: <Wifi size={18} /> },
+              { to: '/super-admin/aggregator/orders',     label: 'Orders',     icon: <ShoppingBag size={18} /> },
+              { to: '/super-admin/aggregator/webhooks',   label: 'Webhooks',   icon: <Truck size={18} /> },
+              { to: '/super-admin/aggregator/settlement', label: 'Settlement', icon: <TrendingUp size={18} /> },
             ].map(l => (
               <a key={l.to} href={l.to} className="flex items-center gap-2 rounded-xl border border-border bg-canvas p-4 hover:bg-mist transition-colors">
                 <span className="text-brand/60">{l.icon}</span>
