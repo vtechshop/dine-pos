@@ -139,7 +139,8 @@ const POS_NAV: PosNavItem[] = [
 // ── Kitchen & Waiter minimal navs ─────────────────────────────────────────────
 
 const KITCHEN_NAV: NavItem[] = [
-  { to: '/kitchen', icon: ChefHat, label: 'Kitchen Display' },
+  { to: '/kitchen', icon: ChefHat, label: 'Kitchen Display', end: true },
+  { to: '/kitchen/stock', icon: Package, label: 'Stock' },
 ];
 
 const WAITER_NAV: NavItem[] = [

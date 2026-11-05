@@ -37,6 +37,16 @@ class AggregatorServiceClass {
     };
   }
 
+  /** Mark one synced item in / out of stock on the integration's platform. */
+  async updateItemAvailability(
+    integration:    IAggregatorIntegration,
+    platformItemId: string,
+    available:      boolean,
+  ): Promise<void> {
+    await this.getConnector(integration.platform)
+      .updateProductAvailability(this.toContext(integration), platformItemId, available);
+  }
+
   async getIntegration(
     hotelId:  string,
     platform: AggregatorPlatform,

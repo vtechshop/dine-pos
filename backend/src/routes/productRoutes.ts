@@ -14,6 +14,7 @@ import { sendError } from '../utils/sendError';
 import { makeRateLimiter } from '../utils/rateLimiter';
 import { ipKeyGenerator } from 'express-rate-limit';
 import { menuCacheGet, menuCacheSet, menuCacheDel } from '../utils/menuCache';
+import { pushDeliveryAvailability } from '../utils/deliveryAvailabilitySync';
 
 const productCacheKey        = (hotelId: string) => `products:${hotelId}`;
 const invalidateProductCache = (hotelId: string) => menuCacheDel(productCacheKey(hotelId));
@@ -315,6 +316,9 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     if (req.body.price !== undefined) meta.newPrice = (product as any).price;
     logAudit(req, 'product.updated', 'product', req.params.id, meta);
     invalidateProductCache(req.hotelId!);
+    if (req.body.isAvailable !== undefined || req.body.stock !== undefined) {
+      void pushDeliveryAvailability(req.hotelId!, [req.params.id]);   // Swiggy / Zomato follow
+    }
     res.json(product);
   } catch (error) {
     sendError(res, 400, 'Invalid data', error);
@@ -349,6 +353,7 @@ router.patch('/:id/availability', requireActiveStaff, async (req: AuthRequest, r
     await Product.updateOne({ _id: req.params.id, hotelId: req.hotelId }, { $set: { isAvailable } });
     logAudit(req, isAvailable ? 'product.back_in_stock' : 'product.out_of_stock', 'product', req.params.id, { name: product.name });
     invalidateProductCache(req.hotelId!);
+    void pushDeliveryAvailability(req.hotelId!, [req.params.id]);   // Swiggy / Zomato follow
     res.json({ _id: req.params.id, isAvailable });
   } catch (error) {
     sendError(res, 500, 'Server error', error);
@@ -366,6 +371,7 @@ router.delete('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     if (!product) return res.status(404).json({ message: 'Product not found' });
     logAudit(req, 'product.deleted', 'product', req.params.id, { name: (product as any).name });
     invalidateProductCache(req.hotelId!);
+    void pushDeliveryAvailability(req.hotelId!, [req.params.id]);   // off on Swiggy / Zomato too
     res.json({ message: 'Product deleted' });
   } catch (error) {
     sendError(res, 500, 'Server error', error);
