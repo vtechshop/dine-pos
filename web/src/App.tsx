@@ -53,6 +53,7 @@ const SubscriptionPage         = lazy(() => import('./pages/SubscriptionPage').t
 import { DashboardPage } from './pages/DashboardPage';
 import { TablesPage } from './pages/TablesPage';
 import { KitchenPage } from './pages/KitchenPage';
+import { KitchenStockPage } from './pages/KitchenStockPage';
 import { CashierPage } from './pages/CashierPage';
 import { CustomerDisplayPage } from './pages/CustomerDisplayPage';
 // Heavy pages — code-split to reduce initial JS parse time
@@ -195,6 +196,7 @@ export function App() {
                     <Route path="/dashboard"   element={<CashierRedirect><DashboardPage /></CashierRedirect>} />
                     <Route path="/tables"      element={<CashierRedirect><TablesPage /></CashierRedirect>} />
                     <Route path="/kitchen"     element={<CashierRedirect kitchenPage><KitchenPage /></CashierRedirect>} />
+                    <Route path="/kitchen/stock" element={<CashierRedirect kitchenPage><KitchenStockPage /></CashierRedirect>} />
                     <Route path="/cashier"     element={<NotKitchen><CashierPage /></NotKitchen>} />
                     <Route path="/help"        element={<Suspense fallback={<PageFallback />}><HelpPage /></Suspense>} />
                     <Route path="/orders"      element={<AdminOnly><Suspense fallback={<PageFallback />}><OrdersPage /></Suspense></AdminOnly>} />

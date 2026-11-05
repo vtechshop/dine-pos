@@ -37,6 +37,7 @@ import { resolveCoupon, CouponResult } from '../utils/couponUtils';
 import { isDueAtCounter } from '../utils/counterBilling';
 import { isQuickServiceOrder } from '../utils/quickService';
 import { payBeforeKitchenEnabled, isHeldForCounterPayment } from '../utils/payBeforeKitchen';
+import { pushDeliveryAvailability } from '../utils/deliveryAvailabilitySync';
 
 const router = Router();
 
@@ -1294,6 +1295,9 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
         productId: (p._id as mongoose.Types.ObjectId).toString(),
         newStock:  (p as any).stock ?? 0,
       }));
+      // Dishes this order sold out are now unavailable — take them off Swiggy / Zomato too
+      const soldOut = stockUpdates.filter(s => s.newStock === 0).map(s => s.productId);
+      if (soldOut.length > 0) void pushDeliveryAvailability(req.hotelId!, soldOut);
     }
 
     // Held orders are announced to the kitchen when they are paid (POST /:id/pay).
@@ -1454,6 +1458,10 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       }
 
       if (prevDoc) {
+        // Cancelling puts counted stock back (and the dish back on sale) — tell Swiggy / Zomato
+        if (bulkOps.length > 0) {
+          void pushDeliveryAvailability(req.hotelId!, existing.items.filter(i => i.product).map(i => String(i.product)));
+        }
         logAudit(req, 'order.cancelled', 'order', String(existing._id), {
           orderNumber: existing.orderNumber,
           prevStatus:  existing.status,

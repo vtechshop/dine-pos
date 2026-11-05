@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { RefreshCw, ChefHat, Clock, Check, X, Truck, MapPin, ChevronDown, Trash2, Package } from 'lucide-react';
-import { KitchenStockPanel } from '../components/kitchen/KitchenStockPanel';
+import { Link } from 'react-router-dom';
 import type { KDSOrder } from '../types';
 import { fetchKitchenOrders, updateOrderStatus, cancelOrder } from '../api/orders';
 import { acceptDeliveryOrder, rejectDeliveryOrder, dispatchDeliveryOrder } from '../api/aggregator';
@@ -348,7 +348,6 @@ export function KitchenPage() {
   const { role } = useAuth();
   const [orders,        setOrders]        = useState<KDSOrderExtended[]>([]);
   const [confirmClear,  setConfirmClear]  = useState(false);
-  const [stockOpen,     setStockOpen]     = useState(false);
   const [clearing,      setClearing]      = useState(false);
   const [clearMsg,      setClearMsg]      = useState<string | null>(null);
   const [loading,       setLoading]       = useState(true);
@@ -574,14 +573,13 @@ export function KitchenPage() {
         )}
 
         {/* Mark dishes in / out of stock */}
-        <button
-          type="button"
-          onClick={() => setStockOpen(true)}
+        <Link
+          to="/kitchen/stock"
           className="flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-xs font-semibold text-brand transition-colors hover:bg-brand/10"
         >
           <Package size={13} />
           Stock
-        </button>
+        </Link>
 
         <button
           onClick={() => void load()}
@@ -594,7 +592,6 @@ export function KitchenPage() {
         </button>
       </div>
 
-      {stockOpen && <KitchenStockPanel onClose={() => setStockOpen(false)} />}
 
       {clearMsg && (
         <div className="mx-5 mt-4 flex items-center justify-between gap-3 rounded-lg border border-border bg-mist px-4 py-2.5 text-sm text-ink/70">
