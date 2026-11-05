@@ -326,6 +326,11 @@ export function suspendHotel(id: string): Promise<SimpleHotelAction> {
   return saFetch<SimpleHotelAction>(`/hotels/${id}/suspend`, { method: 'PUT' });
 }
 
+/** New admin password for a hotel that forgot theirs (shown once). */
+export function resetHotelPassword(id: string): Promise<{ hotelName: string; adminId: string; password: string }> {
+  return saFetch(`/hotels/${id}/reset-password`, { method: 'POST' });
+}
+
 export function activateHotel(id: string): Promise<SimpleHotelAction> {
   return saFetch<SimpleHotelAction>(`/hotels/${id}/activate`, { method: 'PUT' });
 }

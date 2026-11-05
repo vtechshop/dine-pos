@@ -11,6 +11,7 @@ import Order from '../models/Order';
 import TableSession from '../models/TableSession';
 import Device from '../models/Device';
 import Ticket from '../models/Ticket';
+import { RESET_TICKET_SUBJECT } from '../utils/passwordResetTicket';
 import Subscription from '../models/Subscription';
 import RefreshToken from '../models/RefreshToken';
 import Notification from '../models/Notification';
@@ -339,6 +340,38 @@ router.put('/hotels/:id/reject', superAdminAuth, async (req: Request, res: Respo
     await invalidateStatusCache(req.params.id);
     logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.rejected', targetType: 'hotel', targetId: req.params.id, metadata: { reason }, ip: req.ip });
     return res.json({ message: `${hotel.hotelName} rejected`, hotel });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// POST /superadmin/hotels/:id/reset-password — new admin password for a hotel
+// that forgot theirs. Shown once to Super Admin; every signed-in session of the
+// hotel admin is ended (refresh tokens revoked; access tokens expire in 15 min).
+// Open "Password reset request" tickets for the hotel are answered and resolved.
+router.post('/hotels/:id/reset-password', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
+    const hotel = await Hotel.findById(req.params.id).select('hotelName adminId status');
+    if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+    if (!hotel.adminId) return res.status(409).json({ message: 'This hotel has no login yet — approve it first.' });
+
+    const password = generatePassword();
+    hotel.adminPasswordHash = await bcrypt.hash(password, 12);
+    (hotel as any).resetRequested   = false;      // older app reset flow reads these
+    (hotel as any).resetFulfilledAt = new Date();
+    await hotel.save();
+
+    await RefreshToken.updateMany({ hotelId: hotel._id, revokedAt: null }, { revokedAt: new Date() })
+      .catch(err => logger.error('reset-password: failed to revoke sessions', { hotelId: req.params.id, err: String(err) }));
+    await Ticket.updateMany(
+      { hotelId: hotel._id, subject: RESET_TICKET_SUBJECT, status: { $in: ['open', 'in-progress'] } },
+      {
+        $push: { replies: { message: 'Your password has been reset. We will share the new password on your registered mobile number. You can change it later in Settings → Change password.', by: 'superadmin' } },
+        $set:  { status: 'resolved' },
+      },
+    ).catch(() => {});
+
+    logAuditRaw({ hotelId: req.params.id, actorRole: 'superadmin', action: 'hotel.password_reset', targetType: 'hotel', targetId: req.params.id, ip: req.ip });
+    return res.json({ hotelName: hotel.hotelName, adminId: hotel.adminId, password });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 

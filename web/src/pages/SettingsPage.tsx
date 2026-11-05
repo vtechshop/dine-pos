@@ -19,6 +19,7 @@ import { fetchSessionDevices, logoutDevice, logoutAllDevices } from '../api/devi
 import type { SessionDevice } from '../api/devices';
 import { fetchPrinterDevices } from '../api/dashboard';
 import { apiFetch } from '../api/client';
+import { changePassword } from '../api/auth';
 import { StaffDrawer } from '../components/settings/StaffDrawer';
 import { ErrorPopup } from '../components/ui/ErrorPopup';
 import type { Settings, PrinterDeviceStatus, LoyaltySettings } from '../types';
@@ -1250,18 +1251,29 @@ function SecuritySection({ settings }: { settings: Settings }) {
     }
   };
 
-  const handleResetRequest = async () => {
-    if (!settings.phone) return;
+  // ── Change password ──
+  const [curPwd, setCurPwd]   = useState('');
+  const [newPwd, setNewPwd]   = useState('');
+  const [newPwd2, setNewPwd2] = useState('');
+  const [pwdBusy, setPwdBusy] = useState(false);
+  const [pwdMsg, setPwdMsg]   = useState<{ ok: boolean; text: string } | null>(null);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwdMsg(null);
+    if (newPwd !== newPwd2) { setPwdMsg({ ok: false, text: 'The two new passwords do not match.' }); return; }
+    if (newPwd.length < 8 || !/[A-Za-z]/.test(newPwd) || !/\d/.test(newPwd)) {
+      setPwdMsg({ ok: false, text: 'Use at least 8 characters with letters and numbers.' }); return;
+    }
+    setPwdBusy(true);
     try {
-      await apiFetch('/hotels/reset-request', {
-        method: 'POST',
-        body: JSON.stringify({ phone: settings.phone }),
-      });
-      setNotice('Reset request sent. The Super Admin team will contact you shortly.');
-      setTimeout(() => setNotice(null), 6000);
-    } catch {
-      setNotice('Could not send request. Please try again.');
-      setTimeout(() => setNotice(null), 3000);
+      await changePassword(curPwd, newPwd);
+      setCurPwd(''); setNewPwd(''); setNewPwd2('');
+      setPwdMsg({ ok: true, text: 'Password changed. Use the new password next time you sign in.' });
+    } catch (err) {
+      setPwdMsg({ ok: false, text: err instanceof Error ? err.message : 'Could not change the password.' });
+    } finally {
+      setPwdBusy(false);
     }
   };
 
@@ -1324,28 +1336,32 @@ function SecuritySection({ settings }: { settings: Settings }) {
         )}
       </SectionCard>
 
-      <SectionCard title="Admin Password">
-        <p className="mb-4 text-xs text-ink/60">
-          Admin credentials are managed by the Super Admin. To change your password, submit a reset request and the team will assist you.
+      <SectionCard title="Change Password">
+        <form onSubmit={e => void handleChangePassword(e)} className="max-w-md space-y-3">
+          {[
+            { id: 'cur-pwd',  label: 'Current password',     value: curPwd,  set: setCurPwd,  auto: 'current-password' },
+            { id: 'new-pwd',  label: 'New password',         value: newPwd,  set: setNewPwd,  auto: 'new-password' },
+            { id: 'new-pwd2', label: 'New password (again)', value: newPwd2, set: setNewPwd2, auto: 'new-password' },
+          ].map(f => (
+            <label key={f.id} htmlFor={f.id} className="block">
+              <span className="mb-1 block text-xs font-medium text-ink/60">{f.label}</span>
+              <input id={f.id} type="password" autoComplete={f.auto} required value={f.value} onChange={e => f.set(e.target.value)}
+                className="w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand/50" />
+            </label>
+          ))}
+          <p className="text-[11px] text-ink/45">At least 8 characters, with letters and numbers.</p>
+          {pwdMsg && (
+            <p className={`rounded-lg border px-3 py-2 text-xs ${pwdMsg.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-100 bg-red-50 text-red-600'}`}>{pwdMsg.text}</p>
+          )}
+          <button type="submit" disabled={pwdBusy}
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60">
+            {pwdBusy ? 'Saving…' : 'Change password'}
+          </button>
+        </form>
+        <p className="mt-4 text-xs text-ink/45">
+          Forgot your current password? Sign out and use <b>Forgot password?</b> on the sign-in page — DinePOS support will reset it
+          {settings.phone ? <> and contact you on <b>{settings.phone}</b></> : null}.
         </p>
-        {settings.phone ? (
-          <div className="flex items-center gap-4">
-            <div className="flex-1 rounded-lg border border-border px-4 py-3">
-              <p className="text-[10px] text-ink/40">Registered Phone</p>
-              <p className="mt-0.5 text-sm font-semibold text-ink">{settings.phone}</p>
-            </div>
-            <button
-              onClick={() => void handleResetRequest()}
-              className="shrink-0 rounded-lg border border-border bg-canvas px-4 py-2.5 text-xs font-semibold text-ink/60 hover:bg-ink/5"
-            >
-              Request Reset
-            </button>
-          </div>
-        ) : (
-          <p className="text-xs text-ink/40">
-            Add a phone number in the Profile tab to enable password reset requests.
-          </p>
-        )}
       </SectionCard>
     </div>
   );

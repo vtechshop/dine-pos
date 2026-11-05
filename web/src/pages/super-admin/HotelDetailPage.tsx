@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Check, X, Copy, Eye, EyeOff, PauseCircle, PlayCircle, CalendarPlus, CreditCard, Sliders, Settings, FileText, Activity, Pencil } from 'lucide-react';
+import { ArrowLeft, Check, X, Copy, Eye, EyeOff, PauseCircle, PlayCircle, CalendarPlus, CreditCard, Sliders, Settings, FileText, Activity, Pencil, KeyRound } from 'lucide-react';
 import {
-  getHotel, approveHotel, rejectHotel, suspendHotel, activateHotel, extendTrial,
+  getHotel, approveHotel, rejectHotel, suspendHotel, activateHotel, extendTrial, resetHotelPassword,
   updateFeatures, setPlan, setTrial, updateHotelSettings, updateHotelNote,
   type Hotel, type ApproveResponse, type HotelSettingsPayload,
 } from '../../api/superAdmin';
@@ -245,6 +245,9 @@ export function HotelDetailPage() {
   const [extending,    setExtending]    = useState(false);
   const [extendDays,   setExtendDays]   = useState(7);
   const [manageError,  setManageError]  = useState<string | null>(null);
+  const [showResetPwd, setShowResetPwd] = useState(false);
+  const [resettingPwd, setResettingPwd] = useState(false);
+  const [newCreds,     setNewCreds]     = useState<{ adminId: string; password: string } | null>(null);
 
   // Subscription plan
   const [selectedPlan,    setSelectedPlan]    = useState<PlanId | null>(null);
@@ -317,6 +320,21 @@ export function HotelDetailPage() {
       setRejectError(err instanceof Error ? err.message : 'Rejection failed');
     } finally {
       setRejecting(false);
+    }
+  }
+
+  async function handleResetPassword() {
+    if (!id) return;
+    setResettingPwd(true);
+    setManageError(null);
+    try {
+      const res = await resetHotelPassword(id);
+      setNewCreds({ adminId: res.adminId, password: res.password });
+    } catch (err) {
+      setManageError(err instanceof Error ? err.message : 'Reset failed');
+    } finally {
+      setResettingPwd(false);
+      setShowResetPwd(false);
     }
   }
 
@@ -516,6 +534,44 @@ export function HotelDetailPage() {
       {/* Credentials box (shown immediately after approval) */}
       {credentials && <CredentialBox creds={credentials} />}
 
+      {/* New password after "Reset password" — shown once */}
+      {newCreds && (
+        <div className="mb-6 rounded-xl border-2 border-green-400 bg-green-50 p-5">
+          <p className="mb-3 text-sm font-bold text-green-800">New login for {hotel.hotelName} — give it to the owner on their registered mobile</p>
+          <div className="space-y-2 text-sm">
+            {[{ label: 'Hotel ID', value: newCreds.adminId }, { label: 'New password', value: newCreds.password }].map(({ label, value }) => (
+              <div key={label} className="flex items-center gap-2">
+                <span className="w-28 font-medium text-green-700">{label}</span>
+                <code className="font-mono text-green-900">{value}</code>
+                <CopyButton text={value} />
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-green-700">
+            The old password no longer works and the hotel was signed out. This password is not shown again — the owner can change it in Settings → Security.
+          </p>
+        </div>
+      )}
+
+      {showResetPwd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={() => !resettingPwd && setShowResetPwd(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-canvas p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="mb-2 text-sm font-semibold text-ink">Reset password for {hotel.hotelName}?</h3>
+            <p className="mb-5 text-xs leading-relaxed text-ink/55">
+              A new password is created and shown once. The old password stops working and everyone signed in as this hotel's admin is signed out.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowResetPwd(false)} disabled={resettingPwd}
+                className="rounded-lg border border-border px-4 py-2 text-xs font-medium text-ink/60 hover:bg-mist">Cancel</button>
+              <button onClick={() => void handleResetPassword()} disabled={resettingPwd}
+                className="rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-50">
+                {resettingPwd ? 'Resetting…' : 'Reset password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Approve / Reject — pending only */}
       {isPending && !credentials && (
         <div className="mb-6 flex gap-3">
@@ -564,6 +620,13 @@ export function HotelDetailPage() {
                 <CalendarPlus size={15} /> Extend Trial
               </button>
             )}
+            {/* Forgot password → new password for the hotel admin */}
+            <button
+              onClick={() => { setManageError(null); setNewCreds(null); setShowResetPwd(true); }}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-canvas px-3 py-2 text-sm font-medium text-ink/70 transition hover:bg-mist"
+            >
+              <KeyRound size={15} /> Reset password
+            </button>
           </div>
           {manageError && (
             <p className="mt-2 text-xs text-red-600">{manageError}</p>

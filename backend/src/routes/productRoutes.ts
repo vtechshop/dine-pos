@@ -324,7 +324,7 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
 // PATCH /api/products/:id/availability — mark a dish in / out of stock from the POS.
 // Cashier, kitchen and admin (a deactivated staff member is refused by requireActiveStaff).
 // Changes nothing but isAvailable. A stock-tracked dish with 0 left cannot be switched
-// back on here — that needs a restock in Inventory first.
+// back on here — the admin updates its count in Products → the dish → Stock first.
 router.patch('/:id/availability', requireActiveStaff, async (req: AuthRequest, res: Response) => {
   try {
     if (!['admin', 'cashier', 'kitchen'].includes(req.role ?? '')) {
@@ -343,7 +343,7 @@ router.patch('/:id/availability', requireActiveStaff, async (req: AuthRequest, r
     if (isAvailable && product.stock === 0) {
       return res.status(409).json({
         code: 'NO_STOCK',
-        message: `${product.name} has 0 left in stock. Add stock in Inventory to sell it again.`,
+        message: `${product.name} has 0 left. Admin: open Products → ${product.name} → Stock and enter the new quantity (or choose "Not tracked") to sell it again.`,
       });
     }
     await Product.updateOne({ _id: req.params.id, hotelId: req.hotelId }, { $set: { isAvailable } });

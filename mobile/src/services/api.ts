@@ -1435,7 +1435,7 @@ export const getKitchenProducts = async (): Promise<Product[]> => {
 /**
  * Mark a dish in / out of stock from the kitchen. The server only changes
  * isAvailable; a stock-tracked dish with 0 left can't be switched back on
- * (code NO_STOCK) — that needs a restock in Inventory first.
+ * (code NO_STOCK) — the admin updates its count in Products → the dish → Stock first.
  */
 export const setKitchenProductAvailability = async (productId: string, isAvailable: boolean): Promise<void> => {
   const [base, token] = await Promise.all([getBaseUrl(), getKitchenToken()]);
@@ -1448,7 +1448,7 @@ export const setKitchenProductAvailability = async (productId: string, isAvailab
     const data = await res.json().catch(() => ({})) as { message?: string; code?: string };
     throw new Error(
       data.code === 'NO_STOCK'
-        ? 'No stock left for this dish. Restock it in Inventory first.'
+        ? '0 left. The admin must update its count in Products → this dish → Stock first.'
         : data.message || 'Could not update this dish',
     );
   }

@@ -4,11 +4,86 @@ import { CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from '../components/ui/Spinner';
 import { ApiError } from '../api/client';
-import { SUPPORT_PHONE, SUPPORT_PHONE_DISPLAY, SUPPORT_PAGE, supportWhatsAppUrl } from '../config/support';
+import { SUPPORT_PHONE, SUPPORT_PHONE_DISPLAY, SUPPORT_PAGE } from '../config/support';
+import { requestPasswordReset } from '../api/auth';
 
 type LoginMode = 'admin' | 'cashier' | 'kitchen';
 
 const APP_VERSION = 'v1.0-rc1';
+
+/** "Forgot password?" → sends a reset request to DinePOS Super Admin (no WhatsApp). */
+function ForgotPassword({ defaultId }: { defaultId: string }) {
+  const [open, setOpen]     = useState(false);
+  const [value, setValue]   = useState('');
+  const [busy, setBusy]     = useState(false);
+  const [done, setDone]     = useState<string | null>(null);
+  const [err, setErr]       = useState<string | null>(null);
+
+  function start() {
+    setValue(defaultId.trim());
+    setDone(null); setErr(null); setOpen(true);
+  }
+
+  async function send(e: FormEvent) {
+    e.preventDefault();
+    if (!value.trim()) { setErr('Enter your Hotel ID or registered mobile number.'); return; }
+    setBusy(true); setErr(null);
+    try {
+      setDone((await requestPasswordReset(value.trim())).message);
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : 'Could not send the request. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="mt-3 text-center">
+        <button type="button" onClick={start} className="text-sm font-medium text-brand hover:underline">
+          Forgot password?
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-border bg-mist px-4 py-4">
+      {done ? (
+        <div className="text-center">
+          <CheckCircle size={22} className="mx-auto mb-2 text-emerald-600" />
+          <p className="text-sm font-semibold text-ink">Request sent</p>
+          <p className="mt-1 text-xs leading-relaxed text-ink/60">{done}</p>
+          <button type="button" onClick={() => setOpen(false)} className="mt-3 text-xs font-medium text-brand hover:underline">Back to sign in</button>
+        </div>
+      ) : (
+        <form onSubmit={send} className="space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-ink">Forgot password?</p>
+            <p className="mt-0.5 text-xs text-ink/55">We'll send a reset request to DinePOS support. They will give you a new password on your registered mobile.</p>
+          </div>
+          <input
+            autoFocus
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            aria-label="Hotel ID or registered mobile number"
+            placeholder="Hotel ID (e.g. DIN123456) or registered mobile"
+            className="block w-full rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
+          />
+          {err && <p className="text-xs text-red-600">{err}</p>}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setOpen(false)}
+              className="flex-1 rounded-lg border border-border bg-canvas py-2 text-xs font-medium text-ink/60 hover:bg-ink/5">Cancel</button>
+            <button type="submit" disabled={busy}
+              className="flex-1 rounded-lg bg-brand py-2 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-60">
+              {busy ? 'Sending…' : 'Send reset request'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
 
 function roleDestination(role: string | null): string {
   // Super admins sign in through this same form (see handleSubmit).
@@ -282,18 +357,7 @@ export function LoginPage() {
           </form>
 
           {/* Forgot password — right under Sign in (admin only; cashier PINs are reset by the admin) */}
-          {mode === 'admin' && (
-            <div className="mt-3 text-center">
-              <a
-                href={supportWhatsAppUrl('Hi, I forgot my Dine POS password. Please help me reset it.')}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm font-medium text-brand hover:underline"
-              >
-                Forgot password?
-              </a>
-            </div>
-          )}
+          {mode === 'admin' && <ForgotPassword defaultId={userId} />}
 
           {/* Role hint */}
           {(mode === 'admin' || !!deviceHotelId) && (
