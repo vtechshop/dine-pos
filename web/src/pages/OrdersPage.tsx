@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useCashier } from '../context/CashierContext';
 import { RefreshCw, Search, ChevronLeft, ChevronRight, Calendar, X, Banknote, CreditCard, Smartphone, CheckCircle2, Plus } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import type { OrderListItem } from '../types';
@@ -540,6 +541,7 @@ function EmptyState({ status, rangeMode, search, source }: {
 
 export function OrdersPage() {
   const { settings } = useSettings();
+  const { setActiveTab } = useCashier();
   const sym = settings?.currencySymbol ?? '₹';
 
   const [rangeMode, setRangeMode] = useState<RangeMode>('today');
@@ -635,6 +637,7 @@ export function OrdersPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/cashier"
+            onClick={() => setActiveTab('new-order')}   // open the New Order screen, not the POS home
             data-testid="new-order-btn"
             className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand/90"
           >
