@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, RefreshCw, Loader2, Users, Unlock } from 'lucide-react';
+import { X, RefreshCw, Loader2, Users, Unlock, Plus } from 'lucide-react';
 import type { SessionBill, GuestBill, PaymentMethod, SessionSummary, BillingOrder } from '../../types';
 import { fetchSessionBill, billGuest, bulkBillAndClose, markGuestLeft, closeSession } from '../../api/billing';
 import type { SplitDetails } from '../../api/billing';
@@ -20,6 +20,8 @@ interface Props {
   /** Session was just opened by tapping a free table: if it's still empty when
    *  the drawer is dismissed, close it so a mis-tap doesn't leave it occupied. */
   autoReleaseIfEmpty?: boolean;
+  /** Opens the New Order screen for this table; the order seats the first guest. */
+  onTakeOrder?: (table: { tableId: string; tableNumber: string }) => void;
 }
 
 // Orders that block billing/closing because they're still with the kitchen
@@ -38,7 +40,7 @@ function elapsedLabel(openedAt: string): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose: onCloseProp, autoReleaseIfEmpty }: Props) {
+export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose: onCloseProp, autoReleaseIfEmpty, onTakeOrder }: Props) {
   const { socket } = useSocket();
   const { role } = useAuth();
 
@@ -412,10 +414,24 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
             </div>
             <div className="space-y-1">
               <p className="text-sm font-semibold text-ink">No guests on this table</p>
-              <p className="text-xs text-ink/50">No orders have been placed yet.</p>
+              <p className="text-xs text-ink/50">
+                {onTakeOrder && bill?.session.tableId
+                  ? 'Take an order to seat guests — they show up here once it is placed.'
+                  : 'No orders have been placed yet.'}
+              </p>
             </div>
             {actionError && (
               <p className="max-w-xs text-xs text-red-600">{actionError}</p>
+            )}
+            {onTakeOrder && bill?.session.tableId && (
+              <button
+                type="button"
+                onClick={() => onTakeOrder({ tableId: bill.session.tableId!, tableNumber: String(bill.session.tableNumber) })}
+                className="flex items-center gap-2 rounded-xl bg-brand px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand/90"
+              >
+                <Plus size={15} />
+                Take Order
+              </button>
             )}
             <button
               onClick={() => void handleCloseTable()}
