@@ -188,7 +188,7 @@ export interface GuestBill {
 }
 
 export interface SessionBill {
-  session: SessionSummary & { tableNumber: string };
+  session: SessionSummary & { tableNumber: string; tableId?: string };
   guests: GuestBill[];
   grandTotal: number;
 }

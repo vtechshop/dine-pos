@@ -349,7 +349,7 @@ function HourlyRevenueCard({ symbol }: { symbol: string }) {
 
 export function DashboardPage() {
   const navigate                   = useNavigate();
-  const { setActiveTab }           = useCashier();
+  const { setActiveTab, setOrderPrefill } = useCashier();
   const { settings }               = useSettings();
   const { socket, reconnectCount } = useSocket();
   const { role }                   = useAuth();
@@ -866,6 +866,12 @@ export function DashboardPage() {
           currencySymbol={currencySymbol}
           onClose={() => { setBillingSessionId(null); setTapOpenedSessionId(null); void load(); }}
           autoReleaseIfEmpty={billingSessionId === tapOpenedSessionId}
+          onTakeOrder={({ tableId, tableNumber }) => {
+            // The order joins this table's open session as its first guest
+            setOrderPrefill({ orderType: 'dine-in', tableId, tableNumber });
+            setActiveTab('new-order');
+            navigate('/cashier');
+          }}
         />
       )}
     </div>

@@ -670,7 +670,7 @@ export function NewOrderPanel() {
         setServedFromCache(false);
       }
 
-      if (tableRes.status === 'fulfilled') setTables(tableRes.value.filter((t: Table) => t.status === 'available'));
+      if (tableRes.status === 'fulfilled') setTables(tableRes.value.filter((t: Table) => t.status !== 'inactive'));
       if (topRes.status === 'fulfilled') {
         setTopToday(
           [...topRes.value.products]
@@ -1360,8 +1360,11 @@ export function NewOrderPanel() {
               className="min-w-0 rounded-lg border border-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
             >
               <option value="">Walk-in / No table</option>
-              {tables.map(t => (
-                <option key={t._id} value={t._id}>T{t.number} ({t.capacity} pax)</option>
+              {/* Free tables, plus one picked from a table screen (it may already be occupied) */}
+              {tables.filter(t => t.status === 'available' || t._id === dineIn.tableId).map(t => (
+                <option key={t._id} value={t._id}>
+                  T{t.number} ({t.capacity} pax){t.status === 'available' ? '' : ' · occupied'}
+                </option>
               ))}
             </select>
             <div className="relative min-w-0">
