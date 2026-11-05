@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useCashier } from '../context/CashierContext';
 import {
   RefreshCw, Search, TrendingUp, ShoppingCart,
   LayoutGrid, Zap, Bell, X, CreditCard, Smartphone, Banknote, Trophy, Package2, Plus, ChefHat,
@@ -348,6 +349,7 @@ function HourlyRevenueCard({ symbol }: { symbol: string }) {
 
 export function DashboardPage() {
   const navigate                   = useNavigate();
+  const { setActiveTab }           = useCashier();
   const { settings }               = useSettings();
   const { socket, reconnectCount } = useSocket();
   const { role }                   = useAuth();
@@ -638,7 +640,7 @@ export function DashboardPage() {
           </button>
 
           <button
-            onClick={() => navigate('/orders')}
+            onClick={() => { setActiveTab('new-order'); navigate('/cashier'); }}   // straight to billing
             className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand/90"
           >
             <Plus size={13} />
