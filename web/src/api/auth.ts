@@ -50,6 +50,22 @@ export function loginKitchenApi(hotelId: string, pin: string): Promise<{ token: 
   });
 }
 
+/** Forgot password: sends a reset request to DinePOS Super Admin (same reply whether or not the hotel exists). */
+export function requestPasswordReset(identifier: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>('/auth/forgot-password', {
+    method: 'POST',
+    body:   JSON.stringify({ identifier }),
+  });
+}
+
+/** Signed-in hotel admin changes their own password. */
+export function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>('/auth/change-password', {
+    method: 'POST',
+    body:   JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
 // H-02: revoke the refresh token on the server so it cannot generate new access tokens
 export async function logoutApi(refreshToken: string): Promise<void> {
   await apiFetch('/auth/logout', {

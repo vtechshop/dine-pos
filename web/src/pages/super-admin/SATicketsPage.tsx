@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useSATickets } from '../../context/SATicketsContext';
 import { LifeBuoy, RefreshCw, Search, Send, Phone, X } from 'lucide-react';
 import {
@@ -184,6 +184,11 @@ export function SATicketsPage() {
                   <a href={`tel:${selected.hotelPhone}`} className="flex items-center gap-1 text-brand hover:underline"><Phone size={11} />{selected.hotelPhone}</a>
                   <span className="capitalize">· {selected.category}</span>
                   <span className={`font-semibold capitalize ${PRIORITY_CLS[selected.priority]}`}>· {selected.priority} priority</span>
+                  {selected.hotelId && (
+                    <Link to={`/super-admin/hotels/${selected.hotelId}`} className="font-medium text-brand hover:underline">
+                      · Open hotel{selected.subject === 'Password reset request' ? ' to reset password' : ''} →
+                    </Link>
+                  )}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">

@@ -4,7 +4,9 @@ import { makeRateLimiter } from '../utils/rateLimiter';
 import Hotel from '../models/Hotel';
 import RefreshToken from '../models/RefreshToken';
 import Settings from '../models/Settings';
-import { generateToken, generateRefreshToken, generateKitchenToken, generateWaiterToken, generateCashierToken, hashRefreshToken } from '../middleware/auth';
+import { generateToken, generateRefreshToken, generateKitchenToken, generateWaiterToken, generateCashierToken, hashRefreshToken, authMiddleware, type AuthRequest } from '../middleware/auth';
+import mongoose from 'mongoose';
+import { filePasswordResetTicket } from '../utils/passwordResetTicket';
 import Waiter from '../models/Waiter';
 import Cashier from '../models/Cashier';
 import { logAuditRaw } from '../utils/audit';
@@ -427,6 +429,72 @@ router.post('/cashier', normalizeStaffLogin(true), staffPinIpLimiter, staffPinLi
         mobile:       cashier.mobile,
       },
     });
+  } catch (error) {
+    return sendError(res, 500, 'Server error', error);
+  }
+});
+
+// ── Forgot password → request to Super Admin ──────────────────────────────────
+// Public. Files a high-priority "Password reset request" support ticket for the
+// matching hotel (by Hotel/Admin ID or registered mobile) so Super Admin can
+// reset it. Always answers the same way — never reveals whether a hotel exists.
+
+const forgotLimiter = makeRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { message: 'Too many requests. Please try again after 15 minutes.' },
+});
+
+const FORGOT_REPLY = 'Request sent to DinePOS support. We will contact you on your registered mobile number with a new password.';
+
+router.post('/forgot-password', forgotLimiter, async (req: Request, res: Response) => {
+  const raw = typeof req.body?.identifier === 'string' ? req.body.identifier.trim().slice(0, 60) : '';
+  if (!raw) return res.status(400).json({ message: 'Enter your Hotel ID or registered mobile number' });
+  try {
+    const digits = raw.replace(/\D/g, '');
+    const mobile = digits.length >= 10 ? digits.slice(-10) : '';
+    const hotel = await Hotel.findOne(
+      mobile && digits.length === raw.replace(/[\s+()-]/g, '').length
+        ? { $or: [{ adminId: raw }, { phone: { $regex: `${mobile}$` } }] }
+        : { adminId: raw },
+    ).select('hotelName phone status').lean<{ _id: mongoose.Types.ObjectId; hotelName: string; phone: string; status: string } | null>();
+
+    if (hotel && hotel.status !== 'rejected') {
+      await filePasswordResetTicket(hotel, `The hotel used "Forgot password" on the login page (entered: ${raw}).`);
+      logAuditRaw({ hotelId: String(hotel._id), action: 'password.reset_requested', targetType: 'hotel', targetId: String(hotel._id), ip: req.ip });
+    }
+    return res.json({ message: FORGOT_REPLY });
+  } catch (error) {
+    return sendError(res, 500, 'Server error', error);
+  }
+});
+
+// ── Change password (hotel admin, signed in) ─────────────────────────────────
+
+router.post('/change-password', loginLimiter, authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (req.role !== 'admin') return res.status(403).json({ message: 'Only the hotel admin can change the password.' });
+  const { currentPassword, newPassword } = req.body ?? {};
+  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+    return res.status(400).json({ message: 'Current and new password are required' });
+  }
+  if (newPassword.length < 8 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+    return res.status(400).json({ message: 'New password must be at least 8 characters with letters and numbers' });
+  }
+  if (newPassword === currentPassword) {
+    return res.status(400).json({ message: 'New password must be different from the current one' });
+  }
+  try {
+    const hotel = await Hotel.findById(req.hotelId).select('adminPasswordHash');
+    if (!hotel || !hotel.adminPasswordHash) return res.status(404).json({ message: 'Hotel not found' });
+    if (!await bcrypt.compare(currentPassword, hotel.adminPasswordHash)) {
+      logAuditRaw({ hotelId: String(hotel._id), action: 'password.change_failed', targetType: 'hotel', targetId: String(hotel._id), ip: req.ip });
+      return res.status(400).json({ message: 'Current password is wrong' });
+    }
+    hotel.adminPasswordHash = await bcrypt.hash(newPassword, 12);
+    await hotel.save();
+    logAuditRaw({ hotelId: String(hotel._id), action: 'password.changed', targetType: 'hotel', targetId: String(hotel._id), ip: req.ip });
+    return res.json({ message: 'Password changed' });
   } catch (error) {
     return sendError(res, 500, 'Server error', error);
   }

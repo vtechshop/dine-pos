@@ -5,6 +5,7 @@ import Hotel from '../models/Hotel';
 import { sendError } from '../utils/sendError';
 import { isHotelIdString } from '../middleware/auth';
 import { validatePhone, validateEmail, validateGST, validateFSSAI, validatePincode } from '../utils/validation';
+import { filePasswordResetTicket } from '../utils/passwordResetTicket';
 
 // 5 registration / resubmit attempts per hour per IP — prevents registration spam
 const registrationLimiter = makeRateLimiter({
@@ -182,6 +183,8 @@ router.post('/reset-request', resetRequestLimiter, async (req: Request, res: Res
     }
 
     await Hotel.findByIdAndUpdate(hotel._id, { resetRequested: true, resetRequestedAt: new Date() });
+    // Show it to Super Admin as a support ticket (with alerts), not just a hidden flag
+    await filePasswordResetTicket(hotel, 'The hotel asked for a password reset (Settings / app).').catch(() => {});
     return res.json({ message: 'Reset request submitted. The super admin will update your credentials shortly.' });
   } catch (error) {
     return sendError(res, 500, 'Server error');

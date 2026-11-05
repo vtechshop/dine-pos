@@ -58,7 +58,7 @@ export function KitchenStockPanel({ onClose }: { onClose: () => void }) {
     } catch (e) {
       setItems(prev => prev.map(x => (x._id === p._id ? { ...x, isAvailable: !next } : x))); // undo
       const msg = e instanceof ApiError && e.code === 'NO_STOCK'
-        ? 'No stock left — restock it in Inventory first.'
+        ? '0 left — the admin must update its count in Products → this dish → Stock first.'
         : e instanceof Error ? e.message : 'Could not update this dish.';
       setRowErr({ id: p._id, msg });
     } finally {
