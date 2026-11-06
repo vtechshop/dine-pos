@@ -17,6 +17,7 @@ import RefreshToken from '../models/RefreshToken';
 import Notification from '../models/Notification';
 import RemoteConfig from '../models/RemoteConfig';
 import Lead from '../models/Lead';
+import Inquiry from '../models/Inquiry';
 import SADevice from '../models/SADevice';
 import { redisHealthCheck } from '../config/redis';
 import { generateAdminId, generatePassword } from '../utils/credentialGenerator';
@@ -1628,6 +1629,34 @@ router.get('/leads/stats', superAdminAuth, async (_req: Request, res: Response) 
   } catch (err) { return sendError(res, 500, 'Server error', err); }
 });
 
+/**
+ * Website leads keep the booking-form details (preferred date / time, outlets, what they
+ * want to see) on the original Inquiry. Attach them as `demo` so the SA pages can show them.
+ */
+async function withDemoDetails<T extends { inquiryId?: unknown }>(leads: T[]): Promise<Array<T & { demo?: Record<string, string> }>> {
+  const ids = leads.map(l => l.inquiryId).filter((id): id is mongoose.Types.ObjectId => !!id);
+  if (ids.length === 0) return leads;
+  type DemoFields = { _id: unknown; preferredDate?: string; preferredTime?: string; outlets?: string; notes?: string; message?: string };
+  const inquiries: DemoFields[] = await Inquiry.find({ _id: { $in: ids } })
+    .select('preferredDate preferredTime outlets notes message')
+    .lean()
+    .catch(() => []);
+  const byId = new Map<string, DemoFields>(inquiries.map(q => [String(q._id), q]));
+  return leads.map(l => {
+    const q = l.inquiryId ? byId.get(String(l.inquiryId)) : undefined;
+    if (!q) return l;
+    return {
+      ...l,
+      demo: {
+        preferredDate: q.preferredDate || '',
+        preferredTime: q.preferredTime || '',
+        outlets:       q.outlets || '',
+        notes:         q.notes || q.message || '',
+      },
+    };
+  });
+}
+
 // GET /superadmin/leads — paginated + filtered list
 router.get('/leads', superAdminAuth, async (req: Request, res: Response) => {
   try {
@@ -1655,7 +1684,7 @@ router.get('/leads', superAdminAuth, async (req: Request, res: Response) => {
       Lead.countDocuments(filter),
     ]);
 
-    return res.json({ leads, total, page, limit, pages: Math.ceil(total / limit) });
+    return res.json({ leads: await withDemoDetails(leads), total, page, limit, pages: Math.ceil(total / limit) });
   } catch (err) { return sendError(res, 500, 'Server error', err); }
 });
 
@@ -1665,7 +1694,8 @@ router.get('/leads/:id', superAdminAuth, async (req: Request, res: Response) => 
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid lead ID' });
     const lead = await Lead.findById(req.params.id).lean();
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
-    return res.json({ lead });
+    const [withDemo] = await withDemoDetails([lead]);
+    return res.json({ lead: withDemo });
   } catch (err) { return sendError(res, 500, 'Server error', err); }
 });
 

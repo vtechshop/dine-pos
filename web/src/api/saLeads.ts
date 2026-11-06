@@ -59,6 +59,13 @@ export interface Lead {
   notes?: string;
   timeline: LeadTimeline[];
   inquiryId?: string;
+  /** From the website booking form (attached by the server for website leads) */
+  demo?: {
+    preferredDate: string;   // YYYY-MM-DD, or '' when not chosen
+    preferredTime: string;   // e.g. "11:00 AM", or ''
+    outlets: string;
+    notes: string;           // "what would you like to see"
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -153,3 +160,14 @@ export const SOURCE_LABELS: Record<LeadSource, string> = {
   manual:          'Manual',
   other:           'Other',
 };
+
+/** "Mon, 10 Nov 2026 · 11:00 AM" from the booking form's date + time; "—" when neither was chosen. */
+export function fmtPreferred(date?: string, time?: string): string {
+  let d = date ?? '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+  if (m) {
+    d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+      .toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  return [d, time].filter(Boolean).join(' · ') || '—';
+}

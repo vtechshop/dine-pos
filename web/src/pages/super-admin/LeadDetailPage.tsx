@@ -9,7 +9,7 @@ import {
 } from '../../components/ui/SAShared';
 import {
   getLead, updateLead, addTimelineEntry, deleteLead,
-  type Lead, STATUS_LABELS, SOURCE_LABELS, STATUS_ORDER,
+  type Lead, STATUS_LABELS, SOURCE_LABELS, STATUS_ORDER, fmtPreferred,
 } from '../../api/saLeads';
 
 const PRIORITY_VARIANT = { high: 'red', medium: 'amber', low: 'gray' } as const;
@@ -180,6 +180,27 @@ export function LeadDetailPage() {
                 <SABadge label={SOURCE_LABELS[lead.source]} variant="gray" />
               </div>
             </div>
+
+            {/* What they filled in on the website booking form */}
+            {lead.demo && (
+              <div className="rounded-xl border border-brand/25 bg-brand/5 p-5 space-y-3" aria-label="Demo booking">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink/40">Demo booking</p>
+                <div className="space-y-1">
+                  <p className="text-xs text-ink/50">Preferred date &amp; time</p>
+                  <p className="text-sm font-medium text-ink">{fmtPreferred(lead.demo.preferredDate, lead.demo.preferredTime)}</p>
+                </div>
+                {lead.demo.outlets && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-ink/50">Outlets</p>
+                    <p className="text-sm text-ink">{lead.demo.outlets}</p>
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <p className="text-xs text-ink/50">Wants to see</p>
+                  <p className="text-sm text-ink whitespace-pre-wrap">{lead.demo.notes || '—'}</p>
+                </div>
+              </div>
+            )}
 
             {/* Editable fields */}
             <div className="rounded-xl border border-border bg-canvas p-5 space-y-4">
