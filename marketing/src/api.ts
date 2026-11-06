@@ -4,8 +4,6 @@ const API_BASE  = import.meta.env.VITE_API_URL as string | undefined;
 export interface InquiryResponse {
   message: string;
   id: string;
-  /** The WhatsApp link that was opened — shown as a button in case the new tab was blocked */
-  whatsappUrl?: string;
 }
 
 export interface DemoRequest {
@@ -36,29 +34,30 @@ export function demoWhatsAppUrl(body: DemoRequest): string {
   return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(lines)}`;
 }
 
+/**
+ * Saves the demo request (lead for the team + confirmation emails). Stays on the page —
+ * no WhatsApp tab. Throws with a readable message if it could not be saved.
+ */
 export const submitDemo = async (body: DemoRequest): Promise<InquiryResponse> => {
-  // Open WhatsApp immediately — must be synchronous with the user gesture
-  // so the browser does not treat it as a popup and block it.
-  const whatsappUrl = demoWhatsAppUrl(body);
-  window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-
-  // Persist to DB — saves lead, emits new_lead socket event to SA, sends confirmation emails.
-  // Fire after WhatsApp so the popup is never blocked, but await so the caller gets a proper id.
-  if (API_BASE) {
-    try {
-      const res = await fetch(`${API_BASE}/inquiries/demo`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
-      });
-      const data = (await res.json().catch(() => ({}))) as { message?: string; id?: string };
-      if (res.ok) {
-        return { message: data.message ?? 'Demo booked! We will confirm your slot shortly.', id: String(data.id ?? Date.now()), whatsappUrl };
-      }
-    } catch { /* non-fatal — WhatsApp already opened */ }
+  if (!API_BASE) {
+    throw new Error('Demo booking is not available right now. Please call or WhatsApp us on +91 63813 56683.');
   }
-
-  return { message: 'WhatsApp opened', id: Date.now().toString(), whatsappUrl };
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/inquiries/demo`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+  } catch {
+    throw new Error('Could not send your request — please check your internet and try again.');
+  }
+  const data = (await res.json().catch(() => ({}))) as { message?: string; id?: string };
+  if (!res.ok) {
+    // Show the server's reason for a form problem (e.g. invalid email); a plain message otherwise
+    throw new Error(res.status < 500 && data.message ? data.message : 'Could not send your request. Please try again in a minute.');
+  }
+  return { message: data.message ?? 'Demo booked! We will confirm your slot shortly.', id: String(data.id ?? Date.now()) };
 };
 
 export const submitContact = async (body: {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { CheckCircle2, Clock, Monitor, Headphones, MessageCircle } from 'lucide-react';
-import { submitDemo } from '../api';
+import { CheckCircle2, Clock, Monitor, Headphones } from 'lucide-react';
+import { submitDemo, demoWhatsAppUrl } from '../api';
 import { usePageSEO } from '../hooks/usePageSEO';
 
 interface FormState {
@@ -37,7 +37,7 @@ export function BookDemoPage() {
   );
   const [form, setForm]           = useState<FormState>(BLANK);
   const [submitted, setSubmitted] = useState(false);
-  const [waUrl, setWaUrl]         = useState('');
+  const [sending, setSending]     = useState(false);
   const [error, setError]         = useState('');
 
   function set(key: keyof FormState, value: string) {
@@ -51,23 +51,30 @@ export function BookDemoPage() {
       setError('Name, email and phone are required.');
       return;
     }
+    if (sending) return;
     setError('');
+    setSending(true);
     try {
-      const res = await submitDemo({
-        name:          form.name.trim(),
-        email:         form.email.trim(),
-        phone:         form.phone.trim(),
-        restaurant:    form.restaurant.trim() || undefined,
-        outlets:       form.outlets || undefined,
-        preferredDate: form.preferredDate || undefined,
-        preferredTime: form.preferredTime || undefined,
-        notes:         form.notes.trim() || undefined,
-      });
-      setWaUrl(res.whatsappUrl ?? '');
+      await submitDemo(demoBody());
       setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Submission failed. Please try again.');
+    } finally {
+      setSending(false);
     }
+  }
+
+  function demoBody() {
+    return {
+      name:          form.name.trim(),
+      email:         form.email.trim(),
+      phone:         form.phone.trim(),
+      restaurant:    form.restaurant.trim() || undefined,
+      outlets:       form.outlets || undefined,
+      preferredDate: form.preferredDate || undefined,
+      preferredTime: form.preferredTime || undefined,
+      notes:         form.notes.trim() || undefined,
+    };
   }
 
   const field =
@@ -128,26 +135,11 @@ export function BookDemoPage() {
           {submitted ? (
             <div className="flex flex-col items-center rounded-2xl border border-green-100 bg-green-50 px-6 py-14 text-center">
               <CheckCircle2 size={44} className="mb-4 text-green-500" />
-              <h3 className="mb-2 text-lg font-bold text-gray-900">WhatsApp is ready!</h3>
+              <h3 className="mb-2 text-lg font-bold text-gray-900">Demo request received!</h3>
               <p className="text-sm text-gray-500">
-                Your details are pre-filled in WhatsApp — just tap Send to confirm your demo slot.
-                We'll reply within a few hours.
+                Thanks{form.name.trim() ? `, ${form.name.trim()}` : ''}! Our team will call or message you on{' '}
+                <b className="text-gray-700">{form.phone.trim()}</b> within a few hours to confirm your demo slot.
               </p>
-              {/* In case the browser blocked the new tab or opened it in the background */}
-              {waUrl && (
-                <>
-                  <a
-                    href={waUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#25D366] px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#1ebe5b]"
-                  >
-                    <MessageCircle size={18} />
-                    Open WhatsApp
-                  </a>
-                  <p className="mt-2 text-xs text-gray-400">WhatsApp didn't open? Tap the button above.</p>
-                </>
-              )}
               <button
                 type="button"
                 onClick={() => { setForm(BLANK); setSubmitted(false); }}
@@ -159,8 +151,19 @@ export function BookDemoPage() {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
+                <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600" role="alert">
                   {error}
+                  {/* Only offered when sending failed, and only opens if they tap it */}
+                  {form.name.trim() && form.phone.trim() && (
+                    <a
+                      href={demoWhatsAppUrl(demoBody())}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 block font-semibold underline"
+                    >
+                      Or send your details on WhatsApp
+                    </a>
+                  )}
                 </div>
               )}
 
@@ -292,12 +295,13 @@ export function BookDemoPage() {
 
               <button
                 type="submit"
-                className="w-full rounded-xl bg-[#E8380D] px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#C93008]"
+                disabled={sending}
+                className="w-full rounded-xl bg-[#E8380D] px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#C93008] disabled:opacity-60"
               >
-                Book My Free Demo
+                {sending ? 'Booking…' : 'Book My Free Demo'}
               </button>
               <p className="text-center text-xs text-gray-400">
-                WhatsApp will open with your details — tap Send to confirm.
+                We'll call or message you to confirm your slot.
               </p>
             </form>
           )}
