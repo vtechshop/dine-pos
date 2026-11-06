@@ -45,7 +45,11 @@ export function StatusBar() {
 
   const load = useCallback(async () => {
     // Admin: whole day; cashier: own shift; other roles: no sales figures (they'd get 403)
-    const [r, d] = await Promise.allSettled([fetchSalesSummary(role), fetchPrinterDevices()]);
+    // Printer status is admin / cashier only on the server too.
+    const [r, d] = await Promise.allSettled([
+      fetchSalesSummary(role),
+      role === 'admin' || role === 'cashier' ? fetchPrinterDevices() : Promise.resolve([]),
+    ]);
     if (r.status === 'fulfilled') setReport(r.value);
     if (d.status === 'fulfilled') setDevices(d.value);
   }, [role]);

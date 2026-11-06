@@ -191,7 +191,7 @@ const CashierContext = createContext<CashierContextValue | null>(null);
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function CashierProvider({ children }: { children: ReactNode }) {
-  const { hotelId } = useAuth();
+  const { hotelId, role } = useAuth();
 
   // Hotel-scoped storage keys
   const shiftKey  = hotelId ? `pos_shift_${hotelId}`  : '';
@@ -440,7 +440,8 @@ export function CashierProvider({ children }: { children: ReactNode }) {
 
   // ── Sync active shift from API on mount ───────────────────────────────────
   useEffect(() => {
-    if (!hotelId) return;
+    // Shifts are admin / cashier only on the server; kitchen and waiter logins skip this
+    if (!hotelId || (role !== 'admin' && role !== 'cashier')) return;
     apiGetActiveShift()
       .then(({ shift: apiShift }) => {
         if (!apiShift) {
@@ -483,7 +484,7 @@ export function CashierProvider({ children }: { children: ReactNode }) {
         // API unavailable — keep localStorage state as offline fallback
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hotelId]);
+  }, [hotelId, role]);
 
   // ── Replay offline shift when browser reports connectivity restored ────────
   useEffect(() => {

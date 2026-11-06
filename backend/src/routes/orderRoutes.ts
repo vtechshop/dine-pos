@@ -1471,7 +1471,9 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
   if (!KNOWN_ROLES.includes(role ?? '')) {
     return res.status(403).json({ message: 'Access denied.' });
   }
-  if (role === 'kitchen' && !['preparing', 'ready'].includes(status)) {
+  // Kitchen cooks (preparing → ready) and may also hand a ready order over (→ served),
+  // for kitchens that serve without a waiter.
+  if (role === 'kitchen' && !['preparing', 'ready', 'served'].includes(status)) {
     return res.status(403).json({ message: 'Access denied.' });
   }
   if (role === 'waiter' && status !== 'served') {
@@ -1499,10 +1501,13 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     }
 
     // State machine: enforce valid source-state for each role's allowed transition
-    // Kitchen:  can only act on pending/preparing orders
+    // Kitchen:  can only act on pending/preparing orders, or serve a ready one
     // Waiter:   can only serve a ready order
     // Cashier:  can only complete a served order
-    if (role === 'kitchen' && !['pending', 'preparing'].includes(existing.status)) {
+    if (role === 'kitchen' && status === 'served' && existing.status !== 'ready') {
+      return res.status(400).json({ message: `Order must be ready before it can be served (current: ${existing.status}).` });
+    }
+    if (role === 'kitchen' && status !== 'served' && !['pending', 'preparing'].includes(existing.status)) {
       return res.status(400).json({ message: `Cannot update kitchen status from '${existing.status}'.` });
     }
     if (role === 'waiter' && existing.status !== 'ready') {
@@ -1972,7 +1977,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
 
     existing.status = status;
     if (status === 'served') {
-      existing.servedBy = req.waiterName || req.waiterId || '';
+      existing.servedBy = req.waiterName || req.waiterId || (role === 'kitchen' ? 'Kitchen' : '');
       existing.servedAt = new Date();
     }
     await existing.save();

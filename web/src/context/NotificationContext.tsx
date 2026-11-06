@@ -216,20 +216,26 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // Guard prevents polling on /login: unauthenticated API calls return 401,
   // which triggers window.location.replace('/login'), causing an infinite
   // hard-reload loop before the rate limiter kicks in with 429s.
+  // Printer status and the cashier order list are admin / cashier only on the server —
+  // other logins (kitchen, waiter) would only get 403s, so they skip those checks.
+  const counterRole = role === 'admin' || role === 'cashier';
+
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !counterRole) return;
     void pollPrinters();
     const t = setInterval(() => void pollPrinters(), 60_000);
     return () => clearInterval(t);
-  }, [pollPrinters, isAuthenticated]);
+  }, [pollPrinters, isAuthenticated, counterRole]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    void pollKitchen();
-    void pollPayments();
-    const t = setInterval(() => { void pollKitchen(); void pollPayments(); }, 30_000);
+    const kitchenCheck = counterRole || role === 'kitchen';
+    if (!kitchenCheck) return;
+    const poll = () => { void pollKitchen(); if (counterRole) void pollPayments(); };
+    poll();
+    const t = setInterval(poll, 30_000);
     return () => clearInterval(t);
-  }, [pollKitchen, pollPayments, isAuthenticated]);
+  }, [pollKitchen, pollPayments, isAuthenticated, counterRole, role]);
 
   // ── Context value ─────────────────────────────────────────────────────────
   const notifications = Array.from(notifMap.values())

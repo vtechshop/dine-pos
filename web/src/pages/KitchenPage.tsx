@@ -430,6 +430,10 @@ export function KitchenPage() {
     setError(null);
     try {
       await updateOrderStatus(orderId, newStatus);
+      // Served orders leave the kitchen — drop the card now, don't wait for the reload
+      setOrders(prev => newStatus === 'served'
+        ? prev.filter(o => o._id !== orderId)
+        : prev.map(o => (o._id === orderId ? { ...o, status: newStatus as KDSOrderExtended['status'] } : o)));
       void load();
     } catch (e) {
       void load();
@@ -524,7 +528,7 @@ export function KitchenPage() {
   const zomatoCount = orders.filter(o => o.orderSource === 'zomato' && (o.status === 'pending' || o.status === 'preparing')).length;
 
   const refreshedLabel = lastRefreshed
-    ? `Updated ${Math.round((now - lastRefreshed) / 1000)}s ago`
+    ? `Updated ${Math.max(0, Math.round((now - lastRefreshed) / 1000))}s ago`
     : 'Loading…';
 
   // Leftover orders (placed > 1 day ago, never closed). Swiggy/Zomato orders are
