@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, memo, useMemo } from 'react';
-import { RefreshCw, ChefHat, Clock, Check, X, Truck, MapPin, ChevronDown, Trash2, Package } from 'lucide-react';
+import { RefreshCw, ChefHat, Clock, Check, X, Truck, MapPin, ChevronDown, Trash2, Package, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { KDSOrder } from '../types';
 import { fetchKitchenOrders, updateOrderStatus, cancelOrder } from '../api/orders';
@@ -10,6 +10,12 @@ import type { KitchenStation } from '../api/kitchenStations';
 import { Spinner } from '../components/ui/Spinner';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
+
+/** Does this order line match the search (dish or add-on name)? `q` is lower-case. */
+function dishMatches(item: { productName: string; selectedModifiers?: { modifierOptionName: string }[] }, q: string): boolean {
+  return item.productName.toLowerCase().includes(q) ||
+    (item.selectedModifiers ?? []).some(m => m.modifierOptionName.toLowerCase().includes(q));
+}
 
 const DELAYED_MINUTES   = 20;
 const OLD_ORDER_MINUTES = 24 * 60;
@@ -127,6 +133,8 @@ interface OrderCardProps {
   onReject(id: string, platformOrderId: string, source: string, reason: string): void;
   onDispatch(id: string, platformOrderId: string, source: string): void;
   acting: boolean;
+  /** Search text — dishes that match are highlighted. */
+  query?: string;
 }
 
 const OrderCard = memo(function OrderCard({
@@ -137,6 +145,7 @@ const OrderCard = memo(function OrderCard({
   onReject,
   onDispatch,
   acting,
+  query = '',
 }: OrderCardProps) {
   const [showReject, setShowReject] = useState(false);
   const [rejecting,  setRejecting]  = useState(false);
@@ -239,7 +248,7 @@ const OrderCard = memo(function OrderCard({
       <ul className="flex-1 space-y-1.5 px-4 py-3">
         {order.items.map((item, i) => (
           <li key={i} className="text-sm text-ink">
-            <div className="flex items-baseline gap-2">
+            <div className={`flex items-baseline gap-2 ${query && dishMatches(item, query) ? '-mx-1.5 rounded bg-yellow-200/70 px-1.5 font-semibold' : ''}`}>
               <span className="w-5 shrink-0 text-right font-bold text-brand">{item.quantity}×</span>
               <span>{item.productName}</span>
             </div>
@@ -355,6 +364,7 @@ export function KitchenPage() {
   const [acting,        setActing]        = useState(false);
   const [now,           setNow]           = useState(() => Date.now());
   const [lastRefreshed, setLastRefreshed] = useState<number | null>(null);
+  const [search,        setSearch]        = useState('');
 
   // ── Station filter ────────────────────────────────────────────────────────────
   const [stations,         setStations]         = useState<KitchenStation[]>([]);
@@ -488,9 +498,27 @@ export function KitchenPage() {
       .filter(o => o.items.length > 0);
   }, [orders, selectedStation, stationProductIds]);
 
-  const pending   = visibleOrders.filter(o => o.status === 'pending');
-  const preparing = visibleOrders.filter(o => o.status === 'preparing');
-  const ready     = visibleOrders.filter(o => o.status === 'ready');
+  // Search: a dish (or add-on) name, order number, table or customer
+  const q = search.trim().toLowerCase();
+  const searchedOrders = useMemo(() => {
+    if (!q) return visibleOrders;
+    return visibleOrders.filter(o =>
+      o.items.some(item => dishMatches(item, q)) ||
+      o.orderNumber.toLowerCase().includes(q) ||
+      String(o.tableNumber ?? '').toLowerCase() === q.replace(/^table\s*/, '') ||
+      (o.customerName ?? '').toLowerCase().includes(q),
+    );
+  }, [visibleOrders, q]);
+  // How many of the matching dish are still to cook (pending + preparing)
+  const dishesToMake = q
+    ? searchedOrders
+        .filter(o => o.status === 'pending' || o.status === 'preparing')
+        .reduce((n, o) => n + o.items.filter(item => dishMatches(item, q)).reduce((s, item) => s + item.quantity, 0), 0)
+    : 0;
+
+  const pending   = searchedOrders.filter(o => o.status === 'pending');
+  const preparing = searchedOrders.filter(o => o.status === 'preparing');
+  const ready     = searchedOrders.filter(o => o.status === 'ready');
 
   const swiggyCount = orders.filter(o => o.orderSource === 'swiggy' && (o.status === 'pending' || o.status === 'preparing')).length;
   const zomatoCount = orders.filter(o => o.orderSource === 'zomato' && (o.status === 'pending' || o.status === 'preparing')).length;
@@ -524,7 +552,7 @@ export function KitchenPage() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-border bg-canvas px-5 py-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border bg-canvas px-5 py-3">
         <div className="flex items-center gap-3 min-w-0">
           <ChefHat size={18} className="text-brand shrink-0" />
           <h1 className="text-base font-semibold text-ink">Kitchen Display</h1>
@@ -544,6 +572,28 @@ export function KitchenPage() {
             </span>
           )}
         </div>
+        {/* Search orders by dish, order #, table or customer */}
+        <div className="relative ml-auto w-full sm:w-56">
+          <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/30" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search dish, order or table…"
+            aria-label="Search kitchen orders"
+            className="h-8 w-full rounded-lg border border-border bg-canvas pl-8 pr-7 text-xs text-ink outline-none placeholder:text-ink/35 focus:border-brand/50"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              aria-label="Clear search"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-ink/40 hover:text-ink"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
         {/* Station filter */}
         {stations.length > 0 && (
           <div className="relative">
@@ -653,6 +703,16 @@ export function KitchenPage() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto p-5">
+          {q && (
+            <p className="mb-4 rounded-lg border border-border bg-mist px-4 py-2 text-xs text-ink/70" role="status">
+              {searchedOrders.length === 0
+                ? <>No orders with “{search.trim()}”.</>
+                : <>
+                    {searchedOrders.length} order{searchedOrders.length === 1 ? ' matches' : 's match'} “{search.trim()}”
+                    {dishesToMake > 0 && <> · <b className="text-ink">{dishesToMake}</b> to make (pending + preparing)</>}
+                  </>}
+            </p>
+          )}
           <div className="grid gap-5 lg:grid-cols-3">
             {/* Pending column */}
             <div>
@@ -676,6 +736,7 @@ export function KitchenPage() {
                       onReject={handleReject}
                       onDispatch={handleDispatch}
                       acting={acting}
+                      query={q}
                     />
                   ))
                 )}
@@ -704,6 +765,7 @@ export function KitchenPage() {
                       onReject={handleReject}
                       onDispatch={handleDispatch}
                       acting={acting}
+                      query={q}
                     />
                   ))
                 )}
@@ -732,6 +794,7 @@ export function KitchenPage() {
                       onReject={handleReject}
                       onDispatch={handleDispatch}
                       acting={acting}
+                      query={q}
                     />
                   ))
                 )}
