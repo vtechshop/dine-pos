@@ -304,3 +304,6 @@ describe('MB-S1-36 to MB-S1-40: JWT and auth scope', () => {
     expect(validateAdminPasswordPolicy('securePass1!')).toBe(true);
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

@@ -567,3 +567,6 @@ describe('MB-S3-45 to MB-S3-47: Tally, WhatsApp, single-branch preserved', () =>
     expect(shouldInherit).toBe(false);
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};
