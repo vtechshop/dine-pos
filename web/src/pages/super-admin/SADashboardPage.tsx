@@ -463,11 +463,11 @@ export function SADashboardPage() {
   const expiringTrials = getExpiringTrials(data!.pendingRenewals);
 
   const statusCards = [
-    { label: 'Total',     value: s.total,     border: 'border-brand/25',  bg: 'bg-brand/5',   text: 'text-brand',     to: '/super-admin/hotels' },
-    { label: 'Pending',   value: s.pending,   border: 'border-amber-200', bg: 'bg-amber-50',  text: 'text-amber-700', to: '/super-admin/hotels?status=pending' },
-    { label: 'Trial',     value: s.trial,     border: 'border-blue-200',  bg: 'bg-blue-50',   text: 'text-blue-700',  to: '/super-admin/hotels?status=trial' },
-    { label: 'Active',    value: s.active,    border: 'border-green-200', bg: 'bg-green-50',  text: 'text-green-700', to: '/super-admin/hotels?status=active' },
-    { label: 'Suspended', value: s.suspended, border: 'border-red-200',   bg: 'bg-red-50',    text: 'text-red-700',   to: '/super-admin/hotels?status=suspended' },
+    { label: 'Total',     hint: 'All registered hotels',     value: s.total,     border: 'border-brand/25',  bg: 'bg-brand/5',   text: 'text-brand',     to: '/super-admin/hotels' },
+    { label: 'Pending',   hint: 'Waiting for your approval', value: s.pending,   border: 'border-amber-200', bg: 'bg-amber-50',  text: 'text-amber-700', to: '/super-admin/hotels?status=pending' },
+    { label: 'Trial',     hint: 'Approved, on free trial',   value: s.trial,     border: 'border-blue-200',  bg: 'bg-blue-50',   text: 'text-blue-700',  to: '/super-admin/hotels?status=trial' },
+    { label: 'Active',    hint: 'Paid subscribers',          value: s.active,    border: 'border-green-200', bg: 'bg-green-50',  text: 'text-green-700', to: '/super-admin/hotels?status=active' },
+    { label: 'Suspended', hint: 'Blocked by you',            value: s.suspended, border: 'border-red-200',   bg: 'bg-red-50',    text: 'text-red-700',   to: '/super-admin/hotels?status=suspended' },
   ];
 
   const subCount = subRev
@@ -531,7 +531,7 @@ export function SADashboardPage() {
 
       {/* ── Row 1: Hotel status KPIs ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {statusCards.map(({ label, value, border, bg, text, to }) => (
+        {statusCards.map(({ label, hint, value, border, bg, text, to }) => (
           <Link
             key={label}
             to={to}
@@ -539,6 +539,7 @@ export function SADashboardPage() {
           >
             <p className="text-xs font-medium text-ink/50">{label}</p>
             <p className={`mt-1 text-3xl font-bold tabular-nums ${text}`}>{value}</p>
+            <p className="mt-1 text-[11px] leading-tight text-ink/45">{hint}</p>
           </Link>
         ))}
       </div>
