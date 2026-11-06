@@ -1,13 +1,13 @@
 // M2 — Demo Requests (filtered view of leads with source=website_demo)
 
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   SAPageHeader, SABadge, SASpin, SAError, fmtAgo,
 } from '../../components/ui/SAShared';
 import {
-  getLeads, type Lead, type LeadsFilter, STATUS_LABELS, STATUS_ORDER,
+  getLeads, type Lead, type LeadsFilter, STATUS_LABELS, STATUS_ORDER, fmtPreferred,
 } from '../../api/saLeads';
 
 const STATUS_VARIANT: Record<string, 'green' | 'blue' | 'red' | 'amber' | 'gray'> = {
@@ -20,6 +20,7 @@ const STATUS_VARIANT: Record<string, 'green' | 'blue' | 'red' | 'amber' | 'gray'
 };
 
 export function DemoRequestsPage() {
+  const navigate = useNavigate();
   const [leads,   setLeads]   = useState<Lead[]>([]);
   const [total,   setTotal]   = useState(0);
   const [pages,   setPages]   = useState(1);
@@ -87,16 +88,25 @@ export function DemoRequestsPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-mist/50 sticky top-0">
                 <tr>
-                  {['Restaurant', 'Owner', 'Phone', 'Email', 'Preferred Date', 'Status', 'Priority', 'Received'].map(h => (
+                  {['Restaurant', 'Owner', 'Phone', 'Email', 'Preferred Slot', 'Status', 'Priority', 'Received'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-ink/40">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {leads.map(lead => (
-                  <tr key={lead._id} className="border-b border-border/50 hover:bg-mist/30 transition">
+                  <tr
+                    key={lead._id}
+                    // The whole row opens the request (not just the restaurant name)
+                    onClick={() => navigate(`/super-admin/leads/${lead._id}`)}
+                    className="cursor-pointer border-b border-border/50 hover:bg-mist/40 transition"
+                  >
                     <td className="px-4 py-3">
-                      <Link to={`/super-admin/leads/${lead._id}`} className="font-medium text-brand hover:underline">
+                      <Link
+                        to={`/super-admin/leads/${lead._id}`}
+                        onClick={e => e.stopPropagation()}
+                        className="font-medium text-brand hover:underline"
+                      >
                         {lead.companyName}
                       </Link>
                       {lead.city && <p className="text-xs text-ink/40">{lead.city}</p>}
@@ -104,7 +114,9 @@ export function DemoRequestsPage() {
                     <td className="px-4 py-3 text-ink/80">{lead.ownerName}</td>
                     <td className="px-4 py-3 font-mono text-xs">{lead.phone}</td>
                     <td className="px-4 py-3 text-xs text-ink/60">{lead.email}</td>
-                    <td className="px-4 py-3 text-xs text-ink/60">{lead.restaurantType || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-ink/60 whitespace-nowrap">
+                      {fmtPreferred(lead.demo?.preferredDate, lead.demo?.preferredTime)}
+                    </td>
                     <td className="px-4 py-3">
                       <SABadge label={STATUS_LABELS[lead.status]} variant={STATUS_VARIANT[lead.status] ?? 'gray'} />
                     </td>
