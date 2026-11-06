@@ -611,3 +611,6 @@ describe('MB-S4 Org report product breakdown', () => {
   });
 
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

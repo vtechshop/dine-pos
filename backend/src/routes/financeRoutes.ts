@@ -5,6 +5,7 @@ import Expense from '../models/Expense';
 import WasteLog from '../models/WasteLog';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { sendError } from '../utils/sendError';
+import { REVENUE_FILTER } from '../utils/revenue';
 
 const router = Router();
 router.use(authMiddleware);
@@ -74,7 +75,7 @@ router.get('/dashboard', async (req: AuthRequest, res: Response) => {
 
     const matchOrders: mongoose.FilterQuery<typeof Order> = {
       hotelId,
-      status: { $ne: 'cancelled' },
+      ...REVENUE_FILTER,
       createdAt: { $gte: start, $lte: end },
     };
 
@@ -160,7 +161,7 @@ router.get('/menu-profitability', async (req: AuthRequest, res: Response) => {
 
     const matchOrders: mongoose.FilterQuery<typeof Order> = {
       hotelId,
-      status: { $ne: 'cancelled' },
+      ...REVENUE_FILTER,
       createdAt: { $gte: start, $lte: end },
     };
 
@@ -321,7 +322,7 @@ router.get('/cogs-trend', async (req: AuthRequest, res: Response) => {
 
     const matchOrders: mongoose.FilterQuery<typeof Order> = {
       hotelId,
-      status: { $ne: 'cancelled' },
+      ...REVENUE_FILTER,
       createdAt: { $gte: start, $lte: end },
     };
 

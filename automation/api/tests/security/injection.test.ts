@@ -2,6 +2,7 @@ import { api } from '../../../utils/api-client';
 import { authHeaders } from '../../../utils/env';
 import { getHotelA } from '../../setup/testEnv';
 import { nosqlInjectionPayloads, sqlInjectionStrings } from '../../../utils/test-data';
+import { productLine } from '../../helpers/order.helper';
 
 describe('Security — Injection Attacks', () => {
   let adminToken: string;
@@ -62,10 +63,10 @@ describe('Security — Injection Attacks', () => {
           tableNumber: 'T1',
           customerName: injection,
           orderSource: 'dine-in',
-          items: [{ productName: 'Dish', quantity: 1, price: 100, total: 100 }],
-          subtotal: 100,
-          taxTotal: 9,
-          grandTotal: 109,
+          items: [productLine(getHotelA(), 0, 1)],
+          subtotal: 180,
+          taxTotal: 0,
+          grandTotal: 180,
           paymentMethod: 'cash',
           offlineId: `inj-test-${Date.now()}-${Math.random()}`,
         });

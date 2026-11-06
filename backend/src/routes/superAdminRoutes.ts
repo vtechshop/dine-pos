@@ -34,6 +34,7 @@ import {
 } from '../services/razorpaySubscriptionService';
 import { io } from '../server';
 import { Expo } from 'expo-server-sdk';
+import { REVENUE_FILTER } from '../utils/revenue';
 
 
 if (!process.env.SUPER_ADMIN_JWT_SECRET || process.env.SUPER_ADMIN_JWT_SECRET.length < 32) {
@@ -46,6 +47,7 @@ const router = Router();
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
 
 const adminLoginLimiter = makeRateLimiter({
+  name: 'sa:login',
   windowMs: 15 * 60 * 1000,
   max: 10,
   skip: () => process.env.NODE_ENV === 'test',
@@ -846,7 +848,7 @@ router.get('/branch-revenue', superAdminAuth, async (req: Request, res: Response
 
     const activeHotels = await Hotel.find({ status: { $in: ['active', 'trial'] } }).select('_id hotelName city').lean();
     const revenueByHotel = await Order.aggregate([
-      { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: start, $lte: end } } },
+      { $match: { ...REVENUE_FILTER, createdAt: { $gte: start, $lte: end } } },
       { $group: { _id: '$hotelId', revenue: { $sum: '$grandTotal' }, orders: { $sum: 1 }, avgOrder: { $avg: '$grandTotal' } } },
     ]);
     const revenueMap = new Map(revenueByHotel.map((r: any) => [r._id.toString(), r]));
@@ -869,7 +871,7 @@ router.get('/analytics', superAdminAuth, async (req: Request, res: Response) => 
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999);
 
-    const matchFilter: any = { status: { $ne: 'cancelled' }, createdAt: { $gte: todayStart, $lte: todayEnd } };
+    const matchFilter: any = { ...REVENUE_FILTER, createdAt: { $gte: todayStart, $lte: todayEnd } };
     if (hotelId) {
       const mongoose = await import('mongoose');
       if (mongoose.default.Types.ObjectId.isValid(hotelId)) {
@@ -1162,12 +1164,12 @@ router.get('/dashboard', superAdminAuth, async (_req: Request, res: Response) =>
       Hotel.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
 
       Order.aggregate([
-        { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: todayStart } } },
+        { $match: { ...REVENUE_FILTER, createdAt: { $gte: todayStart } } },
         { $group: { _id: null, total: { $sum: '$grandTotal' } } },
       ]),
 
       Order.aggregate([
-        { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: monthStart } } },
+        { $match: { ...REVENUE_FILTER, createdAt: { $gte: monthStart } } },
         { $group: { _id: null, total: { $sum: '$grandTotal' } } },
       ]),
 
@@ -1574,7 +1576,7 @@ router.get('/dashboard/top-hotels', superAdminAuth, async (req: Request, res: Re
       : { $sum: 1 };
 
     const results = await Order.aggregate([
-      { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: startDate } } },
+      { $match: { ...REVENUE_FILTER, createdAt: { $gte: startDate } } },
       { $group: { _id: '$hotelId', value: valueExpr } },
       { $sort: { value: -1 } },
       { $limit: limit },
@@ -1861,7 +1863,7 @@ router.get('/analytics/revenue', superAdminAuth, async (req: Request, res: Respo
 
     const [dailyRev, totalOrders, totalRevenue] = await Promise.all([
       Order.aggregate([
-        { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: from } } },
+        { $match: { ...REVENUE_FILTER, createdAt: { $gte: from } } },
         {
           $group: {
             _id: {
@@ -1877,7 +1879,7 @@ router.get('/analytics/revenue', superAdminAuth, async (req: Request, res: Respo
       ]),
       Order.countDocuments({ status: { $ne: 'cancelled' }, createdAt: { $gte: from } }),
       Order.aggregate([
-        { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: from } } },
+        { $match: { ...REVENUE_FILTER, createdAt: { $gte: from } } },
         { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
       ]),
     ]);

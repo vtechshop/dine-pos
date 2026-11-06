@@ -1,4 +1,5 @@
 import { db } from './db';
+import { assertOfflineQueueable } from '../sync/offlineRules';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -98,6 +99,9 @@ export const enqueueOrder = (
   payload: object,
   afterCreate: AfterCreate = { markServed: true, complete: true },
 ): void => {
+  // Wallet / loyalty / online payments are never queued offline (server must
+  // check a live balance). Throws OfflineNotAllowedError — callers show it.
+  assertOfflineQueueable(payload as Record<string, unknown>);
   const safe = { ...(payload as Record<string, unknown>) };
   for (const field of STRIP_FIELDS) delete safe[field];
 
@@ -161,6 +165,7 @@ export const markRetry = (
   error: string,
   errorCode: string,
   nextAttemptAt: number,
+  serverId: string | null = null,
 ): void => {
   const row = db.getFirstSync<{ retry_count: number }>(
     `SELECT retry_count FROM cashier_order_queue WHERE hotel_id = ? AND offline_id = ?`,
@@ -171,9 +176,10 @@ export const markRetry = (
 
   db.runSync(
     `UPDATE cashier_order_queue
-     SET status = ?, retry_count = ?, next_attempt_at = ?, last_error = ?, error_code = ?
+     SET status = ?, retry_count = ?, next_attempt_at = ?, last_error = ?, error_code = ?,
+         server_id = COALESCE(?, server_id)
      WHERE hotel_id = ? AND offline_id = ?`,
-    [newStatus, retryCount, nextAttemptAt, error, errorCode, hotelId, offlineId],
+    [newStatus, retryCount, nextAttemptAt, error, errorCode, serverId, hotelId, offlineId],
   );
 };
 
@@ -182,13 +188,44 @@ export const markFailed = (
   offlineId: string,
   error: string,
   errorCode: string,
+  serverId: string | null = null,
 ): void => {
   db.runSync(
     `UPDATE cashier_order_queue
-     SET status = 'failed', last_error = ?, error_code = ?
+     SET status = 'failed', last_error = ?, error_code = ?, server_id = COALESCE(?, server_id)
      WHERE hotel_id = ? AND offline_id = ?`,
-    [error, errorCode, hotelId, offlineId],
+    [error, errorCode, serverId, hotelId, offlineId],
   );
+};
+
+/**
+ * Login expired / subscription blocked: keep the bill pending WITHOUT counting a
+ * retry (staff re-login must never turn a paid bill into 'failed').
+ */
+export const markAuthBlocked = (
+  hotelId: string,
+  offlineId: string,
+  error: string,
+  errorCode: string,
+  serverId: string | null = null,
+): void => {
+  db.runSync(
+    `UPDATE cashier_order_queue
+     SET status = 'pending', next_attempt_at = NULL, last_error = ?, error_code = ?,
+         server_id = COALESCE(?, server_id)
+     WHERE hotel_id = ? AND offline_id = ?`,
+    [error, errorCode, serverId, hotelId, offlineId],
+  );
+};
+
+/** Earliest scheduled retry among pending bills (ms epoch), or null. */
+export const nextDueAt = (hotelId: string): number | null => {
+  const row = db.getFirstSync<{ due: number | null }>(
+    `SELECT MIN(next_attempt_at) AS due FROM cashier_order_queue
+     WHERE hotel_id = ? AND status = 'pending' AND next_attempt_at IS NOT NULL`,
+    [hotelId],
+  );
+  return row?.due ?? null;
 };
 
 // ── Crash recovery ────────────────────────────────────────────────────────────

@@ -531,3 +531,7 @@ describe('B-06 — GRN cancellation: WAC/costPerUnit reversal', () => {
     expect(prevCostPerUnit).not.toBe(newCost); // confirms snapshot was taken before WAC update
   });
 });
+
+// Module scope: without an import/export, ts-jest compiles this file as a
+// global script and its top-level consts collide with other such files.
+export {};

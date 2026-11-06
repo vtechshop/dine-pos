@@ -1,8 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import { api } from '../../utils/api-client';
 import { authHeaders } from '../../utils/env';
+import { getTestState, HotelState } from '../setup/testEnv';
 
 export interface OrderItem {
+  /** Product id — required: POS order lines must reference a product of the hotel. */
+  product?: string;
   productName: string;
   quantity: number;
   price: number;
@@ -19,18 +22,35 @@ export interface CreateOrderOptions {
   offlineId?: string;
 }
 
-function defaultItems(): OrderItem[] {
-  return [
-    { productName: 'Paneer Masala', quantity: 2, price: 180, total: 360 },
-    { productName: 'Naan', quantity: 2, price: 30, total: 60 },
-  ];
+/** Hotel (A or B) the JWT belongs to. Payload is decoded, not verified — test helper only. */
+export function hotelForToken(token: string): HotelState {
+  const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+  const state = getTestState();
+  const hotel = [state.hotelA, state.hotelB].find(h => h.hotelId === payload.hotelId);
+  if (!hotel) throw new Error(`[order.helper] token does not belong to a seeded test hotel (${payload.hotelId})`);
+  return hotel;
+}
+
+/**
+ * An order line linked to one of the hotel's seeded products (globalSetup:
+ * [0] Paneer Masala ₹180, [1] Naan ₹30). The server prices lines from the DB
+ * and rejects lines without a product (422).
+ */
+export function productLine(hotel: HotelState, index: 0 | 1, quantity = 1): OrderItem {
+  const p = hotel.products[index];
+  return { product: p.id, productName: p.name, quantity, price: p.price, total: p.price * quantity };
+}
+
+function defaultItems(token: string): OrderItem[] {
+  const hotel = hotelForToken(token);
+  return [productLine(hotel, 0, 2), productLine(hotel, 1, 2)];
 }
 
 export async function createOrder(
   token: string,
   options: CreateOrderOptions = {}
 ): Promise<{ orderId: string; orderNumber: string; body: any }> {
-  const items = options.items || defaultItems();
+  const items = options.items || defaultItems(token);
   const subtotal = items.reduce((s, i) => s + i.total, 0);
   const taxTotal = Math.round(subtotal * 0.09 * 100) / 100;
 

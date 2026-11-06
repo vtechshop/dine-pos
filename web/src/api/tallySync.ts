@@ -1,4 +1,9 @@
-const BASE = `${import.meta.env.VITE_API_URL ?? 'http://localhost:5000/api'}/integrations/tally`;
+import { apiFetch as sharedApiFetch } from './client';
+
+// Tally admin endpoints require the admin JWT. The old local fetch sent only
+// cookies (credentials:'include'), which the backend never reads → every call
+// was 401, so the connector token could not even be generated from the web UI.
+const TALLY_PREFIX = '/integrations/tally';
 
 export interface TallyLedgerMap {
   salesLedger:       string;
@@ -56,17 +61,8 @@ export interface TallySyncJobsResponse {
   pages: number;
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as any).message ?? `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
+function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  return sharedApiFetch<T>(`${TALLY_PREFIX}${path}`, init);
 }
 
 export function fetchTallyConfig(): Promise<TallyConfig> {

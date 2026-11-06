@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { ipKeyGenerator } from 'express-rate-limit';
+import { makeRateLimiter } from '../utils/rateLimiter';
 import Order from '../models/Order';
 import Payment from '../models/Payment';
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
@@ -10,10 +11,12 @@ import { ensureValidOAuthConfig } from '../services/payment/razorpayTokenRefresh
 import { io } from '../server';
 import { scheduleKOTPrint } from '../utils/printUtils';
 import { logger } from '../utils/logger';
+import { releasePaidOnlineOrder, canReleasePaidOrder } from '../utils/onlinePayment';
 
 const router = Router();
 
-const publicPaymentLimiter = rateLimit({
+const publicPaymentLimiter = makeRateLimiter({
+  name: 'pub:pay',
   windowMs: 60_000,
   max: 10,
   keyGenerator: (req: any) => `pub:pay:${ipKeyGenerator(req.ip ?? '')}`,
@@ -85,11 +88,29 @@ router.post('/razorpay-order', publicPaymentLimiter, async (req: Request, res: R
   if (!mongoose.Types.ObjectId.isValid(hotelId) || !mongoose.Types.ObjectId.isValid(orderId)) {
     return res.status(400).json({ message: 'Invalid hotelId or orderId' });
   }
+  // Bills are in INR. A client-chosen currency (e.g. IDR 500) would let the
+  // paise-equality check pass for a fraction of the real amount.
+  if (String(currency).toUpperCase() !== 'INR') {
+    return res.status(400).json({ message: 'Only INR payments are supported' });
+  }
 
   try {
     // Validate order belongs to this hotel
     const order = await Order.findOne({ _id: orderId, hotelId });
     if (!order) return res.status(404).json({ message: 'Order not found' });
+    // Only prepaid QR/kiosk orders waiting for payment can be paid here.
+    if (order.status !== 'payment_pending') {
+      return res.status(409).json({ message: 'This order is not awaiting online payment' });
+    }
+    // R2: never start a charge for an order whose table guest / session is already
+    // closed — the order could no longer be served or billed.
+    const releasable = await canReleasePaidOrder({ hotelId: order.hotelId, sessionId: order.sessionId, guestId: order.guestId });
+    if (!releasable.ok) {
+      return res.status(409).json({
+        code:    'TABLE_ALREADY_BILLED',
+        message: 'This table has already been billed, so this order can no longer be paid online. Please ask the staff.',
+      });
+    }
 
     // Enforce amount matches order total — prevents underpayment via crafted requests
     if (Math.round(amount * 100) !== Math.round((order.grandTotal || 0) * 100)) {
@@ -193,6 +214,19 @@ router.post('/razorpay-order', publicPaymentLimiter, async (req: Request, res: R
 // Atomically transitions the order from payment_pending → pending and emits new_order.
 // Idempotent: safe if called multiple times or if webhook arrives first.
 
+// Customer-facing answer when a payment succeeded but the order can no longer
+// go to the kitchen (table already billed / order cancelled).
+function lateSuccessBody(reason: string) {
+  return {
+    success: false,
+    code:    'PAYMENT_RECEIVED_ORDER_NOT_RELEASED',
+    reason,
+    message: 'Your payment was received, but this order can no longer be sent to the kitchen '
+           + (reason === 'order_cancelled' ? '(it was cancelled). ' : '(the table was already billed). ')
+           + 'Please show this message to the staff.',
+  };
+}
+
 router.post('/qr-verify', publicPaymentLimiter, async (req: Request, res: Response) => {
   const {
     razorpay_payment_id,
@@ -240,15 +274,13 @@ router.post('/qr-verify', publicPaymentLimiter, async (req: Request, res: Respon
     // saved pay.success but crashed before releasing the order). In the crash case
     // the order is still payment_pending — attempt release so it is not stuck forever.
     if (pay.status === 'success') {
-      const recoverReleased = await Order.findOneAndUpdate(
-        {
-          _id:     new mongoose.Types.ObjectId(orderId),
-          hotelId: new mongoose.Types.ObjectId(hotelId),
-          status:  'payment_pending',
-        },
-        { $set: { status: 'pending', transactionId: pay.gatewayTransactionId, paymentTime: new Date() } },
-        { new: true },
+      // R2: released only while the table guest / session is still open
+      // (utils/onlinePayment.ts); otherwise recorded for reconciliation.
+      const { released: recoverReleased, blocked: recoverBlocked } = await releasePaidOnlineOrder(
+        hotelId, orderId, { transactionId: pay.gatewayTransactionId, paymentTime: new Date() },
+        'qr-verify-recovery', String(pay._id),
       );
+      if (recoverBlocked) return res.status(409).json(lateSuccessBody(recoverBlocked));
       if (recoverReleased) {
         try {
           io.to(`hotel_${hotelId}`).emit('new_order', {
@@ -319,16 +351,14 @@ router.post('/qr-verify', publicPaymentLimiter, async (req: Request, res: Respon
     if (result.paymentMethod) pay.paymentMethod = result.paymentMethod;
     await pay.save();
 
-    // Atomically release the order from payment_pending — only first caller wins
-    const released = await Order.findOneAndUpdate(
-      {
-        _id:     new mongoose.Types.ObjectId(orderId),
-        hotelId: new mongoose.Types.ObjectId(hotelId),
-        status:  'payment_pending',
-      },
-      { $set: { status: 'pending', transactionId: razorpay_payment_id, paymentTime: new Date() } },
-      { new: true },
+    // Atomically release the order from payment_pending — only first caller wins.
+    // R2: not released after the table guest / session was closed or the order
+    // was cancelled; the payment is kept and flagged for reconciliation.
+    const { released, blocked } = await releasePaidOnlineOrder(
+      hotelId, orderId, { transactionId: razorpay_payment_id, paymentTime: new Date() },
+      'qr-verify', String(pay._id),
     );
+    if (blocked) return res.status(409).json(lateSuccessBody(blocked));
 
     if (released) {
       try {

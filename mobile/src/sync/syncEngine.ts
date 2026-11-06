@@ -17,6 +17,8 @@ import {
   markSynced as cashierMarkSynced,
   markRetry,
   markFailed as cashierMarkFailed,
+  markAuthBlocked,
+  nextDueAt,
   resetStaleSyncing,
   pruneSynced,
   backoffDelayMs,
@@ -24,6 +26,7 @@ import {
 } from '../database/cashierOrderQueueDao';
 import { getAuthCache } from '../database/authDao';
 import { registerAuthReadyHandler } from '../utils/authEvents';
+import { classifyError, submitCashierBill } from './offlineRules';
 
 export type SyncStatus = 'offline' | 'online' | 'syncing' | 'synced' | 'error';
 export type SyncListener = (status: SyncStatus, pendingCount: number, lastSyncAt: Date | null, error?: string) => void;
@@ -59,54 +62,7 @@ const deriveStatus = (): SyncStatus => {
 
 // ── Error classification ──────────────────────────────────────────────────────
 
-type SyncErrorKind = 'retryable' | 'auth' | 'permanent';
-
-interface ClassifiedError {
-  kind: SyncErrorKind;
-  code: string;
-  reason: string;
-}
-
-const INTERNAL_DETAIL = /E11000|mongo|ObjectId|Cast to|stack|\bat \S+ \(|ECONN|ValidationError:/i;
-
-function readableReason(message: string | undefined, fallback: string): string {
-  const firstLine = String(message ?? '').split('\n')[0].trim();
-  if (!firstLine || INTERNAL_DETAIL.test(firstLine) || /^HTTP \d{3}$/.test(firstLine)) return fallback;
-  return firstLine.length > 160 ? `${firstLine.slice(0, 157)}…` : firstLine;
-}
-
-function classifyError(error: unknown): ClassifiedError {
-  const status = (error as { status?: number })?.status;
-  const name   = (error as { name?: string })?.name;
-  const message = String((error as { message?: string })?.message ?? error ?? '');
-
-  if (status === 401) {
-    return { kind: 'auth', code: 'auth_required', reason: 'Login required to send saved bills.' };
-  }
-  if (status === 403 && /TRIAL_EXPIRED|PLAN_EXPIRED/.test(String((error as { code?: string })?.code ?? ''))) {
-    return { kind: 'auth', code: 'subscription_expired', reason: 'Subscription expired. Renew to send saved bills.' };
-  }
-  if (status && (status === 408 || status === 425 || status === 429 || status >= 500)) {
-    return { kind: 'retryable', code: `http_${status}`, reason: 'Server temporarily unavailable. Will retry.' };
-  }
-  if (status && status >= 400 && status < 500) {
-    return {
-      kind: 'permanent',
-      code: `http_${status}`,
-      reason: readableReason(message, 'The server refused this bill.'),
-    };
-  }
-  if (name === 'AbortError' || name === 'TimeoutError') {
-    return { kind: 'retryable', code: 'timeout', reason: 'Server took too long to answer. Will retry.' };
-  }
-  if (
-    error instanceof TypeError ||
-    /failed to fetch|networkerror|network request failed|load failed|offline/i.test(message)
-  ) {
-    return { kind: 'retryable', code: 'network', reason: 'No connection to server. Will retry.' };
-  }
-  return { kind: 'retryable', code: 'unknown', reason: 'Could not send this bill. Will retry.' };
-}
+// Error classification lives in ./offlineRules.ts (pure, unit-tested).
 
 // ── Per-order sync — idempotent via offlineId ─────────────────────────────────
 
@@ -157,6 +113,7 @@ export const syncNow = async (): Promise<{ synced: number; failed: number }> => 
 
     // 2. Flush cashier offline queue (FIFO, with backoff + afterCreate)
     await _flushCashierQueue();
+    await flushCustomerOrderQueue().catch(() => {});
 
     // 3. Pull fresh data → local SQLite cache
     await _refreshCache();
@@ -243,48 +200,69 @@ const _flushCashierQueue = async (): Promise<void> => {
       const claimed = claimForSync(hotelId, next.offlineId);
       if (!claimed) continue;
 
-      try {
-        const order = await api.createOrder({
-          ...(next.payload as object),
-          offlineId: next.offlineId,
-        } as any) as any;
+      // Synced ONLY when the order exists on the server AND every follow-up step
+      // (served, completed) succeeded. Same offlineId on every attempt → no
+      // duplicate order; steps already done on the server are skipped.
+      // Completion uses the admin JWT (same token as createOrder) — the old
+      // cashier-token call failed with 401 and was swallowed.
+      const outcome = await submitCashierBill(
+        {
+          offlineId:   next.offlineId,
+          payload:     next.payload as Record<string, unknown>,
+          afterCreate: next.afterCreate,
+          serverId:    next.serverId,
+        },
+        {
+          createOrder: (p) => api.createOrder(p as any, { background: true }) as any,
+          markServed:  (id) => api.updateOrderStatus(id, 'served', { background: true }),
+          complete:    (id, pm) => api.completeOrderWithDetails(id, pm, undefined, { background: true }),
+        },
+      );
 
-        const serverId = String(order._id);
-
-        // afterCreate: replay the steps that would have run in the online path.
-        if (next.afterCreate.markServed) {
-          try { await api.updateOrderStatus(serverId, 'served'); } catch { /* best-effort */ }
-        }
-        if (next.afterCreate.complete) {
-          try { await (api as any).markOrderCompleteCashier(serverId); } catch { /* best-effort */ }
-        }
-
-        cashierMarkSynced(hotelId, next.offlineId, serverId, order.orderNumber ?? null);
-      } catch (err: unknown) {
-        const { kind, code, reason } = classifyError(err);
-        const newRetryCount = next.retryCount + 1;
-
-        if (kind === 'permanent' || newRetryCount >= MAX_RETRIES) {
-          cashierMarkFailed(hotelId, next.offlineId, reason, code);
-        } else {
-          markRetry(
-            hotelId, next.offlineId, reason, code,
-            Date.now() + backoffDelayMs(newRetryCount),
-          );
-        }
-
-        // Auth errors stop the run entirely — no point retrying other orders.
-        if (kind !== 'retryable') break;
-        // For retryable errors, first order is in backoff: stop to avoid hammering.
+      if (outcome.kind === 'synced') {
+        cashierMarkSynced(hotelId, next.offlineId, outcome.serverId, outcome.orderNumber);
+        continue;
+      }
+      if (outcome.kind === 'permanent') {
+        // Refused by the server — keep it visible as failed (with serverId if the
+        // order exists) and move on; one bad bill must not block the others.
+        cashierMarkFailed(hotelId, next.offlineId, outcome.reason, outcome.code, outcome.serverId);
+        continue;
+      }
+      if (outcome.kind === 'auth') {
+        // Login needed: keep pending, do not burn a retry, stop until re-login.
+        markAuthBlocked(hotelId, next.offlineId, outcome.reason, outcome.code, outcome.serverId);
         break;
       }
+      const newRetryCount = next.retryCount + 1;
+      if (newRetryCount >= MAX_RETRIES) {
+        cashierMarkFailed(hotelId, next.offlineId, outcome.reason, outcome.code, outcome.serverId);
+      } else {
+        markRetry(hotelId, next.offlineId, outcome.reason, outcome.code,
+          Date.now() + backoffDelayMs(newRetryCount), outcome.serverId);
+      }
+      break; // transient: stop and retry later
     }
 
     pruneSynced(hotelId);
+    _scheduleCashierRetry(hotelId);
   } finally {
     _cashierFlushing = false;
   }
 };
+
+// Wake up again when the earliest backoff expires (previously nothing re-ran the
+// flush until a network change or manual sync).
+let _cashierRetryTimer: ReturnType<typeof setTimeout> | null = null;
+function _scheduleCashierRetry(hotelId: string): void {
+  const due = nextDueAt(hotelId);
+  if (due === null) return;
+  if (_cashierRetryTimer) clearTimeout(_cashierRetryTimer);
+  _cashierRetryTimer = setTimeout(() => {
+    _cashierRetryTimer = null;
+    if (_isConnected) _flushCashierQueue().catch(() => {});
+  }, Math.max(1_000, due - Date.now()));
+}
 
 export const flushCashierOrderQueue = _flushCashierQueue;
 

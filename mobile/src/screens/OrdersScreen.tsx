@@ -10,7 +10,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { io, Socket } from 'socket.io-client';
 import { Order } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../utils/constants';
-import { getOrders, updateOrderStatus, getSocketUrl, getStoredHotelId } from '../services/api';
+import { getOrders, updateOrderStatus, getSocketUrl, getStoredHotelId, getToken } from '../services/api';
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import { printReceipt, printKOT } from '../utils/receipt';
 import { useSettings } from '../context/SettingsContext';
@@ -160,10 +160,12 @@ const OrdersScreen: React.FC = () => {
     let mounted = true;
     (async () => {
       await setupNotifications();
-      const [url, hotelId] = await Promise.all([getSocketUrl(), getStoredHotelId()]);
+      const [url, hotelId, token] = await Promise.all([getSocketUrl(), getStoredHotelId(), getToken()]);
       if (!url || !mounted) return;
 
-      const socket = io(url, { transports: ['websocket'] });
+      // Authenticated socket: order events (with customer details) are only
+      // delivered to staff sockets, not anonymous ones.
+      const socket = io(url, { transports: ['websocket'], auth: { token: token || '' } });
       socketRef.current = socket;
 
       socket.on('connect', () => {

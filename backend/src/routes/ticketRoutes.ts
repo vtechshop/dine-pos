@@ -37,16 +37,22 @@ const superAdminAuth = (req: Request, res: Response, next: Function) => {
       if (payload?.role === 'superadmin') return next();
     } catch { /* invalid or expired token */ }
   }
-  const id   = req.headers['x-super-admin-id']   as string | undefined;
-  const pass = req.headers['x-super-admin-pass'] as string | undefined;
-  if (verifySuperAdminCredentials(id, pass, process.env.SUPER_ADMIN_ID, process.env.SUPER_ADMIN_PASS)) {
-    return next();
+  // Credential headers: same gate as superAdminRoutes — off in production unless
+  // explicitly enabled, so this router is not an unthrottled password oracle.
+  const credHeaderEnabled =
+    process.env.NODE_ENV !== 'production' ||
+    process.env.ENABLE_SUPERADMIN_CREDENTIAL_HEADER_AUTH === 'true';
+  if (credHeaderEnabled) {
+    const id   = req.headers['x-super-admin-id']   as string | undefined;
+    const pass = req.headers['x-super-admin-pass'] as string | undefined;
+    if (verifySuperAdminCredentials(id, pass, process.env.SUPER_ADMIN_ID, process.env.SUPER_ADMIN_PASS)) {
+      return next();
+    }
   }
   return res.status(401).json({ message: 'Unauthorized' });
 };
 
 // ── Hotel routes (JWT required) ────────────────────────────────────────────
-
 // Tickets belong to the hotel in the JWT. hotelName / hotelPhone / :phone sent by
 // the client are ignored (they let any user read, reply to or file tickets as
 // another hotel). Legacy tickets without hotelId match on the hotel's stored phone.

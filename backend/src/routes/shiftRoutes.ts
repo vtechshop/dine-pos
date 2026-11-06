@@ -6,6 +6,7 @@ import Shift from '../models/Shift';
 import Order from '../models/Order';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
+import { computeShiftTotals, expectedDrawerCash } from '../utils/shiftCash';
 
 const router = Router();
 router.use(authMiddleware);
@@ -77,35 +78,18 @@ router.get('/active/stats', requireCashierOrAdmin, async (req: AuthRequest, res:
       return res.json({ totalOrders: 0, totalSales: 0, cashSales: 0, upiSales: 0, cardSales: 0, splitCashSales: 0 });
     }
 
-    const [agg] = await Order.aggregate([
-      {
-        $match: {
-          hotelId:   new mongoose.Types.ObjectId(req.hotelId),
-          status:    { $in: ['completed'] },
-          createdAt: { $gte: shift.openedAt },
-        },
-      },
-      {
-        $group: {
-          _id:         null,
-          totalOrders: { $sum: 1 },
-          totalSales:  { $sum: '$grandTotal' },
-          cashSales:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, '$grandTotal', 0] } },
-          // M-01: sum cash portion from split payment object {cash, upi, card}
-          splitCashSales: { $sum: { $ifNull: ['$splitDetails.cash', 0] } },
-          upiSales:    { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi'] },  '$grandTotal', 0] } },
-          cardSales:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card'] }, '$grandTotal', 0] } },
-        },
-      },
-    ]);
-
+    // Money actually taken since the shift opened (see utils/shiftCash.ts)
+    const t = await computeShiftTotals(req.hotelId!, shift.openedAt, new Date());
     return res.json({
-      totalOrders:    agg?.totalOrders    ?? 0,
-      totalSales:     agg?.totalSales     ?? 0,
-      cashSales:      agg?.cashSales      ?? 0,
-      upiSales:       agg?.upiSales       ?? 0,
-      cardSales:      agg?.cardSales      ?? 0,
-      splitCashSales: agg?.splitCashSales ?? 0,
+      totalOrders:    t.totalOrders,
+      totalSales:     t.totalSales,
+      cashSales:      t.cashSales,
+      upiSales:       t.upiSales,
+      cardSales:      t.cardSales,
+      splitCashSales: t.splitCashSales,
+      onlineSales:    t.onlineSales,
+      refunds:        t.refunds,
+      expectedCash:   expectedDrawerCash(shift.openingCash, t, shift.cashIn, shift.cashOut),
     });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -233,54 +217,25 @@ router.post('/:id/close', requireCashierOrAdmin, async (req: AuthRequest, res: R
     const shiftStart = shift.openedAt;
     const shiftEnd   = new Date();
 
-    const [orderAgg] = await Order.aggregate([
-      {
-        $match: {
-          hotelId: new mongoose.Types.ObjectId(req.hotelId),
-          status: { $in: ['completed'] },
-          createdAt: { $gte: shiftStart, $lte: shiftEnd },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalOrders: { $sum: 1 },
-          totalSales:  { $sum: '$grandTotal' },
-          cashSales:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, '$grandTotal', 0] } },
-          // M3: sum cash portion from split payment object {cash, upi, card}
-          splitCashSales: { $sum: { $ifNull: ['$splitDetails.cash', 0] } },
-          upiSales:    { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi'] },  '$grandTotal', 0] } },
-          cardSales:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card'] }, '$grandTotal', 0] } },
-          otherSales:  {
-            $sum: {
-              $cond: [
-                { $not: [{ $in: ['$paymentMethod', ['cash', 'upi', 'card']] }] },
-                '$grandTotal',
-                0,
-              ],
-            },
-          },
-        },
-      },
-    ]).session(session);
+    // Money actually taken in [openedAt, now]: POS payments by payment time, guest/
+    // table bills by their recorded collection, online payments excluded from cash.
+    const totals = await computeShiftTotals(req.hotelId!, shiftStart, shiftEnd, session);
 
     const actual = Math.max(0, Number(actualCash) || 0);
-    // M3: include cash portions from split payments in expected cash calculation
-    const totalCashSales = (orderAgg?.cashSales ?? 0) + (orderAgg?.splitCashSales ?? 0);
-    const expected = shift.openingCash + totalCashSales + shift.cashIn - shift.cashOut;
+    const expected = expectedDrawerCash(shift.openingCash, totals, shift.cashIn, shift.cashOut);
 
     shift.status       = 'closed';
     shift.closedAt     = shiftEnd;
     shift.closingNote  = (closingNote ?? '').trim();
     shift.actualCash   = actual;
     shift.expectedCash = expected;
-    shift.difference   = actual - expected;
-    shift.totalOrders  = orderAgg?.totalOrders ?? 0;
-    shift.totalSales   = orderAgg?.totalSales  ?? 0;
-    shift.cashSales    = totalCashSales; // M3: direct cash + split-payment cash portions
-    shift.upiSales     = orderAgg?.upiSales    ?? 0;
-    shift.cardSales    = orderAgg?.cardSales   ?? 0;
-    shift.otherSales   = orderAgg?.otherSales  ?? 0;
+    shift.difference   = +(actual - expected).toFixed(2);
+    shift.totalOrders  = totals.totalOrders;
+    shift.totalSales   = totals.totalSales;
+    shift.cashSales    = +(totals.cashSales + totals.splitCashSales).toFixed(2); // direct cash + split cash
+    shift.upiSales     = totals.upiSales;
+    shift.cardSales    = totals.cardSales;
+    shift.otherSales   = +(totals.otherSales + totals.onlineSales).toFixed(2);
 
     await shift.save({ session });
     await session.commitTransaction();

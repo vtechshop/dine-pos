@@ -442,3 +442,6 @@ describe('F-2 — Razorpay completion guard uses gatewayType field', () => {
     expect(configLookup.gatewayType).toBe('razorpay'); // correct field used
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

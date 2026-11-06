@@ -447,8 +447,11 @@ describe('TALLY-S2 security invariants', () => {
       path.resolve(__dirname, '../../src/routes/tallyConnectorRoutes.ts'),
       'utf8',
     );
-    // resolveHotelFromToken must check token.length < 10
-    expect(src).toContain('token.length < 10');
+    // resolveHotelFromToken must reject anything that is not a generated token.
+    // Tightened (audit 2026-10): exactly 64 hex chars — randomBytes(32).hex — which
+    // also rejects every token shorter than 10. Behaviour is covered end-to-end in
+    // test/integration/tallyConnector.integration.test.ts ("malformed token → 401").
+    expect(src).toContain('/^[a-f0-9]{64}$/i.test(token)');
   });
 
   it('TALLY-S2-42: tally feature is disabled by default (opt-in)', async () => {

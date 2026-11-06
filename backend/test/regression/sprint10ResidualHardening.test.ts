@@ -614,3 +614,6 @@ describe('F-5 — guestId format validated before order storage', () => {
     // It will be stored as-is; guestRoutes resolveGuest() verifies hotelId scope
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

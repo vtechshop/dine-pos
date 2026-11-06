@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
+import { resolveOrgAuthority } from '../utils/orgAuth';
 import { requireFeature } from '../middleware/requireFeature';
 import Hotel from '../models/Hotel';
 import Order from '../models/Order';
@@ -15,6 +16,7 @@ import mongoose from 'mongoose';
 import { sendError } from '../utils/sendError';
 import { isValidDateParam } from '../utils/dateParam';
 import { logger } from '../utils/logger';
+import { REVENUE_FILTER } from '../utils/revenue';
 
 const router = Router();
 router.use(authMiddleware);
@@ -306,7 +308,7 @@ router.get('/modifiers', async (req: AuthRequest, res: Response) => {
     const [topModifiers, groupRevenue] = await Promise.all([
       // Top modifier options by quantity and revenue
       Order.aggregate([
-        { $match: { hotelId, status: { $ne: 'cancelled' }, createdAt: { $gte: fromDate, $lte: toDate } } },
+        { $match: { hotelId, ...REVENUE_FILTER, createdAt: { $gte: fromDate, $lte: toDate } } },
         { $unwind: '$items' },
         { $unwind: '$items.selectedModifiers' },
         {
@@ -334,7 +336,7 @@ router.get('/modifiers', async (req: AuthRequest, res: Response) => {
 
       // Revenue by modifier group
       Order.aggregate([
-        { $match: { hotelId, status: { $ne: 'cancelled' }, createdAt: { $gte: fromDate, $lte: toDate } } },
+        { $match: { hotelId, ...REVENUE_FILTER, createdAt: { $gte: fromDate, $lte: toDate } } },
         { $unwind: '$items' },
         { $unwind: '$items.selectedModifiers' },
         {
@@ -542,6 +544,12 @@ router.get('/org-summary', async (req: AuthRequest, res: Response) => {
       : callerHotel;
     if (!orgHotel?.features?.multiBranch) {
       return res.status(403).json({ code: 'FEATURE_DISABLED', message: "Multi-branch feature is not enabled." });
+    }
+    // Org-wide sales are for the HQ admin only (or HQ acting in a branch).
+    // A branch's own admin must not see sibling branches' revenue.
+    const authority = await resolveOrgAuthority(req);
+    if (!authority?.actsForOrg) {
+      return res.status(403).json({ message: 'Only the HQ admin can view the organization summary.' });
     }
 
     const fromStr  = from || thisMonthStartISTStr();

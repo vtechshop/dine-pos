@@ -12,6 +12,7 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { makeRateLimiter } from './utils/rateLimiter';
+import { resolveJoinHotelRooms } from './utils/socketRooms';
 import { setIo } from './utils/ioRegistry';
 import connectDB from './config/database';
 import { connectRedis, getRedisClient, closeRedis, redisHealthCheck, registerSubClient } from './config/redis';
@@ -91,8 +92,7 @@ import aiOcrRoutes from './routes/aiOcrRoutes';
 import aiAnalyticsRoutes from './routes/aiAnalyticsRoutes';
 import morningBriefRoutes from './routes/morningBriefRoutes';
 import shiftRoutes from './routes/shiftRoutes';
-import tallyRoutes from './routes/tallyRoutes';
-import tallyConnectorRoutes from './routes/tallyConnectorRoutes';
+import { mountTallyRoutes } from './routes/tallyMount';
 import heldBillRoutes from './routes/heldBillRoutes';
 import branchRoutes from './routes/branchRoutes';
 import catalogRoutes from './routes/catalogRoutes';
@@ -328,7 +328,8 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // All limits are per IP. A restaurant's tablets share one public IP, so
 // per-IP limits effectively protect per-hotel without needing the auth middleware
 // to run before the limiter.
-const _rl = (max: number, windowMs: number) => makeRateLimiter({
+const _rl = (max: number, windowMs: number, name: string) => makeRateLimiter({
+  name:     `path:${name}`,
   windowMs,
   max,
   skip: () => process.env.NODE_ENV === 'test',
@@ -358,7 +359,7 @@ app.use('/api/remote-config', _rlLocal(30, 60_000));
 // Session + guest writes — 60/min per IP (generous for any table-service flow)
 app.use('/api/sessions', _rlLocal(60, 60_000));
 // Super admin panel — 60 req/min per IP (tighter than general API; login has its own 10/15-min limiter inside the route)
-app.use('/api/superadmin', _rl(60, 60_000));
+app.use('/api/superadmin', _rl(60, 60_000, '/api/superadmin'));
 
 logger.info(process.env.NODE_ENV === 'test' ? 'Rate limiter skipped (NODE_ENV=test)' : 'Rate limiter enabled');
 
@@ -366,11 +367,12 @@ logger.info(process.env.NODE_ENV === 'test' ? 'Rate limiter skipped (NODE_ENV=te
 app.use('/api/auth', authRoutes);
 // Rate-limit public hotel-status lookups — unauthenticated endpoints that could
 // be used to enumerate registered phone numbers or discover suspension reasons.
-app.use('/api/hotels/status',       _rl(10, 60_000));
-app.use('/api/hotels/reset-status', _rl(10, 60_000));
+app.use('/api/hotels/status',       _rl(10, 60_000, '/api/hotels/status'));
+app.use('/api/hotels/reset-status', _rl(10, 60_000, '/api/hotels/reset-status'));
 app.use('/api/hotels', hotelRoutes);
 app.use('/api/verify', verifyRoutes);
 app.use('/api/superadmin', superAdminRoutes);
+app.use('/api/tickets', _rl(60, 60_000, '/api/tickets'));
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
@@ -410,10 +412,9 @@ app.use('/api/messaging-providers',          messagingProviderRoutes);
 app.use('/api/messaging-webhooks',           messagingWebhookRoutes);
 app.use('/api/settings/whatsapp-receipts',   whatsappSettingsRoutes);
 app.use('/api/whatsapp-receipts',            whatsappReceiptRoutes);
-// Tally Direct Sync — admin config + sync history + manual retry
-app.use('/api/integrations/tally',           tallyRoutes);
-// Tally Bridge Connector polling API — authenticated via hotel-scoped connector token
-app.use('/api/integrations/tally/connector', tallyConnectorRoutes);
+// Tally — connector (bridge, own bearer token) MUST be mounted before the admin
+// router (JWT + admin). See routes/tallyMount.ts.
+mountTallyRoutes(app, _rl(60, 60_000, '/api/integrations/tally/connector'));
 // Multi-Branch — HQ admin manages branch Hotels under their organization
 app.use('/api/branches',                     branchRoutes);
 // Multi-Branch Sprint 3 — Shared product catalog + branch pricing configuration
@@ -450,33 +451,33 @@ app.use('/api/saas/webhook',               saasBillingWebhookRoutes);
 // DinePOS SaaS billing — hotel subscription management (JWT-only, no status gate)
 app.use('/api/saas',                       saasBillingRoutes);
 // AI Menu Import — rate-limited to 10 req/min (Gemini calls are expensive)
-app.use('/api/ai-menu', _rl(10, 60_000));
+app.use('/api/ai-menu', _rl(10, 60_000, '/api/ai-menu'));
 app.use('/api/ai-menu', aiMenuRoutes);
 // AI BI metrics — today's hot cache + daily snapshots + job registry
 app.use('/api/ai', aiMetricsRoutes);
 // AI BI Phase 2 — daily report (Gemini narrative, cached) + executive dashboard
-app.use('/api/ai/report', _rl(20, 60_000)); // Gemini calls are expensive — 20 req/min
+app.use('/api/ai/report', _rl(20, 60_000, '/api/ai/report')); // Gemini calls are expensive — 20 req/min
 app.use('/api/ai', aiReportRoutes);
 // AI BI Phase 3 — smart alerts + recommendation engine (Gemini insight cached)
-app.use('/api/ai/recommendations', _rl(20, 60_000)); // Gemini insight endpoint
+app.use('/api/ai/recommendations', _rl(20, 60_000, '/api/ai/recommendations')); // Gemini insight endpoint
 app.use('/api/ai', aiAlertsRoutes);
 // AI BI Phase 4 — statistical forecast + inventory prediction (Gemini brief cached)
-app.use('/api/ai/forecast', _rl(20, 60_000)); // Gemini narrative endpoint
+app.use('/api/ai/forecast', _rl(20, 60_000, '/api/ai/forecast')); // Gemini narrative endpoint
 app.use('/api/ai', aiForecastRoutes);
 // AI BI Phase 5 — AI business assistant chat (Gemini, context-grounded)
 // 30 req/min: conversational flow needs more headroom than one-shot report endpoints
-app.use('/api/ai/chat', _rl(30, 60_000));
+app.use('/api/ai/chat', _rl(30, 60_000, '/api/ai/chat'));
 app.use('/api/ai', aiChatRoutes);
 // AI BI Phase 6 — Supplier invoice OCR + purchase import pipeline
 // 10 uploads/min per IP (OCR is expensive + async; upload just queues the job)
-app.use('/api/ai/ocr/upload', _rl(10, 60_000));
+app.use('/api/ai/ocr/upload', _rl(10, 60_000, '/api/ai/ocr/upload'));
 app.use('/api/ai', aiOcrRoutes);
 // AI BI Phase 7 — Fraud & anomaly detection, staff analytics, kitchen analytics
 // 20 req/min (compute-heavy aggregations + optional Gemini narrative)
-app.use('/api/ai/analytics', _rl(20, 60_000));
+app.use('/api/ai/analytics', _rl(20, 60_000, '/api/ai/analytics'));
 app.use('/api/ai', aiAnalyticsRoutes);
 // AI BI Phase 8 — Morning Brief (pre-generated, admin only)
-app.use('/api/ai/morning-brief', _rl(30, 60_000));
+app.use('/api/ai/morning-brief', _rl(30, 60_000, '/api/ai/morning-brief'));
 app.use('/api/ai', morningBriefRoutes);
 
 // Liveness probe — returns 200 immediately if the process is alive.
@@ -743,33 +744,28 @@ io.on('connection', (socket) => {
       clientsBefore:  _clientsBefore,
     });
 
-    if (typeof hotelId !== 'string' || !hotelId) {
+    const decision = resolveJoinHotelRooms(socket.data, hotelId);
+    if (decision.rejected === 'invalid') {
       logger.warn('[SOCKET] join_hotel IGNORED — hotelId invalid', { socketId: socket.id, hotelId });
       return;
     }
-
-    if (socket.data.authenticated) {
-      if (socket.data.hotelId !== hotelId) {
-        logger.warn('[SOCKET] join_hotel REJECTED — hotelId mismatch', {
-          socketId: socket.id,
-          claimed:  hotelId,
-          jwt:      socket.data.hotelId,
-        });
-        return;
-      }
-      socket.join(`hotel_${hotelId}`);
-      socket.join(`admin_${hotelId}`);
-    } else {
-      // P0-3: Validate hotelId is a real ObjectId before allowing anonymous room join
-      if (!mongoose.isValidObjectId(hotelId)) {
-        logger.warn('[SOCKET] join_hotel REJECTED — invalid hotelId format (unauthenticated)', { socketId: socket.id });
-        socket.emit('error', 'Invalid hotel ID');
-        return;
-      }
-      // Unauthenticated: customer QR flow — join public hotel room only, never admin room
-      socket.data.hotelId = hotelId;
-      socket.join(`hotel_${hotelId}`);
+    if (decision.rejected === 'mismatch') {
+      logger.warn('[SOCKET] join_hotel REJECTED — hotelId mismatch', {
+        socketId: socket.id,
+        claimed:  hotelId,
+        jwt:      socket.data.hotelId,
+      });
+      return;
     }
+    if (decision.rejected === 'invalid_format') {
+      logger.warn('[SOCKET] join_hotel REJECTED — invalid hotelId format (unauthenticated)', { socketId: socket.id });
+      socket.emit('error', 'Invalid hotel ID');
+      return;
+    }
+    // Anonymous sockets (customer kiosk/QR) get the public room only — never
+    // hotel_/admin_, which carry customer PII. See utils/socketRooms.ts.
+    if (decision.anonHotelId) socket.data.hotelId = decision.anonHotelId;
+    for (const room of decision.rooms) socket.join(room);
 
     const _clientsAfter  = io.sockets.adapter.rooms.get(_room)?.size ?? 0;
     const _socketIds     = Array.from(io.sockets.adapter.rooms.get(_room) ?? []);
@@ -794,6 +790,7 @@ io.on('connection', (socket) => {
     if (
       tableNumber.startsWith('admin_') ||
       tableNumber.startsWith('hotel_') ||
+      tableNumber.startsWith('public_') ||
       tableNumber === 'superadmin'
     ) return; // H-04 / H-05
     // Scope the table room to the hotel so tenants cannot see each other's chat

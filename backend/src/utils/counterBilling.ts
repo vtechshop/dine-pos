@@ -42,19 +42,38 @@ export function amountDueAtCounter(orders: Array<CounterBillableOrder & { grandT
  * - orders paid ahead (online, or at the counter): completed, keeping the method
  *   they were paid with
  * - payment_pending (never paid, never cooked) and cancelled: left untouched
+ *
+ * `completion` is extra metadata set on every order completed here (payment
+ * time, cashier, settledVia) so reports and shift cash bucket these orders by
+ * when they were paid and know the money is recorded on the Guest / TableSession.
  */
-export function counterBillingOrderUpdates(scope: Record<string, unknown>, paymentMethod: string) {
+export function counterBillingOrderUpdates(
+  scope: Record<string, unknown>,
+  paymentMethod: string,
+  completion: Record<string, unknown> = {},
+) {
+  // Orders paid ahead were paid when the gateway confirmed (qr-verify / webhook) or
+  // when the counter took payment (POST /orders/:id/pay); billing must not move that
+  // to the bill time, or revenue by payment time lands on the wrong day. Bill time is
+  // only a fallback.
+  const { paymentTime, ...prepaidCompletion } = completion;
   return {
     counter: {
       filter: { ...scope, status: { $nin: ['cancelled', 'payment_pending', 'completed'] }, paymentMethod: { $ne: 'razorpay' }, paymentTime: null },
-      update: { $set: { paymentMethod, status: 'completed' } },
+      update: { $set: { ...completion, paymentMethod, status: 'completed' } },
     },
     prepaid: {
       filter: {
         ...scope, status: { $nin: ['cancelled', 'payment_pending', 'completed'] },
         $or: [{ paymentMethod: 'razorpay' }, { paymentTime: { $ne: null } }],
       },
-      update: { $set: { status: 'completed' } },
+      update: paymentTime === undefined
+        ? { $set: { ...prepaidCompletion, status: 'completed' } }
+        : [{ $set: {
+            ...Object.fromEntries(Object.entries(prepaidCompletion).map(([k, v]) => [k, { $literal: v }])),
+            status:      'completed',
+            paymentTime: { $ifNull: ['$paymentTime', { $literal: paymentTime }] },
+          } }],
     },
   };
 }

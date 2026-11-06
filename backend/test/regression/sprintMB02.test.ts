@@ -362,3 +362,6 @@ describe('MB-S2-37 to MB-S2-40: Integration isolation', () => {
     expect(isOrgSummaryAuthorized(true, false)).toBe(false);
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

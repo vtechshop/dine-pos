@@ -1,5 +1,6 @@
 import { memo, useState, useEffect } from 'react';
 import type { GuestBill, PaymentMethod } from '../../types';
+import { sumDue, sumPaidOnline } from '../../utils/counterBilling';
 import type { SplitDetails } from '../../api/billing';
 import { PaymentSelector } from './PaymentSelector';
 import { SplitInput } from './SplitInput';
@@ -86,9 +87,10 @@ export const PaymentPanel = memo(function PaymentPanel({
     }
   }, [appliedVoucher]);
 
-  const guestTotal = selectedGuestBill
-    ? selectedGuestBill.orders.reduce((s, o) => s + o.grandTotal, 0)
-    : 0;
+  // Due at the counter — same rule as BillingDrawer (cancelled, unpaid and
+  // already-paid-online orders excluded), so the shown total matches validation.
+  const guestTotal      = selectedGuestBill ? sumDue(selectedGuestBill.orders) : 0;
+  const guestPaidOnline = selectedGuestBill ? sumPaidOnline(selectedGuestBill.orders) : 0;
 
   const rawBillingAmount = mode === 'table' ? grandTotal : guestTotal;
   const billingAmount    = Math.max(rawBillingAmount - (appliedVoucher?.amount ?? 0), 0);
@@ -169,6 +171,11 @@ export const PaymentPanel = memo(function PaymentPanel({
           {mode === 'guest' && selectedGuestBill ? (
             <>
               <p className="text-xs text-white/40 mb-1">{selectedGuestBill.guest.displayLabel}</p>
+              {guestPaidOnline > 0 && (
+                <p className="text-[11px] text-green-400 mb-0.5">
+                  {fmt(guestPaidOnline, currencySymbol)} already paid online
+                </p>
+              )}
               {appliedVoucher && (
                 <p className="text-[11px] text-green-400 mb-0.5">
                   -{fmt(appliedVoucher.amount, currencySymbol)} voucher
