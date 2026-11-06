@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import { Link } from 'react-router-dom';
-import { RefreshCw, AlertTriangle, TrendingUp, CreditCard, Smartphone, Trophy } from 'lucide-react';
+import { RefreshCw, AlertTriangle, TrendingUp, CreditCard, Smartphone, Trophy, CalendarCheck } from 'lucide-react';
+import { useLeadNotifications } from '../../context/LeadNotificationContext';
 import {
   getDashboard,
   getSubscriptionRevenue,
@@ -372,6 +373,41 @@ function TopHotelsLeaderboard() {
 
 // ── SADashboardPage ────────────────────────────────────────────────────────────
 
+/** Website demo requests still marked "New" — shown at the top until someone acts on them. */
+function NewDemoRequestsCard() {
+  const { newDemos, newDemoCount } = useLeadNotifications();
+  if (newDemoCount === 0) return null;
+  return (
+    <section className="rounded-xl border border-brand/30 bg-brand/5 p-4" aria-label="New demo requests">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+          <CalendarCheck size={15} className="text-brand" />
+          {newDemoCount} new demo request{newDemoCount === 1 ? '' : 's'}
+          <span className="font-normal text-ink/45">— call them to confirm a slot</span>
+        </h2>
+        <Link to="/super-admin/leads/demos" className="shrink-0 text-xs font-medium text-brand hover:underline">
+          View all →
+        </Link>
+      </div>
+      <ul className="divide-y divide-brand/10">
+        {newDemos.map(l => (
+          <li key={l._id}>
+            <Link
+              to={`/super-admin/leads/${l._id}`}
+              className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-2 text-sm hover:text-brand"
+            >
+              <span className="font-medium text-ink">{l.companyName || l.ownerName}</span>
+              {l.ownerName && l.ownerName !== l.companyName && <span className="text-ink/50">{l.ownerName}</span>}
+              <span className="font-mono text-xs text-ink/60">{l.phone}</span>
+              <span className="ml-auto text-xs text-ink/40">{fmtAgo(l.createdAt)}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function SADashboardPage() {
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
@@ -490,6 +526,8 @@ export function SADashboardPage() {
           Refresh
         </button>
       </div>
+
+      <NewDemoRequestsCard />
 
       {/* ── Row 1: Hotel status KPIs ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">

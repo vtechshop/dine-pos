@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useLeadNotifications } from '../../context/LeadNotificationContext';
 import { ArrowLeft, Save, Trash2, Plus, RefreshCw } from 'lucide-react';
 import {
   SAPageHeader, SABadge, SASpin, SAError, fmtDateTime,
@@ -25,6 +26,7 @@ export function LeadDetailPage() {
   const { id }     = useParams<{ id: string }>();
   const navigate   = useNavigate();
 
+  const { refreshNewDemos } = useLeadNotifications();
   const [lead,    setLead]    = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
@@ -72,6 +74,7 @@ export function LeadDetailPage() {
       const { lead: l } = await updateLead(id, { status: status as Lead['status'], priority: priority as Lead['priority'], assignedTo, notes });
       setLead(l);
       setDirty(false);
+      refreshNewDemos();   // status may have left "new" — update the sidebar badge
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save');
     } finally {
@@ -100,6 +103,7 @@ export function LeadDetailPage() {
       onOk: async () => {
         try {
           await deleteLead(id);
+          refreshNewDemos();
           navigate('/super-admin/leads');
         } catch (e) {
           setError(e instanceof Error ? e.message : 'Failed to delete');

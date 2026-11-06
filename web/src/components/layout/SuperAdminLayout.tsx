@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { SANotificationsProvider } from '../../context/SANotificationsContext';
 import { SANotificationBell } from './SANotificationBell';
 import { SAQuickSearch } from './SAQuickSearch';
-import { LeadNotificationProvider } from '../../context/LeadNotificationContext';
+import { LeadNotificationProvider, useLeadNotifications } from '../../context/LeadNotificationContext';
 import { LeadToast } from '../ui/LeadToast';
 import { SATicketsProvider, useSATickets } from '../../context/SATicketsContext';
 import { SATicketToast } from '../ui/SATicketToast';
@@ -19,6 +19,20 @@ function TicketBadge() {
   if (waiting.length === 0) return null;
   return (
     <span className="ml-auto rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600">{waiting.length}</span>
+  );
+}
+
+/** Count of website demo requests still marked "New" */
+function DemoBadge() {
+  const { newDemoCount } = useLeadNotifications();
+  if (newDemoCount === 0) return null;
+  return (
+    <span
+      className="ml-auto rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600"
+      title={`${newDemoCount} new demo request${newDemoCount === 1 ? '' : 's'}`}
+    >
+      {newDemoCount}
+    </span>
   );
 }
 
@@ -200,6 +214,7 @@ export function SuperAdminLayout() {
                 >
                   {icon}
                   {label}
+                  {to === '/super-admin/leads/demos' && <DemoBadge />}
                 </NavLink>
               ))}
             </div>
