@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
-const POS_LOGIN_URL = 'https://web.dinepos.happya.in/login';
-
 const NAV_LINKS = [
   { to: '/',          label: 'Home' },
   { to: '/features',  label: 'Solutions' },
@@ -71,14 +69,8 @@ export function Header() {
           ))}
         </nav>
 
-        {/* Desktop CTAs */}
+        {/* Desktop CTA */}
         <div className="hidden items-center gap-2 md:flex">
-          <a
-            href={POS_LOGIN_URL}
-            className="rounded-lg border border-gray-200 px-4 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-          >
-            Login
-          </a>
           <Link
             to="/book-demo"
             className="rounded-lg bg-[#E8380D] px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-[#C93008]"
@@ -120,12 +112,6 @@ export function Header() {
             ))}
           </nav>
           <div className="mt-3 flex flex-col gap-2">
-            <a
-              href={POS_LOGIN_URL}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-center text-sm font-medium text-gray-700"
-            >
-              Login
-            </a>
             <Link
               to="/book-demo"
               onClick={() => setMenuOpen(false)}

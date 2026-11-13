@@ -1,8 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Mail, Phone, MapPin } from 'lucide-react';
 
-const POS_LOGIN_URL = 'https://web.dinepos.happya.in/login';
-
 const LINKS = {
   Product: [
     { label: 'Features',  to: '/features' },
@@ -91,12 +89,6 @@ export function Footer() {
           <p className="text-xs text-gray-600">
             © {new Date().getFullYear()} Happya Softech. All rights reserved.
           </p>
-          <a
-            href={POS_LOGIN_URL}
-            className="text-xs text-gray-500 transition-colors hover:text-[#E8380D]"
-          >
-            Login to your account →
-          </a>
         </div>
       </div>
     </footer>
