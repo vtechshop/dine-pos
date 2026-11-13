@@ -13,32 +13,33 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function ShippingPage() {
   usePageSEO(
     'Shipping Policy — Dine POS | Happya Softech',
-    'DinePOS shipping policy. DinePOS is a digital SaaS product — no physical products are shipped. Access is delivered electronically upon subscription.',
+    'DinePOS shipping policy. The software is delivered online; thermal printers (and a kiosk where included) are delivered and installed at your restaurant by our team.',
   );
 
   return (
     <div>
       <section className="bg-[#1C0800] px-5 py-20 text-center text-white">
         <h1 className="mb-3 text-4xl font-extrabold">Shipping Policy</h1>
-        <p className="text-gray-400">Last updated: August 19, 2026</p>
+        <p className="text-gray-400">Last updated: November 13, 2026</p>
       </section>
 
       <div className="mx-auto max-w-4xl space-y-4 px-5 py-14">
 
         <div className="rounded-2xl border border-orange-100 bg-[#FFF6EE] px-6 py-5 text-center">
           <p className="text-xl font-bold text-gray-900">
-            No physical products are shipped by DinePOS.
+            Software online. Printers delivered and installed by our team.
           </p>
           <p className="mt-2 text-sm text-gray-600">
-            DinePOS is a cloud-based Software-as-a-Service (SaaS) platform. All features and
-            services are delivered electronically.
+            DinePOS software is delivered electronically. Hardware that comes with your plan
+            (thermal printers, and a kiosk where included) is delivered to your restaurant and set
+            up by our team.
           </p>
         </div>
 
-        <Section title="Digital Delivery">
+        <Section title="Software — Digital Delivery">
           <p>
-            DinePOS is delivered electronically through the DinePOS web application and mobile
-            application. No hardware, physical media, or printed materials are shipped to customers.
+            The DinePOS software is delivered electronically through the DinePOS web application
+            and mobile application. No software discs or printed manuals are shipped.
           </p>
           <ul className="list-disc space-y-2 pl-5">
             <li>
@@ -59,6 +60,30 @@ export function ShippingPage() {
                 web.dinepos.happya.in
               </a>{' '}
               and the DinePOS mobile application.
+            </li>
+          </ul>
+        </Section>
+
+        <Section title="Hardware — Printers and Kiosk">
+          <ul className="list-disc space-y-2 pl-5">
+            <li>
+              <span className="font-medium text-gray-800">Thermal printers:</span> New
+              subscriptions include 2 thermal printers (for the billing counter and the kitchen),
+              subject to availability.
+            </li>
+            <li>
+              <span className="font-medium text-gray-800">Kiosk:</span> A self-ordering kiosk is
+              supplied only when it is part of your agreed plan or quote.
+            </li>
+            <li>
+              <span className="font-medium text-gray-800">Delivery and installation:</span> Our
+              team delivers the hardware to your restaurant, installs it and connects it to
+              DinePOS. We confirm the delivery date with you by phone or WhatsApp after your
+              subscription starts.
+            </li>
+            <li>
+              <span className="font-medium text-gray-800">Damaged or not working:</span> If any
+              hardware arrives damaged or does not work, contact us right away and we will help.
             </li>
           </ul>
         </Section>

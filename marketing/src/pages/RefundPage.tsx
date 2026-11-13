@@ -13,14 +13,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function RefundPage() {
   usePageSEO(
     'Cancellation & Refund Policy — Dine POS | Happya Softech',
-    'DinePOS cancellation and refund policy. 14-day free trial, annual subscription ₹12,000. Learn how to cancel and when refunds apply.',
+    'DinePOS cancellation and refund policy. 14-day free trial, annual subscription ₹14,000. Learn how to cancel and when refunds apply.',
   );
 
   return (
     <div>
       <section className="bg-[#1C0800] px-5 py-20 text-center text-white">
         <h1 className="mb-3 text-4xl font-extrabold">Cancellation &amp; Refund Policy</h1>
-        <p className="text-gray-400">Last updated: August 19, 2026</p>
+        <p className="text-gray-400">Last updated: November 13, 2026</p>
       </section>
 
       <div className="mx-auto max-w-4xl space-y-4 px-5 py-14">
@@ -45,7 +45,7 @@ export function RefundPage() {
 
         <Section title="3. Subscription Plan">
           <div className="rounded-xl bg-[#FFF6EE] px-5 py-4">
-            <p className="font-semibold text-gray-800 text-base">Annual Plan — ₹12,000 / year</p>
+            <p className="font-semibold text-gray-800 text-base">Annual Plan — ₹14,000 / year</p>
             <p className="mt-1 text-gray-600">
               Billed once per year. Includes all platform features.
               Applicable taxes, if any, will be shown before payment is confirmed.
