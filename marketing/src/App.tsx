@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
+import { PageErrorBoundary } from './components/ui/PageErrorBoundary';
 
 const HomePage    = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
 const FeaturesPage = lazy(() => import('./pages/FeaturesPage').then(m => ({ default: m.FeaturesPage })));
@@ -26,6 +27,12 @@ function PageLoader() {
   );
 }
 
+// New boundary per page, so one page failing doesn't block the next link clicked.
+function PageArea({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
+  return <PageErrorBoundary key={pathname}>{children}</PageErrorBoundary>;
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
@@ -39,23 +46,25 @@ export function App() {
       <div className="flex min-h-screen flex-col">
         <Header />
         <main className="flex-1">
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/"          element={<HomePage />} />
-              <Route path="/features"  element={<FeaturesPage />} />
-              <Route path="/pricing"   element={<PricingPage />} />
-              <Route path="/about"     element={<AboutPage />} />
-              <Route path="/contact"   element={<ContactPage />} />
-              <Route path="/book-demo" element={<BookDemoPage />} />
-              <Route path="/faq"       element={<FAQPage />} />
-              <Route path="/blog"      element={<BlogPage />} />
-              <Route path="/terms"     element={<TermsPage />} />
-              <Route path="/privacy"   element={<PrivacyPage />} />
-              <Route path="/refund"    element={<RefundPage />} />
-              <Route path="/shipping"  element={<ShippingPage />} />
-              <Route path="*"          element={<NotFoundPage />} />
-            </Routes>
-          </Suspense>
+          <PageArea>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/"          element={<HomePage />} />
+                <Route path="/features"  element={<FeaturesPage />} />
+                <Route path="/pricing"   element={<PricingPage />} />
+                <Route path="/about"     element={<AboutPage />} />
+                <Route path="/contact"   element={<ContactPage />} />
+                <Route path="/book-demo" element={<BookDemoPage />} />
+                <Route path="/faq"       element={<FAQPage />} />
+                <Route path="/blog"      element={<BlogPage />} />
+                <Route path="/terms"     element={<TermsPage />} />
+                <Route path="/privacy"   element={<PrivacyPage />} />
+                <Route path="/refund"    element={<RefundPage />} />
+                <Route path="/shipping"  element={<ShippingPage />} />
+                <Route path="*"          element={<NotFoundPage />} />
+              </Routes>
+            </Suspense>
+          </PageArea>
         </main>
         <Footer />
       </div>
