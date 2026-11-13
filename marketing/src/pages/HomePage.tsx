@@ -869,7 +869,7 @@ function HowItWorks() {
 const FOUNDING_PERKS = [
   { title: 'Personal Setup',   desc: 'Our team configures your menu, tables, and printers on-site. You don\'t touch a config file.' },
   { title: 'Direct Support',   desc: 'Reach us directly on WhatsApp — not a ticket queue. Real response from the people who built it.' },
-  { title: 'Founding Price',   desc: '₹12,000/year locked in for the lifetime of your subscription. Price won\'t change as we grow.' },
+  { title: 'Founding Price',   desc: '₹14,000/year locked in for the lifetime of your subscription. Price won\'t change as we grow.' },
 ];
 
 function FoundingOffer() {

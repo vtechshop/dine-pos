@@ -20,7 +20,7 @@ export function TermsPage() {
     <div>
       <section className="bg-[#1C0800] px-5 py-20 text-center text-white">
         <h1 className="mb-3 text-4xl font-extrabold">Terms &amp; Conditions</h1>
-        <p className="text-gray-400">Last updated: August 19, 2026</p>
+        <p className="text-gray-400">Last updated: November 13, 2026</p>
       </section>
 
       <div className="mx-auto max-w-4xl space-y-4 px-5 py-14">
@@ -57,7 +57,7 @@ export function TermsPage() {
         <Section title="4. Subscription and Payment">
           <ul className="list-disc space-y-2 pl-5">
             <li>A 14-day free trial is available to all new accounts. No payment is required during the trial period.</li>
-            <li>After the trial, continued use requires an active paid subscription (currently ₹12,000 per year).</li>
+            <li>After the trial, continued use requires an active paid subscription (currently ₹14,000 per year).</li>
             <li>Subscription fees are billed annually in advance. All prices are in Indian Rupees (INR).</li>
             <li>Applicable taxes, if any, will be displayed before payment is confirmed.</li>
             <li>Pricing may be revised with 30 days' prior notice to the registered email address.</li>

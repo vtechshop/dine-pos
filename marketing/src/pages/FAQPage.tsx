@@ -72,7 +72,7 @@ const FAQ_GROUPS: { heading: string; items: FAQItem[] }[] = [
       },
       {
         q: 'Is there a setup fee or contract?',
-        a: 'No setup fee. Dine POS is billed annually at ₹12,000/year per outlet. You can cancel before your next renewal — no lock-in beyond the current year.',
+        a: 'No setup fee. Dine POS is billed annually at ₹14,000/year per outlet. You can cancel before your next renewal — no lock-in beyond the current year.',
       },
     ],
   },

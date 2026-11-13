@@ -88,7 +88,7 @@ const SUITABLE_FOR = [
 const FAQ_ITEMS = [
   {
     q: 'Are there any monthly charges?',
-    a: 'None. You pay ₹12,000 once per year per outlet. No monthly billing, no hidden fees.',
+    a: 'None. You pay ₹14,000 once per year per outlet. No monthly billing, no hidden fees.',
   },
   {
     q: 'Is the FREE Dual Thermal Printer really free?',
@@ -110,8 +110,8 @@ const FAQ_ITEMS = [
 
 export function PricingPage() {
   usePageSEO(
-    'Restaurant POS Pricing India — ₹12,000/year | Dine POS',
-    'Dine POS annual pricing — ₹12,000/year per outlet. No monthly charges. Includes AI menu import, kiosk ordering, Android POS app, free dual thermal printer, free installation, and training.',
+    'Restaurant POS Pricing India — ₹14,000/year | Dine POS',
+    'Dine POS annual pricing — ₹14,000/year per outlet. No monthly charges. Includes AI menu import, kiosk ordering, Android POS app, free dual thermal printer, free installation, and training.',
   );
   return (
     <div>
@@ -134,7 +134,7 @@ export function PricingPage() {
             </div>
 
             <div className="flex items-end gap-1.5">
-              <span className="text-4xl font-extrabold text-gray-900">₹12,000</span>
+              <span className="text-4xl font-extrabold text-gray-900">₹14,000</span>
               <span className="mb-1.5 text-sm font-medium text-gray-400">/ Year</span>
             </div>
 
