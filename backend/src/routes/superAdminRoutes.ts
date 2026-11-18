@@ -704,7 +704,7 @@ router.get('/saas/printer-queue', superAdminAuth, async (_req: Request, res: Res
 // PUT /api/superadmin/hotels/:id/saas-price — set/clear custom annual price per hotel
 // Setting a price: creates a Razorpay Plan for this price (if not already on same price),
 //   stores plan_id and price on hotel, and if the hotel has an active sub, updates it for next cycle.
-// Clearing (price: null): removes custom price, hotel reverts to standard ₹12,000/year plan next renewal.
+// Clearing (price: null): removes custom price, hotel reverts to standard ₹14,000/year plan next renewal.
 router.put('/hotels/:id/saas-price', superAdminAuth, async (req: Request, res: Response) => {
   try {
     if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
@@ -734,7 +734,7 @@ router.put('/hotels/:id/saas-price', superAdminAuth, async (req: Request, res: R
         }
       }
       logAuditRaw({ actorRole: 'superadmin', action: 'hotel.saas_price_cleared', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: { previous: hotel.saasAnnualPrice } });
-      return res.json({ message: 'Custom price cleared. Hotel reverts to standard ₹12,000/year from next renewal.', effectiveFrom: 'next renewal cycle' });
+      return res.json({ message: 'Custom price cleared. Hotel reverts to standard ₹14,000/year from next renewal.', effectiveFrom: 'next renewal cycle' });
     }
 
     const priceNum = Number(price);

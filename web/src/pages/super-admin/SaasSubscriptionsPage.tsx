@@ -89,7 +89,7 @@ export function SaasSubscriptionsPage() {
         body: JSON.stringify({ price }),
       });
       setActionMsg(price === null
-        ? 'Custom price cleared — hotel reverts to ₹12,000/year from next renewal.'
+        ? 'Custom price cleared — hotel reverts to ₹14,000/year from next renewal.'
         : `Custom price ₹${price}/year set. Effective from next renewal.`);
       setPanel(null);
       await load();
@@ -159,7 +159,7 @@ export function SaasSubscriptionsPage() {
               <>
                 <h2 className="mb-1 text-lg font-bold text-gray-900 dark:text-white">Set Custom Price</h2>
                 <p className="mb-4 text-sm text-gray-500">{panel.hotel.hotelName}</p>
-                <p className="mb-1 text-xs text-gray-400">Annual price in INR (blank = standard ₹12,000)</p>
+                <p className="mb-1 text-xs text-gray-400">Annual price in INR (blank = standard ₹14,000)</p>
                 <input
                   type="number"
                   value={priceInput}
@@ -248,7 +248,7 @@ export function SaasSubscriptionsPage() {
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{h.rzpSubscriptionStatus || '—'}</td>
                   <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">
-                    {fmtAmount(h.saasAnnualPrice ?? 12000)}
+                    {fmtAmount(h.saasAnnualPrice ?? 14000)}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{fmt(h.subscriptionEndDate)}</td>
                   <td className="px-4 py-3">

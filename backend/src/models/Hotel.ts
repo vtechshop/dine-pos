@@ -116,7 +116,7 @@ export interface IHotel extends Document {
   subscriptionEndDate: Date | null;
 
   // ── DinePOS SaaS Billing (Razorpay Subscriptions) ──────────────────────────
-  saasAnnualPrice:         number | null;     // null = standard ₹12,000/year; set by SA for custom pricing (in INR)
+  saasAnnualPrice:         number | null;     // null = standard ₹14,000/year; set by SA for custom pricing (in INR)
   rzpCustomPlanId:         string;            // plan_xxx created for custom price; empty = use RAZORPAY_PLAN_ID_STANDARD
   rzpSubscriptionId:       string;            // sub_xxx — current Razorpay subscription
   rzpSubscriptionStatus:   string;            // mirrors Razorpay status: created|authenticated|active|pending|halted|cancelled|completed

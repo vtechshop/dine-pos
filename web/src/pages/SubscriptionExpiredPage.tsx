@@ -182,7 +182,7 @@ export function SubscriptionExpiredPage() {
           disabled={subscribing || checking}
           className="mb-3 w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white transition hover:bg-green-700 active:scale-95 disabled:opacity-60"
         >
-          {subscribing ? 'Starting checkout…' : '⚡ Subscribe Now — ₹12,000/year'}
+          {subscribing ? 'Starting checkout…' : '⚡ Subscribe Now — ₹14,000/year'}
         </button>
 
         {/* Check status */}

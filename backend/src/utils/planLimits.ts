@@ -6,15 +6,15 @@ export interface PlanLimits {
 
 export const PLAN_LIMITS: Record<string, PlanLimits> = {
   trial:        { devices: 2,  pricePerMonth: 0,     pricePerYear: 0       },
-  standard:     { devices: -1, pricePerMonth: 1000,  pricePerYear: 12000   }, // DinePOS SaaS — ₹12,000/year, unlimited devices
+  standard:     { devices: -1, pricePerMonth: 1167,  pricePerYear: 14000   }, // DinePOS SaaS — ₹14,000/year, unlimited devices
   starter:      { devices: 3,  pricePerMonth: 999,   pricePerYear: 11988   },
   professional: { devices: 5,  pricePerMonth: 4999,  pricePerYear: 59988   },
   enterprise:   { devices: -1, pricePerMonth: 9999,  pricePerYear: 119988  },
   none:         { devices: 1,  pricePerMonth: 0,     pricePerYear: 0       },
 };
 
-export const SAAS_STANDARD_PRICE_INR  = 12_000; // ₹12,000/year
-export const SAAS_STANDARD_PRICE_PAISE = 1_200_000; // in paise for Razorpay API
+export const SAAS_STANDARD_PRICE_INR  = 14_000; // ₹14,000/year
+export const SAAS_STANDARD_PRICE_PAISE = 1_400_000; // in paise for Razorpay API
 
 export const getDeviceLimitForPlan = (plan: string): number =>
   PLAN_LIMITS[plan]?.devices ?? 2;
