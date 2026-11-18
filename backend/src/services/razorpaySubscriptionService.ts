@@ -48,7 +48,7 @@ export function getPlanId(hotel: Pick<IHotel, 'rzpCustomPlanId'>): string {
 
 /**
  * Create a new Razorpay Plan for a given annual price in INR.
- * Called by SA when setting a custom price, and once at initial setup for ₹12,000.
+ * Called by SA when setting a custom price, and once at initial setup for ₹14,000.
  * Returns the Razorpay plan_id (e.g. "plan_xxx").
  */
 export async function createRazorpayPlan(
@@ -70,6 +70,58 @@ export async function createRazorpayPlan(
 
   logger.info('[razorpaySubscriptionService] plan created', { planId: plan.id, annualPriceInr });
   return plan.id;
+}
+
+// A Razorpay plan's price never changes, so each one is fetched only once.
+const planAmountCache = new Map<string, number>();
+
+/**
+ * Yearly price (INR) of a Razorpay plan, read from Razorpay itself.
+ * Returns null if it can't be read (no keys, network error, timeout) so the
+ * caller can fall back to the price stored on the hotel.
+ */
+export async function getPlanAmountInr(planId: string | undefined | null): Promise<number | null> {
+  if (!planId) return null;
+  const cached = planAmountCache.get(planId);
+  if (cached !== undefined) return cached;
+  try {
+    const rzp = getSaasClient();
+    const plan = await withTimeout(
+      (rzp.plans as any).fetch(planId) as Promise<{ item?: { amount?: number } }>,
+      LOOKUP_TIMEOUT_MS,
+    );
+    const paise = Number(plan?.item?.amount);
+    if (!Number.isFinite(paise) || paise <= 0) return null;
+    const inr = paise / 100;
+    planAmountCache.set(planId, inr);
+    return inr;
+  } catch (err) {
+    logger.warn('[razorpaySubscriptionService] could not read plan amount', { planId, err: String(err) });
+    return null;
+  }
+}
+
+/** plan_id of a subscription, or null if Razorpay can't be reached. */
+export async function getSubscriptionPlanId(rzpSubscriptionId: string): Promise<string | null> {
+  if (!rzpSubscriptionId) return null;
+  try {
+    const sub = await withTimeout(fetchSubscription(rzpSubscriptionId), LOOKUP_TIMEOUT_MS);
+    return sub?.plan_id || null;
+  } catch (err) {
+    logger.warn('[razorpaySubscriptionService] could not read subscription plan', { rzpSubscriptionId, err: String(err) });
+    return null;
+  }
+}
+
+// Webhooks wait for these lookups before replying to Razorpay, so keep them short.
+const LOOKUP_TIMEOUT_MS = 3000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => { if (timer) clearTimeout(timer); });
 }
 
 // ── Subscription helpers ──────────────────────────────────────────────────────

@@ -26,6 +26,29 @@ import Hotel from '../models/Hotel';
 import Subscription from '../models/Subscription';
 import { logger } from '../utils/logger';
 import { invalidateStatusCache } from '../middleware/auth';
+import { SAAS_STANDARD_PRICE_INR } from '../utils/planLimits';
+import { getPlanAmountInr, getSubscriptionPlanId } from '../services/razorpaySubscriptionService';
+
+/**
+ * Price to record for a paid period: the price of the Razorpay plan that was
+ * actually charged. Hotels that subscribed at an older standard price keep
+ * renewing on their old plan, so the current standard price can't be assumed.
+ *
+ * If Razorpay can't be reached: the hotel's custom price, else what this same
+ * subscription was charged last time, else the current standard price.
+ */
+async function chargedAnnualPrice(
+  planId:            string | undefined,
+  rzpSubscriptionId: string,
+  hotelPrice:        number | null | undefined,
+): Promise<number> {
+  const pid = planId || await getSubscriptionPlanId(rzpSubscriptionId);
+  const planPrice = await getPlanAmountInr(pid);
+  if (planPrice !== null) return planPrice;
+  if (hotelPrice) return hotelPrice;
+  const previous = await Subscription.findOne({ rzpSubscriptionId }).sort({ paidAt: -1 }).select('amount').lean();
+  return (previous as { amount?: number } | null)?.amount || SAAS_STANDARD_PRICE_INR;
+}
 
 const router = Router();
 
@@ -154,7 +177,7 @@ async function handleSaasWebhookEvent(
         status:                 'active',
         startDate:              currentStart,
         endDate:                currentEnd ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        amount:                 hotel.saasAnnualPrice ?? 12000,
+        amount:                 await chargedAnnualPrice(entity?.plan_id, rzpSubscriptionId, hotel.saasAnnualPrice),
         currency:               'INR',
         paymentMethod:          'razorpay_subscription',
         billingCycle:           'yearly',
@@ -206,7 +229,7 @@ async function handleSaasWebhookEvent(
         status:       'active',
         startDate:    currentStart,
         endDate:      currentEnd ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        amount:       hotel.saasAnnualPrice ?? 12000,
+        amount:       await chargedAnnualPrice(entity?.plan_id, rzpSubscriptionId, hotel.saasAnnualPrice),
         currency:     'INR',
         paymentMethod: 'razorpay_subscription',
         billingCycle: 'yearly',

@@ -94,7 +94,7 @@ export function SubscriptionPage() {
               DinePOS SaaS Standard
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {fmtAmount(status?.annualPrice ?? 12000)}/year · Unlimited devices
+              {fmtAmount(status?.annualPrice ?? 14000)}/year · Unlimited devices
             </p>
           </div>
           <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
@@ -156,7 +156,7 @@ export function SubscriptionPage() {
           disabled={subscribing}
           className="w-full rounded-2xl bg-green-600 py-3.5 text-base font-bold text-white shadow transition hover:bg-green-700 active:scale-[0.98] disabled:opacity-60"
         >
-          {subscribing ? 'Starting checkout…' : `Subscribe — ${fmtAmount(status?.annualPrice ?? 12000)}/year`}
+          {subscribing ? 'Starting checkout…' : `Subscribe — ${fmtAmount(status?.annualPrice ?? 14000)}/year`}
         </button>
       )}
 
