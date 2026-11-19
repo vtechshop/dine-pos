@@ -23,14 +23,14 @@ import { redisHealthCheck } from '../config/redis';
 import { generateAdminId, generatePassword } from '../utils/credentialGenerator';
 import { bootstrapNewHotel } from '../services/bootstrapHotel';
 import { sendError } from '../utils/sendError';
-import { getPriceForPlan, getDeviceLimitForPlan, SAAS_STANDARD_PRICE_INR } from '../utils/planLimits';
+import { getPriceForPlan, getDeviceLimitForPlan } from '../utils/planLimits';
+import { getStandardPricing, setStandardPrice } from '../services/saasPricing';
 import { logAuditRaw } from '../utils/audit';
 import { logger } from '../utils/logger';
 import { invalidateStatusCache, invalidateMaintenanceCache } from '../middleware/auth';
 import {
   createRazorpayPlan,
   updateSubscriptionPlan,
-  getPlanId,
 } from '../services/razorpaySubscriptionService';
 import { io } from '../server';
 import { Expo } from 'expo-server-sdk';
@@ -701,10 +701,46 @@ router.get('/saas/printer-queue', superAdminAuth, async (_req: Request, res: Res
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
 
+// GET /api/superadmin/saas/standard-price — the yearly price new hotels subscribe at
+router.get('/saas/standard-price', superAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const { annualPrice, source } = await getStandardPricing();
+    return res.json({ annualPrice, source });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
+// PUT /api/superadmin/saas/standard-price — set it. Creates a Razorpay plan for the
+// new price; new subscriptions use it. Existing subscribers keep their current price.
+router.put('/saas/standard-price', superAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const priceNum = Number(req.body?.price);
+    if (typeof req.body?.price !== 'number' || !Number.isInteger(priceNum) || priceNum < 1000 || priceNum > 1_000_000) {
+      return res.status(400).json({ message: 'price must be a whole number between 1000 and 1000000 (INR)' });
+    }
+    const before = await getStandardPricing();
+    let result;
+    try {
+      result = await setStandardPrice(priceNum);
+    } catch (e) {
+      logger.error('[SA] Failed to create Razorpay plan for standard price', { price: priceNum, err: String(e) });
+      return res.status(502).json({ message: 'Could not create the plan on Razorpay. Nothing was changed — please try again.' });
+    }
+    // Hotel audit log needs a hotel; this is a platform setting, so it goes to the server log.
+    logger.info('[SA] standard SaaS price set', {
+      previous: before.annualPrice, price: priceNum, planId: result.planId, planCreated: result.created,
+    });
+    return res.json({
+      message: `Standard price set to ₹${priceNum.toLocaleString('en-IN')}/year. New subscriptions use it from now; existing subscribers keep their current price.`,
+      annualPrice: priceNum,
+      source: 'superadmin',
+    });
+  } catch (error) { return sendError(res, 500, 'Server error', error); }
+});
+
 // PUT /api/superadmin/hotels/:id/saas-price — set/clear custom annual price per hotel
 // Setting a price: creates a Razorpay Plan for this price (if not already on same price),
 //   stores plan_id and price on hotel, and if the hotel has an active sub, updates it for next cycle.
-// Clearing (price: null): removes custom price, hotel reverts to standard ₹14,000/year plan next renewal.
+// Clearing (price: null): removes custom price, hotel reverts to the standard price next renewal.
 router.put('/hotels/:id/saas-price', superAdminAuth, async (req: Request, res: Response) => {
   try {
     if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
@@ -718,13 +754,14 @@ router.put('/hotels/:id/saas-price', superAdminAuth, async (req: Request, res: R
     if (price === null || price === undefined) {
       // Clear custom price — revert to standard plan next renewal
       const wasCustom = !!hotel.saasAnnualPrice;
+      const standard  = await getStandardPricing();
       await Hotel.findByIdAndUpdate(req.params.id, {
         saasAnnualPrice:   null,
         rzpCustomPlanId:   '',
       });
       // Update active subscription to standard plan for next cycle
       if (wasCustom && hotel.rzpSubscriptionId && hotel.rzpSubscriptionStatus === 'active') {
-        const standardPlanId = process.env.RAZORPAY_PLAN_ID_STANDARD;
+        const standardPlanId = standard.planId;
         if (standardPlanId) {
           try {
             await updateSubscriptionPlan(hotel.rzpSubscriptionId, standardPlanId);
@@ -734,7 +771,10 @@ router.put('/hotels/:id/saas-price', superAdminAuth, async (req: Request, res: R
         }
       }
       logAuditRaw({ actorRole: 'superadmin', action: 'hotel.saas_price_cleared', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: { previous: hotel.saasAnnualPrice } });
-      return res.json({ message: 'Custom price cleared. Hotel reverts to standard ₹14,000/year from next renewal.', effectiveFrom: 'next renewal cycle' });
+      return res.json({
+        message: `Custom price cleared. Hotel reverts to the standard ₹${standard.annualPrice.toLocaleString('en-IN')}/year from next renewal.`,
+        effectiveFrom: 'next renewal cycle',
+      });
     }
 
     const priceNum = Number(price);

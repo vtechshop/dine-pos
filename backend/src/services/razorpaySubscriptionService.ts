@@ -13,7 +13,6 @@
 
 import Razorpay from 'razorpay';
 import { logger } from '../utils/logger';
-import { IHotel } from '../models/Hotel';
 
 // Lazily-initialised client — allows tests to stub env vars before first call.
 let _client: Razorpay | null = null;
@@ -31,24 +30,11 @@ function getSaasClient(): Razorpay {
 
 // ── Plan helpers ──────────────────────────────────────────────────────────────
 
-/**
- * Resolve the Razorpay plan_id for a given hotel.
- * Custom price: hotel.rzpCustomPlanId (must be set by SA before calling createSubscription).
- * Standard:     process.env.RAZORPAY_PLAN_ID_STANDARD
- */
-export function getPlanId(hotel: Pick<IHotel, 'rzpCustomPlanId'>): string {
-  const customPlan  = hotel.rzpCustomPlanId;
-  const standardPlan = process.env.RAZORPAY_PLAN_ID_STANDARD;
-  if (customPlan && customPlan.trim()) return customPlan.trim();
-  if (!standardPlan) {
-    throw new Error('[razorpaySubscriptionService] RAZORPAY_PLAN_ID_STANDARD not set and no custom plan on hotel');
-  }
-  return standardPlan;
-}
+// Which plan a hotel subscribes on is decided in services/saasPricing.ts (resolvePlanId).
 
 /**
  * Create a new Razorpay Plan for a given annual price in INR.
- * Called by SA when setting a custom price, and once at initial setup for ₹14,000.
+ * Called by Super Admin when setting the standard price or a hotel's custom price.
  * Returns the Razorpay plan_id (e.g. "plan_xxx").
  */
 export async function createRazorpayPlan(
@@ -62,12 +48,14 @@ export async function createRazorpayPlan(
     period:   'yearly',
     interval: 1,
     item: {
-      name:     label,
-      amount:   paise,
-      currency: 'INR',
+      name:        label,
+      amount:      paise,
+      currency:    'INR',
+      description: 'DinePOS annual SaaS subscription — unlimited devices',
     },
   }) as { id: string };
 
+  planAmountCache.set(plan.id, annualPriceInr);
   logger.info('[razorpaySubscriptionService] plan created', { planId: plan.id, annualPriceInr });
   return plan.id;
 }

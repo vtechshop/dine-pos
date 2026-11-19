@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
-import { createSaasSubscription, createSaasSubscriptionPublic, checkSaasStatusPublic } from '../api/saasBilling';
+import { createSaasSubscription, createSaasSubscriptionPublic, checkSaasStatusPublic, getSaasStatus } from '../api/saasBilling';
 
 const SUPPORT_PHONE    = '+916381356683';
 const SUPPORT_WHATSAPP = '916381356683';
@@ -31,6 +31,18 @@ export function SubscriptionExpiredPage() {
   const [checking, setChecking]       = useState(false);
   const [statusMsg, setStatusMsg]     = useState('');
   const [subscribing, setSubscribing] = useState(false);
+  const [annualPrice, setAnnualPrice] = useState<number | null>(null);
+
+  // Price set in Super Admin (or this hotel's custom price) for the Subscribe button.
+  useEffect(() => {
+    let cancelled = false;
+    const hasJwt = !!localStorage.getItem('pos_token');
+    const load = hasJwt
+      ? getSaasStatus().then(s => s.annualPrice)
+      : info.hotelId ? checkSaasStatusPublic(info.hotelId).then(s => s.annualPrice ?? null) : Promise.resolve(null);
+    load.then(p => { if (!cancelled && typeof p === 'number' && p > 0) setAnnualPrice(p); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [info.hotelId]);
 
   const expiredDate = info.expiredOn
     ? new Date(info.expiredOn).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -182,7 +194,9 @@ export function SubscriptionExpiredPage() {
           disabled={subscribing || checking}
           className="mb-3 w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white transition hover:bg-green-700 active:scale-95 disabled:opacity-60"
         >
-          {subscribing ? 'Starting checkout…' : '⚡ Subscribe Now — ₹14,000/year'}
+          {subscribing
+            ? 'Starting checkout…'
+            : `⚡ Subscribe Now${annualPrice ? ` — ₹${annualPrice.toLocaleString('en-IN')}/year` : ''}`}
         </button>
 
         {/* Check status */}
