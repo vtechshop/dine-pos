@@ -14,6 +14,23 @@ describe('Orders — QR Self-Order', () => {
     hotelId = hotelA.hotelId;
     adminToken = hotelA.adminToken;
 
+    // Online-payment QR orders need an active Razorpay config (else 402).
+    // globalSetup creates one, but payments/payment-release deletes it in its
+    // own setup/teardown — so this suite must not depend on suite order.
+    const list = await api.get('/api/payment-gateway-configs').set(authHeaders(adminToken));
+    const active = list.status === 200
+      && (list.body as any[]).some((c: any) => c.gatewayType === 'razorpay' && c.isActive && !c.isDeleted);
+    if (!active) {
+      const gw = await api.post('/api/payment-gateway-configs').set(authHeaders(adminToken)).send({
+        gatewayType: 'razorpay', displayName: 'CI Test Gateway (qr-order)',
+        apiKey: 'rzp_test_CI_QRORDER_0001', apiSecret: 'ci_qrorder_api_secret_01',
+        webhookSecret: 'ci_qrorder_webhook_sec_1', environment: 'sandbox',
+      });
+      expect([200, 201]).toContain(gw.status);
+      const t = await api.patch(`/api/payment-gateway-configs/${gw.body._id}/toggle`).set(authHeaders(adminToken));
+      expect([200, 201]).toContain(t.status);
+    }
+
     // Public endpoint requires items with valid product ObjectIds (server verifies price from catalog)
     const cat = await createCategory(adminToken);
     const prod = await createProduct(adminToken, cat.id);

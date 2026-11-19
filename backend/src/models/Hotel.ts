@@ -323,7 +323,10 @@ HotelSchema.index({ parentHotelId: 1 }, { sparse: true });
 // branchCode must be unique within an org; exclude standalone hotels (parentHotelId:null)
 HotelSchema.index(
   { parentHotelId: 1, branchCode: 1 },
-  { unique: true, sparse: true, partialFilterExpression: { parentHotelId: { $type: 'objectId' }, branchCode: { $gt: '' } } },
+  // No `sparse`: MongoDB rejects sparse + partialFilterExpression, so the index was
+  // never built and branch-code uniqueness was not enforced. The partial filter alone
+  // already excludes standalone hotels and empty codes.
+  { unique: true, partialFilterExpression: { parentHotelId: { $type: 'objectId' }, branchCode: { $gt: '' } } },
 );
 
 export default mongoose.model<IHotel>('Hotel', HotelSchema);

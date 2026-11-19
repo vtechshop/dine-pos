@@ -379,3 +379,6 @@ describe('Sprint MBL-03: Offline Org Redemption Guard', () => {
     expect(() => assertOfflineQueueable(payload.redeemedPoints)).toThrow();
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

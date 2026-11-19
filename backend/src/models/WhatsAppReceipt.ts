@@ -129,8 +129,8 @@ WhatsAppReceiptSchema.index({ hotelId: 1, createdAt: -1 });
 
 // Webhook correlation: find by requestId + normalizedPhone + hotelId
 WhatsAppReceiptSchema.index({ requestId: 1, normalizedPhone: 1, hotelId: 1 }, {
+  // No `sparse`: MongoDB rejects sparse together with partialFilterExpression.
   partialFilterExpression: { requestId: { $type: 'string' } },
-  sparse: true,
 });
 
 export default mongoose.model<IWhatsAppReceipt>('WhatsAppReceipt', WhatsAppReceiptSchema);

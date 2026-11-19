@@ -6,6 +6,7 @@ export interface IRefreshToken extends Document {
   familyId: string;
   expiresAt: Date;
   revokedAt: Date | null;
+  actingOrgId?: mongoose.Types.ObjectId | null;
 }
 
 const RefreshTokenSchema = new Schema<IRefreshToken>({
@@ -17,6 +18,9 @@ const RefreshTokenSchema = new Schema<IRefreshToken>({
   familyId:  { type: String, required: true, index: true },
   expiresAt: { type: Date, required: true },
   revokedAt: { type: Date, default: null },
+  // HQ org id when this token was issued by /api/branches/switch (HQ acting in a branch).
+  // Carried across rotation so the HQ admin keeps branch-hopping rights after refresh.
+  actingOrgId: { type: Schema.Types.ObjectId, ref: 'Hotel', default: null },
 });
 
 // TTL index — MongoDB auto-deletes expired tokens

@@ -365,3 +365,6 @@ describe('Over-receiving guard (CRIT-2)', () => {
     expect(wouldOverReceive(21, 20, 0)).toBe(true);
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

@@ -208,3 +208,6 @@ describe('GET /api/ai/forecast/purchase — authorization', () => {
   it.todo('returns 403 when a non-admin role requests the purchase forecast endpoint');
   it.todo('returns 200 (or 404) when an admin role with ai feature requests the forecast');
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

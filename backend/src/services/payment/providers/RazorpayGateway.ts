@@ -105,7 +105,9 @@ export class RazorpayGateway implements PaymentGateway {
         .update(`${gatewayOrderId}|${gatewayTransactionId}`)
         .digest('hex');
 
-      if (expected !== signature) {
+      const a = Buffer.from(expected, 'utf8');
+      const b = Buffer.from(String(signature), 'utf8');
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
         return {
           success:         false,
           status:          'failed',
@@ -125,11 +127,21 @@ export class RazorpayGateway implements PaymentGateway {
 
     // Cross-check order_id: ties the payment to the expected order.
     // Primary integrity check for OAuth configs (where local HMAC is skipped).
-    if (gatewayOrderId && raw.order_id && raw.order_id !== gatewayOrderId) {
+    // Fail closed: a payment with no order_id (static QR, direct payment) must
+    // never satisfy verification for one of our orders.
+    if (gatewayOrderId && raw.order_id !== gatewayOrderId) {
       return {
         success:         false,
         status:          'failed',
         gatewayResponse: { error: 'Order ID mismatch — payment does not belong to expected order', payment_id: gatewayTransactionId },
+      };
+    }
+
+    if (String(raw.currency ?? 'INR').toUpperCase() !== 'INR') {
+      return {
+        success:         false,
+        status:          'failed',
+        gatewayResponse: { error: 'Unexpected payment currency', payment_id: gatewayTransactionId },
       };
     }
 

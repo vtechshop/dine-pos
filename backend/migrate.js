@@ -1,11 +1,16 @@
 const { MongoClient } = require('mongodb');
 
 const LOCAL = 'mongodb://localhost:27017/hotelbillingpos';
-// Target comes from the environment — never commit a connection string here.
-// (A production URI was previously hardcoded in this file; it must be rotated.)
+// SECURITY: the target URI must come from the environment — never commit it.
+// This script DELETES every matching collection on the target before copying,
+// so it also refuses to run without an explicit --confirm-wipe-target flag.
 const ATLAS = process.env.MIGRATE_TARGET_URI;
 if (!ATLAS) {
-  console.error('Set MIGRATE_TARGET_URI to the destination MongoDB URI.');
+  console.error('Set MIGRATE_TARGET_URI to the target MongoDB URI.');
+  process.exit(1);
+}
+if (!process.argv.includes('--confirm-wipe-target')) {
+  console.error('Refusing to run: this wipes collections on the target. Re-run with --confirm-wipe-target.');
   process.exit(1);
 }
 

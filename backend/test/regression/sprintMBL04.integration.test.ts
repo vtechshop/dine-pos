@@ -797,3 +797,7 @@ describe('MBL-I04-27: earnOrgPoints missing orgHotelId guard (design note)', () 
     expect(earnReliesOnCallerValidation).toBe(true);
   });
 });
+
+// Module scope: without an import/export, ts-jest compiles this file as a
+// global script and its top-level consts collide with other such files.
+export {};

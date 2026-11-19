@@ -404,3 +404,6 @@ describe('A-08 — morningBriefRoutes calls setCachedBrief with isToday=false fo
     expect(src).toMatch(/morning-brief\/regenerate.*requireAiQuota/s);
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

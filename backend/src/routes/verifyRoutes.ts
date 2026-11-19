@@ -7,6 +7,7 @@ const router = Router();
 
 // 30 lookups per minute per IP — prevents quota exhaustion on the upstream public APIs
 const verifyLimiter = makeRateLimiter({
+  name: 'verify',
   windowMs: 60 * 1000,
   max: 30,
   skip: () => process.env.NODE_ENV === 'test',

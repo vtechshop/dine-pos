@@ -464,3 +464,6 @@ describe('TALLY-S1-43 to TALLY-S1-45 — Ledger map defaults', () => {
     expect(DEFAULT_LEDGER_MAP.sgstLedger).toContain('SGST');
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

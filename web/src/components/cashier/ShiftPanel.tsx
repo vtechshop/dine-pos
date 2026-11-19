@@ -57,9 +57,10 @@ function RunningShift({ nowMs }: { nowMs: number }) {
 
   if (!shift) return null;
 
-  // expectedCash = openingCash + cashSales + cashIn - cashOut = drawerBalance + cashSales
-  const cashSales = stats?.cashSales ?? 0;
-  const expectedCash = drawerBalance + cashSales;
+  // Same formula as the server's shift close: opening + cash sales + cash share of
+  // split bills + cash in − cash out. Prefer the server value when available.
+  const cashSales = (stats?.cashSales ?? 0) + (stats?.splitCashSales ?? 0);
+  const expectedCash = stats?.expectedCash ?? (drawerBalance + cashSales);
   const actual = parseFloat(actualCash) || 0;
   const difference = actual - expectedCash;
 

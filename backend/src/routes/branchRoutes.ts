@@ -5,6 +5,7 @@ import Hotel from '../models/Hotel';
 import Settings from '../models/Settings';
 import { authMiddleware, requireAdmin, AuthRequest, generateToken, generateRefreshToken } from '../middleware/auth';
 import { logger } from '../utils/logger';
+import { resolveOrgAuthority } from '../utils/orgAuth';
 
 const router = Router();
 
@@ -260,15 +261,17 @@ router.post('/switch', async (req: AuthRequest, res: Response): Promise<void> =>
       return;
     }
 
-    // Determine the org root from the current token
-    const currentHotel = await Hotel.findById(req.hotelId!)
-      .select('parentHotelId features')
-      .lean() as any;
-    if (!currentHotel) { res.status(404).json({ message: 'Hotel not found' }); return; }
-
-    const orgHotelId: string = currentHotel.parentHotelId
-      ? currentHotel.parentHotelId.toString()
-      : req.hotelId!;
+    // Org root + caller authority from trusted DB records. Only the HQ admin
+    // (or the HQ admin acting in a branch via a token minted below) may switch.
+    // A branch's own admin login has no authority over sibling branches.
+    const authority = await resolveOrgAuthority(req);
+    if (!authority) { res.status(404).json({ message: 'Hotel not found' }); return; }
+    if (!authority.actsForOrg) {
+      logger.warn('[branches] switch denied — caller is not the org admin', { hotelId: req.hotelId, branchId });
+      res.status(403).json({ message: 'Only the organization (HQ) admin can switch branches.' });
+      return;
+    }
+    const orgHotelId: string = authority.orgHotelId;
 
     // Check multiBranch is enabled at the org level
     const orgHotel = await Hotel.findById(orgHotelId)
@@ -301,8 +304,10 @@ router.post('/switch', async (req: AuthRequest, res: Response): Promise<void> =>
       return;
     }
 
-    const branchToken = generateToken(branchId, branch.hotelName);
-    const { token: branchRefreshToken } = await generateRefreshToken(branchId);
+    // actingOrgId marks this session as "HQ admin acting in a branch" so it can
+    // hop to sibling branches (also after refresh) — a branch's own login cannot.
+    const branchToken = generateToken(branchId, branch.hotelName, orgHotelId);
+    const { token: branchRefreshToken } = await generateRefreshToken(branchId, undefined, orgHotelId);
 
     res.json({
       branchToken,

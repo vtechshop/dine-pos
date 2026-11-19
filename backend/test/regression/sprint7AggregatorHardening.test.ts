@@ -658,3 +658,6 @@ describe('E-F13 — Swiggy / Zomato external API contracts', () => {
     expect(JSON.parse(body).status).toBe('Accepted');
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

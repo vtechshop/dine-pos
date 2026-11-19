@@ -5,6 +5,9 @@ const config: Config = {
   testEnvironment: 'node',
   roots: ['<rootDir>/test', '<rootDir>/src/__tests__'],
   testMatch: ['**/*.test.ts'],
+  // One shared in-memory MongoDB for integration tests (test/integration/harness.ts)
+  globalSetup:    '<rootDir>/test/integration/globalSetup.ts',
+  globalTeardown: '<rootDir>/test/integration/globalTeardown.ts',
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: {

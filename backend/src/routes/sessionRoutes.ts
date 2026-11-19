@@ -23,6 +23,7 @@ import guestRouter from './guestRoutes';
 import { getLoyaltyConfig, calculateEarnedPoints, earnPoints } from '../utils/loyaltyUtils';
 import { scheduleReceiptPrint } from '../utils/printUtils';
 import { counterBillingOrderUpdates, isDueAtCounter } from '../utils/counterBilling';
+import { checkOnlineOrdersForBilling, onlineBillingBlockResponse } from '../utils/onlinePayment';
 
 const router = Router();
 
@@ -352,6 +353,7 @@ router.get('/:sessionId/bill', requireCashierOrAdmin, async (req: AuthRequest, r
 // RBAC: cashier | admin
 // ────────────────────────────────────────────────────────────────────────────────
 router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  let claimedSessionId: mongoose.Types.ObjectId | null = null;
   try {
     const { sessionId } = req.params;
     const { bulkBill, paymentMethod, splitDetails, giftVoucherCode } = req.body as {
@@ -387,6 +389,17 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
         res.status(400).json({
           message: `paymentMethod is required for bulkBill. Valid values: ${VALID_METHODS.join(', ')}`,
         });
+        return;
+      }
+
+      // R1 + R2: every online order on the table must be resolved before it is
+      // billed — no unpaid (payment_pending) order, and every order marked paid
+      // online backed by a verified payment. Checked before any write or claim.
+      const onlineBlock = onlineBillingBlockResponse(
+        await checkOnlineOrdersForBilling(req.hotelId!, { sessionId: session._id }),
+      );
+      if (onlineBlock) {
+        res.status(409).json(onlineBlock);
         return;
       }
 
@@ -445,6 +458,19 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
       }
 
       const now = new Date();
+
+      // Atomic claim: only one close request may settle this session. A concurrent
+      // second request gets 409 instead of deducting the voucher / printing twice.
+      const claimed = await TableSession.findOneAndUpdate(
+        { _id: session._id, hotelId: req.hotelId, status: 'open', billingStartedAt: null },
+        { $set: { billingStartedAt: now } },
+      );
+      if (!claimed) {
+        res.status(409).json({ message: 'This table is already being billed. Refresh to see the latest status.' });
+        return;
+      }
+      claimedSessionId = session._id as mongoose.Types.ObjectId;
+
       await Guest.updateMany(
         { sessionId: session._id, status: 'active' },
         {
@@ -470,9 +496,37 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
       // active orders for the whole session.
       // Counter orders take this payment method; orders already paid online keep
       // 'razorpay'; unpaid payment_pending QR orders are never marked completed.
-      const sessionOrderUpdates = counterBillingOrderUpdates({ sessionId: session._id }, paymentMethod);
+      // Completion metadata + settledVia: reports / shift cash bucket these orders by
+      // payment time and count the money once, from the TableSession settlement below.
+      const sessionOrderUpdates = counterBillingOrderUpdates({ sessionId: session._id }, paymentMethod, {
+        completedAt: now, paymentTime: now, settledVia: 'session',
+        ...(req.cashierId ? { cashierId: String(req.cashierId) } : {}),
+      });
       await Order.updateMany(sessionOrderUpdates.counter.filter, sessionOrderUpdates.counter.update);
       await Order.updateMany(sessionOrderUpdates.prepaid.filter, sessionOrderUpdates.prepaid.update);
+
+      // Settlement record: what the counter collected for the whole table, net of
+      // the voucher. Guest.totalAmount already excludes orders paid online.
+      const tableCollected = paymentMethod === 'complimentary'
+        ? 0 : Math.max(0, +(totalActiveAmount - sessionVoucherAmount).toFixed(2));
+      const tableCash =
+        paymentMethod === 'cash'  ? tableCollected :
+        paymentMethod === 'split' ? Math.max(0, Number(splitDetails?.cash ?? 0)) : 0;
+      await TableSession.updateOne(
+        { _id: session._id },
+        { $set: {
+          billedAt:          now,
+          billPaymentMethod: paymentMethod,
+          billSplitDetails:  {
+            cash: paymentMethod === 'split' ? Number(splitDetails?.cash ?? 0) : 0,
+            upi:  paymentMethod === 'split' ? Number(splitDetails?.upi  ?? 0) : 0,
+            card: paymentMethod === 'split' ? Number(splitDetails?.card ?? 0) : 0,
+          },
+          giftVoucherAmount: sessionVoucherAmount,
+          collectedAmount:   tableCollected,
+          cashCollected:     tableCash,
+        } },
+      );
 
       // Gift voucher deduction for bulk bill (best-effort, logged on failure)
       if (sessionVoucherDoc && sessionVoucherAmount > 0) {
@@ -578,6 +632,14 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
         });
         return;
       }
+      // R2: no unpaid online order may be left behind on a closed table.
+      const closeBlock = onlineBillingBlockResponse(
+        await checkOnlineOrdersForBilling(req.hotelId!, { sessionId: session._id }),
+      );
+      if (closeBlock && closeBlock.code === 'ONLINE_PAYMENT_PENDING') {
+        res.status(409).json(closeBlock);
+        return;
+      }
     }
 
     // Re-fetch final state to compute revenue from billed guests
@@ -622,6 +684,14 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
 
     res.json({ session: updatedSession, totalRevenue });
   } catch (err: any) {
+    // Release the bulk-bill claim if we failed before the session was closed,
+    // so staff can retry (already-billed guests are skipped on retry).
+    if (claimedSessionId) {
+      await TableSession.updateOne(
+        { _id: claimedSessionId, status: 'open' },
+        { $set: { billingStartedAt: null } },
+      ).catch(() => {});
+    }
     sendError(res, 500, 'Failed to close session', err);
   }
 });

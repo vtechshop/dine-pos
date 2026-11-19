@@ -11,6 +11,7 @@ import mongoose from 'mongoose';
 import CategoryConfig from '../models/CategoryConfig';
 import Category from '../models/Category';
 import Hotel from '../models/Hotel';
+import { resolveOrgAuthority } from '../utils/orgAuth';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { sendError } from '../utils/sendError';
 
@@ -20,21 +21,17 @@ router.use(requireAdmin);
 
 // ── resolveOrgContext (same pattern as catalogRoutes) ─────────────────────────
 
-async function resolveOrgContext(hotelId: string): Promise<{
-  orgHotelId: string;
-  multiBranchEnabled: boolean;
-  isHQ: boolean;
-} | null> {
-  const hotel = await Hotel.findById(hotelId).select('parentHotelId features').lean();
-  if (!hotel) return null;
-  const isHQ = !hotel.parentHotelId;
-  const orgHotelId = isHQ ? hotelId : hotel.parentHotelId!.toString();
-  let multiBranchEnabled = hotel.features?.multiBranch ?? false;
-  if (!isHQ) {
-    const orgHotel = await Hotel.findById(orgHotelId).select('features').lean();
-    multiBranchEnabled = orgHotel?.features?.multiBranch ?? false;
-  }
-  return { orgHotelId, multiBranchEnabled, isHQ };
+// Org context + authority come from trusted DB records (utils/orgAuth.ts).
+// actsForOrg = HQ admin, or HQ admin acting in a branch via /api/branches/switch.
+async function resolveOrgContext(req: AuthRequest) {
+  return resolveOrgAuthority(req);
+}
+
+// Branch-scoped access: org authority for everything; a branch's own admin may
+// only READ its own branch. Sibling branches are never accessible to a branch admin.
+function canAccessBranch(ctx: { actsForOrg: boolean }, req: AuthRequest, branchId: string | undefined, write: boolean): boolean {
+  if (ctx.actsForOrg) return true;
+  return !write && !!branchId && branchId === req.hotelId;
 }
 
 // ── GET /api/category-config/org ──────────────────────────────────────────────
@@ -42,10 +39,14 @@ async function resolveOrgContext(hotelId: string): Promise<{
 
 router.get('/org', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const ctx = await resolveOrgContext(req.hotelId!);
+    const ctx = await resolveOrgContext(req);
     if (!ctx) { res.status(404).json({ message: 'Hotel not found' }); return; }
     if (!ctx.multiBranchEnabled) {
       res.status(403).json({ message: 'Multi-branch feature is not enabled' });
+      return;
+    }
+    if (!ctx.actsForOrg) {
+      res.status(403).json({ message: 'Only the HQ admin can access organization-wide data' });
       return;
     }
 
@@ -96,10 +97,14 @@ router.get('/org', async (req: AuthRequest, res: Response): Promise<void> => {
 
 router.get('/branches/:branchId', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const ctx = await resolveOrgContext(req.hotelId!);
+    const ctx = await resolveOrgContext(req);
     if (!ctx) { res.status(404).json({ message: 'Hotel not found' }); return; }
     if (!ctx.multiBranchEnabled) {
       res.status(403).json({ message: 'Multi-branch feature is not enabled' });
+      return;
+    }
+    if (!canAccessBranch(ctx, req, req.params.branchId, false)) {
+      res.status(403).json({ message: 'Not authorized for this branch' });
       return;
     }
 
@@ -158,10 +163,14 @@ router.get('/branches/:branchId', async (req: AuthRequest, res: Response): Promi
 
 router.put('/branches/:branchId/categories/:categoryId', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const ctx = await resolveOrgContext(req.hotelId!);
+    const ctx = await resolveOrgContext(req);
     if (!ctx) { res.status(404).json({ message: 'Hotel not found' }); return; }
     if (!ctx.multiBranchEnabled) {
       res.status(403).json({ message: 'Multi-branch feature is not enabled' });
+      return;
+    }
+    if (!canAccessBranch(ctx, req, req.params.branchId, true)) {
+      res.status(403).json({ message: 'Not authorized for this branch' });
       return;
     }
 
@@ -209,10 +218,14 @@ router.put('/branches/:branchId/categories/:categoryId', async (req: AuthRequest
 
 router.delete('/branches/:branchId/categories/:categoryId', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const ctx = await resolveOrgContext(req.hotelId!);
+    const ctx = await resolveOrgContext(req);
     if (!ctx) { res.status(404).json({ message: 'Hotel not found' }); return; }
     if (!ctx.multiBranchEnabled) {
       res.status(403).json({ message: 'Multi-branch feature is not enabled' });
+      return;
+    }
+    if (!canAccessBranch(ctx, req, req.params.branchId, true)) {
+      res.status(403).json({ message: 'Not authorized for this branch' });
       return;
     }
 

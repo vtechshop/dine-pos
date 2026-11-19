@@ -180,6 +180,9 @@ describe('PAY-01 — qr-verify cannot release an order the payment does not belo
     (PaymentModel.findOne as jest.Mock).mockResolvedValue({
       status: 'success', orderId: { toString: () => ORDER_A }, gatewayTransactionId: 'pay_x',
     });
+    // releasePaidOnlineOrder reads the order first; it is still payment_pending and
+    // not on a table, so the atomic release (findOneAndUpdate) runs for ORDER_A.
+    (OrderModel.findOne as jest.Mock).mockReturnValue({ lean: async () => ({ _id: ORDER_A, status: 'payment_pending' }) });
     (OrderModel.findOneAndUpdate as jest.Mock).mockResolvedValue(null); // already released
     const res = mockRes();
     await handler({ body: { ...baseBody, orderId: ORDER_A } }, res);

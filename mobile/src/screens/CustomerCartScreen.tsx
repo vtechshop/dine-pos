@@ -62,6 +62,9 @@ const CustomerCartScreen: React.FC = () => {
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const detailsSectionY = useRef(0);
+  // One idempotency key per placement attempt, reused on retries (timeouts) so
+  // the server returns the same order instead of creating a duplicate + KOT.
+  const placementIdRef = useRef<string | null>(null);
   const [countdown, setCountdown] = useState(6);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [liveStatus, setLiveStatus] = useState<'received' | 'preparing' | 'ready' | 'served'>('received');
@@ -298,8 +301,16 @@ const CustomerCartScreen: React.FC = () => {
       status:        'pending',
     };
 
-    // If offline — queue immediately, no API call needed
+    // If offline — queue immediately, no API call needed.
+    // Only kiosk (hotel device, pay at counter) orders can be queued: the server
+    // always refuses other offline cash orders, which used to be retried forever
+    // while the customer had already been shown a token.
     if (!isConnected()) {
+      if (orderPayload.orderSource !== 'kiosk') {
+        showAlert('No internet', 'Please reconnect to place your order.');
+        setPlacing(false);
+        return;
+      }
       const localToken = String(Math.floor(Math.random() * 90 + 10));
       await enqueueCustomerOrder(hotelId, localToken, orderPayload);
       clearCart();
@@ -324,7 +335,11 @@ const CustomerCartScreen: React.FC = () => {
     }
 
     try {
-      const order = await api.createPublicOrder(orderPayload);
+      if (!placementIdRef.current) {
+        placementIdRef.current = `kp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      }
+      const order = await api.createPublicOrder({ ...orderPayload, offlineId: placementIdRef.current });
+      placementIdRef.current = null; // next order gets a fresh key
 
       const token = order.orderNumber.split('-').pop() || '1';
       const snapshot = {

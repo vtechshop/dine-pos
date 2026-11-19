@@ -904,3 +904,6 @@ describe('E-F14 — Dry-run menu sync labeling', () => {
     expect(realResponse.dryRun).toBe(false);
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

@@ -396,3 +396,6 @@ describe('A-02 — Past-date alert: dedupDate uses historical date', () => {
     expect(filters[0].type).toBe(filters[1].type);
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};

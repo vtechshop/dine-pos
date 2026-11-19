@@ -22,7 +22,7 @@
 import { api } from '../../../utils/api-client';
 import { authHeaders } from '../../../utils/env';
 import { getHotelA, getHotelB } from '../../setup/testEnv';
-import { createOrder, updateOrderStatus } from '../../helpers/order.helper';
+import { createOrder, updateOrderStatus, productLine, hotelForToken } from '../../helpers/order.helper';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -140,7 +140,7 @@ describe('Shift Management (SHF)', () => {
       const { orderId } = await createOrder(adminToken, {
         tableNumber: 'SHFD',
         paymentMethod: 'cash',
-        items: [{ productName: 'Samosa', quantity: 2, price: 30, total: 60 }],
+        items: [productLine(hotelForToken(adminToken), 1, 2)], // Naan ₹30 × 2
       });
       await updateOrderStatus(kitchenToken, orderId, 'preparing');
       await updateOrderStatus(kitchenToken, orderId, 'ready');

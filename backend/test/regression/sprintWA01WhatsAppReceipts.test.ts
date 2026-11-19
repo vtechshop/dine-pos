@@ -395,3 +395,6 @@ describe('WA-S1-38 to WA-S1-40 — Idempotency and fire-and-forget safety', () =
     expect(shouldFail(3, 3)).toBe(true);  // over the limit → failed
   });
 });
+
+// Make this file a module so its top-level names do not clash with other test files.
+export {};
