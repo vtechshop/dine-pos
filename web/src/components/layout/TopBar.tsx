@@ -5,13 +5,14 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { useSettings } from '../../context/SettingsContext';
 import { NotificationBell } from '../ui/NotificationBell';
+import { RefreshPageButton } from '../ui/RefreshPageButton';
 import { PlatformStatus } from './PlatformStatus';
 import { GlobalSearch } from './GlobalSearch';
 import { BroadcastBell } from '../ui/BroadcastBell';
 import { LiveBadge } from '../ui/LiveBadge';
 import { TrialBanner } from './TrialBanner';
 
-export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
+export function TopBar({ onMenuClick, onRefresh }: { onMenuClick?: () => void; onRefresh?: () => void }) {
   const { hotelName, logout, role } = useAuth();
   const { connected, reconnecting } = useSocket();
   const { settings } = useSettings();
@@ -69,6 +70,9 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
 
           {/* Free-trial days left (was a full-width banner) */}
           <TrialBanner />
+
+          {/* Refresh — reloads this page's data */}
+          {onRefresh && <RefreshPageButton onRefresh={onRefresh} />}
 
           {/* Notification bell — live orders (all roles) */}
           <NotificationBell />

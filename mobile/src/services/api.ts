@@ -984,16 +984,17 @@ export interface Ticket {
   createdAt: string;
 }
 
+// Tickets need the hotel login: the server shows each hotel only its own tickets.
 export const raiseTicket = (data: Partial<Ticket>): Promise<Ticket> => {
-  return fetchAPI('/tickets', { method: 'POST', body: JSON.stringify(data) }, true);
+  return fetchAPI('/tickets', { method: 'POST', body: JSON.stringify(data) });
 };
 
 export const getMyTickets = (phone: string): Promise<Ticket[]> => {
-  return fetchAPI(`/tickets/hotel/${phone}`, undefined, true);
+  return fetchAPI(`/tickets/hotel/${phone}`);
 };
 
 export const replyToTicket = (id: string, message: string): Promise<Ticket> => {
-  return fetchAPI(`/tickets/${id}/reply`, { method: 'POST', body: JSON.stringify({ message }) }, true);
+  return fetchAPI(`/tickets/${id}/reply`, { method: 'POST', body: JSON.stringify({ message }) });
 };
 
 export const getAllTickets = (status?: string): Promise<Ticket[]> => {
