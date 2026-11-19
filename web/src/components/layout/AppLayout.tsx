@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -15,6 +15,8 @@ export function AppLayout() {
   const { socket } = useSocket();
   const { pathname } = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Bumped by the top-bar Refresh button: re-mounts the page so it loads fresh data.
+  const [refreshKey, setRefreshKey] = useState(0);
   const [maintenance, setMaintenance] = useState<{ active: boolean; message: string } | null>(null);
 
   const fetchMaintenance = useCallback(async () => {
@@ -54,7 +56,7 @@ export function AppLayout() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-mist">
-      <TopBar onMenuClick={() => setSidebarOpen(true)} />
+      <TopBar onMenuClick={() => setSidebarOpen(true)} onRefresh={() => setRefreshKey(k => k + 1)} />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -63,13 +65,13 @@ export function AppLayout() {
           {/* Pages size themselves with h-full; this wrapper is what's left
               below the banner, so the banner can't push their bottom off-screen. */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <Outlet />
+            <Fragment key={refreshKey}><Outlet /></Fragment>
           </div>
         </main>
 
         {/* The cashier POS has its own order summary on the right; the kitchen
             display needs the full width */}
-        {!pathname.startsWith('/cashier') && role !== 'kitchen' && <RightPanel />}
+        {!pathname.startsWith('/cashier') && role !== 'kitchen' && <RightPanel key={refreshKey} />}
       </div>
 
       <StatusBar />

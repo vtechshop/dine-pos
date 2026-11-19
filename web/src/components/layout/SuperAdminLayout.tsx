@@ -1,3 +1,4 @@
+import { Fragment, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   Activity, BarChart2, Building2, Heart, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Tag,
@@ -12,6 +13,7 @@ import { LeadNotificationProvider, useLeadNotifications } from '../../context/Le
 import { LeadToast } from '../ui/LeadToast';
 import { SATicketsProvider, useSATickets } from '../../context/SATicketsContext';
 import { SATicketToast } from '../ui/SATicketToast';
+import { RefreshPageButton } from '../ui/RefreshPageButton';
 
 /** Red count of support tickets waiting for a reply */
 function TicketBadge() {
@@ -38,6 +40,8 @@ function DemoBadge() {
 
 export function SuperAdminLayout() {
   const { logout } = useAuth();
+  // Bumped by the Refresh button: re-mounts the page so it loads fresh data.
+  const [refreshKey, setRefreshKey] = useState(0);
 
   return (
     <LeadNotificationProvider>
@@ -55,6 +59,7 @@ export function SuperAdminLayout() {
               <p className="text-xs font-bold text-ink leading-none">Super Admin</p>
               <p className="text-[10px] text-ink/40 leading-none mt-0.5">Dine POS</p>
             </div>
+            <RefreshPageButton onRefresh={() => setRefreshKey(k => k + 1)} className="ml-auto" />
           </div>
 
           {/* Search any page or hotel */}
@@ -268,7 +273,7 @@ export function SuperAdminLayout() {
 
         {/* Main */}
         <main className="flex-1 overflow-y-auto">
-          <Outlet />
+          <Fragment key={refreshKey}><Outlet /></Fragment>
         </main>
       </div>
 

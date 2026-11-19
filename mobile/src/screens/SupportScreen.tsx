@@ -45,6 +45,8 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
   // ── Tickets state ──
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
+  // No hotel login on this device (e.g. opened from the pending / expired screen): tickets need one.
+  const [signedOut, setSignedOut] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
@@ -71,9 +73,12 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
   const loadTickets = useCallback(async () => {
     if (!phone) { setLoading(false); return; }
     try {
+      if (!(await getToken())) { setSignedOut(true); setTickets([]); return; }
+      setSignedOut(false);
       const data = await getMyTickets(phone);
       setTickets(data);
     } catch (error: any) {
+      if (/authentication required/i.test(error?.message ?? '')) { setSignedOut(true); return; }
       showAlert('Error', error.message || 'Failed to load tickets');
     } finally {
       setLoading(false);
@@ -158,6 +163,7 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
     if (!subject.trim()) { showAlert('Required', 'Please enter subject'); return; }
     if (!description.trim()) { showAlert('Required', 'Please enter description'); return; }
     if (!phone) { showAlert('Error', 'Phone number not set in Settings'); return; }
+    if (signedOut) { showAlert('Sign in needed', 'Please sign in to raise a ticket, or call / WhatsApp us from the Contact tab.'); return; }
 
     setSubmitting(true);
     try {
@@ -522,8 +528,12 @@ const SupportScreen: React.FC<Props> = ({ navigation }) => {
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <MaterialIcons name="support-agent" size={60} color={Colors.textMuted} />
-                <Text style={styles.emptyTitle}>No tickets yet</Text>
-                <Text style={styles.emptySubtitle}>Tap "New Ticket" to raise a support request</Text>
+                <Text style={styles.emptyTitle}>{signedOut ? 'Sign in to see your tickets' : 'No tickets yet'}</Text>
+                <Text style={styles.emptySubtitle}>
+                  {signedOut
+                    ? 'You can still call, WhatsApp or email us from the Contact tab.'
+                    : 'Tap "New Ticket" to raise a support request'}
+                </Text>
               </View>
             }
           />
