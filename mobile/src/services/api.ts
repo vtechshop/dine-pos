@@ -339,6 +339,7 @@ const fetchAPI = async <T>(
         if (response.status < 500) {
           const err: any = new Error(errBody.message || 'Request failed');
           if (errBody.code) err.code = errBody.code;
+          if (errBody.hotelId) err.hotelId = String(errBody.hotelId);
           if (errBody.code === 'TRIAL_EXPIRED' || errBody.code === 'PLAN_EXPIRED') {
             const expiredOnRaw = errBody.expiredOn;
             const expiredOn = expiredOnRaw
@@ -720,6 +721,15 @@ export const requestCredentialReset = (phone: string): Promise<{ message: string
 export const checkResetStatus = (phone: string): Promise<{ adminId?: string; resetRequested?: boolean; resetFulfilledAt?: string; hotelName?: string }> => {
   return fetchAPI(`/hotels/reset-status/${phone}`, undefined, true);
 };
+
+// ── DinePOS subscription for an expired hotel (no login available) ──
+// The server only allows these for hotels that are really expired.
+export const getSaasStatusPublic = (hotelId: string): Promise<{ isActive: boolean; status: string; annualPrice?: number }> =>
+  fetchAPI(`/saas/status-public?hotelId=${encodeURIComponent(hotelId)}`, undefined, true);
+
+/** Starts a Razorpay subscription; returns the hosted checkout link. Not retried, so one tap = one checkout. */
+export const subscribeSaasPublic = (hotelId: string): Promise<{ subscriptionId: string; checkoutUrl: string; status: string }> =>
+  fetchAPI('/saas/subscribe-public', { method: 'POST', body: JSON.stringify({ hotelId }) }, true, 0);
 
 export const getSubscriptionInfo = (): Promise<{
   subscriptionStatus: string;

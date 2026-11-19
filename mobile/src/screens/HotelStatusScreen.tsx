@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   StyleSheet,
   StatusBar,
   ScrollView,
+  Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -13,6 +15,7 @@ import { RootStackParamList } from '../types';
 import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import { getSaasStatusPublic, subscribeSaasPublic } from '../services/api';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HotelStatus'>;
 
@@ -32,9 +35,59 @@ type StatusConfig = {
 };
 
 const HotelStatusScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { status, hotelName, trialDaysRemaining } = route.params;
+  const { status, hotelName, trialDaysRemaining, hotelId, planExpired } = route.params;
   const { bottom } = useSafeAreaInsets();
   const { logout } = useAuth();
+
+  // ── Subscribe with Razorpay (expired hotels; no login needed) ──
+  const canSubscribe = status === 'expired' && !!hotelId;
+  const [annualPrice, setAnnualPrice]       = useState<number | null>(null);
+  const [subscribing, setSubscribing]       = useState(false);
+  const [checking, setChecking]             = useState(false);
+  const [openedCheckout, setOpenedCheckout] = useState(false);
+  const [payMsg, setPayMsg]                 = useState('');
+
+  useEffect(() => {
+    if (!canSubscribe) return;
+    let cancelled = false;
+    getSaasStatusPublic(hotelId!)
+      .then(s => { if (!cancelled && typeof s.annualPrice === 'number') setAnnualPrice(s.annualPrice); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [canSubscribe, hotelId]);
+
+  const handleSubscribe = async () => {
+    setSubscribing(true);
+    setPayMsg('');
+    try {
+      const { checkoutUrl } = await subscribeSaasPublic(hotelId!);
+      await Linking.openURL(checkoutUrl);
+      setOpenedCheckout(true);
+      setPayMsg('Finish the payment on the Razorpay page, then come back and tap "I have paid".');
+    } catch (e: any) {
+      setPayMsg(e?.message || 'Could not start the payment. Please try again or contact support.');
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
+  const handleCheckPaid = async () => {
+    setChecking(true);
+    setPayMsg('');
+    try {
+      const s = await getSaasStatusPublic(hotelId!);
+      if (s.isActive) {
+        setPayMsg('Payment received — your account is active. Please log in again.');
+        setTimeout(() => { void logout(); }, 1500);
+      } else {
+        setPayMsg('Payment not received yet. If you have paid, wait a minute and tap again.');
+      }
+    } catch {
+      setPayMsg('Could not connect. Check your internet connection.');
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const configs: Record<string, StatusConfig> = {
     pending: {
@@ -75,18 +128,26 @@ const HotelStatusScreen: React.FC<Props> = ({ navigation, route }) => {
     expired: {
       icon: 'timer-off',
       iconStyle: styles.iconExpired,
-      title: 'Trial Expired',
+      title: planExpired ? 'Subscription Expired' : 'Trial Expired',
       cardStyle: styles.statusCardSuspended,
       cardTextStyle: styles.statusTextSuspended,
       cardIcon: 'warning',
       cardIconColor: Colors.danger,
-      message: 'Your free trial has ended. Please contact support to activate your subscription and regain access.',
+      message: canSubscribe
+        ? `${planExpired ? 'Your subscription has expired.' : 'Your free trial has ended.'} Subscribe below to continue using Dine POS.`
+        : 'Your free trial has ended. Please contact support to activate your subscription and regain access.',
       stepsTitle: 'How to reactivate?',
-      steps: [
-        { icon: 'support-agent', text: 'Contact our support team to choose a plan' },
-        { icon: 'payment', text: 'Activate a subscription to restore access' },
-        { icon: 'check-circle', text: 'All your data is preserved and ready to use' },
-      ],
+      steps: canSubscribe
+        ? [
+            { icon: 'payment', text: 'Tap Subscribe Now and pay securely with Razorpay' },
+            { icon: 'refresh', text: 'Come back and tap "I have paid", then log in again' },
+            { icon: 'check-circle', text: 'All your data is preserved and ready to use' },
+          ]
+        : [
+            { icon: 'support-agent', text: 'Contact our support team to choose a plan' },
+            { icon: 'payment', text: 'Activate a subscription to restore access' },
+            { icon: 'check-circle', text: 'All your data is preserved and ready to use' },
+          ],
     },
     suspended: {
       icon: 'block',
@@ -140,6 +201,42 @@ const HotelStatusScreen: React.FC<Props> = ({ navigation, route }) => {
             <MaterialIcons name="arrow-forward" size={20} color={Colors.white} />
             <Text style={styles.continueBtnText}>Continue to App</Text>
           </TouchableOpacity>
+        )}
+
+        {canSubscribe && (
+          <>
+            <TouchableOpacity
+              style={[styles.continueBtn, (subscribing || checking) && { opacity: 0.6 }]}
+              onPress={() => void handleSubscribe()}
+              disabled={subscribing || checking}
+              activeOpacity={0.8}
+            >
+              {subscribing
+                ? <ActivityIndicator color={Colors.white} />
+                : <MaterialIcons name="payment" size={20} color={Colors.white} />}
+              <Text style={styles.continueBtnText}>
+                {subscribing
+                  ? 'Opening Razorpay…'
+                  : `Subscribe Now${annualPrice ? ` — ₹${annualPrice.toLocaleString('en-IN')}/year` : ''}`}
+              </Text>
+            </TouchableOpacity>
+
+            {openedCheckout && (
+              <TouchableOpacity
+                style={[styles.paidBtn, checking && { opacity: 0.6 }]}
+                onPress={() => void handleCheckPaid()}
+                disabled={checking}
+                activeOpacity={0.8}
+              >
+                {checking
+                  ? <ActivityIndicator color={Colors.success} />
+                  : <MaterialIcons name="check-circle" size={20} color={Colors.success} />}
+                <Text style={styles.paidBtnText}>I have paid — check status</Text>
+              </TouchableOpacity>
+            )}
+
+            {payMsg ? <Text style={styles.payMsg}>{payMsg}</Text> : null}
+          </>
         )}
 
         <TouchableOpacity style={styles.supportBtn} onPress={() => navigation.navigate('Support')} activeOpacity={0.8}>
@@ -256,6 +353,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   continueBtnText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '700' },
+  paidBtn: {
+    flexDirection: 'row',
+    borderWidth: 1.5,
+    borderColor: Colors.success,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xxl,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    gap: Spacing.sm,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  paidBtnText: { color: Colors.success, fontSize: FontSize.md, fontWeight: '700' },
+  payMsg: { color: Colors.textSecondary, fontSize: FontSize.sm, textAlign: 'center', lineHeight: 20 },
   supportBtn: {
     flexDirection: 'row',
     backgroundColor: Colors.primary,

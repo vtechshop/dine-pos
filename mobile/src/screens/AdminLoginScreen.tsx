@@ -115,8 +115,12 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
     } catch (error: any) {
       const msg = error.message || '';
       const code = (error as any).code || '';
-      if (code === 'TRIAL_EXPIRED') {
-        navigation.replace('HotelStatus', { status: 'expired', hotelName: '' });
+      if (code === 'TRIAL_EXPIRED' || code === 'PLAN_EXPIRED') {
+        // hotelId lets the expired screen start a Razorpay subscription without a login
+        navigation.replace('HotelStatus', {
+          status: 'expired', hotelName: '',
+          hotelId: (error as any).hotelId, planExpired: code === 'PLAN_EXPIRED',
+        });
         return;
       }
       if (msg.toLowerCase().includes('suspended')) {
