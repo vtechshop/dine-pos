@@ -892,7 +892,7 @@ export type RootStackParamList = {
   RoleSelect: undefined;
   AdminLogin: { sessionExpired?: boolean } | undefined;
   BusinessSetup: { resubmit?: boolean; rejectionReason?: string; phone?: string } | undefined;
-  HotelStatus: { status: 'pending' | 'trial' | 'expired' | 'suspended'; hotelName?: string; trialDaysRemaining?: number };
+  HotelStatus: { status: 'pending' | 'trial' | 'expired' | 'suspended'; hotelName?: string; trialDaysRemaining?: number; hotelId?: string; planExpired?: boolean };
   ForceUpdate: { minimumVersion: string; message?: string };
   MaintenanceMode: { message?: string };
   MainTabs: undefined;
