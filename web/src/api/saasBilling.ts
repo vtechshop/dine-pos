@@ -83,8 +83,8 @@ export const createSaasSubscriptionPublic = (hotelId: string): Promise<SaasSubsc
   });
 
 // Check if an expired hotel's account has since been activated (e.g. after payment).
-export const checkSaasStatusPublic = (hotelId: string): Promise<{ isActive: boolean; status: string }> =>
-  apiFetch<{ isActive: boolean; status: string }>(`/saas/status-public?hotelId=${encodeURIComponent(hotelId)}`);
+export const checkSaasStatusPublic = (hotelId: string): Promise<{ isActive: boolean; status: string; annualPrice?: number }> =>
+  apiFetch<{ isActive: boolean; status: string; annualPrice?: number }>(`/saas/status-public?hotelId=${encodeURIComponent(hotelId)}`);
 
 export const cancelSaasSubscription = (): Promise<{ message: string }> =>
   apiFetch<{ message: string }>('/saas/cancel', { method: 'POST' });

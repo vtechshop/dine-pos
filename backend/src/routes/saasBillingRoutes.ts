@@ -19,13 +19,12 @@ import Hotel from '../models/Hotel';
 import Subscription from '../models/Subscription';
 import { requireHotelJwt, AuthRequest } from '../middleware/auth';
 import {
-  getPlanId,
   createSubscription,
   cancelSubscription,
   fetchSubscription,
 } from '../services/razorpaySubscriptionService';
 import { logger } from '../utils/logger';
-import { SAAS_STANDARD_PRICE_INR } from '../utils/planLimits';
+import { annualPriceForHotel, resolvePlanId } from '../services/saasPricing';
 import { makeRateLimiter } from '../utils/rateLimiter';
 
 const router = Router();
@@ -80,7 +79,7 @@ router.post('/subscribe-public', publicSubscribeLimiter, async (req: Request, re
       });
     }
 
-    const planId = getPlanId(h);
+    const planId = await resolvePlanId(h);
     const sub    = await createSubscription(planId, hotelId);
 
     await Hotel.findByIdAndUpdate(hotelId, {
@@ -118,7 +117,7 @@ router.get('/status-public', publicStatusLimiter, async (req: Request, res: Resp
 
   try {
     const hotel = await Hotel.findById(hotelId)
-      .select('status subscriptionType')
+      .select('status subscriptionType saasAnnualPrice')
       .lean();
 
     if (!hotel) return res.status(404).json({ message: 'Hotel not found.' });
@@ -127,6 +126,8 @@ router.get('/status-public', publicStatusLimiter, async (req: Request, res: Resp
     return res.json({
       isActive: h.status === 'active',
       status:   h.status,
+      // Price for the Subscribe button — only needed (and only shown) while expired.
+      ...(h.status === 'expired' ? { annualPrice: await annualPriceForHotel(h) } : {}),
     });
   } catch (err) {
     logger.error('[saasBillingRoutes] GET /status-public error', { hotelId, err: String(err) });
@@ -168,7 +169,7 @@ router.get('/status', async (req: AuthRequest, res: Response) => {
       trialStartDate:        h.trialStartDate ?? null,
       trialEndDate:          h.trialEndDate ?? null,
       trialDaysRemaining,
-      annualPrice:           h.saasAnnualPrice ?? SAAS_STANDARD_PRICE_INR,
+      annualPrice:           await annualPriceForHotel(h),
       rzpSubscriptionStatus: h.rzpSubscriptionStatus,
       rzpNextBillingAt:      h.rzpNextBillingAt,
       hasActiveSubscription: !!h.rzpSubscriptionId && h.rzpSubscriptionStatus === 'active',
@@ -193,7 +194,7 @@ router.get('/plan', async (req: AuthRequest, res: Response) => {
 
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
 
-    const annualPrice = (hotel as any).saasAnnualPrice ?? SAAS_STANDARD_PRICE_INR;
+    const annualPrice = await annualPriceForHotel(hotel as any);
 
     return res.json({
       name:        'DinePOS SaaS Standard',
@@ -235,7 +236,7 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const planId = getPlanId(h);
+    const planId = await resolvePlanId(h);
     const sub    = await createSubscription(planId, req.hotelId!);
 
     // Store subscription id on hotel immediately so webhook can find the hotel

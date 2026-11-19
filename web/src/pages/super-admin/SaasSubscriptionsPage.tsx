@@ -34,7 +34,13 @@ const fmt = (d: string | null) =>
 const fmtAmount = (n: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
 
-type ActivePanel = { type: 'price'; hotel: HotelSaasRow } | { type: 'printer'; hotel: HotelSaasRow } | null;
+interface StandardPrice {
+  annualPrice: number;
+  /** superadmin = set on this page; env/default = not set here yet */
+  source: 'superadmin' | 'env' | 'default';
+}
+
+type ActivePanel ={ type: 'price'; hotel: HotelSaasRow } | { type: 'printer'; hotel: HotelSaasRow } | null;
 
 export function SaasSubscriptionsPage() {
   const [hotels, setHotels]           = useState<HotelSaasRow[]>([]);
@@ -47,6 +53,45 @@ export function SaasSubscriptionsPage() {
   const [actionMsg, setActionMsg]     = useState('');
   const [actionErr, setActionErr]     = useState('');
   const [saving, setSaving]           = useState(false);
+  const [standard, setStandard]       = useState<StandardPrice | null>(null);
+  const [stdEditing, setStdEditing]   = useState(false);
+  const [stdInput, setStdInput]       = useState('');
+  const [stdSaving, setStdSaving]     = useState(false);
+  const [stdErr, setStdErr]           = useState('');
+
+  const loadStandard = useCallback(async () => {
+    try {
+      setStandard(await saFetch<StandardPrice>('/saas/standard-price'));
+    } catch {
+      setStandard(null);
+    }
+  }, []);
+
+  useEffect(() => { void loadStandard(); }, [loadStandard]);
+
+  async function saveStandard() {
+    const price = Number(stdInput);
+    if (!Number.isInteger(price) || price < 1000 || price > 1_000_000) {
+      setStdErr('Enter a whole number between 1,000 and 10,00,000.');
+      return;
+    }
+    setStdSaving(true);
+    setStdErr('');
+    try {
+      const res = await saFetch<StandardPrice & { message: string }>('/saas/standard-price', {
+        method: 'PUT',
+        body: JSON.stringify({ price }),
+      });
+      setStandard({ annualPrice: res.annualPrice, source: res.source });
+      setStdEditing(false);
+      setActionErr('');
+      setActionMsg(res.message);
+    } catch (err: any) {
+      setStdErr(err?.message ?? 'Failed to save the standard price.');
+    } finally {
+      setStdSaving(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,7 +134,7 @@ export function SaasSubscriptionsPage() {
         body: JSON.stringify({ price }),
       });
       setActionMsg(price === null
-        ? 'Custom price cleared — hotel reverts to ₹14,000/year from next renewal.'
+        ? `Custom price cleared — hotel reverts to the standard ${standard ? fmtAmount(standard.annualPrice) : 'price'}/year from next renewal.`
         : `Custom price ₹${price}/year set. Effective from next renewal.`);
       setPanel(null);
       await load();
@@ -130,6 +175,68 @@ export function SaasSubscriptionsPage() {
         </button>
       </div>
 
+      {/* Standard price — what new hotels pay */}
+      <section
+        aria-label="Standard price"
+        className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Standard price (new subscriptions)</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              {standard ? `${fmtAmount(standard.annualPrice)} / year` : '—'}
+            </p>
+          </div>
+          {!stdEditing && (
+            <button
+              onClick={() => { setStdEditing(true); setStdInput(standard ? String(standard.annualPrice) : ''); setStdErr(''); }}
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white"
+            >
+              Change price
+            </button>
+          )}
+        </div>
+        {standard && standard.source !== 'superadmin' && !stdEditing && (
+          <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+            Not set here yet — this is the price on the current Razorpay plan. Set it here to control it from Super Admin.
+          </p>
+        )}
+        {stdEditing && (
+          <div className="mt-3 space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <input
+                type="number"
+                inputMode="numeric"
+                aria-label="New standard price per year in rupees"
+                value={stdInput}
+                onChange={e => setStdInput(e.target.value)}
+                placeholder="e.g. 14000"
+                className="w-40 rounded-xl border border-gray-200 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
+              />
+              <button
+                onClick={() => void saveStandard()}
+                disabled={stdSaving}
+                className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {stdSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                onClick={() => setStdEditing(false)}
+                disabled={stdSaving}
+                className="rounded-xl border px-4 py-2 text-sm text-gray-600 dark:border-gray-600 dark:text-gray-300"
+              >
+                Cancel
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              New subscriptions are charged this price from now on. Hotels already subscribed keep their current price,
+              and hotels with a custom price keep theirs.
+            </p>
+            {stdErr && <p role="alert" className="text-xs text-red-600">{stdErr}</p>}
+          </div>
+        )}
+      </section>
+
       {/* Tab bar */}
       <div className="flex gap-2 overflow-x-auto">
         {TABS.map(t => (
@@ -159,7 +266,7 @@ export function SaasSubscriptionsPage() {
               <>
                 <h2 className="mb-1 text-lg font-bold text-gray-900 dark:text-white">Set Custom Price</h2>
                 <p className="mb-4 text-sm text-gray-500">{panel.hotel.hotelName}</p>
-                <p className="mb-1 text-xs text-gray-400">Annual price in INR (blank = standard ₹14,000)</p>
+                <p className="mb-1 text-xs text-gray-400">Annual price in INR (blank = standard {standard ? fmtAmount(standard.annualPrice) : 'price'})</p>
                 <input
                   type="number"
                   value={priceInput}
@@ -248,7 +355,7 @@ export function SaasSubscriptionsPage() {
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{h.rzpSubscriptionStatus || '—'}</td>
                   <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">
-                    {fmtAmount(h.saasAnnualPrice ?? 14000)}
+                    {h.saasAnnualPrice != null ? fmtAmount(h.saasAnnualPrice) : standard ? fmtAmount(standard.annualPrice) : '—'}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{fmt(h.subscriptionEndDate)}</td>
                   <td className="px-4 py-3">

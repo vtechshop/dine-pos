@@ -26,7 +26,7 @@ import Hotel from '../models/Hotel';
 import Subscription from '../models/Subscription';
 import { logger } from '../utils/logger';
 import { invalidateStatusCache } from '../middleware/auth';
-import { SAAS_STANDARD_PRICE_INR } from '../utils/planLimits';
+import { getStandardPricing } from '../services/saasPricing';
 import { getPlanAmountInr, getSubscriptionPlanId } from '../services/razorpaySubscriptionService';
 
 /**
@@ -45,9 +45,13 @@ async function chargedAnnualPrice(
   const pid = planId || await getSubscriptionPlanId(rzpSubscriptionId);
   const planPrice = await getPlanAmountInr(pid);
   if (planPrice !== null) return planPrice;
+  const standard = await getStandardPricing();
+  if (pid && pid === standard.planId) return standard.annualPrice;
   if (hotelPrice) return hotelPrice;
   const previous = await Subscription.findOne({ rzpSubscriptionId }).sort({ paidAt: -1 }).select('amount').lean();
-  return (previous as { amount?: number } | null)?.amount || SAAS_STANDARD_PRICE_INR;
+  const previousAmount = (previous as { amount?: number } | null)?.amount;
+  if (previousAmount) return previousAmount;
+  return standard.annualPrice;
 }
 
 const router = Router();
