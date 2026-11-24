@@ -280,6 +280,11 @@ const generateOrderNumber = async (hotelId: string, prefix = 'ORD'): Promise<str
 };
 
 // Daily report — uses aggregation pipeline (single DB pass, faster than multiple reduce loops)
+// Sales reports count only orders that have been paid: completed (billed) orders, or
+// orders paid ahead and still being prepared (paymentTime set). Unpaid open orders
+// are not sales yet; their paymentMethod is only the counter's default ('cash').
+const PAID_ORDER = { $or: [{ status: 'completed' }, { paymentTime: { $ne: null } }] };
+
 router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
@@ -289,7 +294,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
     const endOfDay = new Date(date); endOfDay.setHours(23, 59, 59, 999);
 
     const [result] = await Order.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
       { $group: {
         _id: null,
         totalSales:     { $sum: '$grandTotal' },
@@ -385,7 +390,7 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
     const end     = new Date(toStr);   end.setHours(23, 59, 59, 999);
 
     const [result] = await Order.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, createdAt: { $gte: start, $lte: end } } },
+      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: start, $lte: end } } },
       { $group: {
         _id: null,
         totalSales:     { $sum: '$grandTotal' },
@@ -468,7 +473,7 @@ router.get('/reports/products', authMiddleware, requireAdmin, async (req: AuthRe
     const endOfDay   = new Date(date); endOfDay.setHours(23, 59, 59, 999);
 
     const results = await Order.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
       { $unwind: '$items' },
       { $group: {
         _id: '$items.productName',

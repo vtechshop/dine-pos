@@ -402,12 +402,16 @@ router.put('/hotels/:id/suspend', superAdminAuth, async (req: Request, res: Resp
 router.put('/hotels/:id/activate', superAdminAuth, async (req: Request, res: Response) => {
   try {
     if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
-    const preCheck = await Hotel.findById(req.params.id).select('status adminId').lean();
+    const preCheck = await Hotel.findById(req.params.id).select('status adminId subscriptionType trialEndDate').lean();
     if (!preCheck) return res.status(404).json({ message: 'Hotel not found' });
     if (!preCheck.adminId) return res.status(409).json({ message: 'Hotel has no credentials. Approve it first.' });
     if (preCheck.status === 'active') return res.status(409).json({ message: 'Hotel is already active' });
+    // A hotel still inside its trial goes back to 'trial', not 'active', so trial
+    // reminders and the Trial list keep working. Every other case is unchanged.
+    const trialStillRunning = (preCheck as any).subscriptionType === 'trial'
+      && !!(preCheck as any).trialEndDate && new Date((preCheck as any).trialEndDate) > new Date();
     const hotel = await Hotel.findByIdAndUpdate(
-      req.params.id, { status: 'active' }, { new: true }
+      req.params.id, { status: trialStillRunning ? 'trial' : 'active' }, { new: true }
     ).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);

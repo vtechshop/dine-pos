@@ -1,3 +1,5 @@
+import { getStoredToken } from './client';
+
 const BASE = `${import.meta.env.VITE_API_URL ?? 'http://localhost:5000/api'}/integrations/tally`;
 
 export interface TallyLedgerMap {
@@ -60,7 +62,12 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    // The backend authenticates with a Bearer token only (no auth cookie).
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
+      ...(getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {}),
+    },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

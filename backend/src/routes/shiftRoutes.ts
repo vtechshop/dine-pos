@@ -30,8 +30,13 @@ router.post('/open', requireCashierOrAdmin, async (req: AuthRequest, res: Respon
     }
 
     // M1: cashierId and cashierName come from the verified JWT, never from req.body
-    const cashierId   = req.cashierId   ?? '';
-    const cashierName = req.cashierName ?? '';
+    // A hotel admin's token has no cashier identity; record the shift as the admin's.
+    const byAdmin     = req.role === 'admin' && !req.cashierId;
+    const cashierId   = req.cashierId   || (byAdmin ? 'admin' : '');
+    const cashierName = req.cashierName || (byAdmin ? 'Hotel Admin' : '');
+    if (!cashierId || !cashierName) {
+      return res.status(400).json({ message: 'Could not tell who is opening the shift. Sign in again and retry.' });
+    }
 
     const shift = await Shift.create({
       hotelId:     req.hotelId,

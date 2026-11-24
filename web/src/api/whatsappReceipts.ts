@@ -5,7 +5,19 @@
  * No WhatsApp credentials or provider secrets are returned by any endpoint.
  */
 
+import { getStoredToken } from './client';
+
 const BASE = `${import.meta.env.VITE_API_URL ?? 'http://localhost:5000/api'}`;
+
+// The backend authenticates with a Bearer token only (no auth cookie), so every
+// request here must carry the signed-in user's token.
+function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const token = getStoredToken();
+  return fetch(url, {
+    ...init,
+    headers: { ...(init.headers ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -69,7 +81,7 @@ export interface AvailableVar {
 // ── Settings endpoints ────────────────────────────────────────────────────────
 
 export async function fetchWhatsAppReceiptSettings(): Promise<WhatsAppSettingsResponse> {
-  const res = await fetch(`${BASE}/settings/whatsapp-receipts`, { credentials: 'include' });
+  const res = await authFetch(`${BASE}/settings/whatsapp-receipts`, { credentials: 'include' });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message ?? 'Failed to load settings');
   return res.json();
 }
@@ -77,7 +89,7 @@ export async function fetchWhatsAppReceiptSettings(): Promise<WhatsAppSettingsRe
 export async function saveWhatsAppReceiptSettings(
   data: Partial<WhatsAppReceiptConfig>,
 ): Promise<{ config: WhatsAppReceiptConfig }> {
-  const res = await fetch(`${BASE}/settings/whatsapp-receipts`, {
+  const res = await authFetch(`${BASE}/settings/whatsapp-receipts`, {
     method:      'PATCH',
     credentials: 'include',
     headers:     { 'Content-Type': 'application/json' },
@@ -90,7 +102,7 @@ export async function saveWhatsAppReceiptSettings(
 export async function testWhatsAppReceipt(
   phone: string,
 ): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`${BASE}/settings/whatsapp-receipts/test`, {
+  const res = await authFetch(`${BASE}/settings/whatsapp-receipts/test`, {
     method:      'POST',
     credentials: 'include',
     headers:     { 'Content-Type': 'application/json' },
@@ -102,7 +114,7 @@ export async function testWhatsAppReceipt(
 }
 
 export async function fetchAvailableVars(): Promise<AvailableVar[]> {
-  const res = await fetch(`${BASE}/settings/whatsapp-receipts/available-vars`, { credentials: 'include' });
+  const res = await authFetch(`${BASE}/settings/whatsapp-receipts/available-vars`, { credentials: 'include' });
   if (!res.ok) return [];
   const body = await res.json();
   return body.vars ?? [];
@@ -111,7 +123,7 @@ export async function fetchAvailableVars(): Promise<AvailableVar[]> {
 export async function fetchWhatsAppReceiptStats(): Promise<{
   total: number; sent: number; delivered: number; read: number; failed: number; queued: number;
 }> {
-  const res = await fetch(`${BASE}/settings/whatsapp-receipts/stats`, { credentials: 'include' });
+  const res = await authFetch(`${BASE}/settings/whatsapp-receipts/stats`, { credentials: 'include' });
   if (!res.ok) return { total: 0, sent: 0, delivered: 0, read: 0, failed: 0, queued: 0 };
   return res.json();
 }
@@ -134,13 +146,13 @@ export async function fetchWhatsAppReceipts(params?: {
   if (params?.from)    qs.set('from',    params.from);
   if (params?.to)      qs.set('to',      params.to);
 
-  const res = await fetch(`${BASE}/whatsapp-receipts?${qs}`, { credentials: 'include' });
+  const res = await authFetch(`${BASE}/whatsapp-receipts?${qs}`, { credentials: 'include' });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message ?? 'Failed to load receipts');
   return res.json();
 }
 
 export async function fetchWhatsAppReceipt(id: string): Promise<WhatsAppReceiptRecord> {
-  const res = await fetch(`${BASE}/whatsapp-receipts/${id}`, { credentials: 'include' });
+  const res = await authFetch(`${BASE}/whatsapp-receipts/${id}`, { credentials: 'include' });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message ?? 'Failed to load receipt');
   return res.json();
 }
@@ -148,7 +160,7 @@ export async function fetchWhatsAppReceipt(id: string): Promise<WhatsAppReceiptR
 export async function retryWhatsAppReceipt(
   id: string,
 ): Promise<{ success: boolean; message: string; status: string }> {
-  const res = await fetch(`${BASE}/whatsapp-receipts/${id}/retry`, {
+  const res = await authFetch(`${BASE}/whatsapp-receipts/${id}/retry`, {
     method:      'POST',
     credentials: 'include',
   });

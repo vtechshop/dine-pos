@@ -32,8 +32,12 @@ import type { ProductSalesRow } from '../../types/reports';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Show paise when the amount has them, so the screen matches the total that is saved
+// (₹493.50 is shown as ₹493.50, not rounded up to ₹494).
 function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
+  const v = Math.round(n * 100) / 100;
+  const paise = Math.abs(v % 1) > 0.001;
+  return `${sym}${v.toLocaleString('en-IN', { minimumFractionDigits: paise ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
 type OrderType = 'dine-in' | 'takeaway' | 'delivery';
