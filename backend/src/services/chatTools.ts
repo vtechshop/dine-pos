@@ -10,6 +10,7 @@ import DailySnapshot from '../models/DailySnapshot';
 import Ingredient from '../models/Ingredient';
 import Expense from '../models/Expense';
 import VendorLedgerEntry from '../models/VendorLedgerEntry';
+import { PAID_ORDER } from '../utils/paidOrder';
 
 const MAX_ITEMS = 20;
 
@@ -93,7 +94,7 @@ export async function toolGetTopProducts(
   const endDate   = new Date(`${endStr}T23:59:59.999Z`);
 
   const items = await Order.aggregate([
-    { $match: { hotelId: hotelOId, createdAt: { $gte: startDate, $lte: endDate }, status: { $ne: 'cancelled' } } },
+    { $match: { hotelId: hotelOId, createdAt: { $gte: startDate, $lte: endDate }, status: { $ne: 'cancelled' }, ...PAID_ORDER } },
     { $unwind: '$items' },
     { $group: { _id: '$items.productName', qty: { $sum: '$items.quantity' }, revenue: { $sum: '$items.total' } } },
     { $sort: { revenue: -1 } },

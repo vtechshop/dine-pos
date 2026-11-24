@@ -38,6 +38,7 @@ import { isDueAtCounter } from '../utils/counterBilling';
 import { isQuickServiceOrder } from '../utils/quickService';
 import { payBeforeKitchenEnabled, isHeldForCounterPayment } from '../utils/payBeforeKitchen';
 import { pushDeliveryAvailability } from '../utils/deliveryAvailabilitySync';
+import { PAID_ORDER } from '../utils/paidOrder';
 
 const router = Router();
 
@@ -280,11 +281,6 @@ const generateOrderNumber = async (hotelId: string, prefix = 'ORD'): Promise<str
 };
 
 // Daily report — uses aggregation pipeline (single DB pass, faster than multiple reduce loops)
-// Sales reports count only orders that have been paid: completed (billed) orders, or
-// orders paid ahead and still being prepared (paymentTime set). Unpaid open orders
-// are not sales yet; their paymentMethod is only the counter's default ('cash').
-const PAID_ORDER = { $or: [{ status: 'completed' }, { paymentTime: { $ne: null } }] };
-
 router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
@@ -635,7 +631,7 @@ router.get('/customers', requireAdmin, async (req: AuthRequest, res: Response) =
   try {
     const match: any = {
       hotelId: new mongoose.Types.ObjectId(req.hotelId),
-      status: { $ne: 'cancelled' },
+      status: { $ne: 'cancelled' }, ...PAID_ORDER,
       customerPhone: { $nin: ['', null] },
     };
 

@@ -15,6 +15,7 @@ import mongoose from 'mongoose';
 import { sendError } from '../utils/sendError';
 import { isValidDateParam } from '../utils/dateParam';
 import { logger } from '../utils/logger';
+import { PAID_ORDER } from '../utils/paidOrder';
 
 const router = Router();
 router.use(authMiddleware);
@@ -306,7 +307,7 @@ router.get('/modifiers', async (req: AuthRequest, res: Response) => {
     const [topModifiers, groupRevenue] = await Promise.all([
       // Top modifier options by quantity and revenue
       Order.aggregate([
-        { $match: { hotelId, status: { $ne: 'cancelled' }, createdAt: { $gte: fromDate, $lte: toDate } } },
+        { $match: { hotelId, status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: fromDate, $lte: toDate } } },
         { $unwind: '$items' },
         { $unwind: '$items.selectedModifiers' },
         {
@@ -334,7 +335,7 @@ router.get('/modifiers', async (req: AuthRequest, res: Response) => {
 
       // Revenue by modifier group
       Order.aggregate([
-        { $match: { hotelId, status: { $ne: 'cancelled' }, createdAt: { $gte: fromDate, $lte: toDate } } },
+        { $match: { hotelId, status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: fromDate, $lte: toDate } } },
         { $unwind: '$items' },
         { $unwind: '$items.selectedModifiers' },
         {
