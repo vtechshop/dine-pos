@@ -85,10 +85,12 @@ function utcHourToLocal(h: number): string {
 interface MorningBriefCardProps {
   brief?:  MorningBrief | null;
   loading?: boolean;
+  /** Start with the details open (tests; the dashboard starts collapsed). */
+  defaultExpanded?: boolean;
 }
 
-export function MorningBriefCard({ brief, loading = false }: MorningBriefCardProps) {
-  const [expanded, setExpanded] = useState(false);
+export function MorningBriefCard({ brief, loading = false, defaultExpanded = false }: MorningBriefCardProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const { settings } = useSettings();
   const currency = settings?.currencySymbol ?? '₹';
 
@@ -197,8 +199,8 @@ export function MorningBriefCard({ brief, loading = false }: MorningBriefCardPro
             </div>
             <div className="rounded-xl border border-border bg-mist p-3.5">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">Est. Profit</p>
-              <p className="mt-1 text-xl font-bold tabular-nums text-ink">{currency}{Math.round(b.estimatedProfit).toLocaleString('en-IN')}</p>
-              <p className="text-[10px] text-ink/35">{b.estimatedProfitMarginPct.toFixed(0)}% margin est.</p>
+              <p className="mt-1 text-xl font-bold tabular-nums text-ink">{b.estimatedProfit == null ? '—' : <>{currency}{Math.round(b.estimatedProfit).toLocaleString('en-IN')}</>}</p>
+              <p className="text-[10px] text-ink/35">{b.estimatedProfitMarginPct == null ? 'not estimated' : `${b.estimatedProfitMarginPct.toFixed(0)}% margin est.`}</p>
             </div>
             <div className="rounded-xl border border-border bg-mist p-3.5">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-ink/40">Avg Bill</p>

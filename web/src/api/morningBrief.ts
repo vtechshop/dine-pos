@@ -5,8 +5,9 @@ import { apiFetch } from './client';
 export interface BusinessSummary {
   revenue:                  number;
   orders:                   number;
-  estimatedProfit:          number;
-  estimatedProfitMarginPct: number;
+  // null when the brief has no profit estimate (the server stores none today)
+  estimatedProfit:          number | null;
+  estimatedProfitMarginPct: number | null;
   avgBill:                  number;
   healthScore:              number;
   healthGrade:              'A' | 'B' | 'C' | 'D' | 'F';
