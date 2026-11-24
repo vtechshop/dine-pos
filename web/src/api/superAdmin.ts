@@ -156,6 +156,22 @@ export function approveHotel(id: string, payload: ApprovePayload): Promise<Appro
   });
 }
 
+/** The yearly price new hotels subscribe at (same source the billing routes use). */
+export function getStandardPrice(): Promise<{ annualPrice: number; source: string }> {
+  return saFetch<{ annualPrice: number; source: string }>('/saas/standard-price');
+}
+
+/**
+ * Set a hotel's custom yearly price through the existing saas-price endpoint.
+ * It reuses the hotel's Razorpay plan when the price is unchanged.
+ */
+export function setHotelSaasPrice(id: string, price: number): Promise<{ message: string; annualPrice: number }> {
+  return saFetch<{ message: string; annualPrice: number }>(`/hotels/${id}/saas-price`, {
+    method: 'PUT',
+    body:   JSON.stringify({ price }),
+  });
+}
+
 export interface RejectResponse {
   message: string;
   hotel:   Hotel;
