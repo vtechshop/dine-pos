@@ -6,6 +6,7 @@ import { fetchSalesSummary, fetchPrinterDevices } from '../../api/dashboard';
 import { useAuth } from '../../context/AuthContext';
 import type { DailyReport, PrinterDeviceStatus } from '../../types';
 import { useSettings } from '../../context/SettingsContext';
+import { formatMoney } from '../../utils/money';
 
 // ── Stat chip ─────────────────────────────────────────────────────────────────
 
@@ -62,9 +63,8 @@ export function StatusBar() {
   const printersOnline = (kitchen?.online ?? false) || (cashier?.online ?? false);
 
   // Active tables: use live orders to estimate (table grid is the source of truth)
-  const revenue = report
-    ? `${symbol}${Math.round(report.totalSales).toLocaleString('en-IN')}`
-    : '—';
+  // Batch 3 (owner rule): exact paise, never rounded to the rupee
+  const revenue = report ? formatMoney(symbol, report.totalSales) : '—';
 
   return (
     <footer className="flex h-10 shrink-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap border-t border-border bg-canvas px-3 sm:px-5">

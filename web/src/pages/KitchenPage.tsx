@@ -250,11 +250,15 @@ const OrderCard = memo(function OrderCard({
           <li key={i} className="text-sm text-ink">
             <div className={`flex items-baseline gap-2 ${query && dishMatches(item, query) ? '-mx-1.5 rounded bg-yellow-200/70 px-1.5 font-semibold' : ''}`}>
               <span className="w-5 shrink-0 text-right font-bold text-brand">{item.quantity}×</span>
-              <span>{item.productName}</span>
+              <span>{item.productName}{(item as { variantName?: string }).variantName ? ` (${(item as { variantName?: string }).variantName})` : ''}</span>
             </div>
             {(item.selectedModifiers ?? []).map((m, mi) => (
               <div key={mi} className="ml-7 text-[11px] text-ink/50">+ {m.modifierOptionName}</div>
             ))}
+            {/* Batch 3: the dish's note ("no onion") was stored nowhere and never reached the kitchen */}
+            {(item as { notes?: string }).notes && (
+              <div className="ml-7 text-[11px] font-semibold text-red-700">Note: {(item as { notes?: string }).notes}</div>
+            )}
           </li>
         ))}
       </ul>
@@ -543,7 +547,7 @@ export function KitchenPage() {
     setClearing(true);
     let failed = 0;
     for (const o of oldOrders) {
-      try { await cancelOrder(o._id); } catch { failed++; }
+      try { await cancelOrder(o._id, 'Cancelled from the kitchen display'); } catch { failed++; }
     }
     setClearing(false);
     setConfirmClear(false);

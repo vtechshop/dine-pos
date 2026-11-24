@@ -1,3 +1,5 @@
+import type { DailyReport } from '../types';
+
 const BASE = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/shifts`
   : 'http://localhost:5000/api/shifts';
@@ -106,6 +108,22 @@ export interface ShiftStats {
   cashSales: number;
   upiSales: number;
   cardSales: number;
+  /** Batch 3: ledger-based figures for this shift (absent when no shift is open). */
+  finance?: Pick<DailyReport, 'totalSales' | 'totalOrders' | 'totalTax' | 'totalDiscount' | 'paymentBreakdown'
+    | 'collections' | 'tenders' | 'refunds' | 'reversals' | 'tips' | 'netCollections'>;
+  /** Batch 3: cash that should be in the drawer, from the payment ledger (null when no shift). */
+  drawer?: DrawerCash | null;
+}
+
+export interface DrawerCash {
+  openingCash: number;
+  cashCollected: number;
+  cashRefunds: number;
+  cashReversals: number;
+  cashTips: number;
+  cashIn: number;
+  cashOut: number;
+  expected: number;
 }
 
 export function apiGetActiveShiftStats(): Promise<ShiftStats> {

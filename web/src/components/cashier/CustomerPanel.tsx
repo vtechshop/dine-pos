@@ -5,6 +5,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { ApiError } from '../../api/client';
 import { Spinner } from '../ui/Spinner';
 import type { CustomerSummary, CustomerProfile, LoyaltyTransaction } from '../../types/customers';
+import { formatMoney } from '../../utils/money';
 
 // ── Quick Create Form ─────────────────────────────────────────────────────────
 
@@ -136,7 +137,7 @@ function QuickCreateForm({ onSuccess, onCancel, onOpenExisting }: {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
+  return formatMoney(sym, n);
 }
 
 function fmtDate(iso: string | null | undefined) {

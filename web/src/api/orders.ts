@@ -63,11 +63,26 @@ export interface CashierOrderItem {
   subtotal: number;
   taxTotal: number;
   discountAmount?: number;
+  // Batch 3: everything between the items and what is still owed
+  couponDiscount?: number;
+  loyaltyDiscount?: number;
+  paymentDiscount?: number;
+  giftVoucherAmount?: number;
+  walletAmount?: number;
+  deliveryFee?: number;
+  amountSettled?: number;
+  redeemedPoints?: number;
+  customerPhone?: string;
   status: string;
   orderSource: string;
   isParcel: boolean;
   paymentMethod?: string | null;
-  items: { productName: string; quantity: number; price: number; total: number }[];
+  items: {
+    productName: string; quantity: number; price: number; total: number;
+    variantName?: string;
+    selectedModifiers?: { modifierOptionName: string; modifierPrice: number }[];
+    notes?: string;
+  }[];
   createdAt: string;
   completedAt?: string | null;
   /** Set once the counter has taken payment (the order may still be in the kitchen) */
@@ -78,6 +93,11 @@ export async function fetchCashierOrders(): Promise<CashierOrderItem[]> {
   return apiFetch<CashierOrderItem[]>('/orders/cashier');
 }
 
+/** Batch 3: bills with money still owed, from the server (not from kitchen status). */
+export async function fetchPendingSummary(): Promise<{ orders: number; amount: number }> {
+  return apiFetch<{ orders: number; amount: number }>('/orders/cashier/pending-summary');
+}
+
 export interface CreateOrderItem {
   product: string;
   productName: string;
@@ -85,6 +105,8 @@ export interface CreateOrderItem {
   price: number;
   taxPercent: number;
   notes?: string;
+  variantId?: string;
+  variantName?: string;
 }
 
 export interface CreateOrderPayload {
@@ -109,6 +131,8 @@ export interface CreateOrderPayload {
   offlineId?: string;
   /** Counter took payment while placing the order — it goes to the kitchen already paid */
   payNow?: boolean;
+  /** Batch 3: the subtotal on the cashier's screen; the server refuses if prices changed. */
+  expectedSubtotal?: number;
 }
 
 export async function createOrder(payload: CreateOrderPayload): Promise<CashierOrderItem> {
@@ -118,17 +142,32 @@ export async function createOrder(payload: CreateOrderPayload): Promise<CashierO
   });
 }
 
-export async function cancelOrder(orderId: string): Promise<void> {
+// Batch 3 (3C): the reason is sent and stored (it was dropped). `refund: true` confirms that
+// money already received for the bill is being refunded at the counter (the server refuses to
+// cancel a paid bill otherwise, with code PAID_ORDER).
+export async function cancelOrder(orderId: string, reason = '', refund = false): Promise<void> {
   await apiFetch<unknown>(`/orders/${orderId}/status`, {
     method: 'PATCH',
-    body: JSON.stringify({ status: 'cancelled' }),
+    body: JSON.stringify({ status: 'cancelled', reason, ...(refund ? { refund: true } : {}) }),
   });
 }
 
-export async function completeOrder(orderId: string): Promise<void> {
+// Batch 3 (3D): who may discount, as the server enforces it.
+export interface DiscountPolicy { role: string; canDiscount: boolean; maxPercent: number; maxCashierDiscountPercent: number }
+export function fetchDiscountPolicy(): Promise<DiscountPolicy> {
+  return apiFetch<DiscountPolicy>('/orders/discount-policy');
+}
+/** Admin only: cashier discount limit in % (0 = cashiers cannot discount). */
+export function updateDiscountPolicy(maxCashierDiscountPercent: number): Promise<{ maxCashierDiscountPercent: number }> {
+  return apiFetch('/orders/discount-policy', { method: 'PATCH', body: JSON.stringify({ maxCashierDiscountPercent }) });
+}
+
+// Batch 3 (3D): `reference` (UPI transaction / card approval no.) is stored with the payment —
+// the cashier typed it but it was never sent (P4-PAY-01).
+export async function completeOrder(orderId: string, reference = ''): Promise<void> {
   await apiFetch<unknown>(`/orders/${orderId}/status`, {
     method: 'PATCH',
-    body: JSON.stringify({ status: 'completed' }),
+    body: JSON.stringify({ status: 'completed', ...(reference ? { transactionId: reference } : {}) }),
   });
 }
 
@@ -158,6 +197,7 @@ export async function patchOrderPayment(
   splitDetails?: { cash: number; upi: number; card: number },
   tipAmount?: number,
   additionalDiscount?: number,
+  redeemPoints?: number,
 ): Promise<void> {
   await apiFetch<unknown>(`/orders/${orderId}/payment`, {
     method: 'PATCH',
@@ -166,6 +206,7 @@ export async function patchOrderPayment(
       ...(splitDetails       ? { splitDetails }       : {}),
       ...(tipAmount          ? { tipAmount }          : {}),
       ...(additionalDiscount ? { additionalDiscount } : {}),
+      ...(redeemPoints       ? { redeemPoints }       : {}),
     }),
   });
 }
@@ -179,9 +220,10 @@ export async function payOrder(
   orderId: string,
   paymentMethod: string,
   splitDetails?: { cash: number; upi: number; card: number },
+  reference = '',   // Batch 3 (3D): UPI / card reference, stored with the payment
 ): Promise<CashierOrderItem> {
   return apiFetch<CashierOrderItem>(`/orders/${orderId}/pay`, {
     method: 'POST',
-    body: JSON.stringify({ paymentMethod, ...(splitDetails ? { splitDetails } : {}) }),
+    body: JSON.stringify({ paymentMethod, ...(splitDetails ? { splitDetails } : {}), ...(reference ? { reference } : {}) }),
   });
 }

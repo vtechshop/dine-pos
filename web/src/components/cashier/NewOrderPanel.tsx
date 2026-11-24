@@ -29,11 +29,12 @@ import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
 import { useCashierPermissions } from '../../hooks/useCashierPermissions';
 import type { Product, Category, Table } from '../../types';
 import type { ProductSalesRow } from '../../types/reports';
+import { formatMoney } from '../../utils/money';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
+  return formatMoney(sym, n);
 }
 
 type OrderType = 'dine-in' | 'takeaway' | 'delivery';
@@ -449,13 +450,13 @@ function PaymentPanel({
             </div>
           ))}
           <div className={`flex items-center justify-between rounded-lg px-3 py-2 ${
-            Math.abs(splitDiff) < 0.5 ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'
+            Math.abs(splitDiff) < 0.005 ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'
           }`}>
             <span className="text-xs font-medium">
-              {Math.abs(splitDiff) < 0.5 ? 'Balanced' : splitDiff > 0 ? 'Over by' : 'Short by'}
+              {Math.abs(splitDiff) < 0.005 ? 'Balanced' : splitDiff > 0 ? 'Over by' : 'Short by'}
             </span>
-            <span className={`text-sm font-bold ${Math.abs(splitDiff) < 0.5 ? 'text-emerald-700' : 'text-amber-700'}`}>
-              {Math.abs(splitDiff) < 0.5 ? '✓' : fmtINR(sym, Math.abs(splitDiff))}
+            <span className={`text-sm font-bold ${Math.abs(splitDiff) < 0.005 ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {Math.abs(splitDiff) < 0.005 ? '✓' : fmtINR(sym, Math.abs(splitDiff))}
             </span>
           </div>
         </div>
@@ -609,6 +610,13 @@ export function NewOrderPanel() {
           ? String(orderPrefill.deliveryCharge)
           : d.deliveryCharge,
       }));
+    }
+    // Batch 3 (3B): restore the order notes of a held bill (they were lost on resume)
+    if (orderPrefill.notes) {
+      const n = orderPrefill.notes;
+      if (orderPrefill.orderType === 'dine-in') setDineIn(d => ({ ...d, notes: n }));
+      else if (orderPrefill.orderType === 'takeaway') setTakeAway(d => ({ ...d, notes: n }));
+      else if (orderPrefill.orderType === 'delivery') setDelivery(d => ({ ...d, notes: n }));
     }
     // Restore discount, coupon, voucher, loyalty from held bill
     if (orderPrefill.discountAmount) setDiscount(String(orderPrefill.discountAmount));
@@ -958,6 +966,8 @@ export function NewOrderPanel() {
         quantity: i.quantity,
         price: i.price + (i.modifierTotal ?? 0),
         taxPercent: i.taxPercent,
+        // Batch 3: the chosen size. It was not sent, so the server billed the base price.
+        ...(i.variantId ? { variantId: i.variantId, variantName: i.variantName } : {}),
         selectedModifiers: (i.selectedModifiers ?? []).map(m => ({
           ...m,
           modifierTotal: m.modifierPrice * i.quantity,
@@ -1002,7 +1012,7 @@ export function NewOrderPanel() {
       } else if (orderType === 'takeaway') {
         orderSource = 'takeaway';
         const loyaltyDisc = loyaltyRedemption > 0 && loyaltyInfo?.config
-          ? Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))
+          ? Math.round(loyaltyRedemption * loyaltyInfo.config.pointValueInPaisa) / 100
           : 0;
         payload = {
           ...payload,
@@ -1021,7 +1031,7 @@ export function NewOrderPanel() {
           delivery.notes,
         ].filter(Boolean).join(' | ');
         const loyaltyDiscDel = loyaltyRedemption > 0 && loyaltyInfo?.config
-          ? Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))
+          ? Math.round(loyaltyRedemption * loyaltyInfo.config.pointValueInPaisa) / 100
           : 0;
         payload = {
           ...payload,
@@ -1037,7 +1047,9 @@ export function NewOrderPanel() {
       }
 
       pendingPayload = payload;
-      const created = await createOrder(payload);
+      // Batch 3: the server refuses the bill if a price changed since this screen was loaded.
+      // Not part of the queued copy: a bill saved offline has already been given to the customer.
+      const created = await createOrder({ ...payload, expectedSubtotal: subtotal });
 
       // Pay before kitchen: the server records the payment (payNow) and the order goes to the
       // kitchen paid; it is closed later when handed over / served. Otherwise takeaway and
@@ -1096,6 +1108,7 @@ export function NewOrderPanel() {
         }
       } else {
         setSubmitError(err instanceof Error ? err.message : 'Failed to place order');
+        if ((err as { code?: string } | null)?.code === 'PRICE_CHANGED') void loadProducts();
       }
     } finally {
       setSubmitting(false);
@@ -1104,7 +1117,7 @@ export function NewOrderPanel() {
 
   // ── Split / cash validation ────────────────────────────────────────────────
   const splitTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) + (parseFloat(splitCard) || 0);
-  const splitOk = payMethod !== 'split' || Math.abs(splitTotal - grandTotal) < 0.5;
+  const splitOk = payMethod !== 'split' || Math.abs(splitTotal - grandTotal) < 0.005;   // to the paisa
   // Blank "cash received" means exact cash; a typed amount must cover the bill
   const cashOk  = payMethod !== 'cash'  || cashGiven.trim() === '' || (parseFloat(cashGiven) || 0) >= grandTotal;
   const activeCustomer = orderType === 'dine-in' ? dineIn : orderType === 'takeaway' ? takeAway : delivery;
@@ -1521,7 +1534,7 @@ export function NewOrderPanel() {
               ) : loyaltyInfo.redeemablePoints > 0 && loyaltyInfo.config ? (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[10px] text-ink/50">
-                    <span>Redeem {loyaltyRedemption} pts → {sym}{Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))} off</span>
+                    <span>Redeem {loyaltyRedemption} pts → {formatMoney(sym, Math.round(loyaltyRedemption * loyaltyInfo.config.pointValueInPaisa) / 100)} off</span>
                     <span>Max: {loyaltyInfo.redeemablePoints} pts</span>
                   </div>
                   <input
@@ -1538,7 +1551,7 @@ export function NewOrderPanel() {
                     <div className="flex items-center justify-between rounded-lg bg-brand/10 px-2 py-1">
                       <span className="text-[10px] font-medium text-brand">Loyalty discount applied</span>
                       <span className="text-[11px] font-bold text-brand">
-                        -{sym}{Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))}
+                        -{formatMoney(sym, Math.round(loyaltyRedemption * loyaltyInfo.config.pointValueInPaisa) / 100)}
                       </span>
                     </div>
                   )}

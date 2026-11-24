@@ -61,6 +61,8 @@ import { ApiError } from '../api/client';
 import { Spinner } from '../components/ui/Spinner';
 import { useSettings } from '../context/SettingsContext';
 import { CHART_COLORS } from '../theme/palette';
+import { isSale, fulfilledAt, saleValue } from '../utils/salesDefinitions';
+import { formatMoney } from '../utils/money';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -168,8 +170,9 @@ function downloadJSON(filename: string, data: unknown): void {
 
 // ── Inline chart components ───────────────────────────────────────────────────
 
+// Batch 3 (owner rule): money is shown to the paisa, never rounded to the rupee.
 function fmtCur(value: number, sym: string): string {
-  return `${sym}${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  return formatMoney(sym, value);
 }
 
 function KPICard({
@@ -419,10 +422,13 @@ export function ReportsPage() {
             orders: 0,
             revenue: 0,
           }));
+          // Batch 2 (2D): hourly SALES — served / completed orders on the hour they were served /
+          // completed (was every order incl. cancelled and unpaid, on the hour it was created).
           for (const o of ordersForHourly.orders) {
-            const h = new Date(o.createdAt).getHours();
+            if (!isSale(o as any)) continue;
+            const h = fulfilledAt(o as any).getHours();
             buckets[h].orders++;
-            buckets[h].revenue += o.grandTotal;
+            buckets[h].revenue = Math.round((buckets[h].revenue + saleValue(o as any)) * 100) / 100;
           }
           setHourly(buckets);
         } else {
@@ -1001,7 +1007,7 @@ export function ReportsPage() {
                     label="Avg Order"
                     value={
                       sales.totalOrders > 0
-                        ? fmtCur(Math.round(sales.totalSales / sales.totalOrders), sym)
+                        ? fmtCur(Math.round((sales.totalSales / sales.totalOrders) * 100) / 100, sym)
                         : `${sym}0`
                     }
                     sub={`${sales.parcelOrders} parcels`}

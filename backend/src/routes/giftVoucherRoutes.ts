@@ -340,9 +340,16 @@ router.post('/redeem', redeemLimiter, requireCashierOrAdmin, requireActiveStaff,
     };
 
     // Atomic: guard balance, deduct, push transaction, deactivate if drained — one round-trip
+    // Batch 2 (2A): the "already redeemed for this order" check above is only a fast path; it
+    // is repeated INSIDE this atomic update so two simultaneous redeems for the same order
+    // cannot both deduct (check-then-act race).
+    const orderGuard = orderId && mongoose.isValidObjectId(orderId)
+      ? { transactions: { $not: { $elemMatch: { type: 'redeem', orderId: new mongoose.Types.ObjectId(orderId) } } } }
+      : {};
     const voucher = await GiftVoucher.findOneAndUpdate(
       {
         ...voucherFilter,
+        ...orderGuard,
         isActive:  true,
         isDeleted: false,
         $or: [{ expiresAt: null }, { expiresAt: { $gte: now } }],
@@ -365,6 +372,17 @@ router.post('/redeem', redeemLimiter, requireCashierOrAdmin, requireActiveStaff,
       { new: true },
     );
     if (!voucher) {
+      // Lost the race to a simultaneous redeem for the same order: report the first one's result.
+      if (orderId && mongoose.isValidObjectId(orderId)) {
+        const winner = await GiftVoucher.findOne({
+          ...voucherFilter,
+          transactions: { $elemMatch: { type: 'redeem', orderId: new mongoose.Types.ObjectId(orderId) } },
+        }).select('balance voucherCode').lean();
+        if (winner) {
+          res.json({ success: true, redeemedAmount: redeemAmt, newBalance: winner.balance, voucherCode: winner.voucherCode });
+          return;
+        }
+      }
       const v = await GiftVoucher.findOne({ ...voucherFilter, isDeleted: false })
         .select('isActive balance expiresAt').lean();
       if (!v || !v.isActive) { res.status(404).json({ message: 'Voucher not found or inactive' }); return; }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, Printer, X } from 'lucide-react';
 import type { Guest, BillingOrder } from '../../types';
-import { sumDue, isDueAtCounter } from '../../utils/counterBilling';
+import { isCounterOrder } from '../../utils/counterBilling';
 import { fetchReceiptJobs, reprintJob } from '../../api/billing';
 
 interface Props {
@@ -39,10 +39,12 @@ export function ReceiptView({ guest, sessionId, tableLabel, orders, currencySymb
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>('checking');
   const [retryCount,    setRetryCount]    = useState(0);
 
-  // Counter receipt: only what was collected here (see utils/counterBilling).
-  const subtotal   = sumDue(orders, o => o.subtotal);
-  const taxTotal   = sumDue(orders, o => o.taxTotal);
-  const grandTotal = sumDue(orders);
+  // Counter receipt: only what was collected here (see utils/counterBilling). Uses the counter
+  // orders themselves (they are settled once billed), not what is still owed.
+  const counterOrders = orders.filter(isCounterOrder);
+  const subtotal   = counterOrders.reduce((s, o) => s + (Number(o.subtotal) || 0), 0);
+  const taxTotal   = counterOrders.reduce((s, o) => s + (Number(o.taxTotal) || 0), 0);
+  const grandTotal = counterOrders.reduce((s, o) => s + (Number(o.grandTotal) || 0), 0);
 
   useEffect(() => {
     setPrinterStatus('checking');
@@ -120,7 +122,7 @@ export function ReceiptView({ guest, sessionId, tableLabel, orders, currencySymb
 
         {/* Items */}
         <div className="space-y-0.5">
-          {orders.filter(isDueAtCounter).flatMap(order =>
+          {orders.filter(isCounterOrder).flatMap(order =>
             order.items.map((item, i) => (
               <div key={`${order._id}-${i}`}>
                 <div className="flex justify-between text-ink/70">
@@ -162,10 +164,12 @@ export function ReceiptView({ guest, sessionId, tableLabel, orders, currencySymb
                   <span>SGST ({halfRate}%)</span>
                   <span className="tabular-nums">{fmt(sgst, currencySymbol)}</span>
                 </div>
+                {/* Batch 3 (3A): this difference is the bill's discounts (coupon, loyalty,
+                    discount at payment …) — the app has no cash rounding, so it was mislabelled. */}
                 {Math.abs(roundOff) >= 0.01 && (
                   <div className="flex justify-between text-ink/40">
-                    <span>Round Off</span>
-                    <span className="tabular-nums">{roundOff > 0 ? '+' : ''}{fmt(roundOff, currencySymbol)}</span>
+                    <span>{roundOff < 0 ? 'Discounts' : 'Adjustments'}</span>
+                    <span className="tabular-nums">{roundOff > 0 ? '+' : '-'}{fmt(Math.abs(roundOff), currencySymbol)}</span>
                   </div>
                 )}
               </>

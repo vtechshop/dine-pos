@@ -14,11 +14,12 @@ import { useSettings } from '../../context/SettingsContext';
 import { Spinner } from '../ui/Spinner';
 import type { Table, SessionSummary } from '../../types';
 import type { CashierOrderItem } from '../../api/orders';
+import { formatMoney } from '../../utils/money';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
+  return formatMoney(sym, n);
 }
 
 function fmtElapsed(openedAt: string, nowMs: number): string {

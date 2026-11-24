@@ -3,9 +3,10 @@ import mongoose from 'mongoose';
 import { authMiddleware, requireCashierOrAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import Shift from '../models/Shift';
-import Order from '../models/Order';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
+import { salesReport, drawerCash } from '../utils/financeDefinitions';
+import { r2 } from '../utils/paymentLedger';
 
 const router = Router();
 router.use(authMiddleware);
@@ -29,9 +30,14 @@ router.post('/open', requireCashierOrAdmin, async (req: AuthRequest, res: Respon
       });
     }
 
-    // M1: cashierId and cashierName come from the verified JWT, never from req.body
-    const cashierId   = req.cashierId   ?? '';
-    const cashierName = req.cashierName ?? '';
+    // M1: cashierId and cashierName come from the verified JWT, never from req.body.
+    // Batch 3: a hotel admin has no cashier id — the shift is opened as "Admin" (it was a 500).
+    const isAdmin     = req.role === 'admin';
+    const cashierId   = req.cashierId   || (isAdmin ? 'admin' : '');
+    const cashierName = req.cashierName || (isAdmin ? 'Admin' : '');
+    if (!cashierId || !cashierName) {
+      return res.status(400).json({ message: 'Sign in as a cashier to open a shift.' });
+    }
 
     const shift = await Shift.create({
       hotelId:     req.hotelId,
@@ -68,44 +74,47 @@ router.get('/active', requireCashierOrAdmin, async (req: AuthRequest, res: Respo
 });
 
 // ── GET /api/shifts/active/stats — live totals for the current open shift ─────
-// Only counts completed orders so pending/preparing tickets don't inflate cash.
+// Batch 3: from the payment ledger. Money counts when it was taken (also for orders placed
+// before the shift or still in the kitchen); sales count when orders are served / completed.
 
 router.get('/active/stats', requireCashierOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const shift = await Shift.findOne({ hotelId: req.hotelId, status: 'open' }).lean();
     if (!shift) {
-      return res.json({ totalOrders: 0, totalSales: 0, cashSales: 0, upiSales: 0, cardSales: 0, splitCashSales: 0 });
+      return res.json({ totalOrders: 0, totalSales: 0, cashSales: 0, upiSales: 0, cardSales: 0, splitCashSales: 0, drawer: null });
     }
 
-    const [agg] = await Order.aggregate([
-      {
-        $match: {
-          hotelId:   new mongoose.Types.ObjectId(req.hotelId),
-          status:    { $in: ['completed'] },
-          createdAt: { $gte: shift.openedAt },
-        },
-      },
-      {
-        $group: {
-          _id:         null,
-          totalOrders: { $sum: 1 },
-          totalSales:  { $sum: '$grandTotal' },
-          cashSales:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, '$grandTotal', 0] } },
-          // M-01: sum cash portion from split payment object {cash, upi, card}
-          splitCashSales: { $sum: { $ifNull: ['$splitDetails.cash', 0] } },
-          upiSales:    { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi'] },  '$grandTotal', 0] } },
-          cardSales:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card'] }, '$grandTotal', 0] } },
-        },
-      },
+    const hid = new mongoose.Types.ObjectId(req.hotelId);
+    const now = new Date();
+    const [report, drawer] = await Promise.all([
+      salesReport(hid, new Date(shift.openedAt), now),
+      drawerCash(hid, shift, now),
     ]);
+    const c = report.collections;
 
     return res.json({
-      totalOrders:    agg?.totalOrders    ?? 0,
-      totalSales:     agg?.totalSales     ?? 0,
-      cashSales:      agg?.cashSales      ?? 0,
-      upiSales:       agg?.upiSales       ?? 0,
-      cardSales:      agg?.cardSales      ?? 0,
-      splitCashSales: agg?.splitCashSales ?? 0,
+      // Older field names kept for the Shift tab and the mobile app. Split payments are in
+      // the ledger under their parts, so the cash part is already in cashSales (split = 0).
+      totalOrders:    report.totalOrders,
+      totalSales:     report.totalSales,
+      cashSales:      c.cash,
+      upiSales:       c.upi,
+      cardSales:      c.card,
+      splitCashSales: 0,
+      drawer,
+      finance: {
+        totalSales:       report.totalSales,
+        totalOrders:      report.totalOrders,
+        totalTax:         report.totalTax,
+        totalDiscount:    report.totalDiscount,
+        paymentBreakdown: report.paymentBreakdown,
+        collections:      report.collections,
+        tenders:          report.tenders,
+        refunds:          report.refunds,
+        reversals:        report.reversals,
+        tips:             report.tips,
+        netCollections:   report.netCollections,
+      },
     });
   } catch (error) { return sendError(res, 500, 'Server error', error); }
 });
@@ -229,58 +238,34 @@ router.post('/:id/close', requireCashierOrAdmin, async (req: AuthRequest, res: R
       return res.status(403).json({ message: 'You can only close your own shift.' });
     }
 
-    // Aggregate order totals for this shift's period
+    // Batch 3: the shift's figures from the payment ledger — the same calculation as the live
+    // drawer balance. Money counts when it was taken (orders placed before the shift or still in
+    // the kitchen included); split payments under their parts; cash refunds and reversals out;
+    // cash tips in. Sales are the orders served / completed in the shift.
     const shiftStart = shift.openedAt;
     const shiftEnd   = new Date();
+    const hid = new mongoose.Types.ObjectId(req.hotelId);
+    const [report, drawer] = await Promise.all([
+      salesReport(hid, new Date(shiftStart), shiftEnd),
+      drawerCash(hid, shift, shiftEnd),
+    ]);
+    const c = report.collections;
 
-    const [orderAgg] = await Order.aggregate([
-      {
-        $match: {
-          hotelId: new mongoose.Types.ObjectId(req.hotelId),
-          status: { $in: ['completed'] },
-          createdAt: { $gte: shiftStart, $lte: shiftEnd },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalOrders: { $sum: 1 },
-          totalSales:  { $sum: '$grandTotal' },
-          cashSales:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, '$grandTotal', 0] } },
-          // M3: sum cash portion from split payment object {cash, upi, card}
-          splitCashSales: { $sum: { $ifNull: ['$splitDetails.cash', 0] } },
-          upiSales:    { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi'] },  '$grandTotal', 0] } },
-          cardSales:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card'] }, '$grandTotal', 0] } },
-          otherSales:  {
-            $sum: {
-              $cond: [
-                { $not: [{ $in: ['$paymentMethod', ['cash', 'upi', 'card']] }] },
-                '$grandTotal',
-                0,
-              ],
-            },
-          },
-        },
-      },
-    ]).session(session);
-
-    const actual = Math.max(0, Number(actualCash) || 0);
-    // M3: include cash portions from split payments in expected cash calculation
-    const totalCashSales = (orderAgg?.cashSales ?? 0) + (orderAgg?.splitCashSales ?? 0);
-    const expected = shift.openingCash + totalCashSales + shift.cashIn - shift.cashOut;
+    const actual = r2(Math.max(0, Number(actualCash) || 0));
+    const expected = drawer.expected;
 
     shift.status       = 'closed';
     shift.closedAt     = shiftEnd;
     shift.closingNote  = (closingNote ?? '').trim();
     shift.actualCash   = actual;
     shift.expectedCash = expected;
-    shift.difference   = actual - expected;
-    shift.totalOrders  = orderAgg?.totalOrders ?? 0;
-    shift.totalSales   = orderAgg?.totalSales  ?? 0;
-    shift.cashSales    = totalCashSales; // M3: direct cash + split-payment cash portions
-    shift.upiSales     = orderAgg?.upiSales    ?? 0;
-    shift.cardSales    = orderAgg?.cardSales   ?? 0;
-    shift.otherSales   = orderAgg?.otherSales  ?? 0;
+    shift.difference   = r2(actual - expected);
+    shift.totalOrders  = report.totalOrders;
+    shift.totalSales   = report.totalSales;
+    shift.cashSales    = c.cash;                     // money taken in cash (incl. split cash parts)
+    shift.upiSales     = c.upi;
+    shift.cardSales    = c.card;
+    shift.otherSales   = r2(c.online + c.other);
 
     await shift.save({ session });
     await session.commitTransaction();

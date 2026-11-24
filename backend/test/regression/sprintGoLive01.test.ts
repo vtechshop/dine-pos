@@ -221,10 +221,12 @@ describe('P2-04 — Split payment total validation on status completion path', (
   });
 
   it('GL-28 — source code contains the validation in the status completion path', () => {
+    // Phase 5 · Batch 2 (owner Business Decision 2 — exact paise): the completion path now
+    // checks the split against the amount still owed to the paisa (PAISE), not within ±₹1.
     const route = readSrc('routes', 'orderRoutes.ts');
-    expect(route).toContain('M5 (status path): validate split totals match order total');
-    expect(route).toContain('splitTotal - existing.grandTotal');
-    expect(route).toContain('Math.abs(splitTotal - existing.grandTotal) > 1');
+    expect(route).toContain('M5 (status path): split totals must match what is owed — to the paisa');
+    expect(route).toContain('Math.abs(splitTotal - owed) > PAISE');
+    expect(route).not.toContain('Math.abs(splitTotal - existing.grandTotal) > 1');
   });
 
   it('GL-29 — validation rejection message includes actual vs expected totals', () => {

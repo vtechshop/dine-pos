@@ -34,15 +34,20 @@ export async function fetchSalesSummary(role: string | null | undefined): Promis
   if (role === 'admin') return fetchDailyReport();
   if (role !== 'cashier') return null;
   const s = await apiGetActiveShiftStats();
-  return {
+  const base = {
     date: new Date().toISOString().slice(0, 10),
+    parcelOrders: 0,
+    parcelRevenue: 0,
+    sourceBreakdown: {},
+  };
+  // Batch 3: the server's ledger-based figures, the same ones the admin daily report uses.
+  if (s.finance) return { ...base, ...s.finance };
+  return {
+    ...base,
     totalSales: s.totalSales,
     totalTax: 0,
     totalDiscount: 0,
     totalOrders: s.totalOrders,
-    parcelOrders: 0,
-    parcelRevenue: 0,
     paymentBreakdown: { cash: s.cashSales, upi: s.upiSales, card: s.cardSales, split: 0 },
-    sourceBreakdown: {},
   };
 }

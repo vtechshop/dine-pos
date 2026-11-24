@@ -13,11 +13,12 @@ import { apiGetShiftHistory } from '../../api/shifts';
 import type { ShiftData } from '../../api/shifts';
 import { useCashier } from '../../context/CashierContext';
 import { Spinner } from '../ui/Spinner';
+import { formatMoneyAbs } from '../../utils/money';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(n: number, sym = '₹'): string {
-  return `${sym}${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
+  return formatMoneyAbs(sym, n);
 }
 
 function fmtDate(iso: string): string {

@@ -23,6 +23,10 @@ export interface ServerHeldBill {
     loyaltyPoints?: number;
     loyaltyDiscount?: number;
     notes?: string;
+    // Batch 3 (3B): totals stored with the bill so every device shows the same amount
+    subtotal?: number;
+    taxTotal?: number;
+    grandTotal?: number;
   };
   heldAt: string;
   terminal?: string;

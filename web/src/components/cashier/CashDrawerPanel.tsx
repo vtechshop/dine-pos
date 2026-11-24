@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { PlusCircle, MinusCircle, Wallet, ArrowDown, ArrowUp, Lock } from 'lucide-react';
 import { useCashier } from '../../context/CashierContext';
 import { useSettings } from '../../context/SettingsContext';
+import { formatMoneyAbs } from '../../utils/money';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
+  return formatMoneyAbs(sym, n);
 }
 
 function fmtTime(iso: string) {
@@ -33,7 +34,8 @@ const CASH_OUT_REASONS = [
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function CashDrawerPanel() {
-  const { shift, drawerMovements, addDrawerMovement, drawerBalance } = useCashier();
+  const { shift, drawerMovements, addDrawerMovement, drawerBalance, refreshDrawer } = useCashier();
+  useEffect(() => { void refreshDrawer(); }, [refreshDrawer]);
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
 

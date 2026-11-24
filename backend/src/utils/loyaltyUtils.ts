@@ -189,6 +189,7 @@ export async function redeemPoints(
   points: number,
   config: LoyaltyConfig,
   ctx: LoyaltyContext,
+  txSession?: mongoose.ClientSession,   // Batch 3: lets the caller commit this with the bill change
 ): Promise<number> {
   if (points <= 0) return 0;
 
@@ -203,13 +204,13 @@ export async function redeemPoints(
       loyaltyBalance: { $gte: points },
     },
     { $inc: { loyaltyBalance: -points } },
-    { new: true },
+    { new: true, session: txSession },
   );
   if (!updated) throw new Error('Insufficient loyalty points or customer ineligible');
 
   const discountAmount = calculateRedeemValue(points, config);
 
-  await LoyaltyTransaction.create({
+  await LoyaltyTransaction.create([{
     customerId,
     hotelId:         hotelOid,
     sessionId:       ctx.sessionId  ? new mongoose.Types.ObjectId(ctx.sessionId)  : null,
@@ -221,7 +222,7 @@ export async function redeemPoints(
     balanceAfter:    updated.loyaltyBalance,
     createdBy:       ctx.createdBy ?? 'system',
     remarks:         `Redeemed ${points} ${config.rewardName} for ₹${discountAmount} discount`,
-  });
+  }], { session: txSession });
 
   return discountAmount;
 }
@@ -442,7 +443,7 @@ export async function earnOrgPoints(
     ? `${orgCustomerId}:earn:${ctx.orderId}`
     : ctx.guestId
     ? `${orgCustomerId}:earn:guest:${ctx.guestId}`
-    : null;
+    : undefined;   // omitted, never null (see LoyaltyTransaction.idempotencyKey)
 
   // Set expiry date using HQ config's expiryDays (0 = never expires)
   const orgExpiresAt = config.expiryDays > 0
@@ -518,7 +519,7 @@ export async function redeemOrgPoints(
 
   const idempotencyKey = ctx.orderId
     ? `${orgCustomerId}:redeem:${ctx.orderId}`
-    : null;
+    : undefined;   // omitted, never null (see LoyaltyTransaction.idempotencyKey)
 
   try {
     await LoyaltyTransaction.create(
@@ -594,7 +595,6 @@ export async function reverseOrgEarnedPoints(
     hotelId:         branchObjId,
     orgCustomerId,
     branchHotelId:   branchObjId,
-    idempotencyKey:  null,
     sessionId:       ctx.sessionId  ? new mongoose.Types.ObjectId(ctx.sessionId)  : null,
     guestId:         ctx.guestId    ? new mongoose.Types.ObjectId(ctx.guestId)    : null,
     orderId:         ctx.orderId    ? new mongoose.Types.ObjectId(ctx.orderId)    : null,

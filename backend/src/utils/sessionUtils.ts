@@ -8,7 +8,7 @@
  *   to insert; the loser gets code 11000 and falls back to a second findOne.
  *
  * findOrCreateDefaultGuest: used by waiter/kiosk flows that don't specify a guestId.
- *   Identifies staff-created guests by qrSessionToken === null (QR guests always
+ *   Identifies staff-created guests by a missing (or legacy null) qrSessionToken (QR guests always
  *   have a token until billing). Returns the first active staff guest or creates one.
  */
 
@@ -82,7 +82,8 @@ export async function findOrCreateOpenSession(
 
 /**
  * Find or create the "table default" guest for staff-placed orders.
- * Identified by qrSessionToken === null (QR guests always carry a token until billed).
+ * Identified by having no qrSessionToken (QR guests always carry a token until billed).
+ * The `qrSessionToken: null` filter below matches a missing field as well as a legacy null.
  * The session document is passed directly to avoid a redundant lookup for tableId/tableNumber.
  */
 export async function findOrCreateDefaultGuest(session: any, hotelId: string): Promise<any> {
@@ -97,8 +98,16 @@ export async function findOrCreateDefaultGuest(session: any, hotelId: string): P
 
   if (existing) return existing;
 
-  const count       = await Guest.countDocuments({ sessionId: session._id });
-  const guestNumber = count + 1;
+  // Same atomic counter as staff-added and QR guests (session.guestCount). Counting documents
+  // here did not advance the counter, so the next added guest got the same number and label
+  // ("Guest A" twice) — reachable once default guests could be created (P4-TBL-01).
+  const updatedSession = await TableSession.findByIdAndUpdate(
+    session._id,
+    { $inc: { guestCount: 1 } },
+    { new: true },
+  );
+  const guestNumber = updatedSession?.guestCount
+    ?? (await Guest.countDocuments({ sessionId: session._id })) + 1;
 
   return Guest.create({
     hotelId:     hotelObjId,
@@ -109,6 +118,7 @@ export async function findOrCreateDefaultGuest(session: any, hotelId: string): P
     displayLabel: guestLabel(guestNumber),
     status:      'active',
     totalAmount: 0,
-    // qrSessionToken omitted — null by default; marks this as a staff-created guest
+    // qrSessionToken omitted — the field stays absent (never null: the unique sparse index
+    // would allow only one null across all hotels, P4-TBL-01); marks a staff-created guest
   });
 }

@@ -13,6 +13,8 @@ import { logAuditEntry } from '../../utils/auditLog';
 import { getCashierName, getCashierId } from '../../utils/cashierIdentity';
 import { getTier, isBirthdayToday, nextTierInfo } from '../../utils/loyaltyUtils';
 import type { LoyaltyConfig, CustomerSummary, CustomerProfile } from '../../types/customers';
+import { formatMoneyAbs, formatMoneySigned } from '../../utils/money';
+import { useCashierPermissions } from '../../hooks/useCashierPermissions';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -41,20 +43,27 @@ export interface PaymentModalProps {
   subtotal: number;
   taxTotal: number;
   appliedDiscount: number;
+  /** Batch 3: what is really still owed on this bill. Without it: subtotal + tax − discount. */
+  amountDue?: number;
+  /** Batch 3: the lines between that sum and amountDue (coupon, voucher, already paid …). */
+  adjustments?: { label: string; amount: number }[];
+  /** Batch 3: the phone on the bill. Only this customer can redeem points on it. */
+  billPhone?: string;
+  /** Batch 3: points were already redeemed on this bill (one redemption per bill). */
+  alreadyRedeemed?: boolean;
   onConfirm: (result: PaymentResult) => Promise<void>;
   onClose: () => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Batch 3 (3A): exact paise (was rounded to the rupee).
 function fmtINR(sym: string, n: number) {
-  const rounded = Math.abs(Math.round(n));
-  return `${sym}${rounded.toLocaleString('en-IN')}`;
+  return formatMoneyAbs(sym, n);
 }
 
 function fmtSign(n: number, sym: string) {
-  const sign = n < 0 ? '-' : n > 0 ? '+' : '';
-  return `${sign}${sym}${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
+  return formatMoneySigned(sym, n);
 }
 
 // ── Row in the bill summary ───────────────────────────────────────────────────
@@ -104,23 +113,29 @@ function MethodTab({ active, icon, label, onClick }: {
 // ── Loyalty section ───────────────────────────────────────────────────────────
 
 function LoyaltySection({
-  config, sym, finalBeforeLoyalty,
+  config, sym, finalBeforeLoyalty, billPhone,
   customer, setCustomer,
   phone, setPhone,
   points, setPoints,
   searching, setSearching,
 }: {
-  config: LoyaltyConfig; sym: string; finalBeforeLoyalty: number;
+  config: LoyaltyConfig; sym: string; finalBeforeLoyalty: number; billPhone?: string;
   customer: CustomerSummary | null; setCustomer: (c: CustomerSummary | null) => void;
   phone: string; setPhone: (v: string) => void;
   points: string; setPoints: (v: string) => void;
   searching: boolean; setSearching: (v: boolean) => void;
 }) {
   const [notFound, setNotFound] = useState(false);
+  const [wrongCustomer, setWrongCustomer] = useState(false);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
+  const last10 = (s: string) => s.replace(/\D/g, '').slice(-10);
 
   async function doSearch() {
     if (!phone.trim()) return;
+    // Batch 3: the server only lets the bill's own customer redeem on it.
+    const mismatch = billPhone !== undefined && last10(phone) !== last10(billPhone);
+    setWrongCustomer(mismatch);
+    if (mismatch) { setCustomer(null); setNotFound(false); return; }
     setSearching(true);
     setNotFound(false);
     setProfile(null);
@@ -230,9 +245,7 @@ function LoyaltySection({
           {isBirthday && (
             <div className="rounded-lg border border-pink-200 bg-pink-50 px-3 py-2">
               <p className="text-[11px] font-semibold text-pink-700">🎂 Birthday offer available!</p>
-              <p className="text-[10px] text-pink-600/80 mt-0.5">
-                Discount % requires backend: GET /loyalty/config → birthdayDiscountPercent
-              </p>
+              {/* Batch 3 (3D): a developer note ("Discount % requires backend …") was shown to cashiers here; removed. */}
             </div>
           )}
 
@@ -278,6 +291,11 @@ function LoyaltySection({
       {notFound && !customer && (
         <p className="text-[11px] text-amber-700">No customer found with this number</p>
       )}
+      {wrongCustomer && !customer && (
+        <p className="text-[11px] text-amber-700">
+          {billPhone ? 'Only the customer on this bill can redeem points on it.' : 'This bill has no customer phone, so points cannot be redeemed on it.'}
+        </p>
+      )}
     </div>
   );
 }
@@ -322,10 +340,12 @@ function SuccessScreen({
 export function PaymentModal({
   sym, orderNumber, tableNumber, customerName,
   items, subtotal, taxTotal, appliedDiscount,
+  amountDue, adjustments, billPhone, alreadyRedeemed,
   onConfirm, onClose,
 }: PaymentModalProps) {
   const { hotelId } = useAuth();
   const { settings } = useSettings();
+  const perms = useCashierPermissions();   // Batch 3 (3D): discount only when allowed
   const upiId = settings?.upiId?.trim() ?? '';
 
   // Payment method
@@ -345,7 +365,7 @@ export function PaymentModal({
   // Loyalty
   const [loyaltyConfig, setLoyaltyConfig] = useState<LoyaltyConfig | null>(null);
   const [loyaltyCustomer, setLoyaltyCustomer] = useState<CustomerSummary | null>(null);
-  const [loyaltyPhone, setLoyaltyPhone] = useState('');
+  const [loyaltyPhone, setLoyaltyPhone] = useState(billPhone ?? '');
   const [loyaltyPoints, setLoyaltyPoints] = useState('');
   const [loyaltySearching, setLoyaltySearching] = useState(false);
   const [showLoyalty, setShowLoyalty] = useState(false);
@@ -365,12 +385,19 @@ export function PaymentModal({
   const tipAmt         = Math.max(0, parseFloat(tip) || 0);
   const addDiscAmt     = Math.max(0, parseFloat(addDiscount) || 0);
   const ptsClamped     = Math.max(0, parseInt(loyaltyPoints) || 0);
+  const paise = (n: number) => Math.round(n * 100) / 100;
+
+  // Batch 3: start from what is really owed (coupon, voucher, wallet, earlier discounts and part
+  // payments were ignored, so the dialog could ask ₹252 when ₹152 was due). A tip is not part of
+  // the bill: discounts, loyalty limits and split amounts all work on the bill alone.
+  const baseDue       = amountDue ?? paise(subtotal + taxTotal - appliedDiscount);
+  const afterDiscount = Math.max(0, paise(baseDue - addDiscAmt));
 
   const maxPts = loyaltyConfig && loyaltyCustomer
     ? Math.min(
         loyaltyCustomer.loyaltyBalance,
         Math.floor(
-          ((subtotal + taxTotal - appliedDiscount - addDiscAmt + tipAmt) * loyaltyConfig.maximumRedeemPercent / 100)
+          (afterDiscount * loyaltyConfig.maximumRedeemPercent / 100)
           / (loyaltyConfig.pointValueInPaisa / 100),
         ),
       )
@@ -381,22 +408,28 @@ export function PaymentModal({
     ? (pointsToRedeem * loyaltyConfig.pointValueInPaisa) / 100
     : 0;
 
-  const preRound  = subtotal + taxTotal - appliedDiscount - addDiscAmt - loyaltyDiscAmt + tipAmt;
-  const roundOff  = Math.round(preRound) - preRound;
-  const finalTotal = Math.max(0, preRound + roundOff);
+  // Batch 3 (3A) — owner rule: exact paise, no silent rounding. The dialog used to round every
+  // bill to the rupee ("Round Off · auto") for every method; the server never recorded it, so the
+  // counter collected e.g. ₹575 for a ₹574.80 bill, and UPI / card / split amounts were not exact.
+  // The app has no cash-rounding feature, so the amount to collect is the exact bill amount.
+  const roundOff   = 0;
+  const billDue    = Math.max(0, paise(afterDiscount - loyaltyDiscAmt));
+  const finalTotal = paise(billDue + tipAmt);   // to collect: the bill, plus any tip on top
 
   // Validation
   const cashGivenAmt = parseFloat(cashGiven) || 0;
   const cashChange   = cashGivenAmt - finalTotal;
-  const splitSum     = (parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) + (parseFloat(splitCard) || 0);
-  const splitDiff    = splitSum - finalTotal;
+  const splitSum     = Math.round(((parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) + (parseFloat(splitCard) || 0)) * 100) / 100;
+  const splitDiff    = paise(splitSum - billDue);   // the split covers the bill (server rule)
+  const splitBalanced = Math.abs(splitDiff) < 0.005;
 
   const loyaltyOk = !loyaltyConfig || pointsToRedeem === 0 ||
     (loyaltyConfig && pointsToRedeem >= loyaltyConfig.minimumRedeemPoints && pointsToRedeem <= maxPts);
 
   const canConfirm = (
     (method === 'cash'  ? cashGivenAmt >= finalTotal : true) &&
-    (method === 'split' ? Math.abs(splitDiff) < 0.5  : true) &&
+    (method === 'split' ? splitBalanced : true) &&   // to the paisa (server rule)
+    addDiscAmt <= baseDue + 0.005 &&
     loyaltyOk
   );
 
@@ -498,6 +531,14 @@ export function PaymentModal({
                 {appliedDiscount > 0 && (
                   <SumRow label="Discount"      value={`-${fmtINR(sym, appliedDiscount)}`} negative />
                 )}
+                {adjustments?.filter(a => Math.abs(a.amount) >= 0.005).map(a => (
+                  <SumRow
+                    key={a.label}
+                    label={a.label}
+                    value={`${a.amount < 0 ? '-' : '+'}${fmtINR(sym, a.amount)}`}
+                    negative={a.amount < 0}
+                  />
+                ))}
                 {addDiscAmt > 0 && (
                   <SumRow label="Extra Discount" value={`-${fmtINR(sym, addDiscAmt)}`} negative />
                 )}
@@ -510,7 +551,12 @@ export function PaymentModal({
                 {Math.abs(roundOff) >= 0.01 && (
                   <SumRow label="Round Off"     value={fmtSign(roundOff, sym)} sub="auto" />
                 )}
-                <SumRow label="Grand Total"     value={fmtINR(sym, finalTotal)} bold accent />
+                <SumRow
+                  label={adjustments?.some(a => Math.abs(a.amount) >= 0.005) ? 'Amount Due' : 'Grand Total'}
+                  value={fmtINR(sym, finalTotal)}
+                  bold
+                  accent
+                />
               </div>
             </div>
 
@@ -538,7 +584,7 @@ export function PaymentModal({
                         {sym}{p}
                       </button>
                     ))}
-                    <button type="button" onClick={() => setCashGiven(String(Math.ceil(finalTotal)))}
+                    <button type="button" onClick={() => setCashGiven(String(finalTotal))}
                       className="rounded border border-brand/30 bg-brand/5 px-2.5 py-1 text-xs font-semibold text-brand">
                       Exact
                     </button>
@@ -695,19 +741,24 @@ export function PaymentModal({
                     </div>
                   ))}
                   <div className={`flex items-center justify-between rounded-xl px-3 py-2 ${
-                    Math.abs(splitDiff) < 0.5
+                    splitBalanced
                       ? 'bg-emerald-50 border border-emerald-200'
                       : 'bg-amber-50 border border-amber-200'
                   }`}>
                     <span className="text-xs font-medium">
-                      {Math.abs(splitDiff) < 0.5 ? '✓ Balanced'
+                      {splitBalanced ? '✓ Balanced'
                         : splitDiff > 0 ? 'Over by'
                         : 'Short by'}
                     </span>
-                    <span className={`text-sm font-bold ${Math.abs(splitDiff) < 0.5 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                      {Math.abs(splitDiff) < 0.5 ? '' : fmtINR(sym, Math.abs(splitDiff))}
+                    <span className={`text-sm font-bold ${splitBalanced ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {splitBalanced ? '' : fmtINR(sym, Math.abs(splitDiff))}
                     </span>
                   </div>
+                  {tipAmt > 0 && (
+                    <p className="text-[11px] text-ink/60">
+                      Split the bill of {fmtINR(sym, billDue)}. Collect the {fmtINR(sym, tipAmt)} tip on top, in cash.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -723,8 +774,13 @@ export function PaymentModal({
                 </button>
                 {showAdj && (
                   <div className="mt-2 grid grid-cols-2 gap-2">
+                    {/* Batch 3 (3D): only for someone allowed to discount (server policy). It was
+                        offered to every cashier, and the server then refused the payment. */}
+                    {perms.canApplyDiscount && (
                     <div>
-                      <label className="block mb-0.5 text-[10px] font-medium text-ink/50">Extra Discount ({sym})</label>
+                      <label className="block mb-0.5 text-[10px] font-medium text-ink/50">
+                        Extra Discount ({sym}){perms.maxDiscountPercent < 100 ? ` · max ${perms.maxDiscountPercent}%` : ''}
+                      </label>
                       <input
                         type="number"
                         min="0"
@@ -734,10 +790,11 @@ export function PaymentModal({
                         className="w-full rounded-lg border border-border px-2.5 py-1.5 text-sm text-ink outline-none focus:border-brand/50"
                       />
                     </div>
+                    )}
                     <div>
                       <label className="block mb-0.5 text-[10px] font-medium text-ink/50">
                         Tip ({sym})
-                        <span className="ml-1 text-ink/35">• local only</span>
+                        <span className="ml-1 text-ink/35">• not part of the bill</span>
                       </label>
                       <input
                         type="number"
@@ -753,7 +810,7 @@ export function PaymentModal({
               </div>
 
               {/* ── Loyalty section ────────────────────────────────────────── */}
-              {loyaltyConfig && (
+              {loyaltyConfig && !alreadyRedeemed && (
                 <div>
                   <button
                     type="button"
@@ -771,7 +828,8 @@ export function PaymentModal({
                       <LoyaltySection
                         config={loyaltyConfig}
                         sym={sym}
-                        finalBeforeLoyalty={subtotal + taxTotal - appliedDiscount - addDiscAmt + tipAmt}
+                        finalBeforeLoyalty={afterDiscount}
+                        billPhone={billPhone}
                         customer={loyaltyCustomer}
                         setCustomer={setLoyaltyCustomer}
                         phone={loyaltyPhone}
@@ -786,14 +844,8 @@ export function PaymentModal({
                 </div>
               )}
 
-              {/* Backend-gated: Wallet / Credit */}
-              <div className="rounded-lg border border-dashed border-border px-3 py-2">
-                <p className="text-[10px] text-ink/35">
-                  Wallet &amp; Credit payment — requires backend: add
-                  <code className="mx-1 rounded bg-mist px-1 text-[9px]">'wallet'|'credit'</code>
-                  to PaymentMethod union in shared types.
-                </p>
-              </div>
+              {/* Batch 3 (3D): a developer note ("Wallet & Credit payment — requires backend …")
+                  was shown to cashiers here; removed. Wallet / credit are not payment methods yet. */}
             </div>
           </div>
         )}

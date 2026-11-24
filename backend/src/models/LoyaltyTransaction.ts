@@ -28,7 +28,7 @@ export interface ILoyaltyTransaction extends Document {
   // Org-loyalty context (null for single-branch transactions)
   orgCustomerId:  mongoose.Types.ObjectId | null;
   branchHotelId:  mongoose.Types.ObjectId | null;
-  idempotencyKey: string | null;
+  idempotencyKey?: string;
   // Intentionally no updatedAt: this collection is append-only / immutable
 }
 
@@ -51,7 +51,9 @@ const LoyaltyTransactionSchema: Schema = new Schema(
     expiresAt:    { type: Date, default: null },
     orgCustomerId:  { type: Schema.Types.ObjectId, ref: 'OrganizationCustomer', default: null },
     branchHotelId:  { type: Schema.Types.ObjectId, ref: 'Hotel', default: null },
-    idempotencyKey: { type: String, default: null, maxlength: 200 },
+    // Batch 3: no `default: null`. A sparse unique index still indexes an explicit null, so only
+    // ONE keyless transaction could exist in the whole database and later loyalty writes failed.
+    idempotencyKey: { type: String, maxlength: 200 },
     createdBy:    { type: String, default: 'system', maxlength: 100 },
   },
   {

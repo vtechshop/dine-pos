@@ -296,6 +296,8 @@ export function CashierPage() {
 
   // Header data
   const [platforms, setPlatforms] = useState<PlatformStatusItem[]>([]);
+  /** false when the plan has no Swiggy / Zomato (403 / 404), true when it does, null until known */
+  const [onlineOrdersEnabled, setOnlineOrdersEnabled] = useState<boolean | null>(null);
   const [printers, setPrinters]   = useState<PrinterDeviceStatus[]>([]);
   const [nowMs, setNowMs]         = useState(() => Date.now());
 
@@ -306,8 +308,11 @@ export function CashierPage() {
       fetchPrinterDevices(),
     ]);
     if (!cancelled) {
-      if (platRes.status === 'fulfilled') setPlatforms(platRes.value);
-      else if (platRes.reason instanceof ApiError && (platRes.reason.status === 403 || platRes.reason.status === 404)) setPlatforms([]);
+      if (platRes.status === 'fulfilled') { setPlatforms(platRes.value); setOnlineOrdersEnabled(true); }
+      else if (platRes.reason instanceof ApiError && (platRes.reason.status === 403 || platRes.reason.status === 404)) {
+        setPlatforms([]);
+        setOnlineOrdersEnabled(false);
+      }
       if (prtRes.status === 'fulfilled') setPrinters(prtRes.value);
       setNowMs(Date.now());
     }
@@ -458,7 +463,7 @@ export function CashierPage() {
 
       {/* ── Panel content ───────────────────────────────────────────────────── */}
       <main className="min-h-0 flex-1 overflow-y-auto p-4">
-        {activeTab === 'dashboard'  && <DashboardPanel />}
+        {activeTab === 'dashboard'  && <DashboardPanel onlineOrdersEnabled={onlineOrdersEnabled} />}
         {activeTab === 'new-order'  && <NewOrderPanel />}
         {activeTab === 'pending'    && <PendingBillsPanel />}
         {activeTab === 'hold'       && <HoldBillPanel />}

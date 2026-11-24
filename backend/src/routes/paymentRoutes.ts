@@ -15,6 +15,7 @@ import { sendError } from '../utils/sendError';
 import { logAudit } from '../utils/audit';
 import { logger } from '../utils/logger';
 import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, reverseEarnedPoints } from '../utils/loyaltyUtils';
+import { recordGatewayPayment, recordEntries, r2 } from '../utils/paymentLedger';
 
 const router = Router();
 router.use(authMiddleware);
@@ -355,6 +356,12 @@ router.post('/verify', async (req: AuthRequest, res: Response) => {
       if (gatewayTransactionId) payment.gatewayTransactionId = gatewayTransactionId;
       await payment.save();
 
+      // Batch 2 (2B): money received online → payment ledger (once per gateway payment;
+      // the webhook and the order completion use the same key).
+      if (result.status === 'success' && payment.orderId) {
+        await recordGatewayPayment(req.hotelId!, payment as any, payment.orderId as any, 'gateway_verify', new Date());
+      }
+
       // Loyalty earn — atomic claim prevents double-earn with concurrent webhook
       if (result.status === 'success') {
         ;(async () => {
@@ -516,6 +523,18 @@ router.post('/:id/refund', async (req: AuthRequest, res: Response) => {
       // Extremely unlikely — lock was somehow broken; release and surface error
       await Payment.updateOne({ _id: locked._id }, { $set: { refundInProgress: false } }).catch(() => {});
       return res.status(500).json({ message: 'Refund commit failed. Check payment status and retry.' });
+    }
+
+    // Batch 2 (2B): the refund is a separate ledger entry with its own time (refunds are
+    // reported apart from collections and never change what the order counts as paid).
+    // Same key as the refund webhook, so the refund is recorded once.
+    if (updated.orderId) {
+      await recordEntries(req.hotelId!, [{
+        type: 'refund', method: 'online', amount: r2(amountPaise / 100), paidAt: refundEntry.refundedAt,
+        source: 'gateway_refund', allocations: [{ orderId: updated.orderId as any, amount: r2(amountPaise / 100) }],
+        paymentId: String(updated._id), reference: String(actualRefundId ?? ''), reason: String(reason ?? ''),
+        recordedBy: req.cashierName || req.role || '', idempotencyKey: `refund:${updated._id}:${actualRefundId}`,
+      }]).catch(err => logger.error('[ledger] gateway refund not recorded', { paymentId: String(updated._id), error: String(err) }));
     }
 
     // Loyalty reversal — reverse earned points on full or partial refund.

@@ -4,6 +4,7 @@ import { Printer } from 'lucide-react';
 import { apiGetShift } from '../../api/shifts';
 import type { ShiftData } from '../../api/shifts';
 import { Spinner } from '../ui/Spinner';
+import { formatMoneyAbs } from '../../utils/money';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -14,12 +15,13 @@ interface ZReportViewProps {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(n: number, sym = '₹'): string {
-  return `${sym}${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
+  return formatMoneyAbs(sym, n);
 }
 
 function fmtINRSigned(n: number, sym = '₹'): string {
-  if (n < 0) return `−${sym}${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
-  return `${sym}${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
+  // Batch 3 (3A): exact paise (was rounded to the rupee).
+  if (n < 0) return `−${formatMoneyAbs(sym, n)}`;
+  return formatMoneyAbs(sym, n);
 }
 
 function fmtDate(iso: string): string {
@@ -108,6 +110,9 @@ function ZReportBody({ shift }: { shift: ShiftData }) {
         <Row label="UPI Sales" value={fmtINR(shift.upiSales, sym)} />
         <Row label="Card Sales" value={fmtINR(shift.cardSales, sym)} />
         <Row label="Other Sales" value={fmtINR(shift.otherSales, sym)} />
+        {/* Batch 3: the rows above are the money taken in the shift (split payments under their
+            parts); Total Sales below is the orders served / completed in the shift. */}
+        <Row label="Total Collected" value={fmtINR(Math.round(((shift.cashSales ?? 0) + (shift.upiSales ?? 0) + (shift.cardSales ?? 0) + (shift.otherSales ?? 0)) * 100) / 100, sym)} />
         <div className="my-1 border-t border-border" />
         <Row label="Total Orders" value={String(shift.totalOrders)} />
         <Row label="Total Sales" value={fmtINR(shift.totalSales, sym)} bold />

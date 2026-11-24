@@ -5,11 +5,12 @@ import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import { apiGetActiveShiftStats, type ShiftStats } from '../../api/shifts';
 import { Spinner } from '../ui/Spinner';
+import { formatMoneyAbs } from '../../utils/money';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
+  return formatMoneyAbs(sym, n);
 }
 
 function fmtDuration(startIso: string, nowMs: number): string {
@@ -24,7 +25,7 @@ function fmtDuration(startIso: string, nowMs: number): string {
 // ── Sub-component: running shift view ─────────────────────────────────────────
 
 function RunningShift({ nowMs }: { nowMs: number }) {
-  const { shift, closeShift, drawerBalance } = useCashier();
+  const { shift, closeShift, drawerBalance, refreshDrawer } = useCashier();
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
 
@@ -43,11 +44,12 @@ function RunningShift({ nowMs }: { nowMs: number }) {
     try {
       const r = await apiGetActiveShiftStats();
       if (!cancelled) setStats(r);
+      void refreshDrawer();
     } catch { /* non-fatal */ } finally {
       if (!cancelled) setStatsLoading(false);
     }
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshDrawer]);
 
   useEffect(() => {
     void load();
@@ -57,9 +59,9 @@ function RunningShift({ nowMs }: { nowMs: number }) {
 
   if (!shift) return null;
 
-  // expectedCash = openingCash + cashSales + cashIn - cashOut = drawerBalance + cashSales
-  const cashSales = stats?.cashSales ?? 0;
-  const expectedCash = drawerBalance + cashSales;
+  // Batch 3: the drawer balance already holds the cash taken for bills (from the server's
+  // payment ledger — the same figure the shift close uses), so it IS the expected cash.
+  const expectedCash = drawerBalance;
   const actual = parseFloat(actualCash) || 0;
   const difference = actual - expectedCash;
 

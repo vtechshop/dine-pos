@@ -8,11 +8,12 @@ import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import { fetchSalesSummary } from '../../api/dashboard';
 import type { DailyReport } from '../../types';
+import { formatMoney } from '../../utils/money';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
+  return formatMoney(sym, n);
 }
 
 function fmtDuration(openedAt: string, nowMs: number) {

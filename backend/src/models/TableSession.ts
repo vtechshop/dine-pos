@@ -12,7 +12,8 @@ export interface ITableSession extends Document {
   openedBy: string;             // "Admin: Raj" | "Waiter: Ravi" | "QR Self-service"
   guestCount: number;           // atomic counter; incremented via $inc when adding guests
   totalRevenue: number;         // set on close = sum of all billed guest totals
-  qrTimeoutMinutes: number;     // copied from hotel settings at open-time; guests who never
+  billingClaimedAt?: Date | null; // set atomically while a close/bulk bill runs (one at a time)
+  qrTimeoutMinutes: number;    // copied from hotel settings at open-time; guests who never
                                 // order expire after this many idle minutes
   notes: string;
   createdAt: Date;
@@ -30,6 +31,10 @@ const TableSessionSchema: Schema = new Schema(
     openedBy:         { type: String, default: 'Admin', maxlength: 100 },
     guestCount:       { type: Number, default: 0, min: 0 },
     totalRevenue:     { type: Number, default: 0, min: 0 },
+    // Batch 2 (2A): claimed atomically by PATCH /:id/close so two simultaneous table bills
+    // can't both run (they double-charged gift vouchers). Released when the request ends;
+    // a claim older than a few minutes is treated as abandoned (server crash).
+    billingClaimedAt: { type: Date, default: null },
     qrTimeoutMinutes: { type: Number, default: 15, min: 1, max: 60 },
     notes:            { type: String, default: '', maxlength: 500 },
   },

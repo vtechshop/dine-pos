@@ -44,6 +44,8 @@ export function amountDueAtCounter(orders: Array<CounterBillableOrder & { grandT
  * - payment_pending (never paid, never cooked) and cancelled: left untouched
  */
 export function counterBillingOrderUpdates(scope: Record<string, unknown>, paymentMethod: string) {
+  // Batch 2 (2B): guest / table billing (guestRoutes, sessionRoutes) stamps completedAt on
+  // exactly the orders these updates close; paymentTime is set by the payment ledger.
   return {
     counter: {
       filter: { ...scope, status: { $nin: ['cancelled', 'payment_pending', 'completed'] }, paymentMethod: { $ne: 'razorpay' }, paymentTime: null },

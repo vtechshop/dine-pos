@@ -5,7 +5,7 @@ import {
 import { useAuth } from './AuthContext';
 import type { SelectedModifier } from '../types';
 import {
-  apiOpenShift, apiGetActiveShift, apiCloseShift, apiAddMovement,
+  apiOpenShift, apiGetActiveShift, apiCloseShift, apiAddMovement, apiGetActiveShiftStats,
   type ShiftData,
 } from '../api/shifts';
 import {
@@ -49,6 +49,8 @@ export interface OrderPrefill {
   voucherCode?: string;
   loyaltyPoints?: number;
   loyaltyDiscount?: number;
+  /** Batch 3 (3B): order notes are restored when a held bill is resumed (they were lost). */
+  notes?: string;
 }
 
 export interface CartItem {
@@ -135,14 +137,36 @@ function buildCartLineId(productId: string, variantId?: string, mods?: SelectedM
   return `${base}:${modKey}`;
 }
 
+// Batch 3 (3A): same arithmetic as the server (recalcOrderTotals in backend orderRoutes.ts) —
+// each line's base and tax are rounded to the paisa, then summed — so the cart, the bill, the
+// payment dialog and the saved order agree to the paisa.
+const r2 = (n: number) => Math.round(n * 100) / 100;
 export function calcCartTotals(items: CartItem[], discount = 0) {
-  const subtotal = items.reduce((s, i) => s + (i.price + (i.modifierTotal ?? 0)) * i.quantity, 0);
-  const taxTotal = items.reduce(
-    (s, i) => s + ((i.price + (i.modifierTotal ?? 0)) * i.quantity * i.taxPercent) / 100,
-    0,
-  );
-  const grandTotal = Math.max(0, subtotal + taxTotal - discount);
+  let subtotal = 0;
+  let taxTotal = 0;
+  for (const i of items) {
+    const lineBase = r2((i.price + (i.modifierTotal ?? 0)) * i.quantity);
+    subtotal += lineBase;
+    taxTotal += r2(lineBase * (i.taxPercent || 0) / 100);
+  }
+  subtotal = r2(subtotal);
+  taxTotal = r2(taxTotal);
+  const available = subtotal + taxTotal;
+  const grandTotal = Math.max(0, r2(available - Math.min(Math.max(0, discount), available)));
   return { subtotal, taxTotal, grandTotal };
+}
+
+/** Batch 3 (3B): totals of a held bill loaded from the server — stored ones, else recomputed. */
+export function heldTotals(items: CartItem[], meta: Record<string, unknown>) {
+  const num = (v: unknown) => (typeof v === 'number' && isFinite(v) ? v : null);
+  const stored = { subtotal: num(meta.subtotal), taxTotal: num(meta.taxTotal), grandTotal: num(meta.grandTotal) };
+  if (stored.subtotal != null && stored.taxTotal != null && stored.grandTotal != null) {
+    return stored as { subtotal: number; taxTotal: number; grandTotal: number };
+  }
+  const base = calcCartTotals(items ?? [], 0);
+  const d = Number(meta.discountAmount) || 0;
+  const flat = meta.discountType === 'percent' ? r2((base.subtotal + base.taxTotal) * d / 100) : d;
+  return calcCartTotals(items ?? [], flat);
 }
 
 // ── Context shape ─────────────────────────────────────────────────────────────
@@ -174,14 +198,17 @@ interface CashierContextValue {
   // Held bills
   heldBills: HeldBill[];
   holdBill: (bill: Omit<HeldBill, 'id' | 'heldAt'>) => void;
-  resumeBill: (id: string) => HeldBill | null;
+  resumeBill: (id: string) => Promise<{ bill: HeldBill | null; error?: string }>;
   deleteHeldBill: (id: string) => void;
 
   // Cash drawer
   drawerMovements: DrawerMovement[];
   addDrawerMovement: (m: Omit<DrawerMovement, 'id' | 'timestamp'>) => void;
   clearDrawerMovements: () => void;
+  /** Opening + cash in − cash out + cash taken for bills (and cash tips) − cash refunds / reversals */
   drawerBalance: number;
+  /** Re-read the cash taken for bills from the server (payment ledger) */
+  refreshDrawer: () => Promise<void>;
 }
 
 // ── Context ───────────────────────────────────────────────────────────────────
@@ -281,11 +308,10 @@ export function CashierProvider({ children }: { children: ReactNode }) {
               loyaltyDiscount: sb.metadata?.loyaltyDiscount,
               notes:          sb.metadata?.notes,
               items:          sb.items as CartItem[],
-              // Totals are not stored on server; default to 0 — the resume flow
-              // recalculates them from items when the order is rebuilt.
-              subtotal:    0,
-              taxTotal:    0,
-              grandTotal:  0,
+              // Batch 3 (3B): totals used to be set to 0 here, so a bill held on another device
+              // showed ₹0. Use the totals stored with the bill (since Batch 3); for older held
+              // bills, recompute them from the items exactly like the cart does.
+              ...heldTotals(sb.items as CartItem[], sb.metadata ?? {}),
             }));
           if (newFromServer.length === 0) return prev;
           return [...prev, ...newFromServer];
@@ -685,6 +711,10 @@ export function CashierProvider({ children }: { children: ReactNode }) {
         loyaltyPoints:   bill.loyaltyPoints,
         loyaltyDiscount: bill.loyaltyDiscount,
         notes:           bill.notes,
+        // Batch 3 (3B): totals travel with the bill so every device shows the same amount.
+        subtotal:        bill.subtotal,
+        taxTotal:        bill.taxTotal,
+        grandTotal:      bill.grandTotal,
       },
     }).then(saved => {
       setHeldBills(prev =>
@@ -693,8 +723,23 @@ export function CashierProvider({ children }: { children: ReactNode }) {
     }).catch(() => { /* non-fatal — localStorage already updated */ });
   }, []);
 
-  const resumeBill = useCallback((id: string): HeldBill | null => {
+  const resumeBill = useCallback(async (id: string): Promise<{ bill: HeldBill | null; error?: string }> => {
     const bill = heldBillsRef.current.find(b => b.id === id) ?? null;
+    if (bill?.serverId) {
+      // Batch 3 (3B): claim the held bill on the server BEFORE resuming it. Deleting it is
+      // atomic, so if another device resumed it first we get 404 and must not resume it here
+      // too (both devices used to turn the same held bill into an order → duplicate order).
+      try {
+        await apiDeleteHeldBill(bill.serverId);
+      } catch (err) {
+        const status = (err as { status?: number })?.status;
+        if (status === 404) {
+          setHeldBills(prev => prev.filter(b => b.id !== id));
+          return { bill: null, error: 'This bill was already resumed on another device.' };
+        }
+        // Offline / network error: resume from the local copy (it was held on this device).
+      }
+    }
     if (bill) {
       setHeldBills(prev => prev.filter(b => b.id !== id));
       // Restore all order metadata into context so the order form can pre-populate
@@ -713,13 +758,11 @@ export function CashierProvider({ children }: { children: ReactNode }) {
         voucherCode:     bill.voucherCode,
         loyaltyPoints:   bill.loyaltyPoints,
         loyaltyDiscount: bill.loyaltyDiscount,
+        notes:           bill.notes,
       });
-      // Remove from server — fire-and-forget (non-fatal if it fails)
-      if (bill.serverId) {
-        apiDeleteHeldBill(bill.serverId).catch(() => { /* non-fatal */ });
-      }
+      // (already removed from the server above, before resuming)
     }
-    return bill;
+    return { bill };
   }, []);
 
   const deleteHeldBill = useCallback((id: string) => {
@@ -758,10 +801,30 @@ export function CashierProvider({ children }: { children: ReactNode }) {
 
   const clearDrawerMovements = useCallback(() => setDrawerMovements([]), []);
 
-  const drawerBalance = drawerMovements.reduce((acc, m) => {
+  // Batch 3: the drawer also holds the cash taken for bills. It was left out, so the balance
+  // showed only opening ± cash in / out (₹1,000 with ₹2,228.80 in the drawer) and cash-outs
+  // were wrongly refused. The server works it out from the payment ledger: cash collected +
+  // cash tips − cash refunds − cash reversals during this shift.
+  const [cashFromBills, setCashFromBills] = useState(0);
+  const shiftOpen = shift?.status === 'open';
+  const refreshDrawer = useCallback(async () => {
+    if (!shiftOpen) { setCashFromBills(0); return; }
+    try {
+      const d = (await apiGetActiveShiftStats()).drawer;
+      if (d) setCashFromBills(Math.round((d.cashCollected + d.cashTips - d.cashRefunds - d.cashReversals) * 100) / 100);
+    } catch { /* offline: keep the last known figure */ }
+  }, [shiftOpen]);
+  useEffect(() => {
+    void refreshDrawer();
+    if (!shiftOpen) return;
+    const t = setInterval(() => { void refreshDrawer(); }, 30_000);
+    return () => clearInterval(t);
+  }, [refreshDrawer, shiftOpen]);
+
+  const drawerBalance = Math.round((drawerMovements.reduce((acc, m) => {
     if (m.type === 'opening' || m.type === 'cash_in') return acc + m.amount;
     return acc - m.amount;
-  }, 0);
+  }, 0) + (shiftOpen ? cashFromBills : 0)) * 100) / 100;
 
   return (
     <CashierContext.Provider value={{
@@ -771,7 +834,7 @@ export function CashierProvider({ children }: { children: ReactNode }) {
       shift, openShift, closeShift,
       selectedShiftId, setSelectedShiftId,
       heldBills, holdBill, resumeBill, deleteHeldBill,
-      drawerMovements, addDrawerMovement, clearDrawerMovements, drawerBalance,
+      drawerMovements, addDrawerMovement, clearDrawerMovements, drawerBalance, refreshDrawer,
     }}>
       {children}
     </CashierContext.Provider>
