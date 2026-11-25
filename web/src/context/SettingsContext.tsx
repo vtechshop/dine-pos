@@ -13,7 +13,10 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, setHotelName } = useAuth();
+  const { isAuthenticated, role, setHotelName } = useAuth();
+  // Hotel settings belong to a hotel session; the Super Admin token has no hotel
+  // and only got a 401 on every Super Admin page.
+  const hotelSession = isAuthenticated && role !== 'superadmin';
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -31,9 +34,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [setHotelName]);
 
   useEffect(() => {
-    if (isAuthenticated) void refresh();
+    if (hotelSession) void refresh();
     else setSettings(null);
-  }, [isAuthenticated, refresh]);
+  }, [hotelSession, refresh]);
 
   return (
     <SettingsContext.Provider value={{ settings, loading, refresh }}>

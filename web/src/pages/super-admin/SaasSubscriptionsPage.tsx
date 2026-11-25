@@ -129,13 +129,18 @@ export function SaasSubscriptionsPage() {
     setActionErr('');
     try {
       const price = priceInput.trim() === '' ? null : Number(priceInput);
-      await saFetch(`/hotels/${panel.hotel._id}/saas-price`, {
+      const res = await saFetch<{ message?: string; subscriptionUpdated?: boolean | null }>(`/hotels/${panel.hotel._id}/saas-price`, {
         method: 'PUT',
         body: JSON.stringify({ price }),
       });
-      setActionMsg(price === null
-        ? `Custom price cleared — hotel reverts to the standard ${standard ? fmtAmount(standard.annualPrice) : 'price'}/year from next renewal.`
-        : `Custom price ₹${price}/year set. Effective from next renewal.`);
+      if (res?.subscriptionUpdated === false) {
+        // Price saved, but the hotel's active subscription still points at the old plan.
+        setActionErr(res.message ?? 'Price saved, but the active subscription was not updated. Save the same price again to retry.');
+      } else {
+        setActionMsg(price === null
+          ? `Custom price cleared — hotel reverts to the standard ${standard ? fmtAmount(standard.annualPrice) : 'price'}/year from next renewal.`
+          : `Custom price ₹${price}/year set. Effective from next renewal.`);
+      }
       setPanel(null);
       await load();
     } catch (err: any) {

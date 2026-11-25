@@ -781,15 +781,20 @@ router.put('/hotels/:id/saas-price', superAdminAuth, async (req: Request, res: R
     }
 
     const priceNum = Number(price);
-    if (!Number.isFinite(priceNum) || priceNum < 1000 || priceNum > 1_000_000) {
-      return res.status(400).json({ message: 'price must be a number between 1000 and 1000000 (INR)' });
+    if (!Number.isInteger(priceNum) || priceNum < 1000 || priceNum > 1_000_000) {
+      return res.status(400).json({ message: 'Price must be a whole number of rupees from 1,000 to 10,00,000.' });
     }
 
     // Only create a new Razorpay Plan if price differs from current custom price
     let planId = hotel.rzpCustomPlanId;
     if (!planId || hotel.saasAnnualPrice !== priceNum) {
       const label = `DinePOS SaaS — ₹${priceNum}/year (${(hotel as any).hotelName})`;
-      planId = await createRazorpayPlan(priceNum, label);
+      try {
+        planId = await createRazorpayPlan(priceNum, label);
+      } catch (e) {
+        logger.error('[SA] Razorpay plan create failed', { hotelId: req.params.id, err: String(e) });
+        return res.status(502).json({ message: 'Razorpay could not create a plan for this price, so the price was not saved. Try again in a moment.' });
+      }
     }
 
     await Hotel.findByIdAndUpdate(req.params.id, {
@@ -798,17 +803,23 @@ router.put('/hotels/:id/saas-price', superAdminAuth, async (req: Request, res: R
     });
 
     // Update active subscription to new plan for next billing cycle
+    let subscriptionUpdated: boolean | null = null; // null: no active subscription to move
     if (hotel.rzpSubscriptionId && hotel.rzpSubscriptionStatus === 'active') {
       try {
         await updateSubscriptionPlan(hotel.rzpSubscriptionId, planId);
+        subscriptionUpdated = true;
       } catch (e) {
+        subscriptionUpdated = false;
         logger.warn('[SA] Failed to update Razorpay sub to custom plan — price saved, sub not updated', { hotelId: req.params.id, err: String(e) });
       }
     }
 
-    logAuditRaw({ actorRole: 'superadmin', action: 'hotel.saas_price_set', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: { price: priceNum, planId } });
+    logAuditRaw({ actorRole: 'superadmin', action: 'hotel.saas_price_set', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: { price: priceNum, planId, subscriptionUpdated } });
     return res.json({
-      message: `Custom annual price ₹${priceNum} set. Applies from next renewal cycle.`,
+      message: subscriptionUpdated === false
+        ? `Custom price ₹${priceNum}/year saved, but the active Razorpay subscription could not be moved to it, so the next renewal may still charge the old price. Save the same price again to retry.`
+        : `Custom annual price ₹${priceNum} set. Applies from next renewal cycle.`,
+      subscriptionUpdated,
       annualPrice: priceNum,
       rzpCustomPlanId: planId,
       effectiveFrom: 'next renewal cycle',

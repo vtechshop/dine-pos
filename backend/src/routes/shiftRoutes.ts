@@ -98,7 +98,8 @@ router.get('/active/stats', requireCashierOrAdmin, async (req: AuthRequest, res:
           cashSales:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, '$grandTotal', 0] } },
           // M-01: sum cash portion from split payment object {cash, upi, card}
           splitCashSales: { $sum: { $ifNull: ['$splitDetails.cash', 0] } },
-          upiSales:    { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi'] },  '$grandTotal', 0] } },
+          // All UPI variants (counter UPI, intent, QR, collect), not only plain 'upi'.
+          upiSales:    { $sum: { $cond: [{ $in: ['$paymentMethod', ['upi', 'upi_intent', 'upi_qr', 'upi_collect']] }, '$grandTotal', 0] } },
           cardSales:   { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card'] }, '$grandTotal', 0] } },
         },
       },

@@ -269,6 +269,16 @@ export async function validateAndEnrichItems(
 
 // Helper: Generate order number like ORD-20260310-001 (per hotel)
 // Uses an atomic MongoDB $inc counter — no race condition under concurrent tablets.
+
+// Database/infrastructure failures (Atlas blip, write conflict, timeout) are temporary:
+// answer 503 so the mobile offline queue retries the bill. Every other unexpected error
+// keeps the old 400, which the queue treats as permanent.
+function isTemporaryDbError(error: any): boolean {
+  const name = String(error?.name ?? '');
+  return name.startsWith('Mongo') || (Array.isArray(error?.errorLabels) && error.errorLabels.includes('TransientTransactionError'))
+    || (typeof error?.hasErrorLabel === 'function' && error.hasErrorLabel('TransientTransactionError'));
+}
+
 const generateOrderNumber = async (hotelId: string, prefix = 'ORD'): Promise<string> => {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const key = `${prefix}-${dateStr}-${hotelId}`;
@@ -1284,6 +1294,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       return res.status(400).json({ message: error.message });
     }
     logger.error('[POST /orders] Failed', { hotelId: req.hotelId, error: String(error), code: error.code, stack: error?.stack });
+    if (isTemporaryDbError(error)) return sendError(res, 503, 'Could not save the order right now. Please retry.', error);
     sendError(res, 400, 'Invalid data', error);
   }
 });
@@ -1927,6 +1938,7 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     if (!order) return res.status(404).json({ message: 'Order not found' });
     res.json(order);
   } catch (error) {
+    if (isTemporaryDbError(error)) return sendError(res, 503, 'Could not save the order right now. Please retry.', error);
     sendError(res, 400, 'Invalid data', error);
   }
 });
@@ -2129,8 +2141,9 @@ router.post(
         return res.status(409).json({ message: 'This order has already been refunded.' });
       }
 
-      const reason = String(req.body.reason || '').trim();
-      if (!reason) return res.status(400).json({ message: 'refundReason is required.' });
+      // Accept `reason` (current) and `refundReason` (the name the old message asked for).
+      const reason = String(req.body.reason || req.body.refundReason || '').trim();
+      if (!reason) return res.status(400).json({ message: 'A refund reason is required (send it as `reason`).' });
       const requestedAmount = Number(req.body.refundAmount) || order.grandTotal;
       const refundAmount    = Math.min(Math.max(0, requestedAmount), order.grandTotal);
 
