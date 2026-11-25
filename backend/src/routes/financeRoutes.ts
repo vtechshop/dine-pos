@@ -5,7 +5,7 @@ import Expense from '../models/Expense';
 import WasteLog from '../models/WasteLog';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { sendError } from '../utils/sendError';
-import { PAID_ORDER } from '../utils/paidOrder';
+import { PAID_ORDER, NET_TOTAL } from '../utils/paidOrder';
 
 const router = Router();
 router.use(authMiddleware);
@@ -83,7 +83,7 @@ router.get('/dashboard', async (req: AuthRequest, res: Response) => {
       // Revenue + order count
       Order.aggregate([
         { $match: matchOrders },
-        { $group: { _id: null, revenue: { $sum: '$grandTotal' }, orders: { $sum: 1 } } },
+        { $group: { _id: null, revenue: { $sum: NET_TOTAL }, orders: { $sum: 1 } } },
       ]),
 
       // COGS via recipe BOM × ingredient costPerUnit × qty sold
@@ -332,7 +332,7 @@ router.get('/cogs-trend', async (req: AuthRequest, res: Response) => {
         { $match: matchOrders },
         { $group: {
           _id:     { $dateToString: { format: dateFmt, date: '$createdAt' } },
-          revenue: { $sum: '$grandTotal' },
+          revenue: { $sum: NET_TOTAL },
           orders:  { $sum: 1 },
         }},
         { $sort: { _id: 1 } },

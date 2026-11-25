@@ -14,6 +14,7 @@ import { requireFeature } from '../middleware/requireFeature';
 import { sendError } from '../utils/sendError';
 import { logAudit } from '../utils/audit';
 import { logger } from '../utils/logger';
+import { addRefundToOrder } from '../utils/orderRefund';
 import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, reverseEarnedPoints } from '../utils/loyaltyUtils';
 
 const router = Router();
@@ -517,6 +518,9 @@ router.post('/:id/refund', async (req: AuthRequest, res: Response) => {
       await Payment.updateOne({ _id: locked._id }, { $set: { refundInProgress: false } }).catch(() => {});
       return res.status(500).json({ message: 'Refund commit failed. Check payment status and retry.' });
     }
+
+    // Show the refund on the order too, so sales reports subtract it.
+    await addRefundToOrder(updated.orderId, req.hotelId!, amountPaise);
 
     // Loyalty reversal — reverse earned points on full or partial refund.
     // Idempotent via loyaltyReversedAt. Only reverses if points were earned for this payment.

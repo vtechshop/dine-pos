@@ -38,7 +38,7 @@ import { isDueAtCounter } from '../utils/counterBilling';
 import { isQuickServiceOrder } from '../utils/quickService';
 import { payBeforeKitchenEnabled, isHeldForCounterPayment } from '../utils/payBeforeKitchen';
 import { pushDeliveryAvailability } from '../utils/deliveryAvailabilitySync';
-import { PAID_ORDER } from '../utils/paidOrder';
+import { PAID_ORDER, NET_TOTAL, salesGroupFields, money } from '../utils/paidOrder';
 
 const router = Router();
 
@@ -291,32 +291,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
 
     const [result] = await Order.aggregate([
       { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
-      { $group: {
-        _id: null,
-        totalSales:     { $sum: '$grandTotal' },
-        totalTax:       { $sum: '$taxTotal' },
-        totalDiscount:  { $sum: { $ifNull: ['$discountAmount', 0] } },
-        totalOrders:    { $sum: 1 },
-        parcelOrders:   { $sum: { $cond: ['$isParcel', 1, 0] } },
-        parcelRevenue:  { $sum: { $cond: ['$isParcel', '$grandTotal', 0] } },
-        cashTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash']  }, '$grandTotal', 0] } },
-        upiTotal:        { $sum: { $cond: [{ $in: ['$paymentMethod', ['upi', 'upi_intent', 'upi_qr', 'upi_collect']] }, '$grandTotal', 0] } },
-        upiIntentTotal:  { $sum: { $cond: [{ $in: ['$paymentMethod', ['upi', 'upi_intent']] }, '$grandTotal', 0] } },
-        upiQrTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi_qr'] }, '$grandTotal', 0] } },
-        upiCollectTotal: { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi_collect'] }, '$grandTotal', 0] } },
-        cardTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card']  }, '$grandTotal', 0] } },
-        splitTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'split'] }, '$grandTotal', 0] } },
-        dineInOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, 1, 0] } },
-        dineInTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, '$grandTotal', 0] } },
-        takeawayOrders: { $sum: { $cond: [{ $eq: ['$orderSource', 'takeaway'] }, 1, 0] } },
-        takeawayTotal:  { $sum: { $cond: [{ $eq: ['$orderSource', 'takeaway'] }, '$grandTotal', 0] } },
-        swiggyOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'swiggy']   }, 1, 0] } },
-        swiggyTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'swiggy']   }, '$grandTotal', 0] } },
-        zomatoOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'zomato']   }, 1, 0] } },
-        zomatoTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'zomato']   }, '$grandTotal', 0] } },
-        qrOrders:       { $sum: { $cond: [{ $eq: ['$orderSource', 'qr']       }, 1, 0] } },
-        qrTotal:        { $sum: { $cond: [{ $eq: ['$orderSource', 'qr']       }, '$grandTotal', 0] } },
-      }},
+      { $group: { _id: null, ...salesGroupFields() } },
     ]);
 
     // Loyalty discounts applied at Guest level (session billing) are not reflected in
@@ -331,7 +306,7 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
     const sessionLoyaltyDiscount = loyaltyAgg?.total ?? 0;
 
     const empty = {
-      totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0,
+      totalSales: 0, grossSales: 0, totalRefunds: 0, refundedOrders: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0,
       cashTotal: 0, upiTotal: 0, upiIntentTotal: 0, upiQrTotal: 0, upiCollectTotal: 0,
       cardTotal: 0, splitTotal: 0,
       dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0,
@@ -351,14 +326,17 @@ router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthReque
       parcelOrders: r.parcelOrders,
       parcelRevenue: r.parcelRevenue,
       cancelledOrders,
+      grossSales: money(r.grossSales),
+      totalRefunds: money(r.totalRefunds),
+      refundedOrders: r.refundedOrders,
       paymentBreakdown: {
-        cash: r.cashTotal,
-        upi: r.upiTotal,
-        upi_intent: r.upiIntentTotal,
-        upi_qr: r.upiQrTotal,
-        upi_collect: r.upiCollectTotal,
-        card: r.cardTotal,
-        split: r.splitTotal,
+        cash: money(r.cashTotal),
+        upi: money(r.upiTotal),
+        upi_intent: money(r.upiIntentTotal),
+        upi_qr: money(r.upiQrTotal),
+        upi_collect: money(r.upiCollectTotal),
+        card: money(r.cardTotal),
+        split: money(r.splitTotal),
       },
       sourceBreakdown: {
         'dine-in':  { orders: r.dineInOrders,    revenue: r.dineInTotal },
@@ -387,32 +365,7 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
 
     const [result] = await Order.aggregate([
       { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: start, $lte: end } } },
-      { $group: {
-        _id: null,
-        totalSales:     { $sum: '$grandTotal' },
-        totalTax:       { $sum: '$taxTotal' },
-        totalDiscount:  { $sum: { $ifNull: ['$discountAmount', 0] } },
-        totalOrders:    { $sum: 1 },
-        parcelOrders:   { $sum: { $cond: ['$isParcel', 1, 0] } },
-        parcelRevenue:  { $sum: { $cond: ['$isParcel', '$grandTotal', 0] } },
-        cashTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash']  }, '$grandTotal', 0] } },
-        upiTotal:        { $sum: { $cond: [{ $in: ['$paymentMethod', ['upi', 'upi_intent', 'upi_qr', 'upi_collect']] }, '$grandTotal', 0] } },
-        upiIntentTotal:  { $sum: { $cond: [{ $in: ['$paymentMethod', ['upi', 'upi_intent']] }, '$grandTotal', 0] } },
-        upiQrTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi_qr'] }, '$grandTotal', 0] } },
-        upiCollectTotal: { $sum: { $cond: [{ $eq: ['$paymentMethod', 'upi_collect'] }, '$grandTotal', 0] } },
-        cardTotal:       { $sum: { $cond: [{ $eq: ['$paymentMethod', 'card']  }, '$grandTotal', 0] } },
-        splitTotal:      { $sum: { $cond: [{ $eq: ['$paymentMethod', 'split'] }, '$grandTotal', 0] } },
-        dineInOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, 1, 0] } },
-        dineInTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'dine-in']  }, '$grandTotal', 0] } },
-        takeawayOrders: { $sum: { $cond: [{ $eq: ['$orderSource', 'takeaway'] }, 1, 0] } },
-        takeawayTotal:  { $sum: { $cond: [{ $eq: ['$orderSource', 'takeaway'] }, '$grandTotal', 0] } },
-        swiggyOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'swiggy']   }, 1, 0] } },
-        swiggyTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'swiggy']   }, '$grandTotal', 0] } },
-        zomatoOrders:   { $sum: { $cond: [{ $eq: ['$orderSource', 'zomato']   }, 1, 0] } },
-        zomatoTotal:    { $sum: { $cond: [{ $eq: ['$orderSource', 'zomato']   }, '$grandTotal', 0] } },
-        qrOrders:       { $sum: { $cond: [{ $eq: ['$orderSource', 'qr']       }, 1, 0] } },
-        qrTotal:        { $sum: { $cond: [{ $eq: ['$orderSource', 'qr']       }, '$grandTotal', 0] } },
-      }},
+      { $group: { _id: null, ...salesGroupFields() } },
     ]);
 
     const [[rangeLoyaltyAgg], rangeCancelledOrders] = await Promise.all([
@@ -425,7 +378,7 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
     const rangeSessionLoyaltyDiscount = rangeLoyaltyAgg?.total ?? 0;
 
     const empty = {
-      totalSales: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0,
+      totalSales: 0, grossSales: 0, totalRefunds: 0, refundedOrders: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0,
       cashTotal: 0, upiTotal: 0, upiIntentTotal: 0, upiQrTotal: 0, upiCollectTotal: 0,
       cardTotal: 0, splitTotal: 0,
       dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0,
@@ -438,14 +391,15 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
       totalSales: netRangeSales, totalTax: r.totalTax, totalDiscount: r.totalDiscount,
       totalOrders: r.totalOrders, parcelOrders: r.parcelOrders, parcelRevenue: r.parcelRevenue,
       cancelledOrders: rangeCancelledOrders,
+      grossSales: money(r.grossSales), totalRefunds: money(r.totalRefunds), refundedOrders: r.refundedOrders,
       paymentBreakdown: {
-        cash: r.cashTotal,
-        upi: r.upiTotal,
-        upi_intent: r.upiIntentTotal,
-        upi_qr: r.upiQrTotal,
-        upi_collect: r.upiCollectTotal,
-        card: r.cardTotal,
-        split: r.splitTotal,
+        cash: money(r.cashTotal),
+        upi: money(r.upiTotal),
+        upi_intent: money(r.upiIntentTotal),
+        upi_qr: money(r.upiQrTotal),
+        upi_collect: money(r.upiCollectTotal),
+        card: money(r.cardTotal),
+        split: money(r.splitTotal),
       },
       sourceBreakdown: {
         'dine-in':  { orders: r.dineInOrders,    revenue: r.dineInTotal },
@@ -654,7 +608,7 @@ router.get('/customers', requireAdmin, async (req: AuthRequest, res: Response) =
         _id: '$customerPhone',
         customerName:   { $first: '$customerName' },
         totalOrders:    { $sum: 1 },
-        totalSpent:     { $sum: '$grandTotal' },
+        totalSpent:     { $sum: NET_TOTAL },
         lastOrderDate:  { $max: '$createdAt' },
         firstOrderDate: { $min: '$createdAt' },
       }},
@@ -2005,6 +1959,16 @@ router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res
         });
       }
       update.splitDetails = splitDetails;
+    } else if (paymentMethod === 'split' && splitDetails && typeof splitDetails === 'object' && !Array.isArray(splitDetails)) {
+      // The web sends split parts as { cash, upi, card }, the shape Order.splitDetails
+      // stores. They were silently dropped before, so split bills closed from Pending
+      // Bills had no breakdown. The parts are what the counter collected (they can
+      // include a tip or round-off), so they are not checked against grandTotal here.
+      const sd = { cash: Number(splitDetails.cash) || 0, upi: Number(splitDetails.upi) || 0, card: Number(splitDetails.card) || 0 };
+      if (Object.values(sd).some(v => v < 0) || sd.cash + sd.upi + sd.card <= 0) {
+        return res.status(400).json({ message: 'Split amounts must be zero or more and add up to more than zero.' });
+      }
+      update.splitDetails = sd;
     }
     if (tipAmount != null) {
       const rawTip = Number(tipAmount);
@@ -2151,7 +2115,9 @@ router.post('/:id/pay', requireCashierOrAdmin, async (req: AuthRequest, res: Res
 // wallet, voucher balances using the same path as order cancellation.
 router.post(
   '/:id/refund',
-  authMiddleware, resolveHotelStatus, requireAdmin,
+  // resolveHotelStatus(hotelId) is a lookup function, not middleware: listed here it was
+  // called with `req`, rejected, never called next(), and every refund request hung.
+  authMiddleware, requireAdmin,
   async (req: AuthRequest, res: Response) => {
     try {
       const order = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId });

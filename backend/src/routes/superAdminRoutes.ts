@@ -41,7 +41,7 @@ if (!process.env.SUPER_ADMIN_JWT_SECRET || process.env.SUPER_ADMIN_JWT_SECRET.le
 }
 
 import saAggregatorRoutes from './saAggregatorRoutes';
-import { PAID_ORDER } from '../utils/paidOrder';
+import { PAID_ORDER, NET_TOTAL } from '../utils/paidOrder';
 const router = Router();
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
@@ -892,7 +892,7 @@ router.get('/branch-revenue', superAdminAuth, async (req: Request, res: Response
     const activeHotels = await Hotel.find({ status: { $in: ['active', 'trial'] } }).select('_id hotelName city').lean();
     const revenueByHotel = await Order.aggregate([
       { $match: { status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: start, $lte: end } } },
-      { $group: { _id: '$hotelId', revenue: { $sum: '$grandTotal' }, orders: { $sum: 1 }, avgOrder: { $avg: '$grandTotal' } } },
+      { $group: { _id: '$hotelId', revenue: { $sum: NET_TOTAL }, orders: { $sum: 1 }, avgOrder: { $avg: NET_TOTAL } } },
     ]);
     const revenueMap = new Map(revenueByHotel.map((r: any) => [r._id.toString(), r]));
     const branches = activeHotels.map((h: any) => {
@@ -925,7 +925,7 @@ router.get('/analytics', superAdminAuth, async (req: Request, res: Response) => 
     const [orderStats, deviceStats] = await Promise.all([
       Order.aggregate([
         { $match: matchFilter },
-        { $group: { _id: '$hotelId', ordersToday: { $sum: 1 }, revenueToday: { $sum: '$grandTotal' } } },
+        { $group: { _id: '$hotelId', ordersToday: { $sum: 1 }, revenueToday: { $sum: NET_TOTAL } } },
       ]),
       Device.aggregate([
         // L-3: $match before $group so the query hits the hotelId index
@@ -1208,12 +1208,12 @@ router.get('/dashboard', superAdminAuth, async (_req: Request, res: Response) =>
 
       Order.aggregate([
         { $match: { status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: todayStart } } },
-        { $group: { _id: null, total: { $sum: '$grandTotal' } } },
+        { $group: { _id: null, total: { $sum: NET_TOTAL } } },
       ]),
 
       Order.aggregate([
         { $match: { status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: monthStart } } },
-        { $group: { _id: null, total: { $sum: '$grandTotal' } } },
+        { $group: { _id: null, total: { $sum: NET_TOTAL } } },
       ]),
 
       Device.countDocuments({ isActive: true }),
@@ -1615,7 +1615,7 @@ router.get('/dashboard/top-hotels', superAdminAuth, async (req: Request, res: Re
 
     // Revenue or orders — aggregate from Order collection
     const valueExpr = by === 'revenue'
-      ? { $sum: '$grandTotal' }
+      ? { $sum: NET_TOTAL }
       : { $sum: 1 };
 
     const results = await Order.aggregate([
@@ -1914,7 +1914,7 @@ router.get('/analytics/revenue', superAdminAuth, async (req: Request, res: Respo
               m: { $month: '$createdAt' },
               d: { $dayOfMonth: '$createdAt' },
             },
-            revenue: { $sum: '$grandTotal' },
+            revenue: { $sum: NET_TOTAL },
             orders:  { $sum: 1 },
           },
         },
@@ -1923,7 +1923,7 @@ router.get('/analytics/revenue', superAdminAuth, async (req: Request, res: Respo
       Order.countDocuments({ status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: from } }),
       Order.aggregate([
         { $match: { status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: from } } },
-        { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+        { $group: { _id: null, total: { $sum: NET_TOTAL }, count: { $sum: 1 } } },
       ]),
     ]);
 
@@ -1975,7 +1975,7 @@ router.get('/analytics/completed-trends', superAdminAuth, async (_req: Request, 
             m: { $month:      '$createdAt' },
             d: { $dayOfMonth: '$createdAt' },
           },
-          revenue: { $sum: '$grandTotal' },
+          revenue: { $sum: NET_TOTAL },
           orders:  { $sum: 1 },
         },
       },

@@ -11,6 +11,7 @@ import { logger } from '../utils/logger';
 import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, reverseEarnedPoints } from '../utils/loyaltyUtils';
 import { io } from '../server';
 import { scheduleKOTPrint } from '../utils/printUtils';
+import { addRefundToOrder } from '../utils/orderRefund';
 
 const router = Router();
 
@@ -293,7 +294,8 @@ async function handleRazorpayEvent(event: Record<string, unknown>, eventType: st
       if (!pay) return;
 
       // Idempotency: only add the refund entry once per refundId.
-      if (refundId && !pay.refunds.some(r => r.refundId === refundId)) {
+      const isNewRefund = !!refundId && !pay.refunds.some(r => r.refundId === refundId);
+      if (isNewRefund) {
         pay.refunds.push({
           refundId,
           amount:                 refundAmt,
@@ -310,6 +312,8 @@ async function handleRazorpayEvent(event: Record<string, unknown>, eventType: st
       }
       pay.webhookData = event;
       await pay.save();
+      // Show the refund on the order too, so sales reports subtract it (once per refundId).
+      if (isNewRefund) await addRefundToOrder(pay.orderId, hotelId, refundAmt);
       logger.info(`[Webhook] refund.processed → ${pay.internalTransactionId}, refundId: ${refundId}`);
 
       // Fire-and-forget loyalty reversal — per-refund atomic guard prevents double-reversal on retry

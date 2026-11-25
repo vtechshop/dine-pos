@@ -699,11 +699,11 @@ export function ReportsPage() {
     const pb = sales.paymentBreakdown;
     downloadCSV(`sales-${from}-${to}.csv`, [
       'Period', 'Sales', 'Orders', 'Tax', 'Discount',
-      'Cash', 'UPI', 'UPI Intent', 'UPI QR', 'UPI Collect', 'Card', 'Split', 'Parcel Orders', 'Parcel Revenue',
+      'Cash', 'UPI', 'UPI Intent', 'UPI QR', 'UPI Collect', 'Card', 'Split (not itemised)', 'Refunds', 'Parcel Orders', 'Parcel Revenue',
     ], [[
       [isSingleDay ? from : `${from} to ${to}`,
        sales.totalSales, sales.totalOrders, sales.totalTax, sales.totalDiscount,
-       pb.cash, pb.upi, pb.upi_intent ?? 0, pb.upi_qr ?? 0, pb.upi_collect ?? 0, pb.card, pb.split,
+       pb.cash, pb.upi, pb.upi_intent ?? 0, pb.upi_qr ?? 0, pb.upi_collect ?? 0, pb.card, pb.split, sales.totalRefunds ?? 0,
        sales.parcelOrders, sales.parcelRevenue],
     ]]);
   }, [sales, from, to, isSingleDay]);
@@ -981,7 +981,9 @@ export function ReportsPage() {
                   <KPICard
                     label="Total Sales"
                     value={fmtCur(sales.totalSales, sym)}
-                    sub={`${sales.totalOrders} orders`}
+                    sub={sales.totalRefunds
+                      ? `${sales.totalOrders} orders · ${fmtCur(sales.totalRefunds, sym)} refunded`
+                      : `${sales.totalOrders} orders`}
                     accent
                     stripe="border-l-brand"
                   />
@@ -1030,7 +1032,9 @@ export function ReportsPage() {
                         ...(sales.paymentBreakdown.upi_qr      ? [{ label: 'UPI QR',      value: sales.paymentBreakdown.upi_qr      }] : []),
                         ...(sales.paymentBreakdown.upi_collect  ? [{ label: 'UPI Collect', value: sales.paymentBreakdown.upi_collect  }] : []),
                         { label: 'Card',       value: sales.paymentBreakdown.card  },
-                        { label: 'Split',      value: sales.paymentBreakdown.split },
+                        // Split bills are counted under Cash/UPI/Card when their parts are known;
+                        // this row is only split bills settled per guest or table.
+                        ...(sales.paymentBreakdown.split ? [{ label: 'Split (not itemised)', value: sales.paymentBreakdown.split }] : []),
                       ]}
                     />
                   </Card>
