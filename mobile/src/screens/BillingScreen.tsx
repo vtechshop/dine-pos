@@ -1624,7 +1624,7 @@ const styles = StyleSheet.create({
   cartTitle: { color: Colors.text, fontSize: FontSize.lg, fontWeight: '800' },
 
   // Source selector
-  sourceScroll: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  sourceScroll: { flexGrow: 0, borderBottomWidth: 1, borderBottomColor: Colors.border },
   sourceScrollContent: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, flexDirection: 'row', alignItems: 'center' },
   sourceBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
