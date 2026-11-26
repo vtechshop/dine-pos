@@ -22,6 +22,7 @@ import { setupNotifications } from '../utils/notifications';
 import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import UnreadBadge from '../components/UnreadBadge';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
+import { tableLabel } from '../utils/tableLabel';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WaiterHome'>;
 type Tab = 'tables' | 'serving';
@@ -127,7 +128,7 @@ export default function WaiterHomeScreen({ navigation }: Props) {
         incBadge();
         Vibration.vibrate([0, 300, 150, 300, 150, 500]);
         Notifications.scheduleNotificationAsync({
-          content: { title: '🛎️ Order Ready!', body: `Table ${data.tableNumber || '—'} · ${data.orderNumber}`, data: { type: 'waiter_ready' } },
+          content: { title: '🛎️ Order Ready!', body: `${tableLabel(data.tableNumber) || '—'} · ${data.orderNumber}`, data: { type: 'waiter_ready' } },
           trigger: { channelId: 'order_alerts_v2' },
         }).catch(() => {});
         setReadyPopup({ orderNumber: data.orderNumber, tableNumber: data.tableNumber || '' });
@@ -220,7 +221,7 @@ export default function WaiterHomeScreen({ navigation }: Props) {
         <View style={styles.cardRow}>
           <View style={styles.tokenBadge}><Text style={styles.tokenText}>#{token}</Text></View>
           <View style={{ flex: 1, marginLeft: Spacing.md }}>
-            {item.tableNumber ? <Text style={styles.tableText}>Table {item.tableNumber}</Text> : null}
+            {item.tableNumber ? <Text style={styles.tableText} numberOfLines={1}>{tableLabel(item.tableNumber)}</Text> : null}
             {item.customerName ? <Text style={styles.custText} numberOfLines={1}>{item.customerName}</Text> : null}
           </View>
           <View style={styles.timePill}>
@@ -396,7 +397,7 @@ export default function WaiterHomeScreen({ navigation }: Props) {
             <View style={{ flex: 1 }}>
               <Text style={{ color: Colors.white, fontWeight: '700', fontSize: 16 }}>Order Ready — {readyPopup?.orderNumber}</Text>
               <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, marginTop: 2 }}>
-                {readyPopup?.tableNumber ? `Table ${readyPopup.tableNumber} · ` : ''}Ready to serve
+                {readyPopup?.tableNumber ? `${tableLabel(readyPopup.tableNumber)} · ` : ''}Ready to serve
               </Text>
             </View>
             <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.8)" />

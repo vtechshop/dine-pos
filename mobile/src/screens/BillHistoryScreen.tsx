@@ -9,6 +9,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, Order } from '../types';
 import { searchOrders, cancelOrder, getSettings, getCashierToken, decodeJwtPayload } from '../services/api';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
+import { tableLabel } from '../utils/tableLabel';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BillHistory'>;
 
@@ -79,7 +80,7 @@ function orderTypeLabel(order: Order): string {
   if (order.orderSource === 'swiggy') return 'Swiggy';
   if (order.orderSource === 'zomato') return 'Zomato';
   if (order.isParcel) return 'Takeaway';
-  if (order.tableNumber) return `Table ${order.tableNumber}`;
+  if (order.tableNumber) return tableLabel(order.tableNumber);
   return 'Dine In';
 }
 

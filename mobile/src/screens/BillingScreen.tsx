@@ -406,6 +406,8 @@ Thank you for dining with us! 🍽️`;
         isParcel:        isParcelOff,
         orderSource,
         localTimestamp:  new Date().toISOString(),
+        // Cash/card was collected at the counter: record it paid when the order is created on sync
+        payNow:          true,
       };
 
       const resetCart = () => {

@@ -109,7 +109,7 @@ const CustomerOrderStatusScreen: React.FC = () => {
     socket.on('order_status_update', async (data: { orderId: string; status: string }) => {
       if (data.orderId !== o._id) return;
       const s = data.status as StoredCustomerOrder['status'];
-      if (!STATUS_ORDER[s] !== undefined) return;
+      if (STATUS_ORDER[s] === undefined) return;   // ignore statuses this screen does not show
       setOrder(prev => {
         if (!prev) return prev;
         const updated = { ...prev, status: s };
@@ -204,7 +204,7 @@ const CustomerOrderStatusScreen: React.FC = () => {
     ready:     { icon: 'check-circle',          headline: 'Ready to serve!',   sub: 'Your order is on its way.',        color: Colors.success },
     served:    { icon: 'room-service',          headline: 'Order served!',      sub: 'Enjoy your meal.',                 color: Colors.success },
   };
-  const { icon: sIcon, headline, sub, color: sColor } = statusMeta[order.status];
+  const { icon: sIcon, headline, sub, color: sColor } = statusMeta[order.status] ?? statusMeta.received;
 
   return (
     <View style={[styles.root, { paddingTop: 0 }]}>

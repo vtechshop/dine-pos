@@ -256,7 +256,9 @@ const _flushCashierQueue = async (): Promise<void> => {
           try { await api.updateOrderStatus(serverId, 'served'); } catch { /* best-effort */ }
         }
         if (next.afterCreate.complete) {
-          try { await (api as any).markOrderCompleteCashier(serverId); } catch { /* best-effort */ }
+          // Billing is the admin screen: close with the admin token (the cashier token is absent here → 401)
+          const pm = String((next.payload as any)?.paymentMethod || 'cash');
+          try { await api.completeOrderWithDetails(serverId, pm); } catch { /* best-effort; already paid via payNow */ }
         }
 
         cashierMarkSynced(hotelId, next.offlineId, serverId, order.orderNumber ?? null);

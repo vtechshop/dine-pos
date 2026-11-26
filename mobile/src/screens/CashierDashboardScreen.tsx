@@ -11,7 +11,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList, Settings, Order } from '../types';
 import {
-  getCashierOrders, clearCashierToken,
+  getCashierOrders, clearCashierToken, markOrderCompleteCashier,
   getCashierToken, getStoredHotelId, getSocketUrl, getBaseUrl, getSettings, CashierOrder,
 } from '../services/api';
 import { CASHIER_PROFILE_KEY } from './CashierLoginScreen';
@@ -24,6 +24,7 @@ import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import UnreadBadge from '../components/UnreadBadge';
 import { printReceipt } from '../utils/receipt';
 import { getCashierQueueCount } from '../database/cashierOrderQueueDao';
+import { tableLabel } from '../utils/tableLabel';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CashierDashboard'>;
 
@@ -345,10 +346,32 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
     return map[status] || status;
   };
 
+  // Orders paid while they were placed (payNow) are already paid: closing them must not
+  // send the cashier to collect the money again.
+  const isPrepaid = (o: CashierOrder) => !!(o as CashierOrder & { paymentTime?: string | null }).paymentTime;
+  const closePaidOrder = (o: CashierOrder) => {
+    const tok = o.orderNumber.split('-').pop() || '?';
+    if (o.status !== 'ready' && o.status !== 'served') {
+      Alert.alert('Already Paid', `#${tok} is paid. Close it once the food is ready or served.`);
+      return;
+    }
+    Alert.alert('Close Order', `#${tok} is already paid. Close it now?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Close Order',
+        onPress: async () => {
+          try { await markOrderCompleteCashier(o._id); await loadOrders(); }
+          catch (e: any) { Alert.alert('Close Failed', e?.message || 'Could not close the order. Try again.'); }
+        },
+      },
+    ]);
+  };
+
   const renderActiveOrder = ({ item }: { item: CashierOrder }) => {
     void tick;
     const token = item.orderNumber.split('-').pop() || '?';
-    const openPayment = () => navigation.navigate('PaymentScreen', {
+    const prepaid = isPrepaid(item);
+    const openPayment = prepaid ? () => closePaidOrder(item) : () => navigation.navigate('PaymentScreen', {
       mode: 'cashier',
       orderId: item._id,
       orderNumber: item.orderNumber,
@@ -374,7 +397,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
             />
           </View>
           <View style={{ flex: 1, marginLeft: Spacing.md }}>
-            {item.tableNumber ? <Text style={styles.tableText}>Table {item.tableNumber}</Text> : null}
+            {item.tableNumber ? <Text style={styles.tableText} numberOfLines={1}>{tableLabel(item.tableNumber)}</Text> : null}
             {item.customerName ? <Text style={styles.customerText} numberOfLines={1}>{item.customerName}</Text> : null}
             <View style={[styles.statusPill, { backgroundColor: statusColor(item.status) + '22' }]}>
               <View style={[styles.statusDot, { backgroundColor: statusColor(item.status) }]} />
@@ -409,8 +432,8 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
           onPress={openPayment}
           activeOpacity={0.85}
         >
-          <MaterialIcons name="point-of-sale" size={18} color={Colors.white} />
-          <Text style={styles.payBtnText}>Collect Payment · {sym}{item.grandTotal.toFixed(0)}</Text>
+          <MaterialIcons name={prepaid ? 'check-circle' : 'point-of-sale'} size={18} color={Colors.white} />
+          <Text style={styles.payBtnText}>{prepaid ? 'Paid · Close Order' : 'Collect Payment'} · {sym}{item.grandTotal.toFixed(2)}</Text>
         </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -428,7 +451,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={[styles.tokenText, { color: Colors.textSecondary }]}>#{token}</Text>
           </View>
           <View style={{ flex: 1, marginLeft: Spacing.md }}>
-            {item.tableNumber ? <Text style={styles.tableText}>Table {item.tableNumber}</Text> : null}
+            {item.tableNumber ? <Text style={styles.tableText} numberOfLines={1}>{tableLabel(item.tableNumber)}</Text> : null}
             {item.customerName ? <Text style={styles.customerText} numberOfLines={1}>{item.customerName}</Text> : null}
             {item.completedBy ? <Text style={[styles.customerText, { fontSize: FontSize.xs }]}>By {item.completedBy}</Text> : null}
           </View>
@@ -613,7 +636,7 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
               <TouchableOpacity
                 key={order._id}
                 style={styles.readyCard}
-                onPress={() => navigation.navigate('PaymentScreen', {
+                onPress={() => isPrepaid(order) ? closePaidOrder(order) : navigation.navigate('PaymentScreen', {
                   mode: 'cashier',
                   orderId: order._id,
                   orderNumber: order.orderNumber,
@@ -624,17 +647,17 @@ const CashierDashboardScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={styles.readyCardRow}>
                   <Text style={styles.readyToken}>#{rtoken}</Text>
                   <View style={{ flex: 1, marginLeft: Spacing.md }}>
-                    {order.tableNumber ? <Text style={styles.readyTable}>Table {order.tableNumber}</Text> : null}
+                    {order.tableNumber ? <Text style={styles.readyTable} numberOfLines={1}>{tableLabel(order.tableNumber)}</Text> : null}
                     {order.customerName ? <Text style={styles.readyCustomer} numberOfLines={1}>{order.customerName}</Text> : null}
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.readyTime}>{elapsed(order.createdAt)}</Text>
-                    <Text style={styles.readyAmount}>{sym}{order.grandTotal.toFixed(0)}</Text>
+                    <Text style={styles.readyAmount}>{sym}{order.grandTotal.toFixed(2)}</Text>
                   </View>
                 </View>
                 <View style={styles.readyPayBtn}>
-                  <MaterialIcons name="point-of-sale" size={14} color={Colors.white} />
-                  <Text style={styles.readyPayBtnText}>Collect Payment · {sym}{order.grandTotal.toFixed(0)}</Text>
+                  <MaterialIcons name={isPrepaid(order) ? 'check-circle' : 'point-of-sale'} size={14} color={Colors.white} />
+                  <Text style={styles.readyPayBtnText}>{isPrepaid(order) ? 'Paid · Close Order' : 'Collect Payment'} · {sym}{order.grandTotal.toFixed(2)}</Text>
                 </View>
               </TouchableOpacity>
             );
