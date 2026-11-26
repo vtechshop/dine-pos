@@ -78,7 +78,7 @@ const HotelRegisterScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.header}>
+      <View testID="screen-hotel-register" style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <MaterialIcons name="arrow-back" size={22} color={Colors.surface} />
         </TouchableOpacity>

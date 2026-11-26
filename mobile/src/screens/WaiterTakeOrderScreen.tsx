@@ -40,6 +40,8 @@ const ProductImage: React.FC<{ uri: string; imgStyle: any; fallback: React.React
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n: number, currency = '₹') => `${currency}${n.toFixed(2).replace(/\.00$/, '')}`;
 
+const isMaterialIcon = (name?: string) => !!name && /^[a-z0-9-_]+$/.test(name);
+
 const cartTotal = (items: CartItem[]) =>
   items.reduce((s, it) => s + (it.basePrice + it.modifierTotal) * it.quantity, 0);
 
@@ -318,6 +320,7 @@ export default function WaiterTakeOrderScreen({ navigation, route }: Props) {
 
       {/* ── Category chips ── */}
       {categories.length > 0 && (
+        <View style={styles.catWrap}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
           <TouchableOpacity
             style={[styles.catChip, !selectedCat && styles.catChipActive]}
@@ -333,11 +336,16 @@ export default function WaiterTakeOrderScreen({ navigation, route }: Props) {
               onPress={() => setSelectedCat(cat._id === selectedCat ? null : cat._id)}
               activeOpacity={0.8}
             >
-              {cat.icon ? <Text style={{ fontSize: 13 }}>{cat.icon}</Text> : null}
+              {cat.icon
+                ? isMaterialIcon(cat.icon)
+                  ? <MaterialIcons name={cat.icon as any} size={14} color={selectedCat === cat._id ? Colors.white : Colors.textSecondary} />
+                  : <Text style={{ fontSize: 13 }}>{cat.icon}</Text>
+                : null}
               <Text style={[styles.catChipText, selectedCat === cat._id && styles.catChipTextActive]}>{cat.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
+        </View>
       )}
 
       {/* ── Product grid ── */}
@@ -518,7 +526,8 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, height: 42, paddingHorizontal: 8, fontSize: FontSize.md, color: Colors.text },
 
   // Categories
-  catRow:      { paddingHorizontal: 12, paddingVertical: 8, gap: 8, flexDirection: 'row' },
+  catWrap:     { paddingVertical: 8 },
+  catRow:      { paddingHorizontal: 12, gap: 8, flexDirection: 'row', alignItems: 'center' },
   catChip:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.surface, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1.5, borderColor: Colors.border },
   catChipActive:{ backgroundColor: Colors.primary, borderColor: Colors.primary },
   catChipText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary },

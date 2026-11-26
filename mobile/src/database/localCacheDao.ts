@@ -10,7 +10,7 @@ export const saveProducts = (hotelId: string, products: Product[]): void => {
     db.runSync('DELETE FROM local_products WHERE hotel_id = ?', [hotelId]);
     for (const p of products) {
       db.runSync(
-        'INSERT INTO local_products (id, hotel_id, data, synced_at) VALUES (?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO local_products (id, hotel_id, data, synced_at) VALUES (?, ?, ?, ?)',
         [p._id, hotelId, JSON.stringify(p), now()],
       );
     }
@@ -45,7 +45,7 @@ export const saveCategories = (hotelId: string, categories: Category[]): void =>
     db.runSync('DELETE FROM local_categories WHERE hotel_id = ?', [hotelId]);
     for (const c of categories) {
       db.runSync(
-        'INSERT INTO local_categories (id, hotel_id, data, synced_at) VALUES (?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO local_categories (id, hotel_id, data, synced_at) VALUES (?, ?, ?, ?)',
         [c._id, hotelId, JSON.stringify(c), now()],
       );
     }

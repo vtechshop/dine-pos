@@ -345,6 +345,11 @@ const fetchAPI = async <T>(
             const expiredOn = expiredOnRaw
               ? new Date(expiredOnRaw).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
               : 'Unknown';
+            // Backend sends hotelId in expired responses — persist it so Subscribe Now works
+            // even on a fresh device where no prior login stored it.
+            if (errBody.hotelId) {
+              AsyncStorage.setItem(HOTEL_ID_STORAGE_KEY, String(errBody.hotelId)).catch(() => {});
+            }
             navigateGlobal('SubscriptionExpired', {
               hotelName: errBody.hotelName || 'Your Business',
               expiredOn,
@@ -1621,7 +1626,7 @@ export const createWaiterOrder = async (payload: WaiterOrderPayload): Promise<{ 
   const res = await staffFetch(`${base}/orders`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ ...payload, paymentMethod: 'counter', isParcel: false, orderSource: 'waiter' }),
+    body: JSON.stringify({ ...payload, isParcel: false, orderSource: 'waiter' }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error((data as any).message || 'Failed to create order');
@@ -3199,4 +3204,18 @@ export const reportPrintJobStatus = async (
   } catch {
     // Best-effort — never blocks the UI or triggers logout
   }
+};
+
+// ── SaaS Billing (unauthenticated — expired hotels can still subscribe) ────────
+
+export const subscribeNow = async (hotelId: string): Promise<{ subscriptionId: string; checkoutUrl: string; status: string }> => {
+  const base = await getBaseUrl();
+  const res = await fetch(`${base}/saas/subscribe-public`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hotelId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as any).message || 'Subscription failed. Please try again.');
+  return data as { subscriptionId: string; checkoutUrl: string; status: string };
 };

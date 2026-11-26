@@ -18,6 +18,14 @@ allprojects {
     mavenCentral()
     maven { url 'https://www.jitpack.io' }
   }
+  configurations.all {
+    resolutionStrategy {
+      force 'org.bouncycastle:bcprov-jdk15to18:1.81'
+      force 'com.razorpay:standard-core:1.7.20'
+      force 'com.razorpay:core:1.0.20'
+      force 'com.razorpay:checkout:1.6.41'
+    }
+  }
 }
 
 apply plugin: "expo-root-project"

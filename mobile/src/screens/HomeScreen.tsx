@@ -13,7 +13,6 @@ import { RootStackParamList, TabParamList, DailyReport, KOTOrderInput } from '..
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
 import { getDailyReport, getProducts, getCategories, getStoredHotelId, getSocketUrl, getToken, getLowStockProducts, getLowStockIngredients, getOrder, getNotifications } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
-import { OfflineIndicator } from '../components/OfflineIndicator';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
@@ -371,9 +370,6 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
             <MaterialIcons name="arrow-forward-ios" size={16} color={Colors.white} />
           </TouchableOpacity>
         )}
-
-        {/* ── Offline Indicator ── */}
-        <OfflineIndicator />
 
         {/* ── Hero Revenue Card ── */}
         <View style={styles.heroCard}>
