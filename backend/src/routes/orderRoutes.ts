@@ -1710,20 +1710,23 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       }
 
       const VALID_PM = ['cash', 'upi', 'upi_intent', 'upi_qr', 'upi_collect', 'card', 'split', 'razorpay'];
+      // Paid at the counter earlier (payNow / POST /:id/pay): closing the order must not
+      // record a second payment or change when and how it was paid.
+      const alreadyPaid = !!existing.paymentTime;
       const completionFields: Record<string, unknown> = {
         status:      'completed',
         completedBy: req.cashierName || req.cashierId || '',
         completedAt: new Date(),
         cashierId:   req.cashierId || '',
-        paymentTime: new Date(),
+        paymentTime: existing.paymentTime ?? new Date(),
       };
-      if (paymentMethod && VALID_PM.includes(paymentMethod)) {
+      if (!alreadyPaid && paymentMethod && VALID_PM.includes(paymentMethod)) {
         completionFields.paymentMethod = paymentMethod;
       }
-      if (req.body.transactionId) completionFields.transactionId = req.body.transactionId;
-      if (req.body.upiApp)        completionFields.upiApp        = req.body.upiApp;
-      if (req.body.payments)      completionFields.payments      = req.body.payments;
-      if (req.body.splitDetails) {
+      if (!alreadyPaid && req.body.transactionId) completionFields.transactionId = req.body.transactionId;
+      if (!alreadyPaid && req.body.upiApp)        completionFields.upiApp        = req.body.upiApp;
+      if (!alreadyPaid && req.body.payments)      completionFields.payments      = req.body.payments;
+      if (!alreadyPaid && req.body.splitDetails) {
         // M5 (status path): validate split totals match order total within ±₹1
         // Mirrors the same check in PATCH /:id/payment to keep audit trail consistent.
         const sd = req.body.splitDetails as { cash?: number; upi?: number; card?: number };

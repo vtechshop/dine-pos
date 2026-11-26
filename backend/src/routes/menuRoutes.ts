@@ -135,7 +135,7 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
   let resolvedHotelId = '';
   try {
     // Accept both 'hotel' and 'hotelId' field names for backward compatibility
-    const { hotel, hotelId: hotelIdField, items: clientItems, tableNumber, customerName, notes, isParcel, source, orderSource: reqOrderSource, paymentMethod: reqPaymentMethod } = req.body;
+    const { hotel, hotelId: hotelIdField, items: clientItems, tableNumber, customerName, customerPhone, notes, isParcel, source, orderSource: reqOrderSource, paymentMethod: reqPaymentMethod } = req.body;
     const hotelParam = hotel || hotelIdField;
 
     if (!hotelParam || !mongoose.Types.ObjectId.isValid(hotelParam)) {
@@ -280,6 +280,8 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
       grandTotal:   +grandTotal.toFixed(2),
       tableNumber:  String(tableNumber || '').slice(0, 20),
       customerName: String(customerName || '').slice(0, 60),
+      // Same normalisation as counter billing: digits only, no leading zeros, max 12
+      customerPhone: String(customerPhone || '').replace(/\D/g, '').replace(/^0+/, '').slice(0, 12) || undefined,
       notes:        String(notes || '').slice(0, 200),
       isParcel:     Boolean(isParcel),
       orderSource:   orderSource,
