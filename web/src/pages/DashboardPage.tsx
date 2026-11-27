@@ -355,6 +355,10 @@ export function DashboardPage() {
   const { role }                   = useAuth();
   const { orders: liveOrders, unreadCount, markRead } = useLiveOrders();
   const currencySymbol             = settings?.currencySymbol ?? '₹';
+  // Plan features: /sessions needs tableSessions and /ai/* needs ai (both off by
+  // default). Calling them without the feature only returns 403.
+  const sessionsOn                 = settings?.features?.tableSessions === true;
+  const aiOn                       = (settings?.features as Record<string, unknown> | undefined)?.ai === true;
 
   // Revenue data is shown to admin and cashier only
   const showRevenue = role === 'admin' || role === 'cashier';
@@ -388,15 +392,21 @@ export function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const [t, s] = await Promise.all([fetchTables(), fetchOpenSessions()]);
-      setTables(t);
-      setSessions(s);
+      // Tables must show even when sessions fail or the hotel has no
+      // tableSessions feature (a rejected sessions call used to blank the grid).
+      const [t, s] = await Promise.allSettled([
+        fetchTables(),
+        sessionsOn ? fetchOpenSessions() : Promise.resolve<SessionSummary[]>([]),
+      ]);
+      if (t.status === 'rejected') throw t.reason;
+      setTables(t.value);
+      setSessions(s.status === 'fulfilled' ? s.value : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load table data');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionsOn]);
 
   // ── Data loading — daily report (non-critical: fails silently) ──────────────
 
@@ -442,7 +452,7 @@ export function DashboardPage() {
   // ── Data loading — morning brief (admin only, non-critical) ─────────────────
 
   const loadBrief = useCallback(async () => {
-    if (role !== 'admin') { setBriefLoading(false); return; }
+    if (role !== 'admin' || !aiOn) { setMorningBrief(null); setBriefLoading(false); return; }
     setBriefLoading(true);
     try {
       setMorningBrief(await fetchLatestBrief());
@@ -452,7 +462,7 @@ export function DashboardPage() {
     } finally {
       setBriefLoading(false);
     }
-  }, [role]);
+  }, [role, aiOn]);
 
   // Initial load + refresh after socket reconnect
   useEffect(() => {
@@ -514,6 +524,14 @@ export function DashboardPage() {
   }, []);
 
   const handleAvailableTableClick = useCallback(async (tableId: string) => {
+    if (!sessionsOn) {
+      // No table sessions on this plan: start a dine-in order for the table directly.
+      const tableNumber = String(tables.find(t => t._id === tableId)?.number ?? '');
+      setOrderPrefill({ orderType: 'dine-in', tableId, tableNumber });
+      setActiveTab('new-order');
+      navigate('/cashier');
+      return;
+    }
     setOpeningTableId(tableId);
     try {
       const { session } = await openSession(tableId);
@@ -536,7 +554,7 @@ export function DashboardPage() {
     } finally {
       setOpeningTableId(null);
     }
-  }, [load, tables]);
+  }, [load, tables, sessionsOn, setOrderPrefill, setActiveTab, navigate]);
 
   // ── Build joined table grid items ────────────────────────────────────────────
 

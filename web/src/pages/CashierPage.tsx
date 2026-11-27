@@ -241,6 +241,7 @@ export function CashierPage() {
   const navigate = useNavigate();
   const { activeTab, setActiveTab, heldBills, shift, cart, selectedShiftId } = useCashier();
   const { settings } = useSettings();
+  const aggregatorOn = settings?.features?.aggregator === true;
   const { logout, hotelId, role } = useAuth();
   // Admins reach this billing screen via New Order; their own top bar already has
   // search, notifications and the Swiggy / Zomato pills, so only billing tools show here.
@@ -302,7 +303,8 @@ export function CashierPage() {
   const loadHeader = useCallback(async () => {
     let cancelled = false;
     const [platRes, prtRes] = await Promise.allSettled([
-      fetchPlatformStatus(),     // Swiggy / Zomato on/off — fails (hidden) when the hotel has no aggregator feature
+      // Swiggy / Zomato on/off — only hotels with the aggregator feature (otherwise 403)
+      aggregatorOn ? fetchPlatformStatus() : Promise.resolve<PlatformStatusItem[]>([]),
       fetchPrinterDevices(),
     ]);
     if (!cancelled) {
@@ -312,7 +314,7 @@ export function CashierPage() {
       setNowMs(Date.now());
     }
     return () => { cancelled = true; };
-  }, []);
+  }, [aggregatorOn]);
 
   useEffect(() => {
     void loadHeader();
