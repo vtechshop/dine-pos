@@ -941,6 +941,13 @@ export function NewOrderPanel() {
   // pay=false is a KOT: the order goes to the kitchen and is paid later from Pending Bills.
   async function handleConfirmOrder(opts: { pay: boolean; print: boolean } = { pay: true, print: false }) {
     if (cart.length === 0) return;
+    // Phase 5 · Batch 5 (owner Decision 3): money is taken here only with an open shift. Checked
+    // before the order is created, so a refused payment does not leave an unpaid order behind.
+    const takesPayment = opts.pay && (payFirst || orderType !== 'dine-in');
+    if (takesPayment && shift?.status !== 'open') {
+      setSubmitError('Open a shift before taking payments. Go to the Shift tab, open a shift, then take the payment.');
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
 

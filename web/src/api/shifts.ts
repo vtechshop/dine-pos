@@ -1,4 +1,5 @@
 import type { DailyReport } from '../types';
+import { ApiError } from './client';
 
 const BASE = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/shifts`
@@ -15,8 +16,10 @@ async function shiftFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { message?: string };
-    throw new Error(body.message ?? `HTTP ${res.status}`);
+    const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+    // Phase 5 · Batch 5 (P4-SHIFT-02): keep the HTTP status, so a refusal from the server is told
+    // apart from having no connection (a plain Error looked the same as being offline).
+    throw new ApiError(res.status, body.message ?? `HTTP ${res.status}`, body.code);
   }
   return res.json() as Promise<T>;
 }

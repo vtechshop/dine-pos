@@ -23,6 +23,7 @@ import OrganizationCustomer from '../models/OrganizationCustomer';
 import { scheduleReceiptPrint } from '../utils/printUtils';
 import { createWhatsAppReceiptJobForGuest } from '../services/whatsappReceiptService';
 import { counterBillingOrderUpdates, isDueAtCounter } from '../utils/counterBilling';
+import { refuseWithoutShift, isCounterMethod, owesAtCounter } from '../utils/shiftGuard';
 import { recordEntries, settlementEntries, outstandingOf, ledgerMethod, r2, PAISE } from '../utils/paymentLedger';
 
 // mergeParams: true — inherits :sessionId from the parent sessionRoutes mount
@@ -256,6 +257,10 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         });
         return;
       }
+      // Phase 5 · Batch 5 (Decision 3): taking the guest's money at the counter needs an open shift
+      if (paymentMethod !== 'complimentary'
+          && await owesAtCounter(req.hotelId!, { sessionId: session._id, guestId: guest._id })
+          && await refuseWithoutShift(res, req.hotelId!)) return;
 
       const updateFields: Record<string, any> = {
         status: 'billed',

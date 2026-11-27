@@ -47,8 +47,11 @@ export function CashDrawerPanel() {
 
   const noShift = !shift || shift.status !== 'open';
 
-  function handleSubmit(e: FormEvent) {
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (saving) return;
     const amt = parseFloat(amount);
     if (isNaN(amt) || amt <= 0) { setError('Enter a valid amount'); return; }
     const effectiveReason = reason === 'Other' ? customReason.trim() : reason;
@@ -58,12 +61,20 @@ export function CashDrawerPanel() {
     let cashierName = shift?.cashierName ?? 'Cashier';
     setError(null);
 
-    addDrawerMovement({
-      type: mode === 'in' ? 'cash_in' : 'cash_out',
-      amount: amt,
-      reason: effectiveReason,
-      cashierName,
-    });
+    // Batch 5 (P4-SHIFT-02): counted in the drawer only once the server saved it
+    setSaving(true);
+    let result;
+    try {
+      result = await addDrawerMovement({
+        type: mode === 'in' ? 'cash_in' : 'cash_out',
+        amount: amt,
+        reason: effectiveReason,
+        cashierName,
+      });
+    } finally {
+      setSaving(false);
+    }
+    if (!result.ok) { setError(result.error ?? 'Not saved. Please try again.'); return; }
 
     setAmount('');
     setReason('');

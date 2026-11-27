@@ -15,6 +15,10 @@ import { getTier, isBirthdayToday, nextTierInfo } from '../../utils/loyaltyUtils
 import type { LoyaltyConfig, CustomerSummary, CustomerProfile } from '../../types/customers';
 import { formatMoneyAbs, formatMoneySigned } from '../../utils/money';
 import { useCashierPermissions } from '../../hooks/useCashierPermissions';
+import { useCashier } from '../../context/CashierContext';
+
+// Phase 5 · Batch 5 (owner Decision 3): counter payments need an open shift (the server refuses them too)
+const NO_SHIFT = 'Open a shift before taking payments. Go to the Shift tab, open a shift, then take the payment.';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -346,6 +350,8 @@ export function PaymentModal({
   const { hotelId } = useAuth();
   const { settings } = useSettings();
   const perms = useCashierPermissions();   // Batch 3 (3D): discount only when allowed
+  const { shift } = useCashier();
+  const shiftOpen = shift?.status === 'open';
   const upiId = settings?.upiId?.trim() ?? '';
 
   // Payment method
@@ -436,6 +442,7 @@ export function PaymentModal({
   // ── Confirm ─────────────────────────────────────────────────────────────────
   async function handleConfirm() {
     if (!canConfirm) return;
+    if (!shiftOpen) { setError(NO_SHIFT); return; }
     setConfirming(true);
     setError(null);
     const result: PaymentResult = {
@@ -847,6 +854,14 @@ export function PaymentModal({
               {/* Batch 3 (3D): a developer note ("Wallet & Credit payment — requires backend …")
                   was shown to cashiers here; removed. Wallet / credit are not payment methods yet. */}
             </div>
+          </div>
+        )}
+
+        {/* Batch 5: said up front, before the cashier collects any money */}
+        {!done && !shiftOpen && !error && (
+          <div role="alert" className="mx-5 mt-2 flex shrink-0 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+            <AlertCircle size={13} className="shrink-0 text-amber-600" />
+            <p className="text-xs text-amber-800">{NO_SHIFT}</p>
           </div>
         )}
 

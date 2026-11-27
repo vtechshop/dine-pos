@@ -25,7 +25,7 @@ function fmtDuration(startIso: string, nowMs: number): string {
 // ── Sub-component: running shift view ─────────────────────────────────────────
 
 function RunningShift({ nowMs }: { nowMs: number }) {
-  const { shift, closeShift, drawerBalance, refreshDrawer } = useCashier();
+  const { shift, closeShift, drawerBalance, refreshDrawer, shiftNotice, setShiftNotice } = useCashier();
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
 
@@ -65,7 +65,7 @@ function RunningShift({ nowMs }: { nowMs: number }) {
   const actual = parseFloat(actualCash) || 0;
   const difference = actual - expectedCash;
 
-  function handleClose(e: FormEvent) {
+  async function handleClose(e: FormEvent) {
     e.preventDefault();
     // Bug H8: guard against double-click / double-submit
     if (isClosingShift) return;
@@ -74,7 +74,9 @@ function RunningShift({ nowMs }: { nowMs: number }) {
     setClosing(true);
     setCloseError(null);
     try {
-      closeShift(actual, closingNote);
+      // Batch 5 (P4-SHIFT-02): wait for the server; a failed close is reported, never shown as closed
+      const result = await closeShift(actual, closingNote);
+      if (!result.ok) setCloseError(result.error ?? 'The shift was not closed. Please try again.');
     } finally {
       setIsClosingShift(false);
       setClosing(false);
@@ -83,6 +85,13 @@ function RunningShift({ nowMs }: { nowMs: number }) {
 
   return (
     <div className="space-y-4">
+      {shiftNotice && (
+        <div role="alert" className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="flex-1 text-xs text-amber-800">{shiftNotice}</p>
+          <button type="button" onClick={() => setShiftNotice(null)} className="text-xs font-medium text-amber-700">Dismiss</button>
+        </div>
+      )}
+
       {/* Shift header */}
       <div className="flex items-center gap-3 rounded-xl border border-border bg-canvas p-4">
         <div className="rounded-lg bg-brand/10 p-2.5 text-brand">
@@ -199,7 +208,7 @@ function RunningShift({ nowMs }: { nowMs: number }) {
 // ── Sub-component: shift summary (after close) ────────────────────────────────
 
 function ShiftSummary() {
-  const { shift, clearDrawerMovements, setActiveTab, setSelectedShiftId } = useCashier();
+  const { shift, dismissClosedShift, setActiveTab, setSelectedShiftId } = useCashier();
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
 
@@ -208,7 +217,8 @@ function ShiftSummary() {
   const diff = shift.difference ?? 0;
 
   function startNewShift() {
-    clearDrawerMovements();
+    // Batch 5 (P4-SHIFT-07): leave the summary and show the open-shift form
+    dismissClosedShift();
   }
 
   function viewZReport() {
@@ -306,11 +316,13 @@ function OpenShiftForm() {
   const [openingCash, setOpeningCash] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
 
   if (shift?.status === 'open') return null;
 
-  function handleOpen(e: FormEvent) {
+  async function handleOpen(e: FormEvent) {
     e.preventDefault();
+    if (opening) return;
     const cash = parseFloat(openingCash);
     if (isNaN(cash) || cash < 0) { setError('Enter a valid opening cash amount'); return; }
     setError(null);
@@ -328,13 +340,20 @@ function OpenShiftForm() {
       }
     } catch { /* use defaults */ }
 
-    openShift({
-      cashierName,
-      cashierId,
-      openedAt: new Date().toISOString(),
-      openingCash: cash,
-      openingNote: note.trim(),
-    });
+    // Batch 5 (P4-SHIFT-02): the shift shows as open only when the server opened it
+    setOpening(true);
+    try {
+      const result = await openShift({
+        cashierName,
+        cashierId,
+        openedAt: new Date().toISOString(),
+        openingCash: cash,
+        openingNote: note.trim(),
+      });
+      if (!result.ok) setError(result.error ?? 'The shift could not be opened. Please try again.');
+    } finally {
+      setOpening(false);
+    }
   }
 
   return (

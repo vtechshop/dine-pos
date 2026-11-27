@@ -23,6 +23,7 @@ import guestRouter from './guestRoutes';
 import { getLoyaltyConfig, calculateEarnedPoints, earnPoints } from '../utils/loyaltyUtils';
 import { scheduleReceiptPrint } from '../utils/printUtils';
 import { counterBillingOrderUpdates, isDueAtCounter } from '../utils/counterBilling';
+import { refuseWithoutShift, isCounterMethod, owesAtCounter } from '../utils/shiftGuard';
 import { recordEntries, settlementEntries, outstandingOf, ledgerMethod, r2, PAISE } from '../utils/paymentLedger';
 
 const router = Router();
@@ -382,6 +383,10 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
       res.status(400).json({ message: 'Session is already closed' });
       return;
     }
+    // Phase 5 · Batch 5 (Decision 3): taking the table's money at the counter needs an open shift
+    if (bulkBill && paymentMethod !== 'complimentary'
+        && await owesAtCounter(req.hotelId!, { sessionId: session._id })
+        && await refuseWithoutShift(res, req.hotelId!)) return;
 
     // Batch 2 (2A): claim the session atomically so only ONE close / table bill runs at a time.
     // Two simultaneous bulk bills used to both run and charge a gift voucher twice. The claim is

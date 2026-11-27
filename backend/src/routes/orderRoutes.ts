@@ -39,6 +39,7 @@ import { isDueAtCounter } from '../utils/counterBilling';
 import { recordEntries, outstandingOf, moneyParts, ledgerMethod, r2, PAISE } from '../utils/paymentLedger';
 import { salesReport, salesMatch, istDay, todayIST, pendingPayments } from '../utils/financeDefinitions';
 import { isQuickServiceOrder } from '../utils/quickService';
+import { refuseWithoutShift, isCounterMethod, owesAtCounter } from '../utils/shiftGuard';
 import { payBeforeKitchenEnabled, isHeldForCounterPayment } from '../utils/payBeforeKitchen';
 import { pushDeliveryAvailability } from '../utils/deliveryAvailabilitySync';
 
@@ -649,6 +650,10 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       });
       if (existing) return res.status(200).json(existing);
     }
+
+    // Phase 5 · Batch 5 (Decision 3): money taken at the counter needs an open shift.
+    if (req.body.payNow === true && (req.role === 'cashier' || req.role === 'admin')
+        && isCounterMethod(req.body.paymentMethod) && await refuseWithoutShift(res, req.hotelId!)) return;
 
     // ── Phase 4: Order Route Guard ────────────────────────────────────────────
     // When sessionId + guestId are both provided, validate the ownership chain:
@@ -1819,6 +1824,11 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         }
       }
 
+      // Phase 5 · Batch 5 (Decision 3): collecting what is owed (or a tip) at the counter needs an
+      // open shift. Completing an order that is already paid, or paid online, does not.
+      const takesCounterMoney = (completionParts?.length ?? 0) > 0 || (!razorpayPmt && Number((existing as any).tipAmount) > 0);
+      if (takesCounterMoney && await refuseWithoutShift(res, req.hotelId!)) return;
+
       const completableStatuses = isQuickService
         ? ['served', 'ready', 'pending']
         : ['served', 'ready'];
@@ -2293,6 +2303,8 @@ router.post('/:id/pay', requireCashierOrAdmin, async (req: AuthRequest, res: Res
     if (!COUNTER_PAY_METHODS.includes(paymentMethod)) {
       return res.status(400).json({ message: 'Choose Cash, UPI, Card or Split to take payment.' });
     }
+    // Phase 5 · Batch 5 (Decision 3): counter payments need an open shift
+    if (await refuseWithoutShift(res, req.hotelId!)) return;
 
     const order = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId }).lean() as any;
     if (!order) return res.status(404).json({ message: 'Order not found' });

@@ -12,6 +12,20 @@ import {
   listHeldBills, createHeldBill, deleteHeldBill as apiDeleteHeldBill,
 } from '../api/heldBills';
 import { saveCart, loadCart, clearCartDb } from '../db/cartPersistence';
+import { ApiError } from '../api/client';
+
+/**
+ * Phase 5 · Batch 5 (P4-SHIFT-02): the result of a shift action. When the server answers with an
+ * error nothing changes on screen and `error` says why; only when the server cannot be reached at
+ * all is the action kept on this device (`offline`) and sent once the connection is back.
+ */
+export interface ShiftActionResult {
+  ok:       boolean;
+  offline?: boolean;
+  error?:   string;
+}
+
+const serverSaid = (err: unknown) => (err instanceof ApiError ? err.message : '');
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -190,8 +204,13 @@ interface CashierContextValue {
 
   // Shift
   shift: ShiftState | null;
-  openShift: (data: Omit<ShiftState, 'id' | 'status'>) => void;
-  closeShift: (actualCash: number, note: string) => void;
+  openShift: (data: Omit<ShiftState, 'id' | 'status'>) => Promise<ShiftActionResult>;
+  closeShift: (actualCash: number, note: string) => Promise<ShiftActionResult>;
+  /** Leave the closed shift's summary for the open-shift form (Batch 5, P4-SHIFT-07). */
+  dismissClosedShift: () => void;
+  /** A message about the shift the cashier must see (e.g. a shift was already open elsewhere). */
+  shiftNotice: string | null;
+  setShiftNotice: (msg: string | null) => void;
   selectedShiftId: string | null;
   setSelectedShiftId: (id: string | null) => void;
 
@@ -203,7 +222,7 @@ interface CashierContextValue {
 
   // Cash drawer
   drawerMovements: DrawerMovement[];
-  addDrawerMovement: (m: Omit<DrawerMovement, 'id' | 'timestamp'>) => void;
+  addDrawerMovement: (m: Omit<DrawerMovement, 'id' | 'timestamp'>) => Promise<ShiftActionResult>;
   clearDrawerMovements: () => void;
   /** Opening + cash in − cash out + cash taken for bills (and cash tips) − cash refunds / reversals */
   drawerBalance: number;
@@ -471,6 +490,9 @@ export function CashierProvider({ children }: { children: ReactNode }) {
     apiGetActiveShift()
       .then(({ shift: apiShift }) => {
         if (!apiShift) {
+          // Batch 5 (P4-SHIFT-02): the server has no open shift, so a shift this device still
+          // shows as open with a server id is stale — show what the server has.
+          setShift(prev => (prev?.status === 'open' && !prev.id.startsWith('shift_') ? null : prev));
           // No active shift in DB — try to replay an offline-opened shift if one exists
           void replayOfflineShift();
           return;
@@ -577,66 +599,71 @@ export function CashierProvider({ children }: { children: ReactNode }) {
   }, [cart, cartHydrated, hotelId]);
 
   // ── Shift actions ─────────────────────────────────────────────────────────
-  const openShift = useCallback((data: Omit<ShiftState, 'id' | 'status'>) => {
-    // Optimistic UI update immediately
-    const tempId = `shift_${Date.now()}`;
-    const newShift: ShiftState = { ...data, id: tempId, status: 'open' };
-    setShift(newShift);
-    setDrawerMovements([{
-      id: `mov_${Date.now()}`,
-      type: 'opening',
-      amount: data.openingCash,
-      reason: 'Shift opening balance',
-      cashierName: data.cashierName,
-      timestamp: data.openedAt,
-    }]);
+  const [shiftNotice, setShiftNotice] = useState<string | null>(null);
 
-    // Persist to backend in background; on success replace with real MongoDB _id
-    apiOpenShift({
-      cashierName: data.cashierName,
-      cashierId:   data.cashierId,
-      openedAt:    data.openedAt,
-      openingCash: data.openingCash,
-      openingNote: data.openingNote,
-    }).then(({ shift: s }) => {
-      shiftApiIdRef.current = s._id;
-      setShift(prev => prev ? { ...prev, id: s._id } : null);
-      setDrawerMovements([{
-        id: `opening_${s._id}`,
-        type: 'opening',
-        amount: s.openingCash,
-        reason: 'Shift opening balance',
-        cashierName: s.cashierName,
-        timestamp: s.openedAt,
-      }]);
-    }).catch(() => {
-      // API offline — localStorage fallback already set via optimistic update
+  // Shows the shift the server has open (after it opened one, or when it refused to open a second).
+  const showServerShift = useCallback((s: ShiftData) => {
+    shiftApiIdRef.current = s._id;
+    setShift({
+      id: s._id, cashierName: s.cashierName, cashierId: s.cashierId, openedAt: s.openedAt,
+      openingCash: s.openingCash, openingNote: s.openingNote, status: 'open',
     });
+    setDrawerMovements([
+      { id: `opening_${s._id}`, type: 'opening', amount: s.openingCash, reason: 'Shift opening balance', cashierName: s.cashierName, timestamp: s.openedAt },
+      ...(s.movements ?? []).map((m): DrawerMovement => ({
+        id: m._id, type: m.type, amount: m.amount, reason: m.reason, cashierName: m.cashierName, timestamp: m.timestamp,
+      })),
+    ]);
   }, []);
 
-  const closeShift = useCallback((actualCash: number, note: string) => {
+  // Batch 5 (P4-SHIFT-02): the shift is shown as open only once the server has opened it.
+  const openShift = useCallback(async (data: Omit<ShiftState, 'id' | 'status'>): Promise<ShiftActionResult> => {
+    try {
+      const { shift: s } = await apiOpenShift({
+        cashierName: data.cashierName,
+        cashierId:   data.cashierId,
+        openedAt:    data.openedAt,
+        openingCash: data.openingCash,
+        openingNote: data.openingNote,
+      });
+      showServerShift(s);
+      return { ok: true };
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 409) {
+          // A shift is already open for this hotel (another device or tab): show that one.
+          try {
+            const { shift: active } = await apiGetActiveShift();
+            if (active) showServerShift(active);
+          } catch { /* keep the screen as it is */ }
+          const msg = 'A shift is already open for this hotel, so a new one was not opened. The open shift is shown — close it first to start a new one.';
+          setShiftNotice(msg);   // shown on the running shift (the open form is replaced by it)
+          return { ok: false, error: msg };
+        }
+        return { ok: false, error: `The shift could not be opened (${serverSaid(err)}). Please try again.` };
+      }
+      // No answer from the server (offline): keep the shift on this device; it is sent when back online.
+      const tempId = `shift_${Date.now()}`;
+      setShift({ ...data, id: tempId, status: 'open' });
+      setDrawerMovements([{
+        id: `mov_${Date.now()}`, type: 'opening', amount: data.openingCash,
+        reason: 'Shift opening balance', cashierName: data.cashierName, timestamp: data.openedAt,
+      }]);
+      return { ok: true, offline: true };
+    }
+  }, [showServerShift]);
+
+  // Batch 5 (P4-SHIFT-02): a shift the server has is shown as closed only once the server closed it.
+  const closeShift = useCallback(async (actualCash: number, note: string): Promise<ShiftActionResult> => {
     const apiId = shiftApiIdRef.current;
 
-    // Optimistic local close (difference approximated until API responds)
-    setShift(prev => {
-      if (!prev) return null;
-      const expectedCash = prev.openingCash; // backend will compute the real value
-      return {
-        ...prev,
-        status: 'closed',
-        closedAt: new Date().toISOString(),
-        actualCash,
-        difference: actualCash - expectedCash,
-        closingNote: note,
-      };
-    });
-    setDrawerMovements([]);
-
     if (apiId) {
-      apiCloseShift(apiId, actualCash, note)
-        .then(({ shift: s }) => {
-          shiftApiIdRef.current = null;
-          setShift({
+      try {
+        const { shift: s } = await apiCloseShift(apiId, actualCash, note);
+        shiftApiIdRef.current = null;
+        setShiftNotice(null);
+        setDrawerMovements([]);
+        setShift({
             id:           s._id,
             cashierName:  s.cashierName,
             cashierId:    s.cashierId,
@@ -656,26 +683,41 @@ export function CashierProvider({ children }: { children: ReactNode }) {
             totalOrders:  s.totalOrders,
             cashIn:       s.cashIn,
             cashOut:      s.cashOut,
-          });
-        })
-        .catch(() => {
-          // API offline — localStorage fallback already set
-          shiftApiIdRef.current = null;
         });
-    } else if (hotelId) {
-      // No API ID — shift was opened offline and closed before replay could sync.
-      // Capture movements now (before they are cleared from state) and persist
-      // the entire pending close record so replayOfflineShift can complete the
-      // full open→movements→close sequence once connectivity returns.
-      const pendingMovements = drawerMovementsRef.current.filter(
-        m => (m.type === 'cash_in' || m.type === 'cash_out') && m.id.startsWith('mov_'),
-      );
+        return { ok: true };
+      } catch (err) {
+        // The shift stays open on the server, so it stays open here too.
+        if (err instanceof ApiError) {
+          return { ok: false, error: `The shift was not closed (${serverSaid(err)}). It is still open — please try again.` };
+        }
+        return { ok: false, error: 'No connection — the shift was not closed and is still open. Please try again when you are back online.' };
+      }
+    }
+
+    // No server id — the shift was opened offline and never reached the server. Close it here and
+    // keep the whole open → movements → close record so replayOfflineShift sends it later.
+    const pendingMovements = drawerMovementsRef.current.filter(
+      m => (m.type === 'cash_in' || m.type === 'cash_out') && m.id.startsWith('mov_'),
+    );
+    setShift(prev => prev ? {
+      ...prev, status: 'closed', closedAt: new Date().toISOString(), actualCash,
+      difference: actualCash - prev.openingCash, closingNote: note,
+    } : null);
+    setDrawerMovements([]);
+    if (hotelId) {
       localStorage.setItem(
         `pos_offline_close_${hotelId}`,
         JSON.stringify({ actualCash, closingNote: note, closedAt: new Date().toISOString(), movements: pendingMovements }),
       );
     }
+    return { ok: true, offline: true };
   }, [hotelId]);
+
+  // Batch 5 (P4-SHIFT-07): "Open New Shift" leaves the closed shift's summary for the open form.
+  const dismissClosedShift = useCallback(() => {
+    setShift(prev => (prev?.status === 'closed' ? null : prev));
+    setDrawerMovements([]);
+  }, []);
 
   // ── Held bill actions ─────────────────────────────────────────────────────
   // Use a ref so resumeBill always reads the latest list without re-creating the callback
@@ -775,27 +817,29 @@ export function CashierProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Drawer actions ────────────────────────────────────────────────────────
-  const addDrawerMovement = useCallback((m: Omit<DrawerMovement, 'id' | 'timestamp'>) => {
-    // Optimistic local update
-    const id = `mov_${Date.now()}`;
-    const movement: DrawerMovement = { ...m, id, timestamp: new Date().toISOString() };
-    setDrawerMovements(prev => [movement, ...prev]);
-
+  // Batch 5 (P4-SHIFT-02): a cash in / out counts in the drawer only once the server saved it.
+  const addDrawerMovement = useCallback(async (m: Omit<DrawerMovement, 'id' | 'timestamp'>): Promise<ShiftActionResult> => {
     const apiId = shiftApiIdRef.current;
-    if (apiId && (m.type === 'cash_in' || m.type === 'cash_out')) {
-      apiAddMovement(apiId, {
+    const local = (): ShiftActionResult => {
+      const movement: DrawerMovement = { ...m, id: `mov_${Date.now()}`, timestamp: new Date().toISOString() };
+      setDrawerMovements(prev => [movement, ...prev]);
+      return { ok: true, offline: true };
+    };
+    if (!apiId || (m.type !== 'cash_in' && m.type !== 'cash_out')) return local();   // offline-opened shift
+    try {
+      const { movement: saved } = await apiAddMovement(apiId, {
         type:        m.type,
         amount:      m.amount,
         reason:      m.reason,
         cashierName: m.cashierName,
-      }).then(({ movement: saved }) => {
-        // Replace temp movement with server-assigned ID
-        setDrawerMovements(prev =>
-          prev.map(mv => mv.id === id ? { ...mv, id: saved._id } : mv),
-        );
-      }).catch(() => {
-        // API offline — keep temp movement in localStorage
       });
+      setDrawerMovements(prev => [{ ...m, id: saved._id, timestamp: saved.timestamp ?? new Date().toISOString() }, ...prev]);
+      return { ok: true };
+    } catch (err) {
+      if (err instanceof ApiError) {
+        return { ok: false, error: `Not saved (${serverSaid(err)}). The drawer was not changed — please try again.` };
+      }
+      return local();   // no connection: kept on this device (existing offline behaviour)
     }
   }, []);
 
@@ -831,7 +875,7 @@ export function CashierProvider({ children }: { children: ReactNode }) {
       activeTab, setActiveTab,
       orderPrefill, setOrderPrefill,
       cart, addToCart, removeFromCart, updateQty, updateItemNotes, clearCart,
-      shift, openShift, closeShift,
+      shift, openShift, closeShift, dismissClosedShift, shiftNotice, setShiftNotice,
       selectedShiftId, setSelectedShiftId,
       heldBills, holdBill, resumeBill, deleteHeldBill,
       drawerMovements, addDrawerMovement, clearDrawerMovements, drawerBalance, refreshDrawer,
