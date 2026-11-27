@@ -1,25 +1,31 @@
 import { v4 as uuidv4 } from 'uuid';
 import { api } from '../../../utils/api-client';
 import { authHeaders } from '../../../utils/env';
-import { getHotelA } from '../../setup/testEnv';
+import { getHotelA, getHotelB } from '../../setup/testEnv';
+import { linkItems } from '../../helpers/order.helper';
 
 describe('Orders — Offline Idempotency', () => {
   let adminToken: string;
   let hotelId: string;
+  let itemsA: any[];
+  let itemsB: any[];
+  const rawItems = [{ productName: 'Idempotent Dish', quantity: 1, price: 100, total: 100 }];
 
-  beforeAll(() => {
+  beforeAll(async () => {
     const hotelA = getHotelA();
     adminToken = hotelA.adminToken;
     hotelId = hotelA.hotelId;
+    itemsA = await linkItems(adminToken, rawItems);
+    itemsB = await linkItems(getHotelB().adminToken, rawItems);
   });
 
-  function orderBody(offlineId: string) {
+  function orderBody(offlineId: string, items: any[] = itemsA) {
     return {
       tableNumber: 'T5',
       customerName: 'Offline Test',
       customerPhone: '9999999999',
       orderSource: 'dine-in',
-      items: [{ productName: 'Idempotent Dish', quantity: 1, price: 100, total: 100 }],
+      items,
       subtotal: 100,
       taxTotal: 9,
       grandTotal: 109,
@@ -61,11 +67,10 @@ describe('Orders — Offline Idempotency', () => {
   });
 
   it('OFF-004 same offlineId from different hotel creates separate orders', async () => {
-    const { getHotelB } = await import('../../setup/testEnv');
     const hotelB = getHotelB();
     const offlineId = uuidv4();
     const res1 = await api.post('/api/orders').set(authHeaders(adminToken)).send(orderBody(offlineId));
-    const res2 = await api.post('/api/orders').set(authHeaders(hotelB.adminToken)).send(orderBody(offlineId));
+    const res2 = await api.post('/api/orders').set(authHeaders(hotelB.adminToken)).send(orderBody(offlineId, itemsB));
     const id1 = (res1.body.order || res1.body)._id;
     const id2 = (res2.body.order || res2.body)._id;
     expect(id1).not.toBe(id2);

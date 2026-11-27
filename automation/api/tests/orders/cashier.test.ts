@@ -20,6 +20,7 @@ import {
 } from '../../helpers/order.helper';
 import { cashierPayload, uniquePhone } from '../../../utils/test-data';
 import { cashierLogin } from '../../helpers/auth.helper';
+import { linkItems } from '../../helpers/order.helper';
 
 describe('Cashier Regression', () => {
   let adminToken: string;
@@ -45,7 +46,7 @@ describe('Cashier Regression', () => {
       // NOTE: The backend field is 'deliveryFee' (not 'deliveryCharge' as named in the spec).
       // recalcOrderTotals() in orderRoutes does NOT currently add deliveryFee to grandTotal;
       // the grandTotal assertion below will fail naturally if that gap exists.
-      const items = [{ productName: 'Biryani', quantity: 1, price: 200, total: 200 }];
+      const items = await linkItems(adminToken, [{ productName: 'Biryani', quantity: 1, price: 200, total: 200 }]);
       const subtotal = 200;
       // Items carry no taxPercent, so the server computes taxTotal = 0.
       const taxTotal = 0;
@@ -245,7 +246,7 @@ describe('Cashier Regression', () => {
           customerName: 'Discount Test',
           customerPhone: uniquePhone(),
           orderSource: 'dine-in',
-          items: [{ productName: 'Tea', quantity: 1, price: 50, total: 50 }],
+          items: await linkItems(cashierToken, [{ productName: 'Tea', quantity: 1, price: 50, total: 50 }]),
           subtotal: 50,
           taxTotal: 0,
           grandTotal: 0, // server recalculates; client value is ignored
