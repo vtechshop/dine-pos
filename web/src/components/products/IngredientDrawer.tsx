@@ -221,13 +221,19 @@ export function IngredientDrawer({ ingredient, mode, onSave, onClose }: Props) {
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">
                     Current Stock
                   </label>
+                  {/* Phase 5 · Batch 6 (P4-INV-09): stock is set here only for a new ingredient. After
+                      that it changes through Restock / Adjust, which record the movement and reason
+                      (an edit here was silently ignored by the server). */}
                   <NumberInput
                     className={field}
                     min={0}
                     step={0.01}
                     value={form.currentStock ?? 0}
                     onValueChange={n => set('currentStock', n)}
+                    disabled={!!ingredient}
+                    title={ingredient ? 'Use Restock or Adjust to change stock' : undefined}
                   />
+                  {ingredient && <p className="mt-1 text-[11px] text-ink/45">Use Restock or Adjust to change stock.</p>}
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink/50">

@@ -8,6 +8,7 @@ import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
+import { setVendorOpeningBalance } from '../utils/vendorOpeningBalance';
 
 const router = Router();
 router.use(authMiddleware, requireAdmin);
@@ -220,47 +221,10 @@ router.post('/:vendorId/opening-balance', async (req: AuthRequest, res: Response
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
-        // Read vendor INSIDE the transaction so MongoDB's serializable snapshot
-        // detects concurrent writes and retries — preventing double-increment races.
-        const vendor = await Vendor.findOne(
-          { _id: vendorId, hotelId, isDeleted: false },
-          'openingBalance currentOutstanding',
-          { session },
-        );
-        if (!vendor) throw new Error('Vendor not found');
-
-        oldBalance = vendor.openingBalance;
-        const diff = amt - oldBalance;
-
-        const existing = await VendorLedgerEntry.findOne({
-          hotelId, vendorId: new mongoose.Types.ObjectId(vendorId), entryType: 'opening_balance',
-        }).session(session);
-
-        if (existing) {
-          existing.debit          = amt;
-          existing.runningBalance = amt;
-          existing.description    = String(notes || 'Opening balance');
-          await existing.save({ session });
-        } else {
-          await VendorLedgerEntry.create([{
-            hotelId,
-            vendorId,
-            entryType:       'opening_balance',
-            referenceId:     null,
-            referenceNumber: '',
-            debit:           amt,
-            credit:          0,
-            runningBalance:  amt,
-            description:     String(notes || 'Opening balance'),
-          }], { session });
-        }
-
-        const updated = await Vendor.findOneAndUpdate(
-          { _id: vendorId, hotelId },
-          { $set: { openingBalance: amt }, $inc: { currentOutstanding: diff } },
-          { new: true, session },
-        );
-        finalOutstanding = updated?.currentOutstanding ?? (vendor.currentOutstanding + diff);
+        // Batch 6: the logic now lives in utils/vendorOpeningBalance.ts (also used by the Vendors page)
+        const r = await setVendorOpeningBalance(hotelId, vendorId, amt, notes, session);
+        oldBalance       = r.oldBalance;
+        finalOutstanding = r.currentOutstanding;
       });
     } finally {
       await session.endSession();

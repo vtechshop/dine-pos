@@ -55,7 +55,7 @@ export async function priceQrItems(
 
   const [products, groups] = await Promise.all([
     Product.find({ _id: { $in: ids }, hotelId })
-      .select('_id name price taxPercent channelPrices variants isAvailable isDeleted hsnCode').lean(),
+      .select('_id name price taxPercent channelPrices variants isAvailable isDeleted hsnCode stock').lean(),
     groupIds.length
       ? ModifierGroup.find({ _id: { $in: groupIds }, hotelId, isDeleted: false, isActive: true }).lean()
       : Promise.resolve([]),
@@ -78,6 +78,24 @@ export async function priceQrItems(
       status: 409, code: 'ITEM_UNAVAILABLE', unavailable,
       message: `Sorry, ${nameList(names)} ${names.length === 1 ? 'is' : 'are'} no longer available. Please remove ${names.length === 1 ? 'it' : 'them'} from your cart and try again.`,
     } };
+  }
+
+  // Phase 5 · Batch 6 (P4-INV-03): a counted dish cannot be ordered beyond its stock (all lines together)
+  const wanted = new Map<string, number>();
+  for (const ci of clientItems) {
+    const id = String(ci.product);
+    wanted.set(id, (wanted.get(id) ?? 0) + Math.max(1, Math.floor(Number(ci.quantity) || 1)));
+  }
+  for (const [id, qty] of wanted) {
+    const p = productMap.get(id);
+    if (typeof p.stock === 'number' && p.stock >= 0 && qty > p.stock) {
+      return { result: null, refusal: {
+        status: 409, code: 'ITEM_UNAVAILABLE', unavailable: [{ product: id, name: String(p.name) }],
+        message: p.stock === 0
+          ? `Sorry, ${p.name} is no longer available. Please remove it from your cart and try again.`
+          : `Sorry, only ${p.stock} ${p.name} left. Please change the quantity and try again.`,
+      } };
+    }
   }
 
   let subtotal = 0;

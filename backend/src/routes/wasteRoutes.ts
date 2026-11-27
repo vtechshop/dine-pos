@@ -86,6 +86,12 @@ router.get('/analytics', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const { ingredientId, quantity, estimatedLoss, ...rest } = req.body;
+    // Phase 5 · Batch 6 (P4-INV-10): every waste entry needs a quantity above 0 — the check used to
+    // apply only when an ingredient was chosen, so a free-text entry of 0 was saved and counted.
+    const qtyGiven = typeof quantity === 'number' ? quantity : parseFloat(quantity);
+    if (!(qtyGiven > 0)) {
+      return res.status(400).json({ message: 'quantity must be positive' });
+    }
 
     let resolvedIngredientId: mongoose.Types.ObjectId | null = null;
     let resolvedEstimatedLoss = typeof estimatedLoss === 'number' ? estimatedLoss : 0;

@@ -7,6 +7,7 @@ import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
+import { setVendorOpeningBalance, parseOpeningBalance } from '../utils/vendorOpeningBalance';
 
 const router = Router();
 router.use(authMiddleware);
@@ -124,6 +125,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       if (dupGst) return res.status(409).json({ message: 'A vendor with this GST number already exists' });
     }
 
+    // Phase 5 · Batch 6 (P4-INV-06): the Opening Balance typed in the form is what the hotel owes
+    // the vendor from day one (it was silently discarded).
+    let opening = 0;
+    if (req.body.openingBalance !== undefined && req.body.openingBalance !== null && req.body.openingBalance !== '') {
+      const ob = parseOpeningBalance(req.body.openingBalance);
+      if ('error' in ob) return res.status(400).json({ message: ob.error });
+      opening = ob.amount;
+    }
+
     const counter = await DailyCounter.findOneAndUpdate(
       { key: `VND-${req.hotelId}` },
       { $inc: { seq: 1 } },
@@ -138,16 +148,28 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       ...safeBody
     } = req.body;
 
-    const vendor = await Vendor.create({
-      ...safeBody,
-      hotelId:      req.hotelId,
-      vendorCode,
-      businessName: String(businessName).trim(),
-      mobile:       String(mobile).trim(),
-      gstNumber:    gstNumber ? String(gstNumber).trim().toUpperCase() : '',
-      createdBy:    req.cashierId || req.waiterId || req.hotelId || '',
-      updatedBy:    req.cashierId || req.waiterId || req.hotelId || '',
-    });
+    let vendor: any;
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        [vendor] = await Vendor.create([{
+          ...safeBody,
+          hotelId:      req.hotelId,
+          vendorCode,
+          businessName: String(businessName).trim(),
+          mobile:       String(mobile).trim(),
+          gstNumber:    gstNumber ? String(gstNumber).trim().toUpperCase() : '',
+          createdBy:    req.cashierId || req.waiterId || req.hotelId || '',
+          updatedBy:    req.cashierId || req.waiterId || req.hotelId || '',
+        }], { session });
+        if (opening > 0) {
+          await setVendorOpeningBalance(new mongoose.Types.ObjectId(req.hotelId!), String(vendor._id), opening, 'Opening balance', session);
+        }
+      });
+    } finally {
+      await session.endSession();
+    }
+    if (opening > 0) vendor = await Vendor.findById(vendor._id);
 
     logAudit(req, 'vendor.created', 'vendor', String(vendor._id), {
       businessName: vendor.businessName,
@@ -188,6 +210,14 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       if (dup) return res.status(409).json({ message: 'A vendor with this GST number already exists' });
     }
 
+    // Phase 5 · Batch 6 (P4-INV-06): a changed Opening Balance is applied (it was silently ignored)
+    let newOpening: number | null = null;
+    if (req.body.openingBalance !== undefined && req.body.openingBalance !== null && req.body.openingBalance !== '') {
+      const ob = parseOpeningBalance(req.body.openingBalance);
+      if ('error' in ob) return res.status(400).json({ message: ob.error });
+      newOpening = ob.amount;
+    }
+
     const update: Record<string, unknown> = { ...body, updatedBy: req.hotelId ?? '' };
     if (businessName !== undefined) update.businessName = String(businessName).trim();
     if (mobile       !== undefined) update.mobile       = String(mobile).trim();
@@ -199,6 +229,21 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       { new: true, runValidators: true },
     );
     if (!vendor) return res.status(404).json({ message: 'Vendor not found' });
+
+    if (newOpening !== null && Math.abs(newOpening - (vendor.openingBalance ?? 0)) >= 0.005) {
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          await setVendorOpeningBalance(new mongoose.Types.ObjectId(req.hotelId!), req.params.id, newOpening!, 'Opening balance', session);
+        });
+      } finally {
+        await session.endSession();
+      }
+      logAudit(req, 'vendor_ledger.opening_balance', 'vendor', req.params.id, { amount: newOpening, oldBalance: vendor.openingBalance });
+      const fresh = await Vendor.findById(vendor._id);
+      logAudit(req, 'vendor.updated', 'vendor', req.params.id, { businessName: vendor.businessName });
+      return res.json(fresh);
+    }
 
     logAudit(req, 'vendor.updated', 'vendor', req.params.id, {
       businessName: vendor.businessName,

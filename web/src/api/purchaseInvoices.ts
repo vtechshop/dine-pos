@@ -71,10 +71,11 @@ export function verifyPurchaseInvoice(id: string): Promise<{ invoice: PurchaseIn
 export function markPurchaseInvoicePaid(
   id: string,
   paymentRef?: string,
+  paymentMethod?: string,
 ): Promise<{ invoice: PurchaseInvoice }> {
   return apiFetch<{ invoice: PurchaseInvoice }>(`/purchase-invoices/${id}/mark-paid`, {
     method: 'POST',
-    body:   JSON.stringify({ paymentRef: paymentRef ?? '' }),
+    body:   JSON.stringify({ paymentRef: paymentRef ?? '', ...(paymentMethod ? { paymentMethod } : {}) }),
   });
 }
 

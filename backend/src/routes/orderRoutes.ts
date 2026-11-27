@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Order from '../models/Order';
 import Hotel from '../models/Hotel';
 import Product from '../models/Product';
+import { invalidateProductList } from '../utils/menuCache';
 import ModifierGroup from '../models/ModifierGroup';
 import DailyCounter from '../models/DailyCounter';
 import { nextCustomerId } from '../utils/customerId';
@@ -167,7 +168,7 @@ function recalcOrderTotals(
 export async function validateAndEnrichItems(
   rawItems: any[],
   hotelId: string,
-): Promise<{ items: any[]; error: string | null }> {
+): Promise<{ items: any[]; error: string | null; code?: string; trackedStock?: Map<string, number> }> {
   // Collect distinct product IDs that have a ref
   const productIdStrings = [
     ...new Set(
@@ -296,7 +297,34 @@ export async function validateAndEnrichItems(
     });
   }
 
-  return { items: enriched, error: null };
+  // Phase 5 · Batch 6 (P4-INV-02 / -03): a dish that is sold out or switched off cannot be ordered,
+  // and a counted dish cannot be ordered beyond its stock (all lines of the dish together).
+  // Stock is "counted" when it is a number ≥ 0 (−1 / missing = not counted).
+  const wanted = new Map<string, number>();
+  for (const it of enriched) {
+    const id = String(it.product);
+    wanted.set(id, (wanted.get(id) ?? 0) + Math.max(0, Number(it.quantity) || 0));
+  }
+  const trackedStock = new Map<string, number>();
+  for (const [id, qty] of wanted) {
+    const p = productMap.get(id);
+    if (p.isAvailable === false) {
+      return { items: [], error: `${p.name} is sold out or switched off. Remove it from the bill.`, code: 'ITEM_UNAVAILABLE' };
+    }
+    if (typeof p.stock === 'number' && p.stock >= 0) {
+      if (qty > p.stock) {
+        return {
+          items: [], code: 'NOT_ENOUGH_STOCK',
+          error: p.stock === 0
+            ? `${p.name} is sold out. Remove it from the bill.`
+            : `Only ${p.stock} ${p.name} left — the bill has ${qty}. Change the quantity.`,
+        };
+      }
+      trackedStock.set(id, p.stock);
+    }
+  }
+
+  return { items: enriched, error: null, trackedStock };
 }
 
 // Helper: Generate order number like ORD-20260310-001 (per hotel)
@@ -792,12 +820,12 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     }
 
     // ── Server-side price + modifier integrity check ─────────────────────────
-    const { items: validatedItems, error: itemError } = await validateAndEnrichItems(
+    const { items: validatedItems, error: itemError, code: itemCode, trackedStock } = await validateAndEnrichItems(
       req.body.items,
       req.hotelId!,
     );
     if (itemError) {
-      return res.status(422).json({ message: itemError });
+      return res.status(itemCode ? 409 : 422).json({ message: itemError, ...(itemCode ? { code: itemCode } : {}) });
     }
 
     // ── Server-side coupon resolution ─────────────────────────────────────────
@@ -1015,11 +1043,19 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     // KOT print, guest total, stock-response read, and socket emit run AFTER
     // the transaction commits so they never see a rolled-back order.
     const stockItems = order.items.filter(i => i.product);
-    const stockBulkOps = stockItems.map(item => ({
+    // Phase 5 · Batch 6 (P4-INV-03): counted dishes are taken off stock only if enough is left
+    // (was: clamped at 0, so a second till could sell a plate that did not exist). One update per
+    // dish for all its lines; if any dish no longer has enough, the whole order is rolled back.
+    const stockWanted = new Map<string, number>();
+    for (const item of stockItems) {
+      const id = String(item.product);
+      if (trackedStock?.has(id)) stockWanted.set(id, (stockWanted.get(id) ?? 0) + item.quantity);
+    }
+    const stockBulkOps = [...stockWanted].map(([id, qty]) => ({
       updateOne: {
-        filter: { _id: item.product, hotelId: req.hotelId, stock: { $gt: 0 } },
+        filter: { _id: new mongoose.Types.ObjectId(id), hotelId: req.hotelId, stock: { $gte: qty } },
         update: [
-          { $set: { stock: { $max: [{ $subtract: ['$stock', item.quantity] }, 0] } } },
+          { $set: { stock: { $subtract: ['$stock', qty] } } },
           { $set: { isAvailable: { $gt: ['$stock', 0] } } },
         ],
       },
@@ -1031,6 +1067,11 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     const txSession = await mongoose.startSession();
     try {
       await txSession.withTransaction(async () => {
+        // Phase 5 · Batch 6: withTransaction re-runs this block after a write conflict (e.g. two tills
+        // selling the same counted dish). The first, aborted attempt left the order marked as saved,
+        // so the retry tried to UPDATE an order that was never committed (DocumentNotFoundError →
+        // "Invalid data"). Every attempt inserts it afresh.
+        order.isNew = true;
         // Atomically claim one coupon usage slot inside the transaction.
         // If the limit is exhausted by a concurrent order, the transaction aborts.
         if (couponResult) {
@@ -1173,8 +1214,13 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
         ingredientShortfalls = shortfalls;
         if (ingredientDeltas.size > 0) order.ingredientDeltas = ingredientDeltas;
         await order.save({ session: txSession });
-        if (stockItems.length > 0) {
-          await Product.bulkWrite(stockBulkOps as any, { session: txSession });
+        if (stockBulkOps.length > 0) {
+          const sw = await Product.bulkWrite(stockBulkOps as any, { session: txSession });
+          if (sw.matchedCount !== stockBulkOps.length) {
+            const e = new Error('A dish on this bill sold out while it was being placed. Refresh the menu and check the bill.');
+            (e as any).isStockError = true;
+            throw e;
+          }
         }
         // H2: loyalty redemption inside transaction — if it fails the whole order is rolled back
         // so the loyalty ledger and order discount are always consistent.
@@ -1232,6 +1278,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     }
 
     logger.info('Order saved', { orderId: String(order._id), orderNumber: order.orderNumber, hotelId: req.hotelId });
+    if (stockBulkOps.length > 0) invalidateProductList(req.hotelId!);   // Batch 6 (P4-INV-04)
 
     // ── Phase 7: Fire-and-forget KOT print ───────────────────────────────────
     // An order held for payment gets its KOT when it is paid (POST /:id/pay).
@@ -1313,6 +1360,9 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     }
     if ((error as any).isWalletError) {
       return res.status(400).json({ message: error.message });
+    }
+    if ((error as any).isStockError) {
+      return res.status(409).json({ code: 'NOT_ENOUGH_STOCK', message: error.message });
     }
     logger.error('[POST /orders] Failed', { hotelId: req.hotelId, error: String(error), code: error.code, stack: error?.stack });
     sendError(res, 400, 'Invalid data', error);
@@ -1481,6 +1531,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       } finally {
         await cancelTx.endSession();
       }
+      if (prevDoc && bulkOps.length > 0) invalidateProductList(req.hotelId!);   // Batch 6 (P4-INV-04): stock is back
 
       if (prevDoc) {
         // Cancelling puts counted stock back (and the dish back on sale) — tell Swiggy / Zomato

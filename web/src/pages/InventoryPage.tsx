@@ -129,14 +129,15 @@ export function InventoryPage() {
     setLoading(true);
     setError(null);
     try {
-      const [{ ingredients: all }, { ingredients: low }, analytics] = await Promise.all([
-        fetchIngredients({ limit: 500 }),
-        fetchLowStockIngredients(),
-        fetchWasteAnalytics(todayStr()),
+      // Phase 5 · Batch 6 (P4-INV-05): the waste KPI is optional (the waste feature may be off);
+      // its failure must not hide the ingredient list ("No ingredients yet").
+      const [[{ ingredients: all }, { ingredients: low }], analytics] = await Promise.all([
+        Promise.all([fetchIngredients({ limit: 500 }), fetchLowStockIngredients()]),
+        fetchWasteAnalytics(todayStr()).catch(() => null),
       ]);
       setIngredients(all);
       setLowStock(low);
-      setTodayWasteKpi(analytics.totalLoss);
+      setTodayWasteKpi(analytics?.totalLoss ?? 0);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load inventory');
     } finally {

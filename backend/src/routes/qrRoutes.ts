@@ -52,6 +52,7 @@ import GatewayFactory from '../services/payment/GatewayFactory';
 import { isDueAtCounter } from '../utils/counterBilling';
 import { payBeforeKitchenEnabled } from '../utils/payBeforeKitchen';
 import { priceQrItems, type QrPricedItems } from '../utils/qrOrderItems';
+import { invalidateProductList } from '../utils/menuCache';
 
 const router = Router();
 
@@ -598,6 +599,7 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     } finally {
       await qrTx.endSession();
     }
+    if (stockBulkOps.length > 0) invalidateProductList(String(hotelId));   // Batch 6 (P4-INV-04)
 
     // ── Update guest: increment running total + clear idle timeout ────────────
     // Only counter-payable orders add to what the guest owes at the counter.

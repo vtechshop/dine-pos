@@ -199,9 +199,13 @@ function ProductCard({
           <button
             type="button"
             onClick={() => onAdd(product)}
+            // Phase 5 · Batch 6 (P4-INV-03): a counted dish cannot go past its stock
+            disabled={typeof product.stock === 'number' && product.stock >= 0 && cartQty >= product.stock}
             aria-label={`Add one more ${product.name}`}
-            title={options ? 'Add another (choose size / add-ons)' : 'Add one more'}
-            className="flex h-[26px] w-7 items-center justify-center transition-colors hover:bg-coffee active:bg-action-press"
+            title={typeof product.stock === 'number' && product.stock >= 0 && cartQty >= product.stock
+              ? `Only ${product.stock} left`
+              : options ? 'Add another (choose size / add-ons)' : 'Add one more'}
+            className="flex h-[26px] w-7 items-center justify-center transition-colors hover:bg-coffee active:bg-action-press disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus size={13} />
           </button>
@@ -804,6 +808,14 @@ export function NewOrderPanel() {
 
   function handleAddProduct(p: Product) {
     if (!p.isAvailable) return;
+    // Phase 5 · Batch 6 (P4-INV-03): not more than the counted stock in the bill
+    if (typeof p.stock === 'number' && p.stock >= 0) {
+      const inBill = cart.filter(i => i.productId === p._id).reduce((n, i) => n + i.quantity, 0);
+      if (inBill >= p.stock) {
+        setSubmitError(p.stock === 0 ? `${p.name} is sold out.` : `Only ${p.stock} ${p.name} left.`);
+        return;
+      }
+    }
     const hasVariants = (p.variants ?? []).length > 0;
     const hasModifiers = (p.modifierGroups ?? []).length > 0;
     if (!hasVariants && !hasModifiers) {
