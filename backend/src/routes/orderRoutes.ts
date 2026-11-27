@@ -558,8 +558,20 @@ router.get('/', requireAdmin, async (req: AuthRequest, res: Response) => {
       to.setHours(23, 59, 59, 999);
       filter.createdAt = { $gte: from, $lte: to };
     }
-    if (req.query.status) filter.status = req.query.status;
-    if (req.query.source) filter.orderSource = req.query.source;
+    // Only plain strings (or repeated ?status=a&status=b) may reach the filter.
+    // sanitizeRequest strips "$" keys, so ?status[$ne]=x arrives as {} and used to 500.
+    const isStrOrStrList = (v: unknown) =>
+      typeof v === 'string' || (Array.isArray(v) && v.every(x => typeof x === 'string'));
+    if (req.query.status) {
+      const s = req.query.status;
+      if (!isStrOrStrList(s)) return res.status(400).json({ message: 'Invalid status filter' });
+      filter.status = Array.isArray(s) ? { $in: s } : s;
+    }
+    if (req.query.source) {
+      const s = req.query.source;
+      if (!isStrOrStrList(s)) return res.status(400).json({ message: 'Invalid source filter' });
+      filter.orderSource = Array.isArray(s) ? { $in: s } : s;
+    }
 
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 20), 200);
