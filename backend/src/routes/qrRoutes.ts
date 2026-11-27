@@ -51,6 +51,7 @@ import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
 import GatewayFactory from '../services/payment/GatewayFactory';
 import { isDueAtCounter } from '../utils/counterBilling';
 import { payBeforeKitchenEnabled } from '../utils/payBeforeKitchen';
+import { priceQrItems, type QrPricedItems } from '../utils/qrOrderItems';
 
 const router = Router();
 
@@ -116,66 +117,22 @@ async function validateHotelForQR(
 }
 
 // ── Shared helper: validate and price items against the product catalog ────────
-// orderSource is used to pick the correct channel price (kiosk/qr); falls back to base price.
+// Phase 5 · Batch 4: pricing lives in utils/qrOrderItems.ts (shared with the legacy route).
+// An unavailable item refuses the order (409, named) instead of being dropped; size, add-ons and
+// item notes are priced / kept the same way as on the POS.
 async function validateItems(
   res: Response,
   clientItems: any[],
   hotelId: string,
   orderSource: 'qr' | 'kiosk' = 'qr',
-): Promise<{ validatedItems: any[]; subtotal: number; taxTotal: number } | null> {
-  const productIds = clientItems
-    .map((i: any) => i.product)
-    .filter((id: any) => mongoose.isValidObjectId(String(id ?? '')));
-
-  const dbProducts = productIds.length > 0
-    ? await Product.find({
-        _id: { $in: productIds },
-        hotelId,
-        isAvailable: true,
-        isDeleted: { $ne: true },
-      }).select('_id name price taxPercent channelPrices').lean()
-    : [];
-
-  const productMap: Record<string, any> = {};
-  for (const p of dbProducts) productMap[(p._id as mongoose.Types.ObjectId).toString()] = p;
-
-  let subtotal = 0;
-  let taxTotal = 0;
-  const validatedItems: any[] = [];
-
-  for (const ci of clientItems) {
-    if (!ci.product || !mongoose.isValidObjectId(String(ci.product))) continue;
-    const prod = productMap[String(ci.product)];
-    if (!prod) continue;
-    const qty = Math.max(1, Math.floor(Number(ci.quantity) || 1));
-
-    // Resolve channel price: kiosk → channelPrices.kiosk, qr → channelPrices.qr, fallback to base price
-    const channelPrice = orderSource === 'kiosk'
-      ? (prod.channelPrices?.kiosk || null)
-      : (prod.channelPrices?.qr    || null);
-    const unitPrice = (channelPrice && channelPrice > 0) ? channelPrice : prod.price;
-
-    const taxAmt = (unitPrice * qty * (prod.taxPercent || 0)) / 100;
-    const total  = unitPrice * qty + taxAmt;
-    validatedItems.push({
-      product:     prod._id,
-      productName: prod.name,
-      quantity:    qty,
-      price:       unitPrice,
-      taxPercent:  prod.taxPercent || 0,
-      taxAmount:   +taxAmt.toFixed(2),
-      total:       +total.toFixed(2),
-    });
-    subtotal += unitPrice * qty;
-    taxTotal += taxAmt;
-  }
-
-  if (validatedItems.length === 0) {
-    res.status(400).json({ message: 'No valid items found in the order' });
+): Promise<QrPricedItems | null> {
+  const priced = await priceQrItems(clientItems, hotelId, orderSource);
+  if (priced.refusal) {
+    const { status, ...body } = priced.refusal;
+    res.status(status).json(body);
     return null;
   }
-
-  return { validatedItems, subtotal, taxTotal };
+  return priced.result;
 }
 
 // ── Helper: resolve tableId from body (preferred) or tableNumber lookup ────────
@@ -352,6 +309,28 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
     // Pay before kitchen: kiosk cash orders are held until the counter takes payment
     const heldForCounter = isKiosk && !kioskWantsRazorpay && await payBeforeKitchenEnabled(String(hotelId));
 
+    // ── Item validation + pricing (server-side; client prices never trusted) ──
+    // Phase 5 · Batch 4 (P4-QR-08): items and the payment gateway are checked BEFORE a table
+    // session, guest or customer profile is created, so a refused order leaves nothing behind.
+    const itemResult = await validateItems(res, clientItems, hotelId, validSource as 'qr' | 'kiosk');
+    if (!itemResult) return;
+
+    const { validatedItems, subtotal, taxTotal } = itemResult;
+    const grandTotal = +(subtotal + taxTotal).toFixed(2);
+
+    // ── QR always requires Razorpay; kiosk requires it only when Razorpay is selected ───
+    if (validSource === 'qr' || kioskWantsRazorpay) {
+      const gwConfig = await PaymentGatewayConfig.findOne({
+        hotelId:   new mongoose.Types.ObjectId(String(hotelId)),
+        isActive:  true,
+        isDeleted: false,
+      }).lean();
+      if (!gwConfig || !GatewayFactory.isRegistered(gwConfig.gatewayType as Parameters<typeof GatewayFactory.isRegistered>[0])) {
+        res.status(402).json({ code: 'NO_PAYMENT_GATEWAY', message: 'Online payment is not configured for this hotel. Please order at the counter.' });
+        return;
+      }
+    }
+
     let guest: any;
     let rawGuestToken = '';
 
@@ -403,10 +382,12 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       // ── Case A: First order — auto-create session + guest ─────────────────────
       const resolvedTableId = await resolveTableId(tableId, tableNumber, hotelId);
       if (!resolvedTableId) {
-        res.status(400).json({
-          code:    'TABLE_REQUIRED',
-          message: 'tableId or tableNumber is required for the first order',
-        });
+        // Phase 5 · Batch 4 (P4-QR-02): plain language for the guest; a table number that does
+        // not exist is reported as such (it used to get the developer "required" message).
+        const given = String(tableNumber ?? '').trim();
+        res.status(400).json(given
+          ? { code: 'TABLE_NOT_FOUND', message: `Table ${given.slice(0, 20)} was not found at this restaurant. Please ask staff for a new QR code.` }
+          : { code: 'TABLE_REQUIRED',  message: 'We could not tell which table you are at. Please scan the QR code on your table again.' });
         return;
       }
 
@@ -533,7 +514,9 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
       const newToken     = crypto.randomBytes(32).toString('hex');
       rawGuestToken      = newToken; // raw token returned to client; only its hash is stored
       const expiresAt    = new Date(Date.now() + session.qrTimeoutMinutes * 60 * 1000);
-      const displayLabel = (identMode !== 'disabled' && cleanName) ? cleanName : guestLabel(guestNumber);
+      // Phase 5 · Batch 4 (P4-QR-07): a name the guest chose to give is used in every mode;
+      // when identification is off it is optional and "Guest A/B/…" is used without one.
+      const displayLabel = cleanName || guestLabel(guestNumber);
 
       guest = await Guest.create({
         sessionId:        session._id,
@@ -555,26 +538,6 @@ router.post('/orders', qrWriteLimiter, async (req: Request, res: Response): Prom
         identMode,
         orderSource: validSource,
       });
-    }
-
-    // ── Item validation + pricing (server-side; client prices never trusted) ──
-    const itemResult = await validateItems(res, clientItems, hotelId, validSource as 'qr' | 'kiosk');
-    if (!itemResult) return;
-
-    const { validatedItems, subtotal, taxTotal } = itemResult;
-    const grandTotal = +(subtotal + taxTotal).toFixed(2);
-
-    // ── QR always requires Razorpay; kiosk requires it only when Razorpay is selected ───
-    if (validSource === 'qr' || kioskWantsRazorpay) {
-      const gwConfig = await PaymentGatewayConfig.findOne({
-        hotelId:   new mongoose.Types.ObjectId(String(hotelId)),
-        isActive:  true,
-        isDeleted: false,
-      }).lean();
-      if (!gwConfig || !GatewayFactory.isRegistered(gwConfig.gatewayType as Parameters<typeof GatewayFactory.isRegistered>[0])) {
-        res.status(402).json({ code: 'NO_PAYMENT_GATEWAY', message: 'Online payment is not configured for this hotel. Please order at the counter.' });
-        return;
-      }
     }
 
     // ── Generate order number (same atomic counter as orderRoutes.ts) ──────────

@@ -2,6 +2,7 @@ import type { Product } from '@dinepos/shared/types';
 import { QuantityStepper } from '@dinepos/shared/components';
 import { useCart } from '../../context/CartContext.tsx';
 import { useMenu } from '../../context/MenuContext.tsx';
+import { qrBasePrice } from '../../utils/qrMoney.ts';
 
 interface ProductCardProps {
   product: Product;
@@ -10,7 +11,9 @@ interface ProductCardProps {
 
 export function ProductCard({ product, onClick }: ProductCardProps) {
   const { addItem, removeItem, setQty, getQty, simpleLineId } = useCart();
-  const { hotel } = useMenu();
+  const { hotel, features } = useMenu();
+  const orderingOff = features?.qrOrdering === false;
+  const price  = qrBasePrice(product);
   const qty    = getQty(product._id);
   const symbol = hotel?.currencySymbol ?? '₹';
 
@@ -32,13 +35,13 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
       onClick(product);
       return;
     }
-    addItem({ productId: product._id, name: product.name, price: product.price, modifierTotal: 0, isVeg });
+    addItem({ productId: product._id, name: product.name, price, taxPercent: product.taxPercent, modifierTotal: 0, isVeg });
   }
 
   return (
     <div
       className="relative bg-white rounded-xl border border-[#E8D5C0] overflow-hidden active:scale-[0.98] transition-transform cursor-pointer"
-      onClick={() => !isSoldOut && onClick(product)}
+      onClick={() => !isSoldOut && !orderingOff && onClick(product)}
     >
       {product.image && (
         <img
@@ -74,9 +77,9 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
         )}
         <div className="flex items-center justify-between mt-2">
           <span className="text-sm font-semibold text-[#1C0800]">
-            {symbol}{product.price.toFixed(2)}
+            {symbol}{price.toFixed(2)}
           </span>
-          {isSoldOut ? (
+          {orderingOff ? null : isSoldOut ? (
             <span className="text-xs text-[#1C0800]/30 font-medium">Unavailable</span>
           ) : qty === 0 ? (
             <button
@@ -93,16 +96,19 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
               {qty}× <span className="text-[10px]">Edit</span>
             </button>
           ) : (
-            <QuantityStepper
-              quantity={qty}
-              min={0}
-              size="sm"
-              onIncrement={() => setQty(simpleLineId(product._id), qty + 1)}
-              onDecrement={() => {
-                if (qty <= 1) removeItem(simpleLineId(product._id));
-                else setQty(simpleLineId(product._id), qty - 1);
-              }}
-            />
+            // the stepper's taps only change the quantity; they must not reach the card (opens the sheet)
+            <div onClick={(e) => e.stopPropagation()}>
+              <QuantityStepper
+                quantity={qty}
+                min={0}
+                size="sm"
+                onIncrement={() => setQty(simpleLineId(product._id), qty + 1)}
+                onDecrement={() => {
+                  if (qty <= 1) removeItem(simpleLineId(product._id));
+                  else setQty(simpleLineId(product._id), qty - 1);
+                }}
+              />
+            </div>
           )}
         </div>
       </div>

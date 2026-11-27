@@ -7,6 +7,7 @@ import { MenuPage } from './pages/MenuPage.tsx';
 import { OrderStatusPage } from './pages/OrderStatusPage.tsx';
 import { BillPage } from './pages/BillPage.tsx';
 import { ErrorPage } from './pages/ErrorPage.tsx';
+import { setQrQuery } from './utils/qrLink.ts';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -46,6 +47,8 @@ export default function App() {
       </ErrorBoundary>
     );
   }
+
+  setQrQuery(hotelId, tableNumber);
 
   return (
     <ErrorBoundary>

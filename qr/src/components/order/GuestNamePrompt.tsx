@@ -2,18 +2,19 @@ import { useState } from 'react';
 import type { GuestInfo } from '../../types/qr.ts';
 
 interface GuestNamePromptProps {
+  requiresName?: boolean;
   requiresPhone: boolean;
   onSubmit:      (info: GuestInfo) => void;
 }
 
-export function GuestNamePrompt({ requiresPhone, onSubmit }: GuestNamePromptProps) {
+export function GuestNamePrompt({ requiresName = true, requiresPhone, onSubmit }: GuestNamePromptProps) {
   const [name, setName]   = useState('');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) {
+    if (requiresName && !name.trim()) {
       setError('Please enter your name');
       return;
     }
@@ -34,7 +35,7 @@ export function GuestNamePrompt({ requiresPhone, onSubmit }: GuestNamePromptProp
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="block text-xs font-medium text-[#1C0800]/60 mb-1">
-              Your name
+              {requiresName ? 'Your name' : 'Your name (optional)'}
             </label>
             <input
               type="text"

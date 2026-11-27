@@ -10,6 +10,8 @@ interface PlaceOrderParams {
   phone?:        string;
   notes?:        string;
   tableSessions: boolean;
+  /** Same id for every retry of the same cart: the server returns the order it already made. */
+  clientOrderId?: string;
 }
 
 interface PlaceOrderResponse {
@@ -23,6 +25,7 @@ function toApiItems(entries: CartEntry[]) {
     product:  e.productId,
     quantity: e.quantity,
     price:    e.price + e.modifierTotal,
+    variantId: e.variantId || undefined,
     selectedModifiers: (e.selectedModifiers ?? []).map(m => ({
       ...m,
       modifierTotal: m.modifierPrice * e.quantity,
@@ -45,26 +48,32 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
         phone:       params.phone,
         notes:       params.notes,
         orderSource: 'qr',
+        clientOrderId: params.clientOrderId,
       }),
     });
   }
 
-  // Legacy stateless flow — no session, no guestToken
-  const res = await publicFetch<{ order: { _id: string; orderNumber: string; grandTotal: number } }>(
+  // Legacy stateless flow — no session, no guestToken.
+  // Phase 5 · Batch 4 (P4-QR-10): QR orders are paid online here too (the server refuses
+  // anything else), and the server answers with the order itself, not { order }.
+  type LegacyOrder = { _id: string; orderNumber: string; grandTotal: number };
+  const res = await publicFetch<LegacyOrder | { order: LegacyOrder }>(
     '/public/orders',
     {
       method: 'POST',
       body: JSON.stringify({
-        hotelId:     params.hotelId,
-        tableNumber: params.tableNumber,
-        items:       toApiItems(params.items),
-        customerName: params.name,
-        notes:       params.notes,
-        orderSource: 'qr',
+        hotelId:       params.hotelId,
+        tableNumber:   params.tableNumber,
+        items:         toApiItems(params.items),
+        customerName:  params.name,
+        notes:         params.notes,
+        orderSource:   'qr',
+        paymentMethod: 'razorpay',
+        offlineId:     params.clientOrderId,
       }),
     },
   );
 
   // Wrap legacy response into the same shape for the caller
-  return { guestToken: '', order: res.order };
+  return { guestToken: '', order: 'order' in res ? res.order : res };
 }

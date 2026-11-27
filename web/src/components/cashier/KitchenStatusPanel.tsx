@@ -6,6 +6,7 @@ import {
 import { fetchCashierOrders } from '../../api/orders';
 import { ApiError } from '../../api/client';
 import { Spinner } from '../ui/Spinner';
+import { useSocket } from '../../context/SocketContext';
 import type { KDSOrder } from '../../types';
 
 const KITCHEN_STATUSES: readonly string[] = ['pending', 'preparing', 'ready'];
@@ -192,6 +193,18 @@ export function KitchenStatusPanel() {
     const tick = setInterval(() => setNowMs(Date.now()), 60_000);
     return () => { clearInterval(t); clearInterval(tick); };
   }, [load]);
+
+  // Phase 5 · Batch 4 (P4-KIT-02): live, like the kitchen display — reload when the kitchen
+  // changes a status or a new / cancelled order arrives (the 30 s reload stays as a fallback).
+  const { socket } = useSocket();
+  useEffect(() => {
+    if (!socket) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const handler = () => { clearTimeout(timer); timer = setTimeout(() => { void load(); }, 300); };
+    const events = ['order_status_update', 'order_status_change', 'order_served', 'order_completed', 'new_order', 'new_delivery_order'];
+    for (const e of events) socket.on(e, handler);
+    return () => { clearTimeout(timer); for (const e of events) socket.off(e, handler); };
+  }, [socket, load]);
 
   const pendingCount   = orders.filter(o => o.status === 'pending').length;
   const preparingCount = orders.filter(o => o.status === 'preparing').length;

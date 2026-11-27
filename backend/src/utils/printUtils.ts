@@ -14,9 +14,21 @@ export interface KOTPayload {
   tableNumber:  string;
   guestLabel?:  string;
   orderSource:  string;
-  items:        { productName: string; quantity: number; variantName?: string; modifierNames?: string[] }[];
+  // `modifiers` is what the mobile thermal printer prints under each line ("  + …"):
+  // size, add-ons and the item's note (Phase 5 · Batch 4). The other fields are unchanged.
+  items:        { productName: string; quantity: number; variantName?: string; modifierNames?: string[]; notes?: string; modifiers?: string[] }[];
   notes?:       string;
   createdAt:    string;
+}
+
+/** Lines the kitchen printer shows under an item: size, add-ons, then the guest's / cashier's note. */
+export function kotLineExtras(i: { variantName?: string; selectedModifiers?: { modifierOptionName?: string }[]; notes?: string }): string[] {
+  const out: string[] = [];
+  if (i.variantName) out.push(`Size: ${i.variantName}`);
+  for (const m of i.selectedModifiers ?? []) if (m?.modifierOptionName) out.push(m.modifierOptionName);
+  const note = String(i.notes ?? '').trim();
+  if (note) out.push(`Note: ${note}`);
+  return out;
 }
 
 export interface ReceiptPayload {
@@ -200,6 +212,8 @@ export async function scheduleKOTPrint(
       modifierNames: ((i as any).selectedModifiers || []).map((m: any) => m.modifierOptionName).filter(Boolean).length
         ? ((i as any).selectedModifiers as any[]).map(m => m.modifierOptionName)
         : undefined,
+      notes:         String((i as any).notes ?? '').trim() || undefined,
+      modifiers:     kotLineExtras(i as any).length ? kotLineExtras(i as any) : undefined,
     })),
     notes:        order.notes || undefined,
     createdAt:    order.createdAt instanceof Date

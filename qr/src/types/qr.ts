@@ -8,6 +8,7 @@ export interface CartEntry {
   productId:          string;
   name:               string;
   price:              number;          // effective unit price (variant/base)
+  taxPercent?:        number;          // the dish's GST %, for the cart's tax line
   modifierTotal:      number;          // sum of selected modifier prices per unit
   quantity:           number;
   isVeg:              boolean;
@@ -43,7 +44,7 @@ export interface QrOrderLine {
 export interface QrOrder {
   _id:         string;
   orderNumber: string;
-  status:      'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled';
+  status:      'payment_pending' | 'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled';
   items:       QrOrderLine[];
   grandTotal:  number;
   createdAt:   string;

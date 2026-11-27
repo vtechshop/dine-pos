@@ -6,6 +6,7 @@ import { TopBar } from './TopBar';
 import { Sidebar } from './Sidebar';
 import { RightPanel } from './RightPanel';
 import { StatusBar } from './StatusBar';
+import { WaiterCallAlerts } from './WaiterCallAlerts';
 import { MaintenancePage } from '../../pages/MaintenancePage';
 import { getPublicRemoteConfig } from '../../api/remoteConfig';
 
@@ -75,6 +76,8 @@ export function AppLayout() {
       </div>
 
       <StatusBar />
+      {/* Phase 5 · Batch 4: QR guests' waiter calls (not on the kitchen display) */}
+      {role !== 'kitchen' && <WaiterCallAlerts />}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { scheduleKOTPrint } from '../utils/printUtils';
 import PaymentGatewayConfig from '../models/PaymentGatewayConfig';
 import GatewayFactory from '../services/payment/GatewayFactory';
 import { payBeforeKitchenEnabled } from '../utils/payBeforeKitchen';
+import { priceQrItems } from '../utils/qrOrderItems';
 
 const router = Router();
 
@@ -57,13 +58,13 @@ const generateOrderNumber = async (hotelId: string): Promise<string> => {
 router.get('/menu', publicReadLimiter, async (req: Request, res: Response) => {
   try {
     const hotelId = await resolveHotelId(req.query.hotel as string | undefined);
-    if (!hotelId) return res.status(400).json({ error: 'hotel param required' });
+    if (!hotelId) return res.status(400).json({ error: 'hotel param required', message: 'This QR code is not valid. Please ask staff for a new QR code.' });
 
     // Return 404 for nonexistent hotels, 403 for suspended/inactive hotels
     const hotelDoc = await Hotel.findOne({ _id: hotelId }, { status: 1, features: 1 }).lean();
-    if (!hotelDoc) return res.status(404).json({ error: 'Hotel not found' });
+    if (!hotelDoc) return res.status(404).json({ error: 'Hotel not found', message: 'This QR code is not valid. Please ask staff for a new QR code.' });
     if (!['trial', 'active'].includes((hotelDoc as any).status)) {
-      return res.status(403).json({ error: 'This hotel is not currently active' });
+      return res.status(403).json({ error: 'This hotel is not currently active', message: 'This restaurant is not taking orders right now. Please ask staff.' });
     }
 
     const catFilter:  any = { isActive: true, isDeleted: false, hotelId };
@@ -72,7 +73,10 @@ router.get('/menu', publicReadLimiter, async (req: Request, res: Response) => {
 
     const [categories, products, settingsDoc] = await Promise.all([
       Category.find(catFilter).sort({ sortOrder: 1 }),
-      Product.find(prodFilter).select('-recipe').populate('category', 'name icon color').sort({ name: 1 }),
+      // Phase 5 · Batch 4: add-on groups are sent populated (the QR product sheet reads their options;
+      // unpopulated ids made it fail for any dish with add-ons). Same match rule as productRoutes, active only.
+      Product.find(prodFilter).select('-recipe').populate('category', 'name icon color')
+        .populate({ path: 'modifierGroups', match: { isDeleted: false, isActive: true } }).sort({ name: 1 }),
       Settings.findOne(settingsFilter),
     ]);
 
@@ -200,52 +204,18 @@ router.post('/orders', publicWriteLimiter, async (req: Request, res: Response) =
     }
 
     // All items must reference a product by ObjectId so prices are always verified
-    // against the server-side catalog. Items without a valid product ID are rejected.
-    const productIds = clientItems
-      .map((i: any) => i.product)
-      .filter((id: any) => mongoose.Types.ObjectId.isValid(String(id ?? '')));
-    const dbProducts = productIds.length > 0 ? await Product.find({
-      _id: { $in: productIds },
-      hotelId,
-      isAvailable: true,
-      isDeleted: { $ne: true },
-    }).select('_id name price taxPercent channelPrices').lean() : [];
-    const productMap: Record<string, any> = {};
-    for (const p of dbProducts) productMap[(p._id as mongoose.Types.ObjectId).toString()] = p;
-
-    let subtotal = 0;
-    let taxTotal = 0;
-    const validatedItems: any[] = [];
-
-    for (const ci of clientItems) {
-      if (ci.product && mongoose.Types.ObjectId.isValid(String(ci.product))) {
-        // DB-verified item: price comes from our product catalog
-        const prod = productMap[String(ci.product)];
-        if (!prod) continue; // product not found / unavailable — skip
-        const qty = Math.max(1, Math.floor(Number(ci.quantity) || 1));
-        const channelPrice =
-          orderSource === 'kiosk' ? ((prod as any).channelPrices?.kiosk || null) :
-          orderSource === 'qr'    ? ((prod as any).channelPrices?.qr    || null) : null;
-        const unitPrice = (channelPrice && channelPrice > 0) ? channelPrice : prod.price;
-        const taxAmt = (unitPrice * qty * (prod.taxPercent || 0)) / 100;
-        const total  = unitPrice * qty + taxAmt;
-        validatedItems.push({
-          product:     prod._id,
-          productName: prod.name,
-          quantity:    qty,
-          price:       unitPrice,
-          taxPercent:  prod.taxPercent || 0,
-          taxAmount:   +taxAmt.toFixed(2),
-          total:       +total.toFixed(2),
-        });
-        subtotal += unitPrice * qty;
-        taxTotal += taxAmt;
-      }
+    // against the server-side catalog. Phase 5 · Batch 4: the same pricing as the QR session
+    // flow (utils/qrOrderItems.ts) — an unavailable item refuses the order and is named
+    // (P4-QR-04), size / add-ons are priced and item notes kept (P4-QR-09).
+    if (clientItems.length > 50) {
+      return res.status(400).json({ message: 'Order cannot contain more than 50 items' });
     }
-
-    if (validatedItems.length === 0) {
-      return res.status(400).json({ message: 'No valid items' });
+    const priced = await priceQrItems(clientItems, hotelId, orderSource);
+    if (priced.refusal || !priced.result) {
+      const { status, ...body } = priced.refusal!;
+      return res.status(status).json(body);
     }
+    const { validatedItems, subtotal, taxTotal } = priced.result;
 
     // Verify Razorpay gateway is configured for orders that require it
     const isRazorpayOrder = wantsRazorpay && (orderSource === 'qr' || orderSource === 'kiosk');
