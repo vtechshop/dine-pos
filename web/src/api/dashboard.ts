@@ -1,6 +1,7 @@
 import { apiFetch } from './client';
 import { apiGetActiveShiftStats } from './shifts';
 import type { DailyReport, PrinterDeviceStatus } from '../types';
+import { istDateString } from '../utils/istDate';
 
 export async function fetchDailyReport(): Promise<DailyReport> {
   return apiFetch<DailyReport>('/orders/reports/daily');
@@ -18,7 +19,7 @@ export interface TopProduct {
 }
 
 export async function fetchTopProducts(): Promise<TopProduct[]> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istDateString();
   const res = await apiFetch<{ products: TopProduct[] }>(`/orders/reports/products?date=${today}`);
   return res.products;
 }
@@ -35,7 +36,7 @@ export async function fetchSalesSummary(role: string | null | undefined): Promis
   if (role !== 'cashier') return null;
   const s = await apiGetActiveShiftStats();
   const base = {
-    date: new Date().toISOString().slice(0, 10),
+    date: istDateString(),
     parcelOrders: 0,
     parcelRevenue: 0,
     sourceBreakdown: {},

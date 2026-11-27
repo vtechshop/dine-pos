@@ -1,4 +1,8 @@
-const BASE = `${import.meta.env.VITE_API_URL ?? 'http://localhost:5000/api'}/integrations/tally`;
+// Phase 5 · Batch 7 (P4-CATALOG-01): use the shared client so the login token is sent
+// (a bare fetch went out without it and always got 401).
+import { apiFetch as clientFetch } from './client';
+
+const BASE = '/integrations/tally';
 
 export interface TallyLedgerMap {
   salesLedger:       string;
@@ -56,17 +60,8 @@ export interface TallySyncJobsResponse {
   pages: number;
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as any).message ?? `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
+function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  return clientFetch<T>(`${BASE}${path}`, init);
 }
 
 export function fetchTallyConfig(): Promise<TallyConfig> {

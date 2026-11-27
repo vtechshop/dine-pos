@@ -1,7 +1,7 @@
 // Shared UI primitives for Super Admin aggregator pages
 // Uses DS v2 tokens: bg-canvas, bg-mist, border-border, text-ink, text-brand, bg-brand/10
 
-import { type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 // ── SAStat ─────────────────────────────────────────────────────────────────────
@@ -173,4 +173,50 @@ export function fmtAgo(iso: string | null | undefined): string {
 export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+// ── SAConfirm ───────────────────────────────────────────────────────────────────
+// Phase 5 · Batch 7 (P4-SA-01/02/03): actions that reach every hotel, or end a paid plan,
+// are confirmed first. Nothing is sent until "Yes, …" is pressed.
+
+export function SAConfirm({
+  title, body, confirmLabel, danger = true, busy = false, onConfirm, onCancel,
+}: {
+  title: string; body: ReactNode; confirmLabel: string; danger?: boolean; busy?: boolean;
+  onConfirm: () => void; onCancel: () => void;
+}) {
+  // Escape = Cancel (nothing is sent)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onCancel(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [busy, onCancel]);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
+      <div role="alertdialog" aria-modal="true" aria-label={title} className="w-full max-w-sm rounded-2xl border border-border bg-canvas p-6 shadow-xl">
+        <div className="mb-2 flex items-center gap-2">
+          {danger && <AlertTriangle size={18} className="shrink-0 text-red-600" />}
+          <h2 className="text-base font-bold text-ink">{title}</h2>
+        </div>
+        <div className="mb-5 text-sm text-ink/60">{body}</div>
+        <div className="flex gap-3">
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className={`flex flex-1 items-center justify-center rounded-lg py-2.5 text-sm font-semibold text-white transition disabled:opacity-60 ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-brand hover:opacity-90'}`}
+          >
+            {confirmLabel}
+          </button>
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-lg border border-border px-4 py-2.5 text-sm text-ink/60 transition hover:bg-mist disabled:opacity-60"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

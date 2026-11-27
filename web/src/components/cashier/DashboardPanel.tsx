@@ -17,6 +17,7 @@ import { fetchProductSalesReport } from '../../api/reports';
 import type { DailyReport } from '../../types';
 import type { CashierOrderItem } from '../../api/orders';
 import { formatMoney } from '../../utils/money';
+import { istDateString } from '../../utils/istDate';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -209,7 +210,7 @@ export function DashboardPanel({ onlineOrdersEnabled = null }: {
 
   const loadData = useCallback(async () => {
     let cancelled = false;
-    const today = new Date().toISOString().split('T')[0] ?? '';
+    const today = istDateString();
     const [rptRes, ordRes, topRes, pendRes] = await Promise.allSettled([
       fetchSalesSummary(role),   // cashier: own shift; admin: whole day
       fetchCashierOrders(),

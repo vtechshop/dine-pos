@@ -160,7 +160,8 @@ function CustomerDetail({ summary, sym, onBack }: { summary: CustomerSummary; sy
       fetchCustomerTransactions(summary.customerId, { limit: 10 }),
     ]);
     if (!cancelled) {
-      if (profRes.status === 'fulfilled') setProfile(profRes.value as unknown as CustomerProfile);
+      // Phase 5 · Batch 7 (P4-CATALOG-04): the server answers { customer } — the card read the wrapper
+      if (profRes.status === 'fulfilled' && profRes.value?.customer) setProfile(profRes.value.customer);
       if (txnRes.status === 'fulfilled') setTxns(txnRes.value.transactions);
       setLoading(false);
     }

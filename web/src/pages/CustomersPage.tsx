@@ -147,6 +147,9 @@ export function CustomersPage() {
   const [exportError, setExportError]       = useState<string | null>(null);
 
   const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Phase 5 · Batch 7: the search text when a customer was picked. The delayed (350 ms) reload for
+  // that same search must not close the customer just opened; a changed search still does.
+  const pickedAtSearch = useRef<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const exportMenuRef  = useRef<HTMLDivElement>(null);
 
@@ -186,7 +189,7 @@ export function CustomersPage() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      setSelectedId(null);
+      if (pickedAtSearch.current !== search) setSelectedId(null);
       setCustomers([]);
       void loadCustomers(search, 1, false);
     }, 350);
@@ -369,6 +372,7 @@ export function CustomersPage() {
             <button
               key={key}
               onClick={() => setActiveTab(key)}
+              aria-current={activeTab === key ? 'true' : undefined}
               className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-3 text-xs font-semibold transition-colors ${
                 activeTab === key
                   ? 'border-brand text-brand'
@@ -485,7 +489,7 @@ export function CustomersPage() {
                 </div>
               ) : (
                 visibleCustomers.map(c => (
-                  <CustomerRow key={c._id} customer={c} isSelected={selectedId === c._id} onClick={() => setSelectedId(c._id)} />
+                  <CustomerRow key={c._id} customer={c} isSelected={selectedId === c._id} onClick={() => { pickedAtSearch.current = search; setSelectedId(c._id); }} />
                 ))
               )}
               {customers.length < total && !listLoading && (

@@ -60,6 +60,7 @@ export interface IOrder extends Document {
   customerPhone: string;
   tableNumber: string;
   notes: string;
+  guestCount?: number | null;   // dine-in covers entered at the POS (Phase 5 · Batch 7, P4-POS)
   servedBy: string;
   servedAt: Date | null;
   completedBy: string;
@@ -244,6 +245,8 @@ const OrderSchema: Schema = new Schema(
       default: '',
       maxlength: [500, 'Notes cannot exceed 500 characters'],
     },
+    // Phase 5 · Batch 7: how many people the dine-in order is for. Optional; older orders have none.
+    guestCount: { type: Number, default: null, min: 1, max: 999 },
     orderSource: {
       type: String,
       enum: ['dine-in', 'takeaway', 'swiggy', 'zomato', 'qr', 'kiosk', 'waiter', 'admin'],

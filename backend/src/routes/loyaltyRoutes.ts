@@ -349,10 +349,14 @@ router.patch('/customers/:customerId', requireCashierOrAdmin, async (req: AuthRe
       'deliveryAddresses',
     ] as const;
 
+    // Phase 5 · Batch 7 (P4-CATALOG-02): a blank date or email on the edit form means "not set"
+    // (the model stores null); a filled one must still be MM-DD / is still validated.
+    const BLANK_IS_NULL = new Set(['email', 'birthday', 'anniversary']);
     let changed = false;
     for (const key of allowed) {
       if (req.body[key] !== undefined) {
-        (customer as any)[key] = req.body[key];
+        const v = req.body[key];
+        (customer as any)[key] = BLANK_IS_NULL.has(key) && typeof v === 'string' && v.trim() === '' ? null : v;
         changed = true;
       }
     }

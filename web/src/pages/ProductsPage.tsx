@@ -99,6 +99,7 @@ export function ProductsPage() {
             <button
               key={t}
               onClick={() => setTab(t)}
+              aria-current={tab === t ? 'true' : undefined}
               className={`-mb-px border-b-2 px-5 py-2.5 text-base font-medium capitalize transition-colors ${
                 tab === t
                   ? 'border-brand text-brand'
@@ -474,7 +475,7 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
 
       {/* Table */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto bg-canvas scrollbar-hide">
-        {alertMsg && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex justify-between"><span>{alertMsg}</span><button onClick={() => setAlertMsg(null)} className="ml-2 text-red-400 hover:text-red-600">✕</button></div>}
+        {alertMsg && <div role="alert" className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex justify-between"><span>{alertMsg}</span><button onClick={() => setAlertMsg(null)} className="ml-2 text-red-400 hover:text-red-600">✕</button></div>}
         {error && (
           <div className="m-5 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
             {error}
@@ -585,6 +586,9 @@ function ProductsPanel({ categories }: { categories: Category[] }) {
                       <button
                         onClick={() => { void toggleAvail(p); }}
                         disabled={toggling.has(p._id)}
+                        aria-pressed={p.isAvailable}
+                        aria-label={`${p.name} available`}
+                        title={p.isAvailable ? 'Available — click to switch off' : 'Switched off — click to make available'}
                         className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${
                           p.isAvailable ? 'bg-brand' : 'bg-ink/20'
                         }`}
@@ -703,7 +707,7 @@ function CategoriesPanel({
 
       {/* Grid */}
       <div className="flex-1 min-h-0 overflow-y-auto bg-canvas scrollbar-hide p-5">
-        {alertMsg && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex justify-between"><span>{alertMsg}</span><button onClick={() => setAlertMsg(null)} className="ml-2 text-red-400 hover:text-red-600">✕</button></div>}
+        {alertMsg && <div role="alert" className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex justify-between"><span>{alertMsg}</span><button onClick={() => setAlertMsg(null)} className="ml-2 text-red-400 hover:text-red-600">✕</button></div>}
         {categories.length === 0 ? (
           <div className="flex h-48 flex-col items-center justify-center text-ink/40">
             <p className="text-sm">No categories yet</p>

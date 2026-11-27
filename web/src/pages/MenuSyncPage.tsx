@@ -257,7 +257,7 @@ function PlatformSyncSection({ platform, integration, onToast }: PlatformSyncSec
       setStatus(s);
       onToast(
         res.failedCount === 0 ? 'success' : 'error',
-        `${PLATFORM_LABEL[platform]}: ${res.syncedCount} synced, ${res.failedCount} failed.`,
+        `${PLATFORM_LABEL[platform]}: ${res.syncedCount} synced, ${res.failedCount} failed${res.dryRun ? ' (test run — nothing was sent)' : ''}.`,
       );
     } catch (err) {
       onToast('error', err instanceof Error ? err.message : 'Sync failed');
@@ -1167,6 +1167,7 @@ export function MenuSyncPage() {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
+              aria-current={activeTab === tab.id ? 'true' : undefined}
               className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 activeTab === tab.id
                   ? 'bg-canvas text-ink shadow-sm'

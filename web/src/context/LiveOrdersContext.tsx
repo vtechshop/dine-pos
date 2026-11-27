@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { LiveOrder, LiveOrderItem } from '../types';
 import { useSocket } from './SocketContext';
 import { apiFetch } from '../api/client';
+import { istDateString } from '../utils/istDate';
 
 function playNewOrderBeep() {
   try {
@@ -195,7 +196,7 @@ export function LiveOrdersProvider({ children }: { children: ReactNode }) {
   // F-04: on socket reconnect, back-fill orders that arrived during the gap.
   useEffect(() => {
     if (reconnectCount === 0) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = istDateString();
     apiFetch<{ orders: unknown[] }>(`/orders?date=${today}&limit=50`)
       .then(res => {
         const seeded = (res.orders ?? [])

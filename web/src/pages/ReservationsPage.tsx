@@ -816,12 +816,14 @@ export function ReservationsPage() {
             <div className="flex rounded-lg border border-border overflow-hidden">
               <button
                 onClick={() => setTab('reservations')}
+                aria-current={tab === 'reservations' ? 'true' : undefined}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${tab === 'reservations' ? 'bg-brand text-white' : 'text-ink/50 hover:bg-ink/5'}`}
               >
                 <List size={12} /> Reservations
               </button>
               <button
                 onClick={() => setTab('waitlist')}
+                aria-current={tab === 'waitlist' ? 'true' : undefined}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${tab === 'waitlist' ? 'bg-brand text-white' : 'text-ink/50 hover:bg-ink/5'}`}
               >
                 <ListChecks size={12} /> Waitlist

@@ -25,6 +25,7 @@ import type { MorningBrief } from '../api/morningBrief';
 import { PALETTE } from '../theme/palette';
 import { isSale, fulfilledAt, saleValue } from '../utils/salesDefinitions';
 import { formatMoney } from '../utils/money';
+import { istDateString } from '../utils/istDate';
 
 // ── New-order badge state ──────────────────────────────────────────────────────
 // Tracked separately so socket events do NOT re-render the full table grid.
@@ -273,7 +274,7 @@ function HourlyRevenueCard({ symbol }: { symbol: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = istDateString();
     void (async () => {
       try {
         const { orders } = await fetchOrdersForHourly(today);

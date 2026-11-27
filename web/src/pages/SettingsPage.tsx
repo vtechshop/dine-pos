@@ -19,6 +19,7 @@ import { fetchSessionDevices, logoutDevice, logoutAllDevices } from '../api/devi
 import type { SessionDevice } from '../api/devices';
 import { fetchPrinterDevices } from '../api/dashboard';
 import { apiFetch } from '../api/client';
+import { fetchDiscountPolicy, updateDiscountPolicy } from '../api/orders';
 import { changePassword } from '../api/auth';
 import { StaffDrawer } from '../components/settings/StaffDrawer';
 import { ErrorPopup } from '../components/ui/ErrorPopup';
@@ -125,8 +126,14 @@ function useSave(refresh: () => Promise<void>) {
     [refresh],
   );
 
-  return { save, saving, msg };
+  // Phase 5 · Batch 7: a check on the form failed — show why, send nothing
+  const fail = useCallback((message: string) => setMsg(message), []);
+
+  return { save, saving, msg, fail };
 }
+
+// Phase 5 · Batch 7 (P4-CATALOG-12): a Bluetooth printer address is six hex pairs, e.g. 00:11:22:33:44:55
+const BT_MAC = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i;
 
 // ── ProfileSection ────────────────────────────────────────────────────────────
 
@@ -164,7 +171,7 @@ function toProfileDraft(s: Settings): ProfileDraft {
 
 function ProfileSection({ settings, refresh }: { settings: Settings; refresh: () => Promise<void> }) {
   const [d, setD] = useState<ProfileDraft>(toProfileDraft(settings));
-  const { save, saving, msg } = useSave(refresh);
+  const { save, saving, msg, fail } = useSave(refresh);
 
   useEffect(() => setD(toProfileDraft(settings)), [settings]);
 
@@ -286,7 +293,14 @@ function ProfileSection({ settings, refresh }: { settings: Settings; refresh: ()
         </div>
       </SectionCard>
 
-      <SaveRow onSave={() => void save(d)} saving={saving} msg={msg} />
+      <SaveRow
+        onSave={() => (d.hotelName.trim()
+          ? void save(d)
+          // P4-CATALOG-11: the name is on every bill — it cannot be blank
+          : fail('Hotel name is required'))}
+        saving={saving}
+        msg={msg}
+      />
     </div>
   );
 }
@@ -633,6 +647,7 @@ function StaffSection() {
         onDeleteConfirm={() => void handleDelete()}
         onDeleteCancel={() => setConfirmDel(null)}
       />
+      <CashierPermissionsCard />
       {drawer && (
         <StaffDrawer
           role={drawer.role}
@@ -642,6 +657,67 @@ function StaffSection() {
         />
       )}
     </div>
+  );
+}
+
+// ── Cashier permissions ───────────────────────────────────────────────────────
+// Phase 5 · Batch 7 (P4-CATALOG-09): the POS tells cashiers to ask the admin for the discount
+// permission, but nothing let the admin grant it. The rule already exists on the server
+// (GET/PATCH /orders/discount-policy, enforced on every order): cashiers may discount up to this
+// % of the bill; 0 = cashiers cannot discount. It applies to every cashier of the hotel.
+
+function CashierPermissionsCard() {
+  const [value, setValue]   = useState<string>('');
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg]       = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchDiscountPolicy()
+      .then(p => { setValue(String(p.maxCashierDiscountPercent ?? 0)); setLoaded(true); })
+      .catch(() => setMsg('Could not load the cashier discount limit'));
+  }, []);
+
+  const save = async () => {
+    const n = Number(value);
+    if (value.trim() === '' || !Number.isFinite(n) || n < 0 || n > 100) {
+      setMsg('Enter a percentage from 0 to 100');
+      return;
+    }
+    setSaving(true);
+    setMsg(null);
+    try {
+      const r = await updateDiscountPolicy(n);
+      setValue(String(r.maxCashierDiscountPercent));
+      setMsg('Saved ✓');
+      setTimeout(() => setMsg(null), 2500);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const pct = Number(value) || 0;
+  return (
+    <SectionCard title="Cashier Permissions">
+      <F label="Cashier discount limit (% of bill)">
+        <input
+          type="number" min={0} max={100} step={1}
+          value={value}
+          disabled={!loaded}
+          onChange={e => setValue(e.target.value)}
+          className={inp}
+        />
+      </F>
+      <p className="mt-2 text-xs text-ink/50">
+        {pct > 0
+          ? `Cashiers can apply a discount of up to ${pct}% of the bill. The server refuses anything above it.`
+          : 'Cashiers cannot apply discounts (0%). Set a percentage to grant the discount permission to all cashiers.'}
+        {' '}Admins can always discount.
+      </p>
+      <SaveRow onSave={() => void save()} saving={saving} msg={msg} />
+    </SectionCard>
   );
 }
 
@@ -695,7 +771,7 @@ function toPrinterDraft(s: Settings): PrinterDraft {
 
 function PrintersSection({ settings, refresh }: { settings: Settings; refresh: () => Promise<void> }) {
   const [d, setD] = useState<PrinterDraft>(toPrinterDraft(settings));
-  const { save, saving, msg } = useSave(refresh);
+  const { save, saving, msg, fail } = useSave(refresh);
   const [kitchenPin, setKitchenPin] = useState('');
   const [pinSaving, setPinSaving] = useState(false);
   const [pinMsg, setPinMsg] = useState<string | null>(null);
@@ -785,7 +861,16 @@ function PrintersSection({ settings, refresh }: { settings: Settings; refresh: (
           />
           <span className="text-xs text-ink/70">Auto-print KOT on new order</span>
         </label>
-        <SaveRow onSave={() => void save(d)} saving={saving} msg={msg} />
+        <SaveRow
+          onSave={() => {
+            const bad = [['Cashier', d.cashierPrinterAddress], ['Kitchen', d.kitchenPrinterAddress]]
+              .find(([, a]) => a.trim() !== '' && !BT_MAC.test(a.trim()));
+            if (bad) { fail(`${bad[0]} printer: enter a Bluetooth address like 00:11:22:33:44:55`); return; }
+            void save({ ...d, cashierPrinterAddress: d.cashierPrinterAddress.trim(), kitchenPrinterAddress: d.kitchenPrinterAddress.trim() });
+          }}
+          saving={saving}
+          msg={msg}
+        />
       </SectionCard>
 
       <OrderFlowCard settings={settings} refresh={refresh} />
@@ -1118,7 +1203,23 @@ const FEATURE_LABELS: Record<string, string> = {
   digitalReceipts: 'Digital Receipts',
   customerOrderHistory: 'Order History',
   marketingCampaigns: 'Marketing Campaigns',
+  // Phase 5 · Batch 7 (P4-CATALOG-13): the rest of the hotel's flags were not shown at all
+  shift: 'Shift Management',
+  kiosk: 'Kiosk Mode',
+  ai: 'AI Suite',
+  supplyChain: 'Supply Chain (purchasing)',
+  tally: 'Tally Sync',
+  multiBranch: 'Multi-Branch',
+  orgLoyalty: 'Shared Loyalty (all branches)',
 };
+
+// Any flag the server sends that has no label yet is still listed, by its key
+function featureRows(flags: Record<string, unknown>): [string, string][] {
+  const extra = Object.keys(flags)
+    .filter(k => !(k in FEATURE_LABELS) && (typeof flags[k] === 'boolean' || typeof flags[k] === 'string'))
+    .map(k => [k, k.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase())] as [string, string]);
+  return [...Object.entries(FEATURE_LABELS), ...extra];
+}
 
 const PLAN_LABELS: Record<string, string> = {
   trial: 'Free Trial',
@@ -1177,7 +1278,7 @@ function FeaturesSection({ settings }: { settings: Settings }) {
         </p>
         {flags ? (
           <div className="grid grid-cols-2 gap-2">
-            {Object.entries(FEATURE_LABELS).map(([key, label]) => {
+            {featureRows(flags as Record<string, unknown>).map(([key, label]) => {
               const raw = (flags as Record<string, unknown>)[key];
               const isEnum = key === 'customerIdentification';
               const enabled = typeof raw === 'boolean' ? raw : (raw !== undefined && raw !== 'disabled');
@@ -1390,10 +1491,12 @@ const TABS: TabDef[] = [
 // ── SettingsPage ──────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
-  const { settings, loading, refresh } = useSettings();
+  const { settings, refresh } = useSettings();
   const [tab, setTab] = useState<Tab>('profile');
 
-  if (loading || !settings) {
+  // Phase 5 · Batch 7 (P4-CATALOG-10): only the first load shows the placeholder. A reload after
+  // Save kept unmounting the section, so its "Saved ✓" confirmation was never seen.
+  if (!settings) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-ink/30">
         Loading settings…
@@ -1413,6 +1516,7 @@ export function SettingsPage() {
             <li key={id}>
               <button
                 onClick={() => setTab(id)}
+                aria-current={tab === id ? 'page' : undefined}
                 className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors ${
                   tab === id
                     ? 'bg-brand text-white'

@@ -119,6 +119,7 @@ export interface CreateOrderPayload {
   customerName?: string;
   customerPhone?: string;
   notes?: string;
+  guestCount?: number;   // dine-in covers
   isParcel?: boolean;
   discountAmount?: number;
   couponCode?: string;

@@ -7,6 +7,7 @@ import {
   type Hotel, type ApproveResponse, type HotelSettingsPayload,
 } from '../../api/superAdmin';
 import { Spinner } from '../../components/ui/Spinner';
+import { SAConfirm } from '../../components/ui/SAShared';
 
 const STATUS_BADGE: Record<string, string> = {
   pending:   'bg-amber-50 text-amber-700 border-amber-200',
@@ -66,6 +67,15 @@ const FEATURE_GROUPS: { section: string; flags: [BoolFeatureKey, string][] }[] =
       ['shift', 'Shift Management'],
       ['kiosk', 'Kiosk Mode'],
       ['ai',    'AI Suite'],
+    ],
+  },
+  {
+    // Phase 5 · Batch 7 (P4-SA-06): these gate whole modules and had no switch anywhere
+    section: 'Modules',
+    flags: [
+      ['supplyChain', 'Supply Chain (purchasing)'],
+      ['tally',       'Tally Sync'],
+      ['multiBranch', 'Multi-Branch'],
     ],
   },
 ];
@@ -251,6 +261,8 @@ export function HotelDetailPage() {
 
   // Subscription plan
   const [selectedPlan,    setSelectedPlan]    = useState<PlanId | null>(null);
+  // Phase 5 · Batch 7 (P4-SA-03): moving a paid hotel to Trial ends its paid plan — confirm first
+  const [confirmTrial,    setConfirmTrial]    = useState(false);
   const [planTrialDays,   setPlanTrialDays]   = useState(14);
   const [settingPlan,     setSettingPlan]     = useState(false);
   const [planError,       setPlanError]       = useState<string | null>(null);
@@ -384,7 +396,16 @@ export function HotelDetailPage() {
     }
   }
 
+  function requestSetPlan() {
+    if (selectedPlan === 'trial' && hotel && hotel.subscriptionType && hotel.subscriptionType !== 'trial') {
+      setConfirmTrial(true);
+      return;
+    }
+    void handleSetPlan();
+  }
+
   async function handleSetPlan() {
+    setConfirmTrial(false);
     if (!id || !selectedPlan) return;
     setSettingPlan(true); setPlanError(null);
     try {
@@ -494,6 +515,8 @@ export function HotelDetailPage() {
   }
 
   const isPending   = hotel.status === 'pending';
+  // P4-SA-05: the end date the server enforces (a trial sets both; a paid plan only subscriptionEndDate)
+  const planEnd     = hotel.subscriptionEndDate || hotel.trialEndDate;
   const canSuspend  = hotel.status === 'trial' || hotel.status === 'active';
   const canActivate = hotel.status === 'suspended' || hotel.status === 'expired';
   const canExtend   = hotel.status === 'trial';
@@ -720,19 +743,33 @@ export function HotelDetailPage() {
             <div>
               <p className="text-xs text-ink/50">Expiry Date</p>
               <p className="mt-0.5 font-semibold text-ink">
-                {fmt(hotel.trialEndDate || hotel.subscriptionEndDate)}
+                {fmt(planEnd)}
               </p>
             </div>
             <div>
               <p className="text-xs text-ink/50">Days Remaining</p>
               <p className="mt-0.5 font-semibold text-ink">
                 {(() => {
-                  const d = remainingDays(hotel.trialEndDate || hotel.subscriptionEndDate);
+                  const d = remainingDays(planEnd);
                   return d === null ? '—' : `${d}d`;
                 })()}
               </p>
             </div>
           </div>
+
+          {confirmTrial && (
+            <SAConfirm
+              title="End the paid plan?"
+              body={<>
+                <strong className="text-ink">{hotel.hotelName}</strong> is on the paid <span className="capitalize">{hotel.subscriptionType}</span> plan until {fmt(planEnd)}.
+                Moving it to a {planTrialDays}-day trial replaces that plan, and the paid days left are lost.
+              </>}
+              confirmLabel="Yes, move to Trial"
+              busy={settingPlan}
+              onConfirm={() => void handleSetPlan()}
+              onCancel={() => setConfirmTrial(false)}
+            />
+          )}
 
           <p className="mb-2 text-sm font-medium text-ink/70">Change Plan</p>
           <div className="flex flex-wrap gap-2">
@@ -769,7 +806,7 @@ export function HotelDetailPage() {
 
           {selectedPlan && (
             <button
-              onClick={handleSetPlan}
+              onClick={requestSetPlan}
               disabled={settingPlan}
               className="mt-3 flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand/90 disabled:opacity-60"
             >

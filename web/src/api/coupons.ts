@@ -56,7 +56,8 @@ export const fetchCoupons = (params?: {
 export const createCoupon = (data: CouponInput): Promise<{ coupon: Coupon }> =>
   apiFetch<{ coupon: Coupon }>('/coupons', { method: 'POST', body: JSON.stringify(data) });
 
-export const updateCoupon = (id: string, data: Partial<CouponInput>): Promise<{ coupon: Coupon }> =>
+// validUntil: null removes the end date (Phase 5 · Batch 7, P4-CATALOG-17)
+export const updateCoupon = (id: string, data: Omit<Partial<CouponInput>, 'validUntil'> & { validUntil?: string | null }): Promise<{ coupon: Coupon }> =>
   apiFetch<{ coupon: Coupon }>(`/coupons/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 
 export const deleteCoupon = (id: string): Promise<void> =>

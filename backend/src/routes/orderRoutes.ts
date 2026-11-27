@@ -979,6 +979,9 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       customerName:        b.customerName,
       customerPhone:       b.customerPhone,
       notes:               b.notes,
+      // Phase 5 · Batch 7: dine-in guest count from the POS (a whole number 1–999, else not stored)
+      guestCount:          b.orderSource === 'dine-in' && Number.isInteger(Number(b.guestCount)) && Number(b.guestCount) >= 1 && Number(b.guestCount) <= 999
+                             ? Number(b.guestCount) : null,
       orderSource:         b.orderSource,
       isParcel:            b.isParcel,
       paymentMethod:       b.paymentMethod,
@@ -1996,15 +1999,18 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
 
             const earnProfile = await CustomerProfile.findOne({
               hotelId: new mongoose.Types.ObjectId(req.hotelId),
-              phone,
+              // Phase 5 · Batch 7 (P4-CATALOG-03): profiles store the normalised phone (+91…), the
+              // order holds it as typed — match both, as the cancel path already does.
+              phone:   { $in: [phone, normalizePhone(phone)].filter(Boolean) as string[] },
               status:  { $ne: 'merged' },
             }).select('_id loyaltyOptOut orgCustomerId').lean();
             if (!earnProfile) return;
 
-            // lifetimeSpend is incremented once per completed order (gated by claimedOrder above)
+            // lifetimeSpend and the visit are counted once per completed order (gated by claimedOrder
+            // above). Dine-in counts its visit per table session instead and never reaches here.
             await CustomerProfile.findByIdAndUpdate(
               (earnProfile as any)._id,
-              { $inc: { lifetimeSpend: existing.grandTotal }, $set: { lastVisitAt: new Date() } },
+              { $inc: { lifetimeSpend: existing.grandTotal, visitCount: 1 }, $set: { lastVisitAt: new Date() } },
             ).catch(() => {});
 
             // Determine if org-loyalty is active for this customer

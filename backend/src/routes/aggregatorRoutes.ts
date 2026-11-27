@@ -624,8 +624,19 @@ router.get(
 
       const integrations = await Promise.all(
         PLATFORMS.map(async platform => {
-          let integration = await AggregatorIntegration.findOne({ hotelId, platform });
-          if (!integration) integration = await AggregatorIntegration.create({ hotelId, platform });
+          // Phase 5 · Batch 7: find-or-create in ONE atomic upsert. The top-bar Swiggy / Zomato pills
+          // load this list on every admin page, so on a hotel's first visit to Integrations two
+          // requests both found nothing, both created, and the second failed (unique {hotelId,
+          // platform} → HTTP 500, the page showed no integration). Existing records are untouched.
+          const integration = await AggregatorIntegration.findOneAndUpdate(
+            { hotelId, platform },
+            { $setOnInsert: { hotelId, platform } },
+            { upsert: true, new: true, setDefaultsOnInsert: true },
+          ).catch(async (e: any) => {
+            if (e?.code !== 11000) throw e;
+            return AggregatorIntegration.findOne({ hotelId, platform });   // the other request created it
+          });
+          if (!integration) throw new Error('integration not found after create');
           const todayOrderCount = await Order.countDocuments({
             hotelId, orderSource: platform, createdAt: { $gte: today },
           });
@@ -634,7 +645,8 @@ router.get(
       );
       res.json({ integrations });
     } catch (err: any) {
-      res.status(500).json({ message: err.message || 'Server error' });
+      logger.error('[aggregator] integrations list failed', { error: String(err) });
+      res.status(500).json({ message: 'Could not load the integrations. Please try again.' });
     }
   },
 );
@@ -683,15 +695,23 @@ router.get(
         return res.status(400).json({ message: `Invalid platform. Must be one of: ${PLATFORMS.join(', ')}` });
       }
       const hotelId = req.hotelId!;
-      let integration = await AggregatorIntegration.findOne({ hotelId, platform });
-      if (!integration) integration = await AggregatorIntegration.create({ hotelId, platform });
+      // Phase 5 · Batch 7: one atomic find-or-create (see GET /integrations)
+      const integration = await AggregatorIntegration.findOneAndUpdate(
+        { hotelId, platform },
+        { $setOnInsert: { hotelId, platform } },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      ).catch(async (e: any) => {
+        if (e?.code !== 11000) throw e;
+        return AggregatorIntegration.findOne({ hotelId, platform });
+      });
+      if (!integration) throw new Error('integration not found after create');
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const todayOrderCount = await Order.countDocuments({ hotelId, orderSource: platform, createdAt: { $gte: today } });
       res.json({ integration: safeIntegration(integration, { todayOrderCount }) });
     } catch (err: any) {
-      res.status(500).json({ message: err.message || 'Server error' });
-    }
-  },
+      logger.error('[aggregator] integration load failed', { platform: req.params.platform, error: String(err) });
+      res.status(500).json({ message: 'Could not load the settings. Please try again.' });
+    }  },
 );
 
 // PUT /api/aggregator/integrations/:platform — create/update (upsert)
@@ -733,7 +753,17 @@ router.put(
       const todayOrderCount = await Order.countDocuments({ hotelId, orderSource: platform, createdAt: { $gte: today } });
       res.json({ integration: safeIntegration(integration, { todayOrderCount }) });
     } catch (err: any) {
-      res.status(500).json({ message: err.message || 'Server error' });
+      // Phase 5 · Batch 7 (P4-CATALOG-22): a store ID already linked to another outlet is the admin's
+      // problem to fix — say so (409) instead of a 500 that showed the raw database error.
+      if (err?.code === 11000 && (err?.keyPattern?.storeId || String(err?.message).includes('storeId'))) {
+        const label = req.params.platform === 'zomato' ? 'Zomato' : 'Swiggy';
+        return res.status(409).json({
+          message: `This ${label} store ID is already linked to another outlet. Check the store ID, or contact support.`,
+          code: 'STORE_ID_TAKEN',
+        });
+      }
+      logger.error('[aggregator] integration save failed', { platform: req.params.platform, error: String(err) });
+      res.status(500).json({ message: 'Could not save the settings. Please try again.' });
     }
   },
 );

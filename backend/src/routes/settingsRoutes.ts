@@ -131,6 +131,14 @@ router.put('/', requireAdmin, async (req: AuthRequest, res: Response) => {
       if (SETTINGS_ALLOWED_FIELDS.has(k)) body[k] = v;
     }
 
+    // Phase 5 · Batch 7 (P4-CATALOG-11): the hotel name is printed on every bill and shown to
+    // Super Admin — it may be changed but not blanked.
+    if ('hotelName' in body) {
+      const name = typeof body.hotelName === 'string' ? body.hotelName.trim() : '';
+      if (!name) return res.status(400).json({ message: 'Hotel name is required', code: 'HOTEL_NAME_REQUIRED' });
+      body.hotelName = name;
+    }
+
     // Legal fields: drop unchanged/empty values (other screens resend the whole
     // settings object), reject edits to saved values, validate formats.
     const legalKeys = Object.keys(body).filter(k => k in LEGAL_FIELDS);
@@ -174,7 +182,7 @@ router.put('/', requireAdmin, async (req: AuthRequest, res: Response) => {
 
     // Keep Hotel record in sync so Super Admin dashboard shows the latest name/phone
     const syncFields: Record<string, any> = {};
-    if (req.body.hotelName)  syncFields.hotelName  = req.body.hotelName;
+    if (body.hotelName)      syncFields.hotelName  = body.hotelName;   // trimmed above (Batch 7)
     if (req.body.phone)      syncFields.phone       = req.body.phone;
     if (req.body.ownerName)  syncFields.ownerName   = req.body.ownerName;
     if (Object.keys(syncFields).length > 0) {

@@ -115,8 +115,17 @@ router.get('/hotels', superAdminAuth, async (req: Request, res: Response) => {
 
     const filter: any = {};
     if (status && status !== 'all') filter.status = status;
-    // H-8: use $text index instead of per-field regex — eliminates full collection scan
-    if (search) filter.$text = { $search: String(search) };
+    // Phase 5 · Batch 7 (P4-SA-10): the box promises name / owner / phone search, so match any part
+    // of them (the $text index only found whole words and the full phone). The term is escaped and
+    // capped; the hotel collection is small and the query keeps its 10 s limit.
+    const term = String(search ?? '').trim().slice(0, 60);
+    if (term) {
+      const rx = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const or: any[] = [{ hotelName: rx }, { ownerName: rx }, { phone: rx }, { adminId: rx }, { fssaiNumber: rx }];
+      const digits = term.replace(/\D/g, '');
+      if (digits.length >= 3 && digits !== term) or.push({ phone: new RegExp(digits) });
+      filter.$or = or;
+    }
 
     const [hotels, total] = await Promise.all([
       Hotel.find(filter)
@@ -402,12 +411,16 @@ router.put('/hotels/:id/suspend', superAdminAuth, async (req: Request, res: Resp
 router.put('/hotels/:id/activate', superAdminAuth, async (req: Request, res: Response) => {
   try {
     if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
-    const preCheck = await Hotel.findById(req.params.id).select('status adminId').lean();
+    const preCheck = await Hotel.findById(req.params.id).select('status adminId subscriptionType').lean();
     if (!preCheck) return res.status(404).json({ message: 'Hotel not found' });
     if (!preCheck.adminId) return res.status(409).json({ message: 'Hotel has no credentials. Approve it first.' });
     if (preCheck.status === 'active') return res.status(409).json({ message: 'Hotel is already active' });
+    // Phase 5 · Batch 7 (P4-SA-04): a hotel on a trial goes back to its trial; "active" means a paid plan.
+    // The trial / plan end dates are unchanged (an ended trial still expires as before).
+    const restored = (preCheck as any).subscriptionType === 'trial' ? 'trial' : 'active';
+    if (preCheck.status === restored) return res.status(409).json({ message: `Hotel is already ${restored}` });
     const hotel = await Hotel.findByIdAndUpdate(
-      req.params.id, { status: 'active' }, { new: true }
+      req.params.id, { status: restored }, { new: true }
     ).select('-adminPasswordHash');
     if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
     await invalidateStatusCache(req.params.id);
@@ -623,6 +636,8 @@ router.put('/hotels/:id/features', superAdminAuth, async (req: Request, res: Res
       'customerOrderHistory', 'marketingCampaigns',
       // v1.2 flags
       'shift', 'kiosk', 'ai',
+      // Phase 5 · Batch 7 (P4-SA-06): module flags that nothing could switch before
+      'supplyChain', 'tally', 'multiBranch',
     ];
     // String-enum flags — validate allowed values
     const enumFlags: Record<string, string[]> = {
@@ -1748,10 +1763,15 @@ router.patch('/leads/:id', superAdminAuth, async (req: Request, res: Response) =
     }
     if (!Object.keys(update).length) return res.status(400).json({ message: 'No valid fields to update' });
 
-    // Add timeline event for status change
-    const timelineEntry = req.body.status
+    // Add timeline event for status change — Phase 5 · Batch 7 (P4-SA-08): only when the value
+    // really changes (the page sends the current status with every save, e.g. notes only)
+    const current = await Lead.findById(req.params.id).select('status assignedTo').lean();
+    if (!current) return res.status(404).json({ message: 'Lead not found' });
+    const statusChanged = !!req.body.status && req.body.status !== (current as any).status;
+    const assigneeChanged = !!req.body.assignedTo && String(req.body.assignedTo) !== String((current as any).assignedTo ?? '');
+    const timelineEntry = statusChanged
       ? { event: `Status changed to ${req.body.status}`, actor: 'superadmin', createdAt: new Date() }
-      : req.body.assignedTo
+      : assigneeChanged
         ? { event: `Assigned to ${req.body.assignedTo}`, actor: 'superadmin', createdAt: new Date() }
         : null;
 

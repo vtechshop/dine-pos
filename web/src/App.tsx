@@ -110,8 +110,10 @@ function AdminOnly({ children }: { children: React.ReactNode }) {
 
 // Redirect cashier away from admin/kitchen pages to their own POS interface,
 // and kitchen staff to the Kitchen Display (the only screen they use).
-function CashierRedirect({ children, kitchenPage = false }: { children: React.ReactNode; kitchenPage?: boolean }) {
+// Phase 5 · Batch 7 (P4-AUTH-01): a waiter session only has the Tables screen on the web.
+function CashierRedirect({ children, kitchenPage = false, waiterPage = false }: { children: React.ReactNode; kitchenPage?: boolean; waiterPage?: boolean }) {
   const { role } = useAuth();
+  if (role === 'waiter' && !waiterPage) return <Navigate to="/tables" replace />;
   if (role === 'cashier') return <Navigate to="/cashier" replace />;
   if (role === 'kitchen' && !kitchenPage) return <Navigate to="/kitchen" replace />;
   return <>{children}</>;
@@ -121,6 +123,7 @@ function CashierRedirect({ children, kitchenPage = false }: { children: React.Re
 function NotKitchen({ children }: { children: React.ReactNode }) {
   const { role } = useAuth();
   if (role === 'kitchen') return <Navigate to="/kitchen" replace />;
+  if (role === 'waiter') return <Navigate to="/tables" replace />;
   return <>{children}</>;
 }
 
@@ -194,7 +197,7 @@ export function App() {
                   <Route element={<AppLayout />}>
                     <Route index element={<Navigate to="/dashboard" replace />} />
                     <Route path="/dashboard"   element={<CashierRedirect><DashboardPage /></CashierRedirect>} />
-                    <Route path="/tables"      element={<CashierRedirect><TablesPage /></CashierRedirect>} />
+                    <Route path="/tables"      element={<CashierRedirect waiterPage><TablesPage /></CashierRedirect>} />
                     <Route path="/kitchen"     element={<CashierRedirect kitchenPage><KitchenPage /></CashierRedirect>} />
                     <Route path="/kitchen/stock" element={<CashierRedirect kitchenPage><KitchenStockPage /></CashierRedirect>} />
                     <Route path="/cashier"     element={<NotKitchen><CashierPage /></NotKitchen>} />

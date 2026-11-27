@@ -39,6 +39,10 @@ interface TableWithSession extends Table {
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
+// Phase 5 · Batch 7 (P4-TBL-03): a table is occupied when it has an open session OR staff marked it
+// occupied (status override). The card used both, the detail panel and the counters only the session.
+const tableOccupied = (t: { session?: unknown; status?: string }) => !!t.session || t.status === 'occupied';
+
 const STATUS_CONFIG: Record<string, { label: string; bg: string; border: string; dot: string; text: string }> = {
   available: {
     label: 'Available',
@@ -260,7 +264,7 @@ function TableDetailPanel({
           <UtensilsCrossed size={16} className="text-brand" />
           <div>
             <p className="text-sm font-bold text-ink">{table.name || `Table ${table.number}`}</p>
-            <p className="text-[10px] text-ink/50">{table.capacity} seats · {isOccupied ? 'Occupied' : 'Available'}</p>
+            <p className="text-[10px] text-ink/50">{table.capacity} seats · {tableOccupied(table) ? 'Occupied' : 'Available'}</p>
           </div>
         </div>
         <button type="button" onClick={onClose} className="rounded-lg border border-border p-1 text-ink/40 hover:bg-mist">
@@ -322,7 +326,7 @@ function TableDetailPanel({
             Open Table &amp; New Order
           </button>
         ) : null}
-        {!isOccupied && (
+        {!tableOccupied(table) && (
           <button
             type="button"
             onClick={() => void handleOccupy()}
@@ -516,13 +520,13 @@ export function CashierTablePanel() {
       (t.name ?? '').toLowerCase().includes(search.toLowerCase());
     const matchStatus =
       filterStatus === 'all' ||
-      (filterStatus === 'occupied' && !!t.session) ||
-      (filterStatus === 'available' && !t.session);
+      (filterStatus === 'occupied' && tableOccupied(t)) ||
+      (filterStatus === 'available' && !tableOccupied(t));
     return matchSearch && matchStatus;
   });
 
-  const occupiedCount  = tables.filter(t => !!t.session).length;
-  const availableCount = tables.filter(t => !t.session && t.status !== 'inactive').length;
+  const occupiedCount  = tables.filter(tableOccupied).length;
+  const availableCount = tables.filter(t => !tableOccupied(t) && t.status !== 'inactive').length;
   const totalSales     = tables
     .reduce((sum, t) => sum + (t.session?.runningTotal ?? 0), 0);
 

@@ -133,3 +133,11 @@
     outline: none;
   }
 }
+
+/* Phase 5 · Batch 7 (P4-RPT-10): printing a page prints only the page — no app bar, side menu or
+   live-orders panel — and the content is not cut off by the screen-height scroll boxes. */
+@media print {
+  [data-print-hide] { display: none !important; }
+  html, body, #root { height: auto !important; overflow: visible !important; }
+  [data-print-expand] { height: auto !important; max-height: none !important; overflow: visible !important; flex: none !important; }
+}

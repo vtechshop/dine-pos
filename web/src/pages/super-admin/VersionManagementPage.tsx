@@ -8,6 +8,7 @@ import {
   type RemoteConfig,
   type RemoteConfigPatch,
 } from '../../api/superAdmin';
+import { SAConfirm } from '../../components/ui/SAShared';
 
 // ── form types ─────────────────────────────────────────────────────────────────
 
@@ -138,6 +139,8 @@ export function VersionManagementPage() {
   const [saving,   setSaving]   = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError,  setSaveError]  = useState<string | null>(null);
+  // Phase 5 · Batch 7 (P4-SA-01): what a save would switch on for every hotel, awaiting "Yes"
+  const [globalWarn, setGlobalWarn] = useState<string[] | null>(null);
 
   const loadData = useCallback(async () => {
     const [cfgRes, dashRes] = await Promise.allSettled([getRemoteConfig(), getDashboard()]);
@@ -177,10 +180,19 @@ export function VersionManagementPage() {
     setForm(prev => prev ? { ...prev, [key]: value } : prev);
   }
 
-  async function handleSave() {
+  function handleSave() {
     if (!form || !origForm) return;
     const delta = formDelta(form, origForm);
     if (Object.keys(delta).length === 0) return;
+    const warn: string[] = [];
+    if (delta.maintenanceMode === true) warn.push('Maintenance Mode blocks every hotel from logging in and using the app.');
+    if (delta.forceUpdate === true) warn.push('Force Update makes every hotel update the app before they can use it.');
+    if (warn.length) { setGlobalWarn(warn); return; }
+    void doSave(delta);
+  }
+
+  async function doSave(delta: RemoteConfigPatch) {
+    setGlobalWarn(null);
 
     setSaving(true);
     setSaveStatus('idle');
@@ -217,6 +229,16 @@ export function VersionManagementPage() {
 
   return (
     <div className="space-y-6 p-6">
+      {globalWarn && form && origForm && (
+        <SAConfirm
+          title="Apply to every hotel?"
+          body={<>{globalWarn.map(w => <p key={w} className="mb-1">{w}</p>)}<p className="mt-2">This takes effect for all hotels as soon as it is saved.</p></>}
+          confirmLabel="Yes, apply to all hotels"
+          busy={saving}
+          onConfirm={() => void doSave(formDelta(form, origForm))}
+          onCancel={() => setGlobalWarn(null)}
+        />
+      )}
 
       {/* ── Header ── */}
       <div className="flex flex-wrap items-start justify-between gap-4">

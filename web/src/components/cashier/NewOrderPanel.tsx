@@ -30,6 +30,7 @@ import { useCashierPermissions } from '../../hooks/useCashierPermissions';
 import type { Product, Category, Table } from '../../types';
 import type { ProductSalesRow } from '../../types/reports';
 import { formatMoney } from '../../utils/money';
+import { istDateString } from '../../utils/istDate';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -281,6 +282,7 @@ function CartRow({ item, onQty, onRemove, onNotes, sym, image }: {
           <button
             type="button"
             onClick={() => onQty(item.id, item.quantity - 1)}
+            aria-label={`Decrease quantity of ${item.productName}`}
             className="flex h-6 w-6 items-center justify-center rounded-md border border-border text-ink/60 hover:bg-mist"
           >
             <Minus size={11} />
@@ -289,6 +291,7 @@ function CartRow({ item, onQty, onRemove, onNotes, sym, image }: {
           <button
             type="button"
             onClick={() => onQty(item.id, item.quantity + 1)}
+            aria-label={`Increase quantity of ${item.productName}`}
             className="flex h-6 w-6 items-center justify-center rounded-md border border-border text-ink/60 hover:bg-mist"
           >
             <Plus size={11} />
@@ -299,6 +302,8 @@ function CartRow({ item, onQty, onRemove, onNotes, sym, image }: {
           <button
             type="button"
             onClick={() => onRemove(item.id)}
+            aria-label={`Delete ${item.productName} from the order`}
+            title="Delete from the order"
             className="rounded-md p-1 text-ink/35 hover:bg-red-50 hover:text-red-500"
           >
             <Trash2 size={12} />
@@ -634,7 +639,7 @@ export function NewOrderPanel() {
   const loadProducts = useCallback(async () => {
     let cancelled = false;
     setProdLoading(true);
-    const today = new Date().toISOString().split('T')[0];
+    const today = istDateString();
     const [catRes, prodRes, tableRes, topRes] = await Promise.allSettled([
       fetchCategories(),
       fetchProducts(),   // all dishes: out-of-stock ones show greyed and can be switched back on
@@ -1026,6 +1031,8 @@ export function NewOrderPanel() {
           customerName: dineIn.customerName || undefined,
           customerPhone: dineIn.phone || undefined,
           notes: dineIn.notes || undefined,
+          // Phase 5 · Batch 7: the Guests box was never sent, so the count was lost
+          guestCount: Number(dineIn.guestCount) >= 1 ? Math.floor(Number(dineIn.guestCount)) : undefined,
           isParcel: false,
         };
       } else if (orderType === 'takeaway') {
