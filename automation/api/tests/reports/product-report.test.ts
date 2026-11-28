@@ -2,6 +2,10 @@ import { api } from '../../../utils/api-client';
 import { authHeaders } from '../../../utils/env';
 import { getHotelA } from '../../setup/testEnv';
 import { createOrder, updateOrderStatus } from '../../helpers/order.helper';
+import { ensureOpenShifts } from '../../helpers/shift.helper';
+
+// Counter payments need an open shift (Phase 5 Batch 5); see helpers/shift.helper.ts
+beforeAll(ensureOpenShifts);
 
 describe('Reports — Product Report', () => {
   let adminToken: string;

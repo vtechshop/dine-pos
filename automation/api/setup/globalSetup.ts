@@ -182,6 +182,16 @@ async function setupHotel(label: string): Promise<Record<string, unknown>> {
   const { hotelId, adminId, password, kitchenPin, phone } = await registerAndApproveHotel(label);
   const adminToken = await loginAdmin(adminId, password);
 
+  // Counter payments need an open shift (409 SHIFT_REQUIRED otherwise). Open a ₹0 shift so the
+  // order and report tests can complete orders; settings/shift.test manages its own shifts.
+  const shiftRes = await api
+    .post('/api/shifts/open')
+    .set({ Authorization: `Bearer ${adminToken}` })
+    .send({ openingCash: 0, openingNote: 'API test default shift' });
+  if (shiftRes.status !== 201) {
+    throw new Error(`[Setup] Could not open a shift for ${label}: ${shiftRes.status} ${JSON.stringify(shiftRes.body)}`);
+  }
+
   const [waiter, cashier] = await Promise.all([
     createWaiter(adminToken, label),
     createCashier(adminToken, label),

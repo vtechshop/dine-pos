@@ -295,8 +295,11 @@ describe('Payment Flow — QR & Kiosk (POST /api/public/orders)', () => {
       paymentMethod: 'razorpay',
       items:         baseItems, // productId belongs to hotel A
     }));
-    // Either hotel B has no gateway (402), no valid items (400), or hotel not found (404)
-    expect([400, 402, 404]).toContain(res.status);
+    // Either hotel B has no gateway (402), no valid items (400), hotel not found (404), or (Phase 5
+    // Batch 4, P4-QR-04) the dish is not on hotel B's menu and is refused by name (409 ITEM_UNAVAILABLE).
+    // Which one depends on whether an earlier test gave hotel B a payment gateway.
+    expect([400, 402, 404, 409]).toContain(res.status);
+    if (res.status === 409) expect(res.body.code).toBe('ITEM_UNAVAILABLE');
     // Must NOT return 201 — hotel A products must not land in hotel B
     expect(res.status).not.toBe(201);
     expect(res.status).not.toBe(200);

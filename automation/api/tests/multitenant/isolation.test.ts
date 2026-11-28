@@ -3,6 +3,10 @@ import { authHeaders, superAdminHeaders } from '../../../utils/env';
 import { getHotelA, getHotelB } from '../../setup/testEnv';
 import { createOrder, updateOrderStatus } from '../../helpers/order.helper';
 import { createCategory, createProduct } from '../../helpers/menu.helper';
+import { ensureOpenShifts } from '../../helpers/shift.helper';
+
+// Counter payments need an open shift (Phase 5 Batch 5); see helpers/shift.helper.ts
+beforeAll(ensureOpenShifts);
 
 describe('Multi-Tenant — Data Isolation', () => {
   let hotelA: ReturnType<typeof getHotelA>;
