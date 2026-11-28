@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { X, Plus, Minus, Check } from 'lucide-react';
 import type { Product, SelectedModifier } from '../../types';
+import { formatMoney } from '../../utils/money';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,8 @@ export function ModifierDialog({ product, sym, onConfirm, onClose }: ModifierDia
   }
 
   function validate(): string | null {
+    // Batch 3: the size is marked Required but could be skipped, billing the base price.
+    if (variants.length > 0 && !selectedVariantId) return 'Please choose a size';
     for (const group of groups) {
       const selected = (modSelections[group._id] ?? []).length;
       const minRequired = group.isRequired ? Math.max(1, group.minSelections) : group.minSelections;
@@ -181,11 +184,11 @@ export function ModifierDialog({ product, sym, onConfirm, onClose }: ModifierDia
                 {variants.map(v => (
                   <OptionChip
                     key={v._id}
-                    label={v.name}
-                    price={v.price - product.price}
+                    label={`${v.name} ${formatMoney(sym, v.price)}`}
+                    price={0}
                     sym={sym}
                     active={selectedVariantId === v._id}
-                    onClick={() => setSelectedVariantId(prev => prev === v._id ? undefined : v._id)}
+                    onClick={() => { setValidationError(null); setSelectedVariantId(prev => prev === v._id ? undefined : v._id); }}
                   />
                 ))}
               </div>
@@ -314,7 +317,7 @@ export function ModifierDialog({ product, sym, onConfirm, onClose }: ModifierDia
             <Plus size={14} />
             Add {qty > 1 ? `${qty}× ` : ''}to Cart
             <span className="ml-1 opacity-80 text-xs">
-              {sym}{(unitTotal * qty).toLocaleString('en-IN')}
+              {formatMoney(sym, unitTotal * qty)}
             </span>
           </button>
         </div>

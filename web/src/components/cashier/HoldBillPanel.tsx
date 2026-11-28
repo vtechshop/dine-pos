@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Clock, Trash2, Play, Search, ShoppingBag, UtensilsCrossed, Truck } from 'lucide-react';
 import { useCashier, type HeldBill } from '../../context/CashierContext';
 import { useSettings } from '../../context/SettingsContext';
+import { formatMoney } from '../../utils/money';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
+  return formatMoney(sym, n);
 }
 
 function fmtAge(iso: string): string {
@@ -46,8 +47,14 @@ export function HoldBillPanel({ onResume }: { onResume?: () => void }) {
       )
     : heldBills;
 
-  function handleResume(id: string) {
-    const bill = resumeBill(id);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+
+  async function handleResume(id: string) {
+    setResumeError(null);
+    // Batch 3 (3B): resumeBill claims the bill on the server first — another device may have
+    // resumed it already (then it is not resumed twice, which created a duplicate order).
+    const { bill, error } = await resumeBill(id);
+    if (error) { setResumeError(error); return; }
     if (!bill) return;
     // resumeBill() also restores all order metadata (orderType, table, customer,
     // delivery, discounts, loyalty) into context via setOrderPrefill so the
@@ -73,6 +80,12 @@ export function HoldBillPanel({ onResume }: { onResume?: () => void }) {
           </span>
         )}
       </div>
+
+      {resumeError && (
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {resumeError}
+        </div>
+      )}
 
       {/* Search */}
       {heldBills.length > 3 && (

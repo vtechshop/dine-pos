@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { CartEntry, SelectedModifier } from '../types/qr.ts';
+import { cartMoney, type CartMoney } from '../utils/qrMoney.ts';
 
 // ── CartLineId dedup key ──────────────────────────────────────────────────────
 
@@ -21,7 +22,8 @@ function buildCartLineId(productId: string, variantId?: string, mods?: SelectedM
 interface CartState {
   items:      CartEntry[];
   totalItems: number;
-  totalPrice: number;
+  totalPrice: number;     // items before tax
+  money:      CartMoney;  // subtotal, tax and the total the guest will be charged
 }
 
 // Input for addItem — caller does not supply cartLineId (generated internally)
@@ -37,6 +39,7 @@ function calcTotals(items: CartEntry[]) {
   return {
     totalItems: items.reduce((s, i) => s + i.quantity, 0),
     totalPrice: items.reduce((s, i) => s + (i.price + i.modifierTotal) * i.quantity, 0),
+    money:      cartMoney(items),
   };
 }
 
@@ -85,7 +88,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       return { items: next, ...calcTotals(next) };
     }
     case 'CLEAR':
-      return { items: [], totalItems: 0, totalPrice: 0 };
+      return { items: [], ...calcTotals([]) };
     default:
       return state;
   }
@@ -107,11 +110,7 @@ interface CartContextValue extends CartState {
 const CartContext = createContext<CartContextValue | null>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(cartReducer, {
-    items:      [],
-    totalItems: 0,
-    totalPrice: 0,
-  });
+  const [state, dispatch] = useReducer(cartReducer, { items: [], ...calcTotals([]) });
 
   const addItem = useCallback(
     (entry: CartEntryInput, quantity?: number, notes?: string) =>

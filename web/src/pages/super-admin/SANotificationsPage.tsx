@@ -5,6 +5,7 @@ import { useSATickets } from '../../context/SATicketsContext';
 import { useSANotifications } from '../../context/SANotificationsContext';
 import { type CreateNotificationPayload, type SANotification } from '../../api/superAdmin';
 import { Spinner } from '../../components/ui/Spinner';
+import { SAConfirm } from '../../components/ui/SAShared';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,9 @@ export function SANotificationsPage() {
   // ── delete tracking ──────────────────────────────────────────────────────────
   const [deleting,     setDeleting]     = useState<Set<string>>(new Set());
   const [deleteError,  setDeleteError]  = useState<string | null>(null);
+  // Phase 5 · Batch 7 (P4-SA-02): sending to every hotel and deleting are confirmed first
+  const [confirmSend, setConfirmSend] = useState<CreateNotificationPayload | null>(null);
+  const [confirmDel,  setConfirmDel]  = useState<SANotification | null>(null);
 
   // ── derived ──────────────────────────────────────────────────────────────────
   const q = searchQ.toLowerCase();
@@ -116,12 +120,19 @@ export function SANotificationsPage() {
       type: formType,
       ...(formExpiry ? { expiresInDays: Number(formExpiry) } : {}),
     };
+    setCreateError(null);
+    setConfirmSend(payload);
+  }
+
+  async function sendConfirmed(payload: CreateNotificationPayload) {
     setCreating(true);
     setCreateError(null);
     try {
       await create(payload);
+      setConfirmSend(null);
       resetForm();
     } catch (err) {
+      setConfirmSend(null);
       setCreateError(err instanceof Error ? err.message : 'Failed to send');
     } finally {
       setCreating(false);
@@ -129,6 +140,7 @@ export function SANotificationsPage() {
   }
 
   async function handleDelete(id: string) {
+    setConfirmDel(null);
     setDeleting(prev => new Set([...prev, id]));
     setDeleteError(null);
     try {
@@ -146,6 +158,26 @@ export function SANotificationsPage() {
 
   return (
     <div className="space-y-5 p-6">
+      {confirmSend && (
+        <SAConfirm
+          title="Send to all hotels?"
+          body={<>&ldquo;{confirmSend.title}&rdquo; will be shown to {hotelCount !== null ? `all ${hotelCount} active hotels` : 'every hotel'} straight away.</>}
+          confirmLabel="Yes, send to all hotels"
+          danger={false}
+          busy={creating}
+          onConfirm={() => void sendConfirmed(confirmSend)}
+          onCancel={() => setConfirmSend(null)}
+        />
+      )}
+      {confirmDel && (
+        <SAConfirm
+          title="Delete this notification?"
+          body={<>&ldquo;{confirmDel.title}&rdquo; will disappear for every hotel. This cannot be undone.</>}
+          confirmLabel="Yes, delete"
+          onConfirm={() => void handleDelete(confirmDel._id)}
+          onCancel={() => setConfirmDel(null)}
+        />
+      )}
 
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -403,7 +435,7 @@ export function SANotificationsPage() {
                       <div className="flex flex-shrink-0 items-center gap-2">
                         <span className="text-xs text-ink/40">{timeAgo(n.createdAt)}</span>
                         <button
-                          onClick={() => handleDelete(n._id)}
+                          onClick={() => setConfirmDel(n)}
                           disabled={isDel}
                           className="rounded-md p-1 text-ink/30 transition hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed"
                           title="Delete notification"

@@ -26,6 +26,7 @@ import GRN from '../models/GRN';
 import DailyCounter from '../models/DailyCounter';
 import { logAudit } from '../utils/audit';
 import { createTallySyncJobForPurchaseInvoice } from '../services/tallySyncService';
+import { recordVendorPayment, VENDOR_PAYMENT_METHODS } from '../utils/vendorPaymentLedger';
 
 const router = Router();
 router.use(authMiddleware);
@@ -253,19 +254,49 @@ router.post('/:id/verify', async (req: AuthRequest, res: Response): Promise<void
 
 router.post('/:id/mark-paid', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { paymentRef } = req.body as { paymentRef?: string };
-    const invoice = await PurchaseInvoice.findOneAndUpdate(
-      {
-        _id: req.params.id,
-        hotelId: new mongoose.Types.ObjectId(req.hotelId),
-        status: 'verified',
-        isDeleted: false,
-      },
-      { $set: { status: 'paid', paidAt: new Date(), paymentRef: paymentRef || '' } },
-      { new: true },
+    const { paymentRef, paymentMethod } = req.body as { paymentRef?: string; paymentMethod?: string };
+    // Phase 5 · Batch 6 (P4-INV-07): paying the invoice is a payment to the vendor — it is recorded
+    // (vendor payment + ledger credit, amount owed reduced) in the same transaction as the status
+    // change, keyed to the invoice so it is recorded once.
+    const method = (VENDOR_PAYMENT_METHODS as readonly string[]).includes(String(paymentMethod)) ? String(paymentMethod) : 'bank_transfer';
+    const hotelOId = new mongoose.Types.ObjectId(req.hotelId);
+    const ctr = await DailyCounter.findOneAndUpdate(
+      { key: `PAY-${req.hotelId}` }, { $inc: { seq: 1 } }, { upsert: true, new: true },
     );
-    if (!invoice) { res.status(404).json({ message: 'Invoice not found or already in terminal status' }); return; }
-    logAudit(req, 'purchaseinvoice.paid', 'PurchaseInvoice', invoice._id.toString(), { paymentRef });
+    const paymentNumber = `PAY-${String(ctr.seq).padStart(4, '0')}`;
+    let invoice: any = null;
+    let notFound = '';
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        notFound = '';
+        invoice = await PurchaseInvoice.findOneAndUpdate(
+          { _id: req.params.id, hotelId: hotelOId, status: 'verified', isDeleted: false },
+          { $set: { status: 'paid', paidAt: new Date(), paymentRef: paymentRef || '' } },
+          { new: true, session },
+        );
+        if (!invoice) { notFound = 'Invoice not found or already in terminal status'; return; }
+        const vendor = await Vendor.findOne({ _id: invoice.vendorId, hotelId: hotelOId }).session(session);
+        if (!vendor) throw new Error('Vendor of this invoice not found');
+        await recordVendorPayment({
+          hotelId:         hotelOId,
+          vendor:          { _id: vendor._id as mongoose.Types.ObjectId, businessName: vendor.businessName, vendorCode: vendor.vendorCode, mobile: vendor.mobile },
+          paymentNumber,
+          paymentDate:     new Date(),
+          paymentMethod:   method,
+          amount:          Math.round((Number(invoice.grandTotal) || 0) * 100) / 100,
+          referenceNumber: String(paymentRef || ''),
+          notes:           `Purchase invoice ${invoice.invoiceNumber ?? ''}`.trim(),
+          attachment:      '',
+          createdBy:       req.cashierId || req.waiterId || req.hotelId || '',
+          idempotencyKey:  `invoice-paid:${invoice._id}`,
+        }, session);
+      });
+    } finally {
+      await session.endSession();
+    }
+    if (notFound || !invoice) { res.status(404).json({ message: notFound || 'Invoice not found or already in terminal status' }); return; }
+    logAudit(req, 'purchaseinvoice.paid', 'PurchaseInvoice', invoice._id.toString(), { paymentRef, paymentMethod: method });
 
     // Tally Direct Sync — fire-and-forget; failure NEVER rolls back the payment
     void createTallySyncJobForPurchaseInvoice(req.hotelId!, invoice._id);

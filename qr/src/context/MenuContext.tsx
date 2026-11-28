@@ -7,6 +7,7 @@ import {
 } from 'react';
 import type { Category, FeatureFlags, Product } from '@dinepos/shared/types';
 import { fetchMenu, type MenuResponse } from '../api/menu.ts';
+import { ApiError } from '../api/client.ts';
 
 interface HotelInfo {
   _id:             string;
@@ -72,7 +73,9 @@ export function MenuProvider({
         setState((prev) => ({
           ...prev,
           loading: false,
-          error: err instanceof Error ? err.message : 'Failed to load menu',
+          error: err instanceof ApiError && (err.status === 400 || err.status === 404)
+            ? 'This QR code is not valid. Please ask staff for a new QR code.'
+            : err instanceof Error ? err.message : 'The menu could not be loaded. Please try again.',
         }));
       });
   }, [hotelId]);

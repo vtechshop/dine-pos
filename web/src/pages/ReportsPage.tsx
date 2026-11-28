@@ -61,6 +61,8 @@ import { ApiError } from '../api/client';
 import { Spinner } from '../components/ui/Spinner';
 import { useSettings } from '../context/SettingsContext';
 import { CHART_COLORS } from '../theme/palette';
+import { isSale, saleTime, saleValue } from '../utils/salesDefinitions';
+import { formatMoney } from '../utils/money';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -168,8 +170,9 @@ function downloadJSON(filename: string, data: unknown): void {
 
 // ── Inline chart components ───────────────────────────────────────────────────
 
+// Batch 3 (owner rule): money is shown to the paisa, never rounded to the rupee.
 function fmtCur(value: number, sym: string): string {
-  return `${sym}${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  return formatMoney(sym, value);
 }
 
 function KPICard({
@@ -419,10 +422,13 @@ export function ReportsPage() {
             orders: 0,
             revenue: 0,
           }));
+          // Hourly SALES — paid orders (owner decision 27 Nov 2026) on the hour they were created,
+          // net of refunds (utils/salesDefinitions.ts).
           for (const o of ordersForHourly.orders) {
-            const h = new Date(o.createdAt).getHours();
+            if (!isSale(o as any)) continue;
+            const h = saleTime(o as any).getHours();
             buckets[h].orders++;
-            buckets[h].revenue += o.grandTotal;
+            buckets[h].revenue = Math.round((buckets[h].revenue + saleValue(o as any)) * 100) / 100;
           }
           setHourly(buckets);
         } else {
@@ -759,11 +765,9 @@ export function ReportsPage() {
     downloadCSV(`modifiers-${from}-${to}.csv`,
       ['Modifier Option', 'Group', 'Qty Sold', 'Revenue', 'Orders'],
       [modifiers.topModifiers.map(m => [
-        m.modifierOptionName,
-        modifiers.groupRevenue.find(_g =>
-          modifiers.topModifiers.some(tm => tm.modifierOptionId === m.modifierOptionId)
-        )?.modifierGroupName ?? '',
-        m.totalQuantity,
+        m.optionName,
+        m.groupName ?? '',
+        m.totalQty,
         m.totalRevenue,
         m.orderCount,
       ])],
@@ -873,7 +877,7 @@ export function ReportsPage() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full flex-col">
+    <div data-print-expand className="flex h-full flex-col">
       {/* ── Top bar ── */}
       <div className="shrink-0 border-b border-border bg-canvas">
         {/* Tab row + actions */}
@@ -959,7 +963,8 @@ export function ReportsPage() {
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-y-auto bg-mist">
+      {/* P4-RPT-10: printed in full, not cut at the screen height */}
+      <div data-print-expand className="flex-1 overflow-y-auto bg-mist">
 
         {/* ════════════════ OVERVIEW TAB ════════════════ */}
         {tab === 'overview' && (
@@ -1003,7 +1008,7 @@ export function ReportsPage() {
                     label="Avg Order"
                     value={
                       sales.totalOrders > 0
-                        ? fmtCur(Math.round(sales.totalSales / sales.totalOrders), sym)
+                        ? fmtCur(Math.round((sales.totalSales / sales.totalOrders) * 100) / 100, sym)
                         : `${sym}0`
                     }
                     sub={`${sales.parcelOrders} parcels`}
@@ -1605,9 +1610,9 @@ export function ReportsPage() {
                     <HorizBars
                       sym={sym}
                       data={modifiers.topModifiers.slice(0, 10).map(m => ({
-                        label: m.modifierOptionName,
+                        label: m.optionName,
                         value: m.totalRevenue,
-                        sub:   `${m.totalQuantity} sold`,
+                        sub:   `${m.totalQty} sold`,
                       }))}
                     />
                   </Card>
@@ -1620,9 +1625,9 @@ export function ReportsPage() {
                     <HorizBars
                       sym={sym}
                       data={modifiers.groupRevenue.map(g => ({
-                        label: g.modifierGroupName,
+                        label: g.groupName,
                         value: g.totalRevenue,
-                        sub:   `${g.totalQuantity} sold`,
+                        sub:   `${g.totalQty} sold`,
                       }))}
                     />
                   </Card>
@@ -1645,6 +1650,7 @@ export function ReportsPage() {
                           <tr className="bg-mist">
                             <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">#</th>
                             <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">Option</th>
+                            <th className="px-5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/40">Group</th>
                             <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Qty</th>
                             <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Orders</th>
                             <th className="px-5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-ink/40">Revenue</th>
@@ -1652,10 +1658,11 @@ export function ReportsPage() {
                         </thead>
                         <tbody className="divide-y divide-border">
                           {modifiers.topModifiers.map((m, i) => (
-                            <tr key={m.modifierOptionId} className="hover:bg-mist">
+                            <tr key={`${m.optionId}-${i}`} className="hover:bg-mist">
                               <td className="px-5 py-2.5 text-xs tabular-nums text-ink/30">{i + 1}</td>
-                              <td className="px-5 py-2.5 text-sm text-ink">{m.modifierOptionName}</td>
-                              <td className="px-5 py-2.5 text-right text-sm tabular-nums text-ink">{m.totalQuantity}</td>
+                              <td className="px-5 py-2.5 text-sm text-ink">{m.optionName}</td>
+                              <td className="px-5 py-2.5 text-sm text-ink/60">{m.groupName}</td>
+                              <td className="px-5 py-2.5 text-right text-sm tabular-nums text-ink">{m.totalQty}</td>
                               <td className="px-5 py-2.5 text-right text-sm tabular-nums text-ink/60">{m.orderCount}</td>
                               <td className="px-5 py-2.5 text-right text-sm font-semibold tabular-nums text-ink">
                                 {fmtCur(m.totalRevenue, sym)}

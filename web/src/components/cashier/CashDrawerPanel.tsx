@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { PlusCircle, MinusCircle, Wallet, ArrowDown, ArrowUp, Lock } from 'lucide-react';
 import { useCashier } from '../../context/CashierContext';
 import { useSettings } from '../../context/SettingsContext';
+import { formatMoneyAbs } from '../../utils/money';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.abs(Math.round(n)).toLocaleString('en-IN')}`;
+  return formatMoneyAbs(sym, n);
 }
 
 function fmtTime(iso: string) {
@@ -33,7 +34,8 @@ const CASH_OUT_REASONS = [
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function CashDrawerPanel() {
-  const { shift, drawerMovements, addDrawerMovement, drawerBalance } = useCashier();
+  const { shift, drawerMovements, addDrawerMovement, drawerBalance, refreshDrawer } = useCashier();
+  useEffect(() => { void refreshDrawer(); }, [refreshDrawer]);
   const { settings } = useSettings();
   const sym = settings?.currencySymbol ?? '₹';
 
@@ -45,8 +47,11 @@ export function CashDrawerPanel() {
 
   const noShift = !shift || shift.status !== 'open';
 
-  function handleSubmit(e: FormEvent) {
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (saving) return;
     const amt = parseFloat(amount);
     if (isNaN(amt) || amt <= 0) { setError('Enter a valid amount'); return; }
     const effectiveReason = reason === 'Other' ? customReason.trim() : reason;
@@ -56,12 +61,20 @@ export function CashDrawerPanel() {
     let cashierName = shift?.cashierName ?? 'Cashier';
     setError(null);
 
-    addDrawerMovement({
-      type: mode === 'in' ? 'cash_in' : 'cash_out',
-      amount: amt,
-      reason: effectiveReason,
-      cashierName,
-    });
+    // Batch 5 (P4-SHIFT-02): counted in the drawer only once the server saved it
+    setSaving(true);
+    let result;
+    try {
+      result = await addDrawerMovement({
+        type: mode === 'in' ? 'cash_in' : 'cash_out',
+        amount: amt,
+        reason: effectiveReason,
+        cashierName,
+      });
+    } finally {
+      setSaving(false);
+    }
+    if (!result.ok) { setError(result.error ?? 'Not saved. Please try again.'); return; }
 
     setAmount('');
     setReason('');

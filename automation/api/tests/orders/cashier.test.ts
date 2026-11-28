@@ -21,6 +21,10 @@ import {
 import { cashierPayload, uniquePhone } from '../../../utils/test-data';
 import { cashierLogin } from '../../helpers/auth.helper';
 import { linkItems } from '../../helpers/order.helper';
+import { ensureOpenShifts } from '../../helpers/shift.helper';
+
+// Counter payments need an open shift (Phase 5 Batch 5); see helpers/shift.helper.ts
+beforeAll(ensureOpenShifts);
 
 describe('Cashier Regression', () => {
   let adminToken: string;

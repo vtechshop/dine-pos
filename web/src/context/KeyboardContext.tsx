@@ -34,6 +34,11 @@ export function KeyboardProvider({ children }: { children: ReactNode }) {
       // F keys do not fire while user is typing — every other key still fires
       if (F_KEYS.has(key) && inInput) return;
 
+      // Phase 5 · Batch 7 (P4-CATALOG-14): Enter in a multi-line field is a new line, not "Save".
+      // Ctrl/Cmd+Enter still saves from there.
+      const multiLine = target.tagName === 'TEXTAREA' || target.isContentEditable;
+      if (key === 'Enter' && multiLine && !e.ctrlKey && !e.metaKey) return;
+
       // Prevent browser default for F1–F4 (help, address bar, search, etc.)
       if (F_KEYS.has(key)) e.preventDefault();
 

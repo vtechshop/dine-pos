@@ -23,7 +23,9 @@ export function CartBar({ onOpen, bottomClass = 'bottom-0' }: CartBarProps) {
           <span className="bg-white/20 rounded-md px-1.5 py-0.5 text-xs">{totalItems}</span>
           View cart
         </span>
-        <span className="font-bold">{symbol}{totalPrice.toFixed(2)}</span>
+        <span className="font-bold">
+          {symbol}{totalPrice.toFixed(2)} <span className="text-xs font-medium opacity-80">+ taxes</span>
+        </span>
       </button>
     </div>
   );

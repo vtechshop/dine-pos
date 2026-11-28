@@ -95,7 +95,7 @@ export function CategoryDrawer({ category, onSave, onClose }: Props) {
         {/* Body */}
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           {error && (
-            <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+            <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
               {error}
             </div>
           )}

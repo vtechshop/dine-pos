@@ -10,6 +10,7 @@ import { ensureValidOAuthConfig } from '../services/payment/razorpayTokenRefresh
 import { io } from '../server';
 import { scheduleKOTPrint } from '../utils/printUtils';
 import { logger } from '../utils/logger';
+import { recordGatewayPayment } from '../utils/paymentLedger';
 
 const router = Router();
 
@@ -249,6 +250,8 @@ router.post('/qr-verify', publicPaymentLimiter, async (req: Request, res: Respon
         { $set: { status: 'pending', transactionId: pay.gatewayTransactionId, paymentTime: new Date() } },
         { new: true },
       );
+      // Batch 2 (2B): money received online → payment ledger (once per gateway payment).
+      await recordGatewayPayment(hotelId, pay as any, orderId, 'qr_verify', (pay as any).updatedAt ?? new Date());
       if (recoverReleased) {
         try {
           io.to(`hotel_${hotelId}`).emit('new_order', {
@@ -329,6 +332,9 @@ router.post('/qr-verify', publicPaymentLimiter, async (req: Request, res: Respon
       { $set: { status: 'pending', transactionId: razorpay_payment_id, paymentTime: new Date() } },
       { new: true },
     );
+    // Batch 2 (2B): money received online → payment ledger (once per gateway payment; the
+    // webhook uses the same key, so whichever arrives second adds nothing).
+    await recordGatewayPayment(hotelId, pay as any, orderId, 'qr_verify', new Date());
 
     if (released) {
       try {

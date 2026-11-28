@@ -270,13 +270,15 @@ function MarkPaidDialog({
   invoice: PurchaseInvoice; onDone: (updated: PurchaseInvoice) => void; onCancel: () => void;
 }) {
   const [paymentRef, setPaymentRef] = useState('');
+  // Phase 5 · Batch 6 (P4-INV-07): the payment is recorded against the vendor — say how it was paid
+  const [paymentMethod, setPaymentMethod] = useState('bank_transfer');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
   async function handleSubmit() {
     setBusy(true); setErr('');
     try {
-      const { invoice: updated } = await markPurchaseInvoicePaid(invoice._id, paymentRef);
+      const { invoice: updated } = await markPurchaseInvoicePaid(invoice._id, paymentRef, paymentMethod);
       onDone(updated);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Failed to mark paid');
@@ -290,6 +292,21 @@ function MarkPaidDialog({
       <div className="w-full max-w-sm rounded-2xl bg-canvas p-6 shadow-xl">
         <h3 className="text-base font-semibold text-ink">Mark as Paid</h3>
         <p className="mt-1 text-sm text-ink/60">{invoice.invoiceNumber} — {invoice.vendorSnapshot?.businessName}</p>
+        <div className="mt-4">
+          <label className="block text-xs font-medium text-ink/60 mb-1">Paid by</label>
+          <select
+            value={paymentMethod}
+            onChange={e => setPaymentMethod(e.target.value)}
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30"
+          >
+            <option value="bank_transfer">Bank transfer</option>
+            <option value="upi">UPI</option>
+            <option value="cash">Cash</option>
+            <option value="cheque">Cheque</option>
+            <option value="card">Card</option>
+          </select>
+          <p className="mt-1 text-xs text-ink/45">Recorded as a payment to the vendor; the amount owed goes down.</p>
+        </div>
         <div className="mt-4">
           <label className="block text-xs font-medium text-ink/60 mb-1">Payment Reference (optional)</label>
           <input

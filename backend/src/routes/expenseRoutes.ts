@@ -8,7 +8,7 @@ import { sendError } from '../utils/sendError';
 import { requireFeature } from '../middleware/requireFeature';
 import { isValidDateParam } from '../utils/dateParam';
 import { createTallySyncJobForExpense } from '../services/tallySyncService';
-import { PAID_ORDER, NET_TOTAL } from '../utils/paidOrder';
+import { netSales, istDay, todayIST } from '../utils/financeDefinitions';
 
 const router = Router();
 router.use(authMiddleware);
@@ -59,23 +59,22 @@ router.get('/pnl', async (req: AuthRequest, res: Response) => {
       if (!isValidDateParam(rawFrom) || !isValidDateParam(rawTo)) {
         return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' });
       }
-      start = new Date(rawFrom); start.setHours(0, 0, 0, 0);
-      end   = new Date(rawTo);   end.setHours(23, 59, 59, 999);
+      // Batch 2 (2D): IST days, like every other report (was the server's local midnight).
+      start = istDay(rawFrom);
+      end   = istDay(rawTo, true);
     } else {
-      const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+      const dateStr = (req.query.date as string) || todayIST();
       if (!isValidDateParam(dateStr)) return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' });
-      const date = new Date(dateStr);
-      start = new Date(date); start.setHours(0, 0, 0, 0);
-      end   = new Date(date); end.setHours(23, 59, 59, 999);
+      start = istDay(dateStr);
+      end   = istDay(dateStr, true);
     }
 
     const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
 
     const [revenueResult, expenseResult] = await Promise.all([
-      Order.aggregate([
-        { $match: { hotelId: hotelObjId, status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: start, $lte: end } } },
-        { $group: { _id: null, revenue: { $sum: NET_TOTAL }, orders: { $sum: 1 } } },
-      ]),
+      // Revenue = net sales, the same figure as the daily report: paid orders (owner decision
+      // 27 Nov 2026), net of refunds and settlement discounts (utils/financeDefinitions.ts).
+      netSales(hotelObjId, start, end).then(s => [{ revenue: s.net, orders: s.orders }]),
       Expense.aggregate([
         { $match: { hotelId: hotelObjId, date: { $gte: start, $lte: end } } },
         { $group: {
@@ -92,7 +91,7 @@ router.get('/pnl', async (req: AuthRequest, res: Response) => {
     const profit    = revenue - expenses;
 
     res.json({
-      date: start.toISOString().slice(0, 10),
+      date: new Date(start.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10),   // IST date of the period start
       revenue,
       orders,
       expenses,

@@ -129,6 +129,17 @@ export interface PaymentBreakdown {
   upi: number;
   card: number;
   split: number;
+  online?: number;
+}
+
+/** Money by method from the payment ledger (server: financeDefinitions.moneyMovements). */
+export interface MoneyByMethod {
+  cash: number;
+  upi: number;
+  card: number;
+  online: number;
+  other: number;
+  total: number;
 }
 
 export interface DailyReport {
@@ -141,6 +152,14 @@ export interface DailyReport {
   parcelRevenue: number;
   paymentBreakdown: PaymentBreakdown;
   sourceBreakdown: Record<string, number>;
+  // Batch 3: ledger figures, kept apart from one another
+  collections?: MoneyByMethod;
+  tenders?: { voucher: number; wallet: number; total: number };
+  refunds?: MoneyByMethod;
+  reversals?: MoneyByMethod;
+  /** Tips received — not sales, not collections (owner decision, Batch 3) */
+  tips?: MoneyByMethod;
+  netCollections?: number;
 }
 
 // ── Billing ───────────────────────────────────────────────────────────────────
@@ -179,6 +198,10 @@ export interface BillingOrder {
   /** Present at runtime — the bill endpoint returns full order docs. */
   status?: string;
   paymentMethod?: string;
+  /** Payment ledger (Batch 2): set once the order is fully settled. */
+  paymentTime?: string | null;
+  /** Payment ledger (Batch 2): amount paid / tendered / written off so far. */
+  amountSettled?: number;
   createdAt: string;
 }
 

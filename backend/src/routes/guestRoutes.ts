@@ -11,8 +11,9 @@ import { logger } from '../utils/logger';
 import { logAudit } from '../utils/audit';
 import { io } from '../server';
 import TableSession from '../models/TableSession';
-import Guest from '../models/Guest';
+import Guest, { UNSET_QR_TOKEN } from '../models/Guest';
 import Order from '../models/Order';
+import PaymentEntry from '../models/PaymentEntry';
 import GiftVoucher from '../models/GiftVoucher';
 import CustomerProfile from '../models/CustomerProfile';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
@@ -22,9 +23,26 @@ import OrganizationCustomer from '../models/OrganizationCustomer';
 import { scheduleReceiptPrint } from '../utils/printUtils';
 import { createWhatsAppReceiptJobForGuest } from '../services/whatsappReceiptService';
 import { counterBillingOrderUpdates, isDueAtCounter } from '../utils/counterBilling';
+import { refuseWithoutShift, isCounterMethod, owesAtCounter } from '../utils/shiftGuard';
+import { recordEntries, settlementEntries, outstandingOf, ledgerMethod, r2, PAISE } from '../utils/paymentLedger';
 
 // mergeParams: true — inherits :sessionId from the parent sessionRoutes mount
 const router = Router({ mergeParams: true });
+
+/**
+ * Batch 2 (2C): what a guest still owes at the counter — outstanding amounts (payment ledger
+ * rule) of the guest's counter orders, oldest first. Used by "left" and "write_off".
+ */
+async function guestDues(sessionId: unknown, guestId: unknown, hotelId: string) {
+  const orders = await Order.find({
+    sessionId, guestId, hotelId, status: { $nin: ['cancelled', 'payment_pending'] },
+  }).select('_id orderNumber grandTotal amountSettled paymentTime status paymentMethod').sort({ createdAt: 1 }).lean();
+  const dues = orders
+    .filter(o => isDueAtCounter(o as any))
+    .map(o => ({ orderId: o._id as mongoose.Types.ObjectId, orderNumber: (o as any).orderNumber as string, status: (o as any).status as string, due: outstandingOf(o as any) }))
+    .filter(d => d.due > PAISE);
+  return { dues, owed: r2(dues.reduce((t, d) => t + d.due, 0)) };
+}
 
 // ── Shared helper: resolve + validate session + hotel ownership ────────────────
 async function resolveSession(sessionId: string, hotelId: string) {
@@ -175,18 +193,19 @@ router.get('/:guestId', async (req: AuthRequest, res: Response): Promise<void> =
 router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { sessionId, guestId } = req.params;
-    const { action, paymentMethod, splitDetails, paidAmount, displayLabel, redeemPoints, giftVoucherCode } = req.body as {
-      action: 'bill' | 'left' | 'rename';
+    const { action, paymentMethod, splitDetails, paidAmount, displayLabel, redeemPoints, giftVoucherCode, reason } = req.body as {
+      action: 'bill' | 'left' | 'rename' | 'write_off';
       paymentMethod?: string;
       splitDetails?: { cash?: number; upi?: number; card?: number };
       paidAmount?: number;
       displayLabel?: string;
       redeemPoints?: number;
       giftVoucherCode?: string;
+      reason?: string;
     };
 
-    if (!action || !['bill', 'left', 'rename'].includes(action)) {
-      res.status(400).json({ message: "action must be one of: 'bill', 'left', 'rename'" });
+    if (!action || !['bill', 'left', 'rename', 'write_off'].includes(action)) {
+      res.status(400).json({ message: "action must be one of: 'bill', 'left', 'rename', 'write_off'" });
       return;
     }
 
@@ -238,12 +257,16 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         });
         return;
       }
+      // Phase 5 · Batch 5 (Decision 3): taking the guest's money at the counter needs an open shift
+      if (paymentMethod !== 'complimentary'
+          && await owesAtCounter(req.hotelId!, { sessionId: session._id, guestId: guest._id })
+          && await refuseWithoutShift(res, req.hotelId!)) return;
 
       const updateFields: Record<string, any> = {
         status: 'billed',
         paymentMethod,
         billedAt: new Date(),
-        qrSessionToken: null,
+        // qrSessionToken is removed with $unset below (never stored as null)
         qrTokenExpiresAt: null,
       };
 
@@ -333,7 +356,7 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
       // The loser gets null and returns 409 before touching loyalty points.
       const updated = await Guest.findOneAndUpdate(
         { _id: guest._id, status: 'active' },
-        { $set: updateFields },
+        { $set: updateFields, $unset: UNSET_QR_TOKEN },
         { new: true, runValidators: true },
       );
       if (!updated) {
@@ -341,8 +364,12 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         return;
       }
 
-      // Gift voucher deduction (after atomic billing guard — best-effort, logged on failure)
+      // Gift voucher deduction (after the atomic billing guard, so it runs once per billing).
+      // Batch 2 (2A): it used to be best-effort — a failed deduction left the guest billed for
+      // the after-voucher amount and the voucher part was never collected (silent loss). Now a
+      // failed deduction undoes this billing and the cashier gets a 409 to re-check the voucher.
       if (guestVoucherDoc && guestVoucherAmount > 0) {
+        let voucherOk = false;
         try {
           const vNow = new Date();
           const deducted = await GiftVoucher.findOneAndUpdate(
@@ -358,12 +385,13 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
               { $set: { balance: { $subtract: ['$balance', guestVoucherAmount] } } },
               { $set: {
                   isActive:     { $cond: { if: { $lte: ['$balance', 0] }, then: false, else: '$isActive' } },
-                  transactions: { $concatArrays: [{ $ifNull: ['$transactions', []] }, [{ type: 'redeem', amount: guestVoucherAmount, balanceAfter: { $ifNull: ['$balance', 0] }, orderId: null, remarks: `Guest billing: ${guest.displayLabel} (Guest ${String(guest._id)})`, createdBy: `cashier:${req.hotelId}`, createdAt: vNow }]] },
+                  transactions: { $concatArrays: [{ $ifNull: ['$transactions', []] }, [{ type: 'redeem', amount: guestVoucherAmount, balanceAfter: { $ifNull: ['$balance', 0] }, orderId: null, sessionId: session._id, guestId: guest._id, remarks: `Guest billing: ${guest.displayLabel} (Guest ${String(guest._id)})`, createdBy: `cashier:${req.hotelId}`, createdAt: vNow }]] },
               }},
             ] as any,
             { new: true },
           );
           if (deducted) {
+            voucherOk = true;
             await Guest.findByIdAndUpdate(updated._id, {
               $set: {
                 giftVoucherId:     guestVoucherDoc._id,
@@ -372,14 +400,30 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
               },
             });
           } else {
-            logger.warn('[gift-voucher] deduction at guest billing failed — voucher may have changed', {
+            logger.warn('[gift-voucher] deduction at guest billing failed — voucher may have changed; billing undone', {
               hotelId: req.hotelId, guestId: String(guest._id),
             });
           }
         } catch (vErr: any) {
-          logger.warn('[gift-voucher] deduction error at guest billing', {
+          logger.warn('[gift-voucher] deduction error at guest billing; billing undone', {
             hotelId: req.hotelId, guestId: String(guest._id), error: vErr?.message,
           });
+        }
+        if (!voucherOk) {
+          // Undo only what this request did (status guard): back to active, billing fields cleared.
+          // Nothing else (orders, loyalty, prints) has run yet at this point.
+          await Guest.updateOne(
+            { _id: updated._id, status: 'billed' },
+            { $set: {
+                status: 'active', paymentMethod: null, billedAt: null, paidAmount: null,
+                'splitDetails.cash': 0, 'splitDetails.upi': 0, 'splitDetails.card': 0,
+            } },
+          );
+          res.status(409).json({
+            code:    'VOUCHER_CHANGED',
+            message: 'The gift voucher balance changed or the voucher is no longer valid. The guest was NOT billed — check the voucher and try again.',
+          });
+          return;
         }
       }
 
@@ -541,8 +585,64 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
       const guestOrderUpdates = counterBillingOrderUpdates(
         { sessionId: session._id, guestId: updated._id }, paymentMethod,
       );
+      // Batch 2 (2B): the orders this bill closes get their completion time (it was left empty).
+      const closingIds = await Order.distinct('_id', { $or: [guestOrderUpdates.counter.filter, guestOrderUpdates.prepaid.filter] });
       await Order.updateMany(guestOrderUpdates.counter.filter, guestOrderUpdates.counter.update);
       await Order.updateMany(guestOrderUpdates.prepaid.filter, guestOrderUpdates.prepaid.update);
+      if (closingIds.length) {
+        await Order.updateMany(
+          { _id: { $in: closingIds }, status: 'completed', completedAt: null },
+          { $set: { completedAt: (updated as any).billedAt ?? new Date() } },
+        );
+      }
+
+      // Batch 2 (2B): record this guest bill in the payment ledger, each part with the billing
+      // time — loyalty as a settlement discount, voucher as a tender (not money received),
+      // the money taken per method (split = one entry per method) — allocated over the
+      // guest's orders that are still owed. Sets paymentTime on each fully settled order.
+      {
+        const billedAt: Date = (updated as any).billedAt ?? new Date();
+        const guestOrders = await Order.find({
+          sessionId: session._id, guestId: updated._id, hotelId: req.hotelId,
+          status: { $nin: ['cancelled', 'payment_pending'] },
+        }).select('_id grandTotal amountSettled paymentTime status paymentMethod').sort({ createdAt: 1 }).lean();
+        const dues = guestOrders
+          .filter(o => isDueAtCounter(o as any))
+          .map(o => ({ orderId: o._id as mongoose.Types.ObjectId, due: outstandingOf(o as any) }))
+          .filter(d => d.due > 0);
+        const totalDue   = r2(dues.reduce((t, d) => t + d.due, 0));
+        const loyaltyAmt = r2(guestAfterLoyalty.loyaltyDiscountAmount ?? 0);
+        const voucherAmt = r2(guestVoucherAmount);
+        const moneyAmt   = r2(Math.max(0, totalDue - loyaltyAmt - voucherAmt));
+        const comp       = paymentMethod === 'complimentary';
+        const money = comp ? [] : paymentMethod === 'split' && splitDetails
+          ? [
+              { method: 'cash' as const, amount: r2(splitDetails.cash) },
+              { method: 'upi'  as const, amount: r2(splitDetails.upi) },
+              { method: 'card' as const, amount: r2(splitDetails.card) },
+            ].filter(p => p.amount > 0)
+          : [{ method: ledgerMethod(paymentMethod), amount: moneyAmt }];
+        const moneySum = r2(money.reduce((t, p) => t + p.amount, 0));
+        if (!comp && Math.abs(moneySum - moneyAmt) > PAISE) {
+          logger.warn('[ledger] guest bill: money taken differs from the orders still owed', {
+            hotelId: req.hotelId, guestId: String(updated._id), moneyTaken: moneySum, ordersOwed: moneyAmt,
+          });
+        }
+        await recordEntries(req.hotelId!, settlementEntries({
+          dues,
+          discounts: [
+            ...(loyaltyAmt > 0 ? [{ method: 'loyalty' as const, amount: loyaltyAmt }] : []),
+            ...(comp && moneyAmt > 0 ? [{ method: 'complimentary' as const, amount: moneyAmt }] : []),
+          ],
+          tenders: voucherAmt > 0 ? [{ method: 'voucher' as const, amount: voucherAmt, reference: rawGuestVoucherCode }] : [],
+          money,
+          base: {
+            paidAt: billedAt, source: 'guest_bill', sessionId: session._id, guestId: updated._id,
+            recordedBy: req.cashierName || req.role || '', reference: '',
+          },
+          keyBase: `guest-bill:${updated._id}:${new Date(billedAt).getTime()}`,
+        }));
+      }
 
       const billingDiscount = guestAfterLoyalty.loyaltyDiscountAmount ?? 0;
       const netPayable = guestAfterLoyalty.totalAmount - billingDiscount - guestVoucherAmount;
@@ -574,11 +674,77 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
 
       res.json({ guest: guestAfterLoyalty });
 
+    } else if (action === 'write_off') {
+      // Batch 2 (2C) — owner rule for walk-outs: only a manager (admin) can write off what a
+      // guest owes; a reason is mandatory; the write-off is a ledger entry and is audit-logged;
+      // the orders are kept (closed as written off), never discarded.
+      if (req.role !== 'admin') {
+        res.status(403).json({ message: 'Only a manager (admin) can approve a write-off.' });
+        return;
+      }
+      const why = String(reason ?? '').trim().slice(0, 500);
+      if (why.length < 3) {
+        res.status(400).json({ message: 'A reason is required to write off an unpaid bill.' });
+        return;
+      }
+      const { dues, owed } = await guestDues(session._id, guest._id, req.hotelId!);
+      if (owed <= 0) {
+        res.status(400).json({ message: 'Nothing is owed — mark the guest as left instead.' });
+        return;
+      }
+      const inKitchen = dues.filter(d => ['pending', 'preparing', 'ready'].includes(d.status));
+      if (inKitchen.length > 0) {
+        res.status(409).json({ message: `${inKitchen.length} order(s) are still in the kitchen — serve or cancel them before writing off.` });
+        return;
+      }
+      const now   = new Date();
+      const actor = req.cashierName || req.role || 'admin';
+      const claimed = await Guest.findOneAndUpdate(
+        { _id: guest._id, hotelId: req.hotelId, status: 'active' },
+        {
+          $set: { status: 'left', qrTokenExpiresAt: null, writeOffAmount: owed, writeOffReason: why, writeOffBy: actor, writeOffAt: now },
+          $unset: UNSET_QR_TOKEN,
+        },
+        { new: true },
+      );
+      if (!claimed) {
+        res.status(409).json({ message: `Guest is already ${guest.status}` });
+        return;
+      }
+      await recordEntries(req.hotelId!, [{
+        type: 'write_off', method: 'other', amount: owed, paidAt: now, source: 'write_off',
+        allocations: dues.map(d => ({ orderId: d.orderId, amount: d.due })),
+        sessionId: session._id, guestId: guest._id, reason: why, recordedBy: actor,
+        idempotencyKey: `write-off:${guest._id}`,
+      }]);
+      await Order.updateMany(
+        { _id: { $in: dues.map(d => d.orderId) }, hotelId: req.hotelId, status: { $nin: ['cancelled', 'completed'] } },
+        { $set: { status: 'completed', completedAt: now } },
+      );
+      logAudit(req, 'guest.write_off', 'guest', String(guest._id), {
+        sessionId: String(session._id), amount: owed, reason: why, orders: dues.map(d => d.orderNumber),
+      });
+      io.to(`hotel_${req.hotelId}`).emit('guest_updated', { sessionId: session._id, guestId: guest._id, status: 'left' });
+      res.json({ guest: claimed, writtenOff: owed });
+      return;
     } else if (action === 'left') {
       // Cashier/admin only for marking left
       if (req.role === 'waiter') {
         res.status(403).json({ message: 'Waiters cannot mark guests as left' });
         return;
+      }
+      // Batch 2 (2C) — owner rule for walk-outs: a guest who still owes money cannot simply be
+      // marked as left (that let the table close with unpaid orders silently abandoned).
+      // Take payment, or a manager writes the balance off (action 'write_off', reason required).
+      {
+        const { owed } = await guestDues(session._id, guest._id, req.hotelId!);
+        if (owed > 0) {
+          res.status(409).json({
+            code: 'GUEST_OWES', amountOwed: owed,
+            message: `This guest still owes ₹${owed.toFixed(2)}. Take payment first — or a manager can write it off with a reason.`,
+          });
+          return;
+        }
       }
       // D-03: status guard is inside the atomic MongoDB filter, not a separate
       // read — prevents a concurrent bill from being overwritten by a left action.
@@ -587,9 +753,9 @@ router.patch('/:guestId', requireWaiterOrCashierOrAdmin, async (req: AuthRequest
         {
           $set: {
             status: 'left',
-            qrSessionToken: null,
             qrTokenExpiresAt: null,
           },
+          $unset: UNSET_QR_TOKEN,
         },
         { new: true },
       );
@@ -716,9 +882,9 @@ router.post('/merge', requireCashierOrAdmin, async (req: AuthRequest, res: Respo
         {
           $set: {
             status: 'cancelled',
-            qrSessionToken: null,
             qrTokenExpiresAt: null,
           },
+          $unset: UNSET_QR_TOKEN,
         }
       ),
     ]);
@@ -834,8 +1000,9 @@ router.post('/split', requireCashierOrAdmin, async (req: AuthRequest, res: Respo
     const newGuestNumber = updatedSession.guestCount;
     const newLabel = guestLabel(newGuestNumber);
     // Only counter-payable orders carry an amount due (prepaid / cancelled don't).
-    const splitTotal = ordersToMove.reduce((sum, o) => sum + (isDueAtCounter(o) ? o.grandTotal : 0), 0);
-    const remainingTotal = Math.max(0, source.totalAmount - splitTotal);
+    // Batch 3: only the unpaid part moves — a part payment already came off the guest's due.
+    const splitTotal = r2(ordersToMove.reduce((sum, o) => sum + (isDueAtCounter(o) ? outstandingOf(o as any) : 0), 0));
+    const remainingTotal = Math.max(0, r2(source.totalAmount - splitTotal));
 
     // Create the new guest
     const newGuest = await Guest.create({
@@ -967,10 +1134,10 @@ router.patch('/:guestId/transfer', requireCashierOrAdmin, async (req: AuthReques
           tableNumber: targetSession.tableNumber,
           guestNumber: newGuestNumber,
           displayLabel: newLabel,
-          // Rotate token on transfer for security
-          qrSessionToken: null,
+          // Rotate token on transfer for security (token removed via $unset below)
           qrTokenExpiresAt: null,
         },
+        $unset: UNSET_QR_TOKEN,
       },
       { new: true }
     );
@@ -1033,17 +1200,107 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
       return;
     }
 
-    const guest = await resolveGuest(guestId, String(session._id), req.hotelId!);
-    if (!guest) {
+    const current = await resolveGuest(guestId, String(session._id), req.hotelId!);
+    if (!current) {
       res.status(404).json({ message: 'Guest not found' });
       return;
     }
-    if (guest.status !== 'billed') {
-      res.status(409).json({ message: `Only billed guests can be reopened (current status: ${guest.status})` });
+    if (current.status !== 'billed') {
+      res.status(409).json({ message: `Only billed guests can be reopened (current status: ${current.status})` });
       return;
     }
 
-    // Reverse loyalty transactions before clearing the guest's billing fields.
+    // Batch 3 (3E): one atomic billed → active step. Two simultaneous reopens both passed the
+    // check above and each restored the voucher and loyalty; now only one gets past here.
+    // `guest` is the bill as it was, which everything below reverses.
+    const guest = await Guest.findOneAndUpdate(
+      { _id: current._id, hotelId: req.hotelId, status: 'billed' },
+      {
+        $set: {
+          status: 'active',
+          paymentMethod: null,
+          paidAmount: null,
+          billedAt: null,
+          'splitDetails.cash': 0,
+          'splitDetails.upi': 0,
+          'splitDetails.card': 0,
+          qrTokenExpiresAt: null,
+          loyaltyPointsRedeemed: 0,
+          loyaltyDiscountAmount: 0,
+          giftVoucherId: null,
+          giftVoucherCode: '',
+          giftVoucherAmount: 0,
+          // D-09: clear idempotency guards so re-billing earns points and
+          // updates lifetime spend exactly once on the re-billed amount.
+          loyaltyEarnedAt: null,
+          lifetimeSpendAt: null,
+        },
+        $unset: UNSET_QR_TOKEN,
+      },
+      { new: false },
+    );
+    if (!guest) {
+      res.status(409).json({ message: 'This bill has already been reopened.' });
+      return;
+    }
+
+    // Batch 3 (3E) — correcting a billed guest. The original payment records are never changed:
+    // every ledger entry of this guest's bill (money, voucher tender, loyalty discount) gets an
+    // explicit REVERSAL entry with its own time (each entry can be reversed once — key
+    // reverse:<id>). The orders are owed again and go back to 'served', so the corrected bill
+    // records NEW payments separately. Done first: if it fails, the bill is put back as it was
+    // and nothing has been restored to the voucher or loyalty balance.
+    let toReverse: any[] = [];
+    try {
+      const reopenAt = new Date();
+      const billEntries = await PaymentEntry.find({
+        hotelId: req.hotelId, guestId: guest._id, source: 'guest_bill', type: { $in: ['payment', 'discount'] },
+      }).lean();
+      const alreadyReversed = new Set((await PaymentEntry.find({
+        hotelId: req.hotelId, type: 'reversal', reversesEntryId: { $in: billEntries.map(e => e._id) },
+      }).select('reversesEntryId').lean()).map(e => String((e as any).reversesEntryId)));
+      toReverse = billEntries.filter(e => !alreadyReversed.has(String(e._id)));
+      if (toReverse.length > 0) {
+        await recordEntries(req.hotelId!, toReverse.map(e => ({
+          type: 'reversal' as const, method: e.method, amount: e.amount, paidAt: reopenAt, source: 'guest_reopen',
+          allocations: (e.allocations || []).map((a: any) => ({ orderId: a.orderId, amount: a.amount })),
+          sessionId: session._id, guestId: guest._id, reference: e.reference,
+          reason: `Bill reopened for correction (reverses ${e.type} ${e.method} ₹${e.amount})`,
+          recordedBy: req.cashierName || req.role || 'admin',
+          idempotencyKey: `reverse:${e._id}`, reversesEntryId: e._id,
+        })));
+        const reopenedOrderIds = [...new Set(toReverse.flatMap(e => (e.allocations || []).map((a: any) => String(a.orderId))))];
+        await Order.updateMany(
+          { _id: { $in: reopenedOrderIds }, hotelId: req.hotelId, status: 'completed', paymentTime: null },
+          { $set: { status: 'served', completedAt: null } },
+        );
+      }
+    } catch (reversalErr) {
+      const was = guest.toObject() as any;
+      await Guest.updateOne({ _id: guest._id, hotelId: req.hotelId, status: 'active' }, {
+        $set: {
+          status: 'billed',
+          paymentMethod: was.paymentMethod ?? null,
+          paidAmount: was.paidAmount ?? null,
+          billedAt: was.billedAt ?? null,
+          'splitDetails.cash': was.splitDetails?.cash ?? 0,
+          'splitDetails.upi': was.splitDetails?.upi ?? 0,
+          'splitDetails.card': was.splitDetails?.card ?? 0,
+          qrTokenExpiresAt: was.qrTokenExpiresAt ?? null,
+          loyaltyPointsRedeemed: was.loyaltyPointsRedeemed ?? 0,
+          loyaltyDiscountAmount: was.loyaltyDiscountAmount ?? 0,
+          giftVoucherId: was.giftVoucherId ?? null,
+          giftVoucherCode: was.giftVoucherCode ?? '',
+          giftVoucherAmount: was.giftVoucherAmount ?? 0,
+          loyaltyEarnedAt: was.loyaltyEarnedAt ?? null,
+          lifetimeSpendAt: was.lifetimeSpendAt ?? null,
+          ...Object.fromEntries(Object.keys(UNSET_QR_TOKEN).filter(k => was[k] != null).map(k => [k, was[k]])),
+        },
+      });
+      throw reversalErr;
+    }
+
+    // Reverse loyalty transactions using the bill as it was.
     // Runs regardless of whether the loyalty feature is currently enabled —
     // points were earned/redeemed when the feature was on, so the reversal must happen.
     if (guest.customerId) {
@@ -1181,32 +1438,7 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
       }
     }
 
-    const updated = await Guest.findByIdAndUpdate(
-      guest._id,
-      {
-        $set: {
-          status: 'active',
-          paymentMethod: null,
-          paidAmount: null,
-          billedAt: null,
-          'splitDetails.cash': 0,
-          'splitDetails.upi': 0,
-          'splitDetails.card': 0,
-          qrSessionToken: null,
-          qrTokenExpiresAt: null,
-          loyaltyPointsRedeemed: 0,
-          loyaltyDiscountAmount: 0,
-          giftVoucherId: null,
-          giftVoucherCode: '',
-          giftVoucherAmount: 0,
-          // D-09: clear idempotency guards so re-billing earns points and
-          // updates lifetime spend exactly once on the re-billed amount.
-          loyaltyEarnedAt: null,
-          lifetimeSpendAt: null,
-        },
-      },
-      { new: true }
-    );
+    const updated = await Guest.findById(guest._id);
 
     io.to(`hotel_${req.hotelId}`).emit('guest_reopened', {
       sessionId: session._id,
@@ -1216,6 +1448,8 @@ router.patch('/:guestId/reopen', requireAdmin, async (req: AuthRequest, res: Res
     logAudit(req, 'guest.reopened', 'guest', String(guest._id), {
       sessionId: String(session._id),
       previousTotal: guest.totalAmount,
+      // Batch 3 (3E): what was reversed (originals kept in the ledger)
+      reversed: toReverse.map(e => ({ entry: String(e._id), type: e.type, method: e.method, amount: e.amount })),
     });
 
     logger.info('Guest reopened', {

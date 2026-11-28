@@ -114,10 +114,29 @@ export const testIntegration = (platform: AggregatorPlatform) =>
     `/aggregator/integrations/${platform}/test`, { method: 'POST' },
   );
 
-export const syncMenu = (platform: AggregatorPlatform) =>
-  apiFetch<{ syncedCount: number; failedCount: number; failedItems: { name: string; error: string }[] }>(
-    `/aggregator/integrations/${platform}/sync-menu`, { method: 'POST' },
-  );
+export interface MenuSyncOutcome {
+  syncedCount: number;
+  failedCount: number;
+  failedItems: { name: string; error: string }[];
+  /** true = simulated (no partner credentials / test mode): nothing was sent to the platform */
+  dryRun: boolean;
+}
+
+// Phase 5 · Batch 7 (P4-CATALOG-21): the server answers { success, dryRun, result: { syncedCount, … } };
+// the screens read the counts from the top level and showed "undefined synced".
+export const syncMenu = async (platform: AggregatorPlatform): Promise<MenuSyncOutcome> => {
+  const body = await apiFetch<{
+    success?: boolean; dryRun?: boolean;
+    result?: { syncedCount?: number; failedCount?: number; failedItems?: { name: string; error: string }[]; dryRun?: boolean };
+  }>(`/aggregator/integrations/${platform}/sync-menu`, { method: 'POST' });
+  const r = body.result ?? {};
+  return {
+    syncedCount: r.syncedCount ?? 0,
+    failedCount: r.failedCount ?? 0,
+    failedItems: r.failedItems ?? [],
+    dryRun:      Boolean(body.dryRun ?? r.dryRun),
+  };
+};
 
 export const fetchSyncStatus = (platform: AggregatorPlatform) =>
   apiFetch<Pick<AggregatorIntegration, 'menuSyncStatus' | 'lastSyncAt' | 'lastSyncError' | 'syncedItemCount' | 'failedItemCount'>>(

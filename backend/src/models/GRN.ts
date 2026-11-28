@@ -90,7 +90,11 @@ const GRNSchema = new Schema<IGRN>(
     receivedBy:     { type: String, default: '' },
     cancelReason:   { type: String, default: '' },
     isDeleted:      { type: Boolean, default: false },
-    idempotencyKey: { type: String, default: null, trim: true },
+    // Phase 5 · Batch 6: never null. The unique index is on { hotelId, idempotencyKey } (sparse), and a
+    // compound sparse index still indexes a missing / null key as null — so a hotel could save only ONE
+    // record without a client key; the next failed with E11000. A record without a client key gets its
+    // own key. No index change or migration; client keys work as before.
+    idempotencyKey: { type: String, default: () => `auto:${new mongoose.Types.ObjectId().toHexString()}`, trim: true },
   },
   { timestamps: true },
 );

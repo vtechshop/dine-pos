@@ -11,6 +11,7 @@ import { logger } from '../utils/logger';
 import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, reverseEarnedPoints } from '../utils/loyaltyUtils';
 import { io } from '../server';
 import { scheduleKOTPrint } from '../utils/printUtils';
+import { recordGatewayPayment, recordEntries, r2 } from '../utils/paymentLedger';
 import { addRefundToOrder } from '../utils/orderRefund';
 
 const router = Router();
@@ -157,16 +158,21 @@ async function handleRazorpayEvent(event: Record<string, unknown>, eventType: st
       if (method) pay.paymentMethod = mapRazorpayMethod(method);
       await pay.save();
 
-      // Update the associated Order's payment timestamp and transaction reference.
-      // Non-fatal: Payment is the source of truth; Order update is for UX convenience.
-      await Order.findByIdAndUpdate(pay.orderId, {
-        $set: { transactionId: gatewayTxnId, paymentTime: new Date() },
-      }).catch((e: unknown) => {
+      // Batch 2 (2B): this used to stamp paymentTime on the order with NO filter (it could
+      // mark a cancelled or cash order as paid). Now: keep the gateway reference if the order
+      // has none, and record the money in the payment ledger — once per gateway payment (same
+      // key as QR verify), which sets paymentTime only when the order is fully settled and
+      // never on a cancelled order. Non-fatal: the Payment document is the source of truth.
+      await Order.updateOne(
+        { _id: pay.orderId, hotelId, transactionId: { $in: ['', null] } },
+        { $set: { transactionId: gatewayTxnId } },
+      ).catch((e: unknown) => {
         logger.warn(`[Webhook] Order update failed after payment.captured (non-fatal)`, {
           paymentId: String(pay._id),
           err:       String(e),
         });
       });
+      await recordGatewayPayment(hotelId, pay as any, pay.orderId as any, 'webhook', new Date());
 
       // Release QR payment-pending orders — atomic, idempotent (only the first caller wins).
       // qr-verify may have already released the order; in that case this is a no-op.
@@ -315,6 +321,16 @@ async function handleRazorpayEvent(event: Record<string, unknown>, eventType: st
       // Show the refund on the order too, so sales reports subtract it (once per refundId).
       if (isNewRefund) await addRefundToOrder(pay.orderId, hotelId, refundAmt);
       logger.info(`[Webhook] refund.processed → ${pay.internalTransactionId}, refundId: ${refundId}`);
+
+      // Batch 2 (2B): refund → payment ledger (same key as the refund route: recorded once).
+      if (refundId && refundAmt > 0 && pay.orderId) {
+        await recordEntries(hotelId, [{
+          type: 'refund', method: 'online', amount: r2(refundAmt / 100), paidAt: new Date(), source: 'webhook_refund',
+          allocations: [{ orderId: pay.orderId as any, amount: r2(refundAmt / 100) }],
+          paymentId: String(pay._id), reference: refundId, recordedBy: 'gateway',
+          idempotencyKey: `refund:${pay._id}:${refundId}`,
+        }]).catch(err => logger.error('[ledger] webhook refund not recorded', { paymentId: String(pay._id), error: String(err) }));
+      }
 
       // Fire-and-forget loyalty reversal — per-refund atomic guard prevents double-reversal on retry
       ;(async () => {

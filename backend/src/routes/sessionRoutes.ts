@@ -13,7 +13,7 @@ import { logger } from '../utils/logger';
 import { logAudit } from '../utils/audit';
 import { io } from '../server';
 import TableSession from '../models/TableSession';
-import Guest from '../models/Guest';
+import Guest, { UNSET_QR_TOKEN } from '../models/Guest';
 import Table from '../models/Table';
 import Order from '../models/Order';
 import GiftVoucher from '../models/GiftVoucher';
@@ -23,8 +23,13 @@ import guestRouter from './guestRoutes';
 import { getLoyaltyConfig, calculateEarnedPoints, earnPoints } from '../utils/loyaltyUtils';
 import { scheduleReceiptPrint } from '../utils/printUtils';
 import { counterBillingOrderUpdates, isDueAtCounter } from '../utils/counterBilling';
+import { refuseWithoutShift, isCounterMethod, owesAtCounter } from '../utils/shiftGuard';
+import { recordEntries, settlementEntries, outstandingOf, ledgerMethod, r2, PAISE } from '../utils/paymentLedger';
 
 const router = Router();
+
+/** A close/bill claim older than this is treated as abandoned (crashed request). */
+const BILLING_CLAIM_STALE_MS = 2 * 60 * 1000;
 
 // ── Global middleware: every session route requires auth ──────────────────────
 router.use(authMiddleware);
@@ -378,13 +383,53 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
       res.status(400).json({ message: 'Session is already closed' });
       return;
     }
+    // Phase 5 · Batch 5 (Decision 3): taking the table's money at the counter needs an open shift
+    if (bulkBill && paymentMethod !== 'complimentary'
+        && await owesAtCounter(req.hotelId!, { sessionId: session._id })
+        && await refuseWithoutShift(res, req.hotelId!)) return;
+
+    // Batch 2 (2A): claim the session atomically so only ONE close / table bill runs at a time.
+    // Two simultaneous bulk bills used to both run and charge a gift voucher twice. The claim is
+    // released on every exit that does not close the table (finally below); a claim older than
+    // BILLING_CLAIM_STALE_MS is treated as abandoned (e.g. a crashed request).
+    const claimedAt   = new Date();
+    const staleBefore = new Date(claimedAt.getTime() - BILLING_CLAIM_STALE_MS);
+    const claimed = await TableSession.findOneAndUpdate(
+      {
+        _id: session._id, hotelId: req.hotelId, status: 'open',
+        $or: [{ billingClaimedAt: null }, { billingClaimedAt: { $lt: staleBefore } }],
+      },
+      { $set: { billingClaimedAt: claimedAt } },
+      { new: true },
+    );
+    if (!claimed) {
+      const current = await TableSession.findById(session._id).select('status').lean();
+      if (current?.status === 'closed') {
+        res.status(400).json({ message: 'Session is already closed' });
+      } else {
+        res.status(409).json({ code: 'BILLING_IN_PROGRESS', message: 'This table is already being billed. Refresh and try again.' });
+      }
+      return;
+    }
+    let closedNow = false;
+    const releaseClaim = () => TableSession.updateOne(
+      { _id: session._id, billingClaimedAt: claimedAt },
+      { $set: { billingClaimedAt: null } },
+    ).catch(() => {});
+    // Every refusal below releases the claim BEFORE answering, so an immediate retry by the
+    // cashier is not refused as "already being billed".
+    const refuse = async (status: number, body: Record<string, unknown>) => {
+      await releaseClaim();
+      res.status(status).json(body);
+    };
+    try {
 
     const guests = await Guest.find({ sessionId: session._id });
 
     if (bulkBill) {
       const VALID_METHODS = ['cash', 'upi', 'card', 'split', 'complimentary'];
       if (!paymentMethod || !VALID_METHODS.includes(paymentMethod)) {
-        res.status(400).json({
+        await refuse(400, {
           message: `paymentMethod is required for bulkBill. Valid values: ${VALID_METHODS.join(', ')}`,
         });
         return;
@@ -411,7 +456,7 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
           balance:     { $gt: 0 },
         }).select('_id voucherCode balance').lean();
         if (!sessionVoucherDoc) {
-          res.status(400).json({ message: 'Gift voucher not found, expired, or inactive' });
+          await refuse(400, { message: 'Gift voucher not found, expired, or inactive' });
           return;
         }
         sessionVoucherAmount = Math.round(
@@ -423,7 +468,7 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
         const payableTotal = +(totalActiveAmount - sessionVoucherAmount).toFixed(2);
         const splitSum = (splitDetails.cash ?? 0) + (splitDetails.upi ?? 0) + (splitDetails.card ?? 0);
         if (Math.abs(splitSum - payableTotal) > 0.01) {
-          res.status(400).json({ message: `Split amounts (₹${splitSum.toFixed(2)}) must equal table total (₹${payableTotal.toFixed(2)}) after discounts` });
+          await refuse(400, { message: `Split amounts (₹${splitSum.toFixed(2)}) must equal table total (₹${payableTotal.toFixed(2)}) after discounts` });
           return;
         }
       }
@@ -437,11 +482,52 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
         status:    { $in: ['pending', 'preparing', 'ready'] },
       });
       if (kitchenActiveCount > 0) {
-        res.status(409).json({
+        await refuse(409, {
           message:           `Cannot bulk-bill: ${kitchenActiveCount} order(s) are still in the kitchen. Mark them as served first.`,
           pendingOrderCount: kitchenActiveCount,
         });
         return;
+      }
+
+      // Batch 2 (2A): deduct the gift voucher FIRST, keyed to this session. It used to run after
+      // the table was billed and was "best effort": a failed deduction left the table billed for
+      // the after-voucher amount (voucher part never collected), and two simultaneous bills each
+      // deducted. The $not/$elemMatch guard makes the deduction happen at most once per session,
+      // even when a retry follows a failure later in this request.
+      if (sessionVoucherDoc && sessionVoucherAmount > 0) {
+        const vNow = new Date();
+        const deducted = await GiftVoucher.findOneAndUpdate(
+          {
+            _id:          sessionVoucherDoc._id,
+            hotelId:      new mongoose.Types.ObjectId(req.hotelId!),
+            isActive:     true,
+            isDeleted:    false,
+            $or:          [{ expiresAt: null }, { expiresAt: { $gte: vNow } }],
+            balance:      { $gte: sessionVoucherAmount },
+            transactions: { $not: { $elemMatch: { type: 'redeem', sessionId: session._id } } },
+          },
+          [
+            { $set: { balance: { $subtract: ['$balance', sessionVoucherAmount] } } },
+            { $set: {
+                isActive:     { $cond: { if: { $lte: ['$balance', 0] }, then: false, else: '$isActive' } },
+                transactions: { $concatArrays: [{ $ifNull: ['$transactions', []] }, [{ type: 'redeem', amount: sessionVoucherAmount, balanceAfter: { $ifNull: ['$balance', 0] }, orderId: null, sessionId: session._id, guestId: null, remarks: `Bulk bill: Session ${sessionId}`, createdBy: `cashier:${req.hotelId}`, createdAt: vNow }]] },
+            }},
+          ] as any,
+          { new: true },
+        );
+        if (!deducted) {
+          const alreadyForThisTable = await GiftVoucher.exists({
+            _id: sessionVoucherDoc._id,
+            transactions: { $elemMatch: { type: 'redeem', sessionId: session._id } },
+          });
+          if (!alreadyForThisTable) {
+            await refuse(409, {
+              code:    'VOUCHER_CHANGED',
+              message: 'The gift voucher balance changed or the voucher is no longer valid. Nothing was billed — check the voucher and try again.',
+            });
+            return;
+          }
+        }
       }
 
       const now = new Date();
@@ -452,7 +538,6 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
             status: 'billed',
             paymentMethod,
             billedAt: now,
-            qrSessionToken: null,
             qrTokenExpiresAt: null,
             ...(paymentMethod === 'split' && splitDetails
               ? {
@@ -462,6 +547,8 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
                 }
               : {}),
           },
+          // Never store null: the unique sparse index allows only one null (P4-TBL-01)
+          $unset: UNSET_QR_TOKEN,
         }
       );
 
@@ -471,37 +558,57 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
       // Counter orders take this payment method; orders already paid online keep
       // 'razorpay'; unpaid payment_pending QR orders are never marked completed.
       const sessionOrderUpdates = counterBillingOrderUpdates({ sessionId: session._id }, paymentMethod);
+      // Batch 2 (2B): the orders this bill closes get their completion time (it was left empty).
+      const closingIds = await Order.distinct('_id', { $or: [sessionOrderUpdates.counter.filter, sessionOrderUpdates.prepaid.filter] });
       await Order.updateMany(sessionOrderUpdates.counter.filter, sessionOrderUpdates.counter.update);
       await Order.updateMany(sessionOrderUpdates.prepaid.filter, sessionOrderUpdates.prepaid.update);
+      if (closingIds.length) {
+        await Order.updateMany({ _id: { $in: closingIds }, status: 'completed', completedAt: null }, { $set: { completedAt: now } });
+      }
 
-      // Gift voucher deduction for bulk bill (best-effort, logged on failure)
-      if (sessionVoucherDoc && sessionVoucherAmount > 0) {
-        try {
-          const vNow = new Date();
-          await GiftVoucher.findOneAndUpdate(
-            {
-              _id:       sessionVoucherDoc._id,
-              hotelId:   new mongoose.Types.ObjectId(req.hotelId!),
-              isActive:  true,
-              isDeleted: false,
-              $or:       [{ expiresAt: null }, { expiresAt: { $gte: vNow } }],
-              balance:   { $gte: sessionVoucherAmount },
-            },
-            [
-              { $set: { balance: { $subtract: ['$balance', sessionVoucherAmount] } } },
-              { $set: {
-                  isActive:     { $cond: { if: { $lte: ['$balance', 0] }, then: false, else: '$isActive' } },
-                  transactions: { $concatArrays: [{ $ifNull: ['$transactions', []] }, [{ type: 'redeem', amount: sessionVoucherAmount, balanceAfter: { $ifNull: ['$balance', 0] }, orderId: null, remarks: `Bulk bill: Session ${sessionId}`, createdBy: `cashier:${req.hotelId}`, createdAt: vNow }]] },
-              }},
-            ] as any,
-            { new: true },
-          );
-        } catch (vErr: any) {
-          logger.warn('[gift-voucher] deduction error at bulk bill', {
-            hotelId: req.hotelId, sessionId, error: vErr?.message,
+      // Batch 2 (2B): record the table bill in the payment ledger with the billing time —
+      // voucher as a tender (not money received), money per method (split = one entry each),
+      // complimentary as a settlement discount — allocated over the table's orders still owed.
+      // Keyed to the session, so it is recorded once even if a retry follows a failure.
+      {
+        const tableOrders = await Order.find({
+          sessionId: session._id, hotelId: req.hotelId, status: { $nin: ['cancelled', 'payment_pending'] },
+        }).select('_id grandTotal amountSettled paymentTime status paymentMethod').sort({ createdAt: 1 }).lean();
+        const dues = tableOrders
+          .filter(o => isDueAtCounter(o as any))
+          .map(o => ({ orderId: o._id as mongoose.Types.ObjectId, due: outstandingOf(o as any) }))
+          .filter(d => d.due > 0);
+        const totalDue   = r2(dues.reduce((t, d) => t + d.due, 0));
+        const voucherAmt = r2(sessionVoucherAmount);
+        const moneyAmt   = r2(Math.max(0, totalDue - voucherAmt));
+        const comp       = paymentMethod === 'complimentary';
+        const money = comp ? [] : paymentMethod === 'split' && splitDetails
+          ? [
+              { method: 'cash' as const, amount: r2(splitDetails.cash) },
+              { method: 'upi'  as const, amount: r2(splitDetails.upi) },
+              { method: 'card' as const, amount: r2(splitDetails.card) },
+            ].filter(p => p.amount > 0)
+          : [{ method: ledgerMethod(paymentMethod), amount: moneyAmt }];
+        const moneySum = r2(money.reduce((t, p) => t + p.amount, 0));
+        if (!comp && Math.abs(moneySum - moneyAmt) > PAISE) {
+          logger.warn('[ledger] table bill: money taken differs from the orders still owed', {
+            hotelId: req.hotelId, sessionId: String(session._id), moneyTaken: moneySum, ordersOwed: moneyAmt,
           });
         }
+        await recordEntries(req.hotelId!, settlementEntries({
+          dues,
+          discounts: comp && moneyAmt > 0 ? [{ method: 'complimentary' as const, amount: moneyAmt }] : [],
+          tenders: voucherAmt > 0 ? [{ method: 'voucher' as const, amount: voucherAmt, reference: rawSessionVoucherCode }] : [],
+          money,
+          base: {
+            paidAt: now, source: 'table_bill', sessionId: session._id, guestId: null,
+            recordedBy: req.cashierName || req.role || '', reference: '',
+          },
+          keyBase: `table-bill:${session._id}`,
+        }));
       }
+
+      // (Gift voucher was deducted before billing — see Batch 2 (2A) above.)
 
       // [Phase 4+6] Merged fire-and-forget: lifetimeSpend (all guests, atomic guard)
       //             + loyalty earn (eligible guests, existing loyaltyEarnedAt guard).
@@ -572,7 +679,7 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
     } else {
       const activeGuests = guests.filter((g) => g.status === 'active');
       if (activeGuests.length > 0) {
-        res.status(400).json({
+        await refuse(400, {
           message: `${activeGuests.length} guest(s) are still active. Bill or mark as left before closing, or pass bulkBill:true.`,
           activeGuestIds: activeGuests.map((g) => g._id),
         });
@@ -620,7 +727,13 @@ router.patch('/:sessionId/close', requireCashierOrAdmin, async (req: AuthRequest
       totalRevenue,
     });
 
+    closedNow = true;
     res.json({ session: updatedSession, totalRevenue });
+    } finally {
+      // Safety net: release the claim unless the table was closed (exceptions; refusals above
+      // already released it before answering — the filter makes a second release a no-op).
+      if (!closedNow) await releaseClaim();
+    }
   } catch (err: any) {
     sendError(res, 500, 'Failed to close session', err);
   }

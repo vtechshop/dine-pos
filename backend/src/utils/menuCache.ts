@@ -14,3 +14,7 @@ export const menuCacheSet = (key: string, data: any[]): void => {
 };
 
 export const menuCacheDel = (key: string): void => { _cache.delete(key); };
+
+/** Phase 5 · Batch 6 (P4-INV-04): drop the cached product list (same key as productRoutes) after a
+ *  sale or cancellation changes counted stock, so the POS never shows a sold-out dish as available. */
+export const invalidateProductList = (hotelId: string): void => menuCacheDel(`products:${hotelId}`);

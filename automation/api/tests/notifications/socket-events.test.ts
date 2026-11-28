@@ -2,6 +2,10 @@ import { getHotelA } from '../../setup/testEnv';
 import { createOrder, updateOrderStatus } from '../../helpers/order.helper';
 import { connectAllRoles, disconnectBundle, SocketBundle } from '../../helpers/socket.helper';
 import { createConnectedSocket } from '../../../utils/socket-client';
+import { ensureOpenShifts } from '../../helpers/shift.helper';
+
+// Counter payments need an open shift (Phase 5 Batch 5); see helpers/shift.helper.ts
+beforeAll(ensureOpenShifts);
 
 describe('Notifications — Socket Events', () => {
   let bundle: SocketBundle;

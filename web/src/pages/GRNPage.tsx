@@ -9,7 +9,17 @@ import {
   type GRN, type GRNInput, type GRNItemInput, type GRNReport,
 } from '../api/grn';
 import { fetchPurchaseOrders, type PurchaseOrder } from '../api/purchaseOrders';
-import type { GRNStatus } from '../types';
+import type { GRNStatus, Ingredient } from '../types';
+import { fetchIngredients } from '../api/inventory';
+
+// Phase 5 · Batch 6 (P4-INV-01): a received line adds to an ingredient's stock only when it is linked
+// to one (the page never sent the link, so stock never went up). The default is the ingredient with
+// the same name and unit; the person receiving can change it or choose "not an inventory item".
+const norm = (s: string | undefined) => String(s ?? '').trim().toLowerCase();
+function matchIngredient(list: Ingredient[], name: string, unit: string): string {
+  const hit = list.filter(g => norm(g.name) === norm(name) && norm(g.unit) === norm(unit));
+  return hit.length === 1 ? hit[0]._id : '';
+}
 import { useSettings } from '../context/SettingsContext';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -89,6 +99,19 @@ function ReceiveDrawer({
   const [items, setItems]             = useState<ReceiveItem[]>([]);
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState<string | null>(null);
+  const [ingredients, setIngredients] = useState<Ingredient[] | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    // Ingredients may be off for this hotel — then lines simply are not linked.
+    fetchIngredients().then(setIngredients).catch(() => setIngredients([]));
+  }, [open]);
+
+  // Lines the person has not linked yet get the matching ingredient once the list has loaded.
+  useEffect(() => {
+    if (!ingredients) return;
+    setItems(prev => prev.map(i => (i.ingredientId === undefined ? { ...i, ingredientId: matchIngredient(ingredients, i.productName, i.unit) } : i)));
+  }, [ingredients, step]);
 
   useEffect(() => {
     if (!open) { setStep('select-po'); setSelectedPO(null); setError(null); return; }
@@ -128,6 +151,7 @@ function ReceiveDrawer({
       variantName:   pi.variantName,
       orderedQty:    pi.orderedQty,
       receivedQty:   Math.max(0, pi.orderedQty - (pi.receivedQty || 0)),
+      ingredientId:  ingredients ? matchIngredient(ingredients, pi.productName, pi.unit) : undefined,
       damagedQty:    0,
       rejectedQty:   0,
       unit:          pi.unit,
@@ -160,6 +184,7 @@ function ReceiveDrawer({
           poItemIndex:   i.poItemIndex,
           productId:     i.productId,
           productName:   i.productName,
+          ingredientId:  i.ingredientId || undefined,
           variantId:     i.variantId,
           variantName:   i.variantName,
           orderedQty:    Number(i.orderedQty) || 0,
@@ -299,6 +324,20 @@ function ReceiveDrawer({
                           <div>
                             <p className="text-sm font-semibold text-ink">{item.productName}</p>
                             {item.variantName && <p className="text-xs text-ink/40">{item.variantName}</p>}
+                            {ingredients && ingredients.length > 0 && (
+                              <label className="mt-1 flex items-center gap-1.5 text-xs text-ink/60">
+                                Adds to stock of
+                                <select
+                                  aria-label={`Stock for ${item.productName}`}
+                                  value={item.ingredientId ?? ''}
+                                  onChange={e => setItemField(item._key, 'ingredientId', e.target.value)}
+                                  className="rounded border border-border bg-canvas px-1.5 py-0.5 text-xs text-ink"
+                                >
+                                  <option value="">— not an inventory item (stock unchanged)</option>
+                                  {ingredients.map(g => <option key={g._id} value={g._id}>{g.name} ({g.unit})</option>)}
+                                </select>
+                              </label>
+                            )}
                             <p className="mt-0.5 text-xs text-ink/40">
                               Ordered: {item.orderedQty} {item.unit}
                               {alreadyReceived > 0 && <span className="ml-2 text-emerald-600">Already received: {alreadyReceived}</span>}

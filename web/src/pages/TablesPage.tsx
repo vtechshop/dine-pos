@@ -303,7 +303,7 @@ function ReleaseDialog({ table, sym, onDone, onCancel }: {
     setWorking(true); setErr(null);
     try {
       if (plan.sessionId) {
-        for (const o of plan.kitchenOrders) await cancelOrder(o._id);
+        for (const o of plan.kitchenOrders) await cancelOrder(o._id, 'Table marked available');
         for (const gid of plan.activeGuestIds) {
           try { await markGuestLeft(plan.sessionId, gid); }
           catch (e) { if (!(e instanceof Error && /already/i.test(e.message))) throw e; }

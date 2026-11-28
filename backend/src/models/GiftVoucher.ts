@@ -7,6 +7,8 @@ export interface IVoucherTransaction {
   amount:    number;
   balanceAfter: number;
   orderId:   mongoose.Types.ObjectId | null;
+  sessionId?: mongoose.Types.ObjectId | null;   // table bill this redemption belongs to (idempotency key)
+  guestId?:   mongoose.Types.ObjectId | null;   // guest bill this redemption belongs to (idempotency key)
   remarks:   string;
   createdBy: string;
   createdAt: Date;
@@ -38,6 +40,8 @@ const VoucherTransactionSchema = new Schema<IVoucherTransaction>(
     amount:       { type: Number, required: true },
     balanceAfter: { type: Number, required: true },
     orderId:      { type: Schema.Types.ObjectId, ref: 'Order', default: null },
+    sessionId:    { type: Schema.Types.ObjectId, ref: 'TableSession', default: null },
+    guestId:      { type: Schema.Types.ObjectId, ref: 'Guest', default: null },
     remarks:      { type: String, default: '' },
     createdBy:    { type: String, default: 'system' },
   },

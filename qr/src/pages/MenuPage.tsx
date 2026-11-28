@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { publicFetch } from '../api/client.ts';
 import { loadRazorpayScript } from '../utils/razorpay.ts';
@@ -17,6 +17,13 @@ import { CartSheet } from '../components/cart/CartSheet.tsx';
 import { GuestNamePrompt } from '../components/order/GuestNamePrompt.tsx';
 import { BottomNav } from '../components/layout/BottomNav.tsx';
 import type { GuestInfo, QrOrder } from '../types/qr.ts';
+import { qrPath } from '../utils/qrLink.ts';
+
+/** A fresh id for one order attempt (the server de-duplicates retries by it). */
+function newAttemptId(): string {
+  const c = globalThis.crypto as Crypto | undefined;
+  return c?.randomUUID ? c.randomUUID() : `qr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
 
 interface MenuPageProps {
   hotelId:     string;
@@ -47,7 +54,7 @@ const WAITER_PRESETS = [
 export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
   const navigate = useNavigate();
   const { hotel, features, loading, error } = useMenu();
-  const { items, clearCart } = useCart();
+  const { items, clearCart, totalItems } = useCart();
   const { guestToken, guestInfo, setGuestToken, setGuestInfo, addPlacedOrder } = useGuest();
 
   const [modal, setModal]               = useState<ModalState>('none');
@@ -55,9 +62,16 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
   const [search, setSearch]             = useState('');
   const [vegOnly, setVegOnly]           = useState(false);
   const [waiterSent, setWaiterSent]     = useState(false);
+  const [waiterFailed, setWaiterFailed] = useState(false);
+  // Phase 5 · Batch 4 (P4-QR-11): one id per cart; a retry of the same cart sends the same id,
+  // so the server returns the order it already made instead of a second one.
+  const attemptRef = useRef<{ cartKey: string; id: string } | null>(null);
   const [pendingPayment, setPendingPayment] = useState<PendingPaymentData | null>(null);
 
   const tableSessions = features?.tableSessions ?? false;
+  const orderingOff   = features?.qrOrdering === false;
+  // the legacy flow (no table sessions) always needs a name; with sessions, only when the hotel asks
+  const nameRequired  = !tableSessions || (features?.customerIdentification ?? 'disabled') !== 'disabled';
   const businessType  = hotel?.businessType ?? 'both';
   const showVegToggle = businessType === 'both';
 
@@ -81,6 +95,11 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
           if (sessionToken) setGuestToken(sessionToken);
         }
 
+        const cartKey = JSON.stringify(items.map(i => [i.cartLineId, i.quantity, i.notes]));
+        if (!attemptRef.current || attemptRef.current.cartKey !== cartKey) {
+          attemptRef.current = { cartKey, id: newAttemptId() };
+        }
+
         const result = await placeOrder({
           hotelId,
           tableNumber,
@@ -89,27 +108,15 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
           name:          guestData?.name,
           phone:         guestData?.phone,
           tableSessions,
+          clientOrderId: attemptRef.current.id,
         });
 
         if (result.guestToken && !guestToken) {
           setGuestToken(result.guestToken);
         }
 
-        if (!tableSessions) {
-          // Legacy non-tableSessions path: no Razorpay gate
-          const placedOrder: QrOrder = {
-            _id:         result.order._id,
-            orderNumber: result.order.orderNumber,
-            status:      'pending',
-            items:       [],
-            grandTotal:  result.order.grandTotal,
-            createdAt:   new Date().toISOString(),
-          };
-          addPlacedOrder(placedOrder);
-          clearCart();
-          navigate('/orders');
-          return;
-        }
+        // Phase 5 · Batch 4 (P4-QR-10): the legacy flow (no table sessions) pays online too —
+        // the server only accepts prepaid QR orders — so both flows continue to payment here.
 
         // Get Razorpay checkout params from backend
         const rpOrder = await publicFetch<{
@@ -192,6 +199,7 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
       });
 
       setPendingPayment(null);
+      attemptRef.current = null;
       const placedOrder: QrOrder = {
         _id:         pay.orderId,
         orderNumber: pay.orderNumber,
@@ -202,7 +210,7 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
       };
       addPlacedOrder(placedOrder);
       clearCart();
-      navigate('/orders');
+      navigate(qrPath('/orders'));
     } catch (err) {
       setPlaceError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
       setModal('cart');
@@ -215,7 +223,7 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
       void doPlaceOrder();
       return;
     }
-    if (tableSessions && !guestInfo) {
+    if (!guestInfo) {
       setModal('guest-prompt');
     } else {
       void doPlaceOrder();
@@ -229,10 +237,14 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
 
   async function handleWaiterPreset(msg: string) {
     setModal('none');
+    setWaiterFailed(false);
     try {
       await callWaiter(hotelId, tableNumber, msg);
     } catch {
-      // Fire-and-forget; a failed call still shows the toast to avoid confusing the guest
+      // Phase 5 · Batch 4 (P4-QR-15): never tell the guest staff were notified when they were not
+      setWaiterFailed(true);
+      setTimeout(() => setWaiterFailed(false), 5000);
+      return;
     }
     setWaiterSent(true);
     setTimeout(() => setWaiterSent(false), 3000);
@@ -296,6 +308,12 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
         )}
       </div>
 
+      {orderingOff && (
+        <div className="mx-4 mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Ordering from your phone is not available here. Please order with a staff member.
+        </div>
+      )}
+
       <CategoryTabs />
       <ProductGrid searchQuery={search} vegOnly={vegOnly} />
 
@@ -305,16 +323,22 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
         </div>
       )}
 
+      {waiterFailed && (
+        <div className="fixed top-4 inset-x-4 z-50 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl shadow text-center">
+          We could not reach the staff. Please try again, or wave to a staff member.
+        </div>
+      )}
+
       {waiterSent && (
         <div className="fixed top-4 inset-x-4 z-50 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl shadow text-center">
           Staff has been notified — someone will be with you shortly.
         </div>
       )}
 
-      {/* Call waiter FAB — above CartBar */}
+      {/* Call waiter FAB — above CartBar (Phase 5 · Batch 4, P4-QR-16: moves up while the cart bar shows) */}
       <button
         onClick={() => setModal('waiter')}
-        className="fixed bottom-[72px] right-4 z-40 w-12 h-12 bg-white border border-[#E8D5C0] rounded-full shadow-md flex items-center justify-center text-[#1C0800]/60 hover:text-[#1C0800] transition-colors"
+        className={`fixed ${totalItems > 0 ? 'bottom-[136px]' : 'bottom-[72px]'} right-4 z-40 w-12 h-12 bg-white border border-[#E8D5C0] rounded-full shadow-md flex items-center justify-center text-[#1C0800]/60 hover:text-[#1C0800] transition-colors`}
         aria-label="Call waiter"
       >
         <Bell size={20} />
@@ -334,6 +358,7 @@ export function MenuPage({ hotelId, tableNumber }: MenuPageProps) {
       {/* Guest info prompt */}
       {modal === 'guest-prompt' && (
         <GuestNamePrompt
+          requiresName={nameRequired}
           requiresPhone={features?.customerIdentification === 'name_mobile'}
           onSubmit={handleGuestSubmit}
         />

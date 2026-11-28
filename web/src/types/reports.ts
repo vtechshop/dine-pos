@@ -95,19 +95,23 @@ export interface HourlyBucket {
   revenue: number;
 }
 
+// Phase 5 · Batch 7 (P4-CATALOG-08): field names as GET /api/reports/modifiers returns them
+// (the screen read modifierOptionName / totalQuantity, which the API never sent).
 export interface ModifierTopRow {
-  modifierOptionId:   string;
-  modifierOptionName: string;
-  totalQuantity:      number;
-  totalRevenue:       number;
-  orderCount:         number;
+  optionId:     string;
+  optionName:   string;
+  groupName:    string;
+  totalQty:     number;
+  totalRevenue: number;
+  orderCount:   number;
 }
 
 export interface ModifierGroupRow {
-  modifierGroupId:   string;
-  modifierGroupName: string;
-  totalRevenue:      number;
-  totalQuantity:     number;
+  groupId:      string;
+  groupName:    string;
+  totalRevenue: number;
+  totalQty:     number;
+  orderCount:   number;
 }
 
 export interface ModifierReport {

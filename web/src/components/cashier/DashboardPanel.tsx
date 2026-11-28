@@ -12,15 +12,17 @@ import { useSocket } from '../../context/SocketContext';
 import { useSettings } from '../../context/SettingsContext';
 import { fetchSalesSummary } from '../../api/dashboard';
 import { useAuth } from '../../context/AuthContext';
-import { fetchCashierOrders } from '../../api/orders';
+import { fetchCashierOrders, fetchPendingSummary } from '../../api/orders';
 import { fetchProductSalesReport } from '../../api/reports';
 import type { DailyReport } from '../../types';
 import type { CashierOrderItem } from '../../api/orders';
+import { formatMoney } from '../../utils/money';
+import { istDateString } from '../../utils/istDate';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
+  return formatMoney(sym, n);
 }
 
 function fmtTime(d: Date) {
@@ -70,7 +72,18 @@ function KpiCard({
 
 // ── Status indicator ──────────────────────────────────────────────────────────
 
-function StatusDot({ ok, label, detail }: { ok: boolean; label: string; detail?: string }) {
+function StatusDot({ ok, label, detail, neutral = false }: { ok: boolean; label: string; detail?: string; neutral?: boolean }) {
+  if (neutral) {
+    return (
+      <div className="flex items-center gap-2">
+        <div className="h-2 w-2 shrink-0 rounded-full bg-ink/25" />
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-ink">{label}</p>
+          {detail && <p className="text-[10px] text-ink/45 truncate">{detail}</p>}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-2">
       <div className={`h-2 w-2 shrink-0 rounded-full ${ok ? 'bg-emerald-500' : 'bg-red-500'}`} />
@@ -151,8 +164,11 @@ function RecentRow({ order, sym }: { order: CashierOrderItem; sym: string }) {
 
 interface TopProduct { productName: string; totalQuantity: number; totalRevenue: number }
 
-export function DashboardPanel() {
-  const { shift, heldBills, drawerBalance, setActiveTab, setOrderPrefill } = useCashier();
+export function DashboardPanel({ onlineOrdersEnabled = null }: {
+  /** Swiggy / Zomato: false when the hotel's plan does not include it, null when unknown */
+  onlineOrdersEnabled?: boolean | null;
+} = {}) {
+  const { shift, heldBills, drawerBalance, setActiveTab, setOrderPrefill, refreshDrawer } = useCashier();
   const { notifications, unreadCount } = useNotifications();
   const { connected: socketConnected } = useSocket();
   const { settings } = useSettings();
@@ -185,6 +201,7 @@ export function DashboardPanel() {
   // Remote data
   const [report, setReport] = useState<DailyReport | null>(null);
   const [orders, setOrders] = useState<CashierOrderItem[]>([]);
+  const [pendingSummary, setPendingSummary] = useState<{ orders: number; amount: number } | null>(null);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -193,16 +210,19 @@ export function DashboardPanel() {
 
   const loadData = useCallback(async () => {
     let cancelled = false;
-    const today = new Date().toISOString().split('T')[0] ?? '';
-    const [rptRes, ordRes, topRes] = await Promise.allSettled([
+    const today = istDateString();
+    const [rptRes, ordRes, topRes, pendRes] = await Promise.allSettled([
       fetchSalesSummary(role),   // cashier: own shift; admin: whole day
       fetchCashierOrders(),
       // Product sales report is admin-only — don't ask for it as a cashier (403)
       isAdmin ? fetchProductSalesReport(today) : Promise.reject(new Error('admin only')),
+      fetchPendingSummary(),
+      refreshDrawer(),   // Batch 3: drawer balance includes the cash taken for bills
     ]);
     if (!cancelled) {
       if (rptRes.status === 'fulfilled') setReport(rptRes.value);
       if (ordRes.status === 'fulfilled') setOrders(ordRes.value);
+      if (pendRes.status === 'fulfilled') setPendingSummary(pendRes.value);
       if (topRes.status === 'fulfilled') {
         const sorted = [...topRes.value.products]
           .sort((a, b) => b.totalQuantity - a.totalQuantity)
@@ -212,7 +232,7 @@ export function DashboardPanel() {
       setLoading(false);
     }
     return () => { cancelled = true; };
-  }, [role, isAdmin]);
+  }, [role, isAdmin, refreshDrawer]);
 
   useEffect(() => {
     void loadData();
@@ -221,8 +241,9 @@ export function DashboardPanel() {
   }, [loadData]);
 
   // Derived counts
-  // Same rule as Pending Bills: every unpaid, uncancelled order
-  const pendingCount = orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length;
+  // Batch 3: bills with money still owed, from the server. An order paid while still in the
+  // kitchen is an advance, not a pending payment.
+  const pendingCount = pendingSummary?.orders ?? 0;
   const recentOrders = orders
     .filter(o => o.status === 'completed' || o.status === 'cancelled')
     .slice(0, 6);
@@ -322,11 +343,12 @@ export function DashboardPanel() {
         />
         <KpiCard
           label="Pending Payment"
-          value={String(pendingCount)}
-          sub="Awaiting collection"
+          value={pendingSummary ? String(pendingCount) : '—'}
+          sub={pendingSummary ? `${fmtINR(sym, pendingSummary.amount)} to collect` : 'Awaiting collection'}
           icon={<CreditCard size={16} className="text-amber-600" />}
           color={`border-amber-100 bg-amber-50 text-amber-800 ${pendingCount > 0 ? 'ring-1 ring-amber-300' : ''}`}
-          onClick={pendingCount > 0 ? () => setActiveTab('pending') : undefined}
+          // always opens the list: paid orders in the kitchen are handed over from there
+          onClick={() => setActiveTab('pending')}
         />
         <KpiCard
           label="Hold Bills"
@@ -362,7 +384,8 @@ export function DashboardPanel() {
               { label: 'Cash', val: report.paymentBreakdown.cash, cls: 'text-emerald-700' },
               { label: 'UPI', val: report.paymentBreakdown.upi, cls: 'text-brand' },
               { label: 'Card', val: report.paymentBreakdown.card, cls: 'text-ink/50' },
-              { label: 'Split', val: report.paymentBreakdown.split, cls: 'text-ink/50' },
+              // Batch 3: split payments are recorded under their parts, so "Split" was always ₹0.
+              { label: 'Online', val: report.paymentBreakdown.online, cls: 'text-ink/50' },
             ] as const).map(({ label, val, cls }) => (
               <div key={label}>
                 <p className="text-[10px] text-ink/50">{label}</p>
@@ -370,6 +393,28 @@ export function DashboardPanel() {
               </div>
             ))}
           </div>
+          {report.collections && (
+            <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border pt-2 sm:grid-cols-4">
+              {[
+                { label: 'Total collected', val: report.collections.total, show: true },
+                { label: 'Refunds', val: report.refunds?.total ?? 0, show: (report.refunds?.total ?? 0) > 0 },
+                { label: 'Reversals', val: report.reversals?.total ?? 0, show: (report.reversals?.total ?? 0) > 0 },
+                {
+                  label: 'Net collected', val: report.netCollections ?? report.collections.total,
+                  show: (report.refunds?.total ?? 0) > 0 || (report.reversals?.total ?? 0) > 0,
+                },
+                { label: 'Voucher / wallet', val: report.tenders?.total ?? 0, show: (report.tenders?.total ?? 0) > 0 },
+                // Owner decision: tips are money received but not sales and not part of collections
+                { label: 'Tips (not sales)', val: report.tips?.total ?? 0, show: (report.tips?.total ?? 0) > 0 },
+              ].filter(x => x.show).map(({ label, val }) => (
+                <div key={label}>
+                  <p className="text-[10px] text-ink/50">{label}</p>
+                  <p className="text-sm font-bold text-ink">{fmtINR(sym, val)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-[10px] text-ink/40">Split payments are shown under Cash, UPI and Card. Vouchers and wallet are not money collected.</p>
         </div>
       )}
 
@@ -397,6 +442,10 @@ export function DashboardPanel() {
             label="Cloud Sync"
             detail={isOnline && socketConnected ? 'Live' : 'Degraded'}
           />
+          {/* Batch 3: say so when Swiggy / Zomato is not part of the plan (the pills just vanished) */}
+          {onlineOrdersEnabled === false && (
+            <StatusDot ok={false} neutral label="Swiggy / Zomato" detail="Not enabled for this hotel" />
+          )}
         </div>
       </div>
 

@@ -17,11 +17,12 @@ import { AuditModal } from './AuditModal';
 import { Spinner } from '../ui/Spinner';
 import type { CashierOrderItem } from '../../api/orders';
 import type { PrintJob } from '../../types';
+import { formatMoney } from '../../utils/money';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
+  return formatMoney(sym, n);
 }
 
 function fmtAge(nowMs: number, iso: string): string {
@@ -67,6 +68,9 @@ function OrderRow({
   const [reprinting, setReprinting] = useState(false);
   const [reprintErr, setReprintErr] = useState<string | null>(null);
   const paymentCompletedRef = useRef(false);
+  // Batch 3: the tip / discount / points already saved by this dialog, so that retrying after a
+  // failed payment cannot apply them a second time.
+  const appliedRef = useRef<string | null>(null);
 
   const ageMs = nowMs - new Date(order.createdAt).getTime();
   const isOld = ageMs > 20 * 60_000;
@@ -103,8 +107,20 @@ function OrderRow({
     }
   }
 
-  async function handleCancel(_payload: { reason: string; cashierName: string; cashierId: string }) {
-    await cancelOrder(order._id);
+  // Batch 3 (3C): the typed reason is sent and stored (it was ignored). A bill with money
+  // already received is only cancelled after the refund to the customer is confirmed.
+  async function handleCancel(payload: { reason: string; cashierName: string; cashierId: string }) {
+    try {
+      await cancelOrder(order._id, payload.reason);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'PAID_ORDER') {
+        const ok = window.confirm(`${e.message}\n\nRefund the customer and cancel this bill?`);
+        if (!ok) throw new Error('Not cancelled — the bill has a payment. Refund it to cancel.');
+        await cancelOrder(order._id, payload.reason, true);
+      } else {
+        throw e;
+      }
+    }
     onRefresh();
   }
 
@@ -252,27 +268,50 @@ function OrderRow({
           subtotal={order.subtotal}
           taxTotal={order.taxTotal}
           appliedDiscount={order.discountAmount ?? 0}
+          amountDue={Math.max(0, Math.round((order.grandTotal - (order.amountSettled ?? 0)) * 100) / 100)}
+          adjustments={[
+            { label: 'Coupon', amount: -(order.couponDiscount ?? 0) },
+            { label: 'Loyalty redeemed', amount: -(order.loyaltyDiscount ?? 0) },
+            { label: 'Discount at payment', amount: -(order.paymentDiscount ?? 0) },
+            { label: 'Delivery', amount: order.deliveryFee ?? 0 },
+            { label: 'Gift voucher', amount: -(order.giftVoucherAmount ?? 0) },
+            { label: 'Wallet', amount: -(order.walletAmount ?? 0) },
+            { label: 'Already paid', amount: -(order.amountSettled ?? 0) },
+          ]}
+          billPhone={order.customerPhone ?? ''}
+          alreadyRedeemed={(order.redeemedPoints ?? 0) > 0}
           onConfirm={async (result: PaymentResult) => {
             // Food already ready / served → pay and close the bill (as before).
             // Held for payment or still being cooked → record the payment only: a held order
             // goes to the kitchen now, a cooking one stays there until handed over / served.
             const closeNow = readyToHand;
+            const changes = `${result.tipAmount}|${result.additionalDiscount}|${result.loyaltyPointsRedeemed}`;
+            const hasChanges = !!(result.tipAmount || result.additionalDiscount || result.loyaltyPointsRedeemed);
+            if (appliedRef.current && appliedRef.current !== changes) {
+              throw new Error('The tip, discount or points were already saved on this bill. Close this window and open it again to change them.');
+            }
+            const sendChanges = !appliedRef.current && hasChanges;
             try {
-              // PATCH /orders/:id/payment carries tip and post-order discount (and, when
-              // closing, the payment method the completion keeps).
-              if (closeNow || result.tipAmount || result.additionalDiscount) {
+              // PATCH /orders/:id/payment carries tip, post-order discount and loyalty points
+              // (and, when closing, the payment method the completion keeps).
+              if (closeNow || sendChanges) {
                 await patchOrderPayment(
                   order._id,
                   result.method,
                   result.splitDetails,
-                  result.tipAmount || undefined,
-                  result.additionalDiscount || undefined,
+                  sendChanges ? result.tipAmount || undefined : undefined,
+                  sendChanges ? result.additionalDiscount || undefined : undefined,
+                  sendChanges ? result.loyaltyPointsRedeemed || undefined : undefined,
                 );
+                if (sendChanges) {
+                  appliedRef.current = changes;
+                  paymentCompletedRef.current = true;   // the bill changed: refresh when this closes
+                }
               }
               if (closeNow) {
-                await completeOrder(order._id);
+                await completeOrder(order._id, result.paymentRef);
               } else {
-                await payOrder(order._id, result.method, result.method === 'split' ? result.splitDetails : undefined);
+                await payOrder(order._id, result.method, result.method === 'split' ? result.splitDetails : undefined, result.paymentRef);
               }
             } catch (e) {
               // Paid already (e.g. from another screen): refresh the list when this window closes
@@ -286,6 +325,7 @@ function OrderRow({
           }}
           onClose={() => {
             setShowPay(false);
+            appliedRef.current = null;
             if (paymentCompletedRef.current) {
               paymentCompletedRef.current = false;
               onRefresh();
@@ -385,7 +425,7 @@ export function PendingBillsPanel() {
         <div className="flex items-center gap-2">
           {pending.length > 0 && (
             <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">
-              {pending.length} pending
+              {pending.length} open
             </span>
           )}
           <button

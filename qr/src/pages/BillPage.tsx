@@ -7,6 +7,7 @@ import { fetchBill } from '../api/bill.ts';
 import { BillView } from '../components/order/BillView.tsx';
 import { BottomNav } from '../components/layout/BottomNav.tsx';
 import type { QrBill } from '../types/qr.ts';
+import { qrPath } from '../utils/qrLink.ts';
 
 const POLL_INTERVAL_MS = 20_000;
 
@@ -46,7 +47,7 @@ export function BillPage({ hotelId }: BillPageProps) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#FFF6EE] p-8 text-center">
         <p className="text-sm text-[#1C0800]/60">No active session found.</p>
-        <Link to="/" className="mt-4 text-sm text-[#E8380D] font-medium">Back to menu</Link>
+        <Link to={qrPath('/')} className="mt-4 text-sm text-[#E8380D] font-medium">Back to menu</Link>
       </div>
     );
   }

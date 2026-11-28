@@ -51,7 +51,8 @@ export function StaffDrawer({ role, staff, onSave, onClose }: Props) {
       const data: StaffUpdateInput = {
         name: name.trim(),
         employeeCode: code.trim().toUpperCase(),
-        mobile: mobile.trim() || undefined,
+        // Phase 5 · Batch 7 (P4-CATALOG-16): an emptied field is sent as "" so the number is removed
+        mobile: mobile.trim(),
       };
 
       if (isEdit) {

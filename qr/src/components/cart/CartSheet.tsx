@@ -10,7 +10,7 @@ interface CartSheetProps {
 }
 
 export function CartSheet({ onClose, onConfirm }: CartSheetProps) {
-  const { items, totalPrice, totalItems } = useCart();
+  const { items, money, totalItems } = useCart();
   const { hotel } = useMenu();
   const overlayRef = useRef<HTMLDivElement>(null);
   const symbol = hotel?.currencySymbol ?? '₹';
@@ -41,9 +41,18 @@ export function CartSheet({ onClose, onConfirm }: CartSheetProps) {
         </div>
 
         <div className="px-5 py-4 border-t border-[#E8D5C0] bg-[#FFF6EE]">
+          {/* Phase 5 · Batch 4 (P4-QR-06): the total is what the guest will be charged */}
+          <div className="flex justify-between text-xs text-[#1C0800]/70 mb-1">
+            <span>Subtotal</span>
+            <span>{symbol}{money.subtotal.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-xs text-[#1C0800]/70 mb-2">
+            <span>Taxes</span>
+            <span>{symbol}{money.tax.toFixed(2)}</span>
+          </div>
           <div className="flex justify-between text-sm font-semibold text-[#1C0800] mb-4">
-            <span>Total</span>
-            <span>{symbol}{totalPrice.toFixed(2)}</span>
+            <span>Total (incl. taxes)</span>
+            <span>{symbol}{money.total.toFixed(2)}</span>
           </div>
           <button
             onClick={onConfirm}

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { saFetch } from '../../api/superAdmin';
+import { SAConfirm } from '../../components/ui/SAShared';
 
 interface HotelSaasRow {
   _id: string;
@@ -58,6 +59,8 @@ export function SaasSubscriptionsPage() {
   const [stdInput, setStdInput]       = useState('');
   const [stdSaving, setStdSaving]     = useState(false);
   const [stdErr, setStdErr]           = useState('');
+  // Phase 5 · Batch 7 (P4-SA-02): the platform price is confirmed before it is saved
+  const [stdConfirm, setStdConfirm]   = useState<number | null>(null);
 
   const loadStandard = useCallback(async () => {
     try {
@@ -69,12 +72,18 @@ export function SaasSubscriptionsPage() {
 
   useEffect(() => { void loadStandard(); }, [loadStandard]);
 
-  async function saveStandard() {
+  function saveStandard() {
     const price = Number(stdInput);
     if (!Number.isInteger(price) || price < 1000 || price > 1_000_000) {
       setStdErr('Enter a whole number between 1,000 and 10,00,000.');
       return;
     }
+    setStdErr('');
+    setStdConfirm(price);
+  }
+
+  async function saveStandardConfirmed(price: number) {
+    setStdConfirm(null);
     setStdSaving(true);
     setStdErr('');
     try {
@@ -173,6 +182,15 @@ export function SaasSubscriptionsPage() {
 
   return (
     <div className="space-y-4 p-4">
+      {stdConfirm !== null && (
+        <SAConfirm
+          title="Change the standard price?"
+          body={<>Every new subscription will be charged {fmtAmount(stdConfirm)} a year{standard ? <> instead of {fmtAmount(standard.annualPrice)}</> : null}. Hotels already subscribed keep their price.</>}
+          confirmLabel="Yes, change the price"
+          onConfirm={() => void saveStandardConfirmed(stdConfirm)}
+          onCancel={() => setStdConfirm(null)}
+        />
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">SaaS Subscriptions</h1>
         <button onClick={() => void load()} className="rounded-lg border px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300">

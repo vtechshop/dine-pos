@@ -23,6 +23,9 @@ import { MorningBriefCard } from '../components/ai/MorningBriefCard';
 import { fetchLatestBrief } from '../api/morningBrief';
 import type { MorningBrief } from '../api/morningBrief';
 import { PALETTE } from '../theme/palette';
+import { isSale, saleTime, saleValue } from '../utils/salesDefinitions';
+import { formatMoney } from '../utils/money';
+import { istDateString } from '../utils/istDate';
 
 // ── New-order badge state ──────────────────────────────────────────────────────
 // Tracked separately so socket events do NOT re-render the full table grid.
@@ -122,18 +125,25 @@ interface PaymentBreakdownProps {
 function PaymentBreakdownCard({ report, loading, symbol }: PaymentBreakdownProps) {
   const rows = useMemo(() => {
     if (!report) return [];
-    const { cash, upi, card } = report.paymentBreakdown;
-    const total = (cash ?? 0) + (upi ?? 0) + (card ?? 0);
+    // Batch 2 (2D): paymentBreakdown = COLLECTIONS (money received today, per method; split
+    // payments appear under their parts). Online = gateway payments.
+    const pb = report.paymentBreakdown as typeof report.paymentBreakdown & { online?: number; other?: number };
+    const { cash, upi, card } = pb;
+    const online = pb.online ?? 0;
+    const other  = pb.other ?? 0;
+    const total = (cash ?? 0) + (upi ?? 0) + (card ?? 0) + online + other;
     return [
-      { label: 'Cash',  icon: <Banknote   size={12} />, value: cash ?? 0, pct: total > 0 ? Math.round(((cash ?? 0) / total) * 100) : 0 },
-      { label: 'UPI',   icon: <Smartphone size={12} />, value: upi  ?? 0, pct: total > 0 ? Math.round(((upi  ?? 0) / total) * 100) : 0 },
-      { label: 'Card',  icon: <CreditCard size={12} />, value: card ?? 0, pct: total > 0 ? Math.round(((card ?? 0) / total) * 100) : 0 },
+      { label: 'Cash',   icon: <Banknote   size={12} />, value: cash ?? 0, pct: total > 0 ? Math.round(((cash ?? 0) / total) * 100) : 0 },
+      { label: 'UPI',    icon: <Smartphone size={12} />, value: upi  ?? 0, pct: total > 0 ? Math.round(((upi  ?? 0) / total) * 100) : 0 },
+      { label: 'Card',   icon: <CreditCard size={12} />, value: card ?? 0, pct: total > 0 ? Math.round(((card ?? 0) / total) * 100) : 0 },
+      { label: 'Online', icon: <Smartphone size={12} />, value: online,    pct: total > 0 ? Math.round((online / total) * 100) : 0 },
+      { label: 'Other',  icon: <Banknote   size={12} />, value: other,     pct: total > 0 ? Math.round((other / total) * 100) : 0 },
     ].filter(r => r.value > 0);
   }, [report]);
 
   return (
     <div className="rounded-xl border border-border bg-canvas p-4">
-      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/65">Payment Split</p>
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-ink/65">Collections (money received)</p>
       {loading ? (
         <div className="space-y-3">
           {[1,2,3].map(i => <div key={i} className="animate-pulse h-7 rounded bg-border/60" />)}
@@ -148,7 +158,7 @@ function PaymentBreakdownCard({ report, loading, symbol }: PaymentBreakdownProps
                 <div className="flex items-center gap-1.5 text-ink/65">{r.icon}<span className="text-xs">{r.label}</span></div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] text-ink/50">{r.pct}%</span>
-                  <span className="text-xs font-semibold tabular-nums text-ink">{symbol}{r.value.toLocaleString('en-IN')}</span>
+                  <span className="text-xs font-semibold tabular-nums text-ink">{formatMoney(symbol, r.value)}</span>
                 </div>
               </div>
               <div className="h-1 overflow-hidden rounded-full bg-mist">
@@ -194,7 +204,7 @@ function TopProductsCard({ products, loading, symbol }: TopProductsCardProps) {
               <span className="flex-1 truncate text-xs text-ink" title={p.productName}>{p.productName}</span>
               <span className="shrink-0 text-[11px] tabular-nums text-ink/55">{p.totalQuantity}×</span>
               <span className="shrink-0 text-[11px] font-semibold tabular-nums text-ink">
-                {symbol}{Math.round(p.totalRevenue).toLocaleString('en-IN')}
+                {formatMoney(symbol, p.totalRevenue)}
               </span>
             </li>
           ))}
@@ -244,7 +254,7 @@ function OrderMixCard({ report, loading, liveOrderCount, symbol }: OrderMixCardP
             <div className="flex items-center justify-between border-t border-border pt-2">
               <span className="text-xs text-ink/65">Discounts given</span>
               <span className="text-xs tabular-nums text-ink/70">
-                -{symbol}{Math.round(report.totalDiscount).toLocaleString('en-IN')}
+                -{formatMoney(symbol, report.totalDiscount)}
               </span>
             </div>
           )}
@@ -264,15 +274,18 @@ function HourlyRevenueCard({ symbol }: { symbol: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = istDateString();
     void (async () => {
       try {
         const { orders } = await fetchOrdersForHourly(today);
         const map = new Map<number, HourlyBucket>();
+        // Hourly SALES — paid orders (owner decision 27 Nov 2026) on the hour they were created,
+        // net of refunds (utils/salesDefinitions.ts).
         for (const o of orders) {
-          const h = new Date(o.createdAt).getHours();
+          if (!isSale(o as any)) continue;
+          const h = saleTime(o as any).getHours();
           const b = map.get(h) ?? { hour: h, revenue: 0, orders: 0 };
-          b.revenue += o.grandTotal;
+          b.revenue = Math.round((b.revenue + saleValue(o as any)) * 100) / 100;
           b.orders  += 1;
           map.set(h, b);
         }
@@ -324,7 +337,7 @@ function HourlyRevenueCard({ symbol }: { symbol: string }) {
                   {b.revenue > 0 && (
                     <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 group-hover:block">
                       <div className="whitespace-nowrap rounded bg-ink px-2 py-1 text-[10px] text-white shadow-md">
-                        {symbol}{Math.round(b.revenue).toLocaleString('en-IN')} · {b.orders}×
+                        {formatMoney(symbol, b.revenue)} · {b.orders}×
                       </div>
                     </div>
                   )}
@@ -702,12 +715,12 @@ export function DashboardPage() {
                   label="Today's Revenue"
                   value={
                     report
-                      ? `${currencySymbol}${Math.round(report.totalSales).toLocaleString('en-IN')}`
+                      ? formatMoney(currencySymbol, report.totalSales)
                       : '—'
                   }
                   sub={
                     report
-                      ? `incl. ${currencySymbol}${Math.round(report.totalTax).toLocaleString('en-IN')} tax`
+                      ? `incl. ${formatMoney(currencySymbol, report.totalTax)} tax`
                       : undefined
                   }
                   onClick={role === 'admin' ? () => navigate('/reports') : undefined}
@@ -740,7 +753,7 @@ export function DashboardPage() {
                   label="Avg. Ticket"
                   value={
                     report && report.totalOrders > 0
-                      ? `${currencySymbol}${Math.round(avgTicket).toLocaleString('en-IN')}`
+                      ? formatMoney(currencySymbol, avgTicket)
                       : '—'
                   }
                   sub={report && report.totalOrders > 0 ? 'per order' : undefined}

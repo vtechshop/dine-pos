@@ -14,8 +14,7 @@ const SettingsContext = createContext<SettingsContextType | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, role, setHotelName } = useAuth();
-  // Hotel settings belong to a hotel session; the Super Admin token has no hotel
-  // and only got a 401 on every Super Admin page.
+  // Phase 5 · Batch 7 (P4-AUTH-03): Super Admin has no hotel settings (the call only got 401)
   const hotelSession = isAuthenticated && role !== 'superadmin';
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(false);

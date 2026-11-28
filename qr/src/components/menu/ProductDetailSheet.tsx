@@ -5,6 +5,7 @@ import { QuantityStepper } from '@dinepos/shared/components';
 import { useCart } from '../../context/CartContext.tsx';
 import { useMenu } from '../../context/MenuContext.tsx';
 import type { SelectedModifier } from '../../types/qr.ts';
+import { qrBasePrice } from '../../utils/qrMoney.ts';
 
 interface ProductDetailSheetProps {
   product:      Product;
@@ -57,11 +58,12 @@ export function ProductDetailSheet({ product, isBestseller, onClose }: ProductDe
   const hasVariants  = variants.length > 0;
   const isComplex    = hasModifiers || hasVariants;
 
+  // Phase 5 · Batch 4: the same price the server charges (size, else QR price, else base)
   const effectivePrice = useMemo(() => {
-    if (!selectedVariantId) return product.price;
+    if (!selectedVariantId) return qrBasePrice(product);
     const v = variants.find(v => v._id === selectedVariantId);
-    return v?.price ?? product.price;
-  }, [product.price, selectedVariantId, variants]);
+    return v?.price ?? qrBasePrice(product);
+  }, [product, selectedVariantId, variants]);
 
   const modifierTotal = useMemo(() => {
     let total = 0;
@@ -125,6 +127,8 @@ export function ProductDetailSheet({ product, isBestseller, onClose }: ProductDe
   }
 
   function validate(): string | null {
+    // Phase 5 · Batch 4: the size is marked Required, so it is required (as on the POS)
+    if (hasVariants && !selectedVariantId) return 'Please choose a variant';
     for (const group of groups) {
       const selected = (modSelections[group._id] ?? []).length;
       if (group.isRequired && selected < group.minSelections) {
@@ -148,6 +152,7 @@ export function ProductDetailSheet({ product, isBestseller, onClose }: ProductDe
       productId:         product._id,
       name:              product.name,
       price:             effectivePrice,
+      taxPercent:        product.taxPercent,
       modifierTotal,
       isVeg,
       variantId:         selectedVariantId,
@@ -161,7 +166,8 @@ export function ProductDetailSheet({ product, isBestseller, onClose }: ProductDe
     addItem({
       productId: product._id,
       name:      product.name,
-      price:     product.price,
+      price:     qrBasePrice(product),
+      taxPercent: product.taxPercent,
       modifierTotal: 0,
       isVeg,
     }, 1, notes);
@@ -310,7 +316,7 @@ export function ProductDetailSheet({ product, isBestseller, onClose }: ProductDe
                 onClick={handleAddSimpleWithNotes}
                 className="flex-1 py-3 bg-[#E8380D] text-white rounded-xl font-semibold"
               >
-                Add to cart — {symbol}{product.price.toFixed(2)}
+                Add to cart — {symbol}{qrBasePrice(product).toFixed(2)}
               </button>
             ) : (
               <>

@@ -7,11 +7,12 @@ import { reprintJob, fetchReceiptJobs } from '../../api/billing';
 import { useSettings } from '../../context/SettingsContext';
 import { Spinner } from '../ui/Spinner';
 import type { OrderListItem, PrintJob } from '../../types';
+import { formatMoney } from '../../utils/money';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtINR(sym: string, n: number) {
-  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
+  return formatMoney(sym, n);
 }
 
 function fmtDateTime(iso: string) {

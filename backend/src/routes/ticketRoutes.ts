@@ -144,11 +144,18 @@ router.post('/:id/admin-reply', superAdminAuth, async (req: Request, res: Respon
   }
 });
 
+const TICKET_STATUSES = ['open', 'in-progress', 'resolved', 'closed'];
+
 // PUT /api/tickets/:id/status — update ticket status (super admin)
 router.put('/:id/status', superAdminAuth, async (req: Request, res: Response) => {
   try {
     const { status } = req.body;
-    const ticket = await Ticket.findByIdAndUpdate(req.params.id, { status }, { new: true });
+    // Phase 5 · Batch 7 (P4-SA-09): only the statuses the hotel and Super Admin screens know
+    if (!TICKET_STATUSES.includes(status)) {
+      return res.status(400).json({ message: `Status must be one of: ${TICKET_STATUSES.join(', ')}`, code: 'INVALID_STATUS' });
+    }
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ message: 'Ticket not found' });
+    const ticket = await Ticket.findByIdAndUpdate(req.params.id, { status }, { new: true, runValidators: true });
     if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
     return res.json(ticket);
   } catch (error) {

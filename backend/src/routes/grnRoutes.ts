@@ -183,6 +183,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Phase 5 · Batch 6 (P4-INV-01): a line linked to an ingredient must name one of this hotel's
+    // ingredients — otherwise its stock update would silently match nothing.
+    const linkedIds = [...new Set(items.map((r: any) => r?.ingredientId).filter(Boolean).map(String))] as string[];
+    if (linkedIds.some(id => !mongoose.isValidObjectId(id))) return sendError(res, 400, 'Invalid ingredient on a received line');
+    if (linkedIds.length) {
+      const found = await Ingredient.countDocuments({ _id: { $in: linkedIds }, hotelId: req.hotelId });
+      if (found !== linkedIds.length) return sendError(res, 400, 'A received line is linked to an ingredient that does not exist in this hotel');
+    }
+
     // Generate GRN number (outside transaction — idempotency key guards duplicate creation)
     const counter = await DailyCounter.findOneAndUpdate(
       { key: `GRN-${req.hotelId}` },

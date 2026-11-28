@@ -109,7 +109,15 @@ export function CouponsPage() {
         validUntil: form.validUntil || undefined,
       };
       if (editing) {
-        await updateCoupon(editing._id, payload);
+        // Phase 5 · Batch 7 (P4-CATALOG-17): a cleared field must reach the server — an empty
+        // limit is "unlimited" (0) and an empty end date is "no end date" (null). Left out of
+        // the request, the old values stayed.
+        payload.usageLimit       = form.usageLimit ?? 0;
+        payload.perCustomerLimit = form.perCustomerLimit ?? 0;
+      }
+      if (editing) {
+        // null = remove the end date (left out, the old end date stayed)
+        await updateCoupon(editing._id, { ...payload, validUntil: form.validUntil || null });
       } else {
         await createCoupon(payload);
       }

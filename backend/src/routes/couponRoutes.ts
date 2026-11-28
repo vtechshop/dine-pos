@@ -61,8 +61,15 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response): Promise<
       applicableCategories, applicableProducts,
     } = req.body as Record<string, any>;
 
-    if (!code || !type || value === undefined || !validFrom) {
-      res.status(400).json({ message: 'code, type, value, validFrom are required' });
+    // Phase 5 · Batch 7 (P4-CATALOG-15): "Valid From" is optional on the form — blank means
+    // "valid from now". A date that is given must still be a real date.
+    if (!code || !type || value === undefined) {
+      res.status(400).json({ message: 'code, type and value are required' });
+      return;
+    }
+    const startsAt = validFrom ? new Date(validFrom) : new Date();
+    if (Number.isNaN(startsAt.getTime())) {
+      res.status(400).json({ message: 'Valid From is not a valid date' });
       return;
     }
     if (!['percent', 'flat'].includes(type)) {
@@ -83,7 +90,7 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response): Promise<
       value:              Number(value),
       minOrderValue:      Number(minOrderValue) || 0,
       maxDiscount:        Number(maxDiscount) || 0,
-      validFrom:          new Date(validFrom),
+      validFrom:          startsAt,
       validUntil:         validUntil ? new Date(validUntil) : null,
       usageLimit:         Number(usageLimit) || 0,
       perCustomerLimit:   Number(perCustomerLimit) || 0,

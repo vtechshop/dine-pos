@@ -86,10 +86,26 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Phase 5 · Batch 6 (P4-INV-08): one ingredient per name in a hotel ("Onion", "onion " and "ONION"
+// are the same). Checked in the app — the index on { hotelId, name } is not unique and is not changed.
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+async function ingredientNameTaken(hotelId: string, name: unknown, exceptId?: string): Promise<string | null> {
+  const n = String(name ?? '').trim();
+  if (!n) return null;
+  const clash = await Ingredient.findOne({
+    hotelId,
+    name: { $regex: `^\\s*${escapeRegExp(n)}\\s*$`, $options: 'i' },
+    ...(exceptId ? { _id: { $ne: exceptId } } : {}),
+  }).select('name').lean();
+  return clash ? String((clash as any).name) : null;
+}
+
 // ── POST / — create ingredient ────────────────────────────────────────────────
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const ingredient = new Ingredient({ ...req.body, hotelId: req.hotelId });
+    const taken = await ingredientNameTaken(req.hotelId!, req.body?.name);
+    if (taken) return res.status(409).json({ code: 'DUPLICATE_NAME', message: `An ingredient named "${taken}" already exists.` });
+    const ingredient = new Ingredient({ ...req.body, ...(typeof req.body?.name === 'string' ? { name: req.body.name.trim() } : {}), hotelId: req.hotelId });
     await ingredient.save();
     logAudit(req, 'ingredient.created', 'ingredient', String((ingredient as any)._id), { name: (ingredient as any).name });
 
@@ -274,7 +290,11 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { name, unit, lowStockThreshold, costPerUnit } = req.body;
     const update: Record<string, unknown> = {};
-    if (name              !== undefined) update.name              = name;
+    if (name !== undefined) {
+      const taken = await ingredientNameTaken(req.hotelId!, name, req.params.id);
+      if (taken) return res.status(409).json({ code: 'DUPLICATE_NAME', message: `An ingredient named "${taken}" already exists.` });
+    }
+    if (name              !== undefined) update.name              = typeof name === 'string' ? name.trim() : name;
     if (unit              !== undefined) update.unit              = unit;
     if (lowStockThreshold !== undefined) update.lowStockThreshold = lowStockThreshold;
     if (costPerUnit       !== undefined) update.costPerUnit       = costPerUnit;

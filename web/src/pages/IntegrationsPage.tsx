@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Link, Link2Off, RefreshCw, Copy, Check,
   AlertCircle, Zap, Clock, MessageSquare, FlaskConical, Eye, EyeOff,
@@ -218,9 +218,13 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
   const [disconnecting, setDisconnecting] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<{ msg: string; onOk: () => void } | null>(null);
 
+  // Phase 5 · Batch 7: once the admin has changed something here, data arriving from the server
+  // (e.g. the first load finishing late) must not undo it — it used to switch "Enabled" back off.
+  const edited = useRef(false);
+
   // Sync non-secret fields when parent data changes
   useEffect(() => {
-    if (!data) return;
+    if (!data || edited.current) return;
     setForm(f => ({
       ...f,
       storeId:    data.storeId,
@@ -231,6 +235,7 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
   }, [data]);
 
   function set(field: keyof typeof form, value: string | boolean) {
+    edited.current = true;
     setForm(f => ({ ...f, [field]: value }));
   }
 
@@ -249,7 +254,8 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
       if (form.webhookSecret.trim()) body.webhookSecret = form.webhookSecret.trim();
 
       const { integration: updated } = await saveIntegration(platform, body);
-      // Clear write-only fields after successful save
+      // Clear write-only fields after successful save; the saved values are now the server's
+      edited.current = false;
       setForm(f => ({ ...f, apiKey: '', apiSecret: '', webhookSecret: '' }));
       onSaved(updated);
       onToast('success', `${PLATFORM_LABEL[platform]} settings saved.`);
@@ -264,7 +270,7 @@ function IntegrationCard({ platform, data, loading, onSaved, onToast }: Integrat
     setSyncing(true);
     try {
       const res = await syncMenu(platform);
-      onToast('success', `Sync complete: ${res.syncedCount} synced, ${res.failedCount} failed.`);
+      onToast(res.failedCount === 0 ? 'success' : 'error', `Sync complete: ${res.syncedCount} synced, ${res.failedCount} failed${res.dryRun ? ' (test run — nothing was sent)' : ''}.`);
     } catch (err) {
       onToast('error', err instanceof Error ? err.message : 'Sync failed.');
     } finally {

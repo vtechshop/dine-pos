@@ -8,6 +8,7 @@ import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../utils/audit';
 import { sendError } from '../utils/sendError';
+import { recordVendorPayment } from '../utils/vendorPaymentLedger';
 
 const router = Router();
 router.use(authMiddleware, requireAdmin);
@@ -189,11 +190,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const session = await mongoose.startSession();
     let payment: InstanceType<typeof VendorPayment>;
     await session.withTransaction(async () => {
-      [payment] = await VendorPayment.create([{
+      // Batch 6: the logic lives in utils/vendorPaymentLedger.ts (also used when an invoice is marked paid)
+      payment = await recordVendorPayment({
         hotelId,
+        vendor:          { _id: vendor._id as mongoose.Types.ObjectId, businessName: vendor.businessName, vendorCode: vendor.vendorCode, mobile: vendor.mobile },
         paymentNumber,
-        vendorId:        new mongoose.Types.ObjectId(String(vendorId)),
-        vendorSnapshot:  { businessName: vendor.businessName, vendorCode: vendor.vendorCode, mobile: vendor.mobile },
         paymentDate:     paymentDate ? new Date(String(paymentDate)) : new Date(),
         paymentMethod:   String(paymentMethod),
         amount:          amt,
@@ -202,23 +203,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         attachment:      String(attachment || ''),
         createdBy:       req.cashierId || req.waiterId || req.hotelId || '',
         ...(idemKey ? { idempotencyKey: idemKey } : {}),
-      }], { session });
-      const updatedVendor = await Vendor.findOneAndUpdate(
-        { _id: vendor._id, hotelId },
-        [{ $set: { currentOutstanding: { $max: [0, { $subtract: ['$currentOutstanding', amt] }] } } }],
-        { new: true, session },
-      );
-      await VendorLedgerEntry.create([{
-        hotelId,
-        vendorId:        vendor._id,
-        entryType:       'payment',
-        referenceId:     payment!._id,
-        referenceNumber: paymentNumber,
-        debit:           0,
-        credit:          amt,
-        runningBalance:  updatedVendor?.currentOutstanding ?? 0,
-        description:     `Payment via ${paymentMethod}${referenceNumber ? ` (ref: ${referenceNumber})` : ''}`,
-      }], { session });
+      }, session);
     });
     await session.endSession();
 

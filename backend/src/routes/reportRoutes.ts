@@ -15,6 +15,7 @@ import mongoose from 'mongoose';
 import { sendError } from '../utils/sendError';
 import { isValidDateParam } from '../utils/dateParam';
 import { logger } from '../utils/logger';
+import { salesMatch, statutoryMatch } from '../utils/financeDefinitions';
 import { PAID_ORDER } from '../utils/paidOrder';
 
 const router = Router();
@@ -55,9 +56,7 @@ router.get('/gst', async (req: AuthRequest, res: Response) => {
     const rows = await Order.aggregate([
       {
         $match: {
-          hotelId,
-          status: 'completed',
-          createdAt: { $gte: fromDate, $lte: toDate },
+          ...statutoryMatch(hotelId, fromDate, toDate),
         },
       },
       { $unwind: '$items' },
@@ -119,9 +118,10 @@ router.get('/tally', async (req: AuthRequest, res: Response) => {
     if (fromDate.getTime() < maxFromMs) fromDate = new Date(maxFromMs);
 
     const orders = await Order.find(
-      { hotelId, status: 'completed', createdAt: { $gte: fromDate, $lte: toDate } },
-      { orderNumber: 1, createdAt: 1, customerName: 1, tableNumber: 1, paymentMethod: 1,
-        subtotal: 1, taxTotal: 1, discountAmount: 1, grandTotal: 1, orderSource: 1 },
+      statutoryMatch(hotelId, fromDate, toDate),
+      { orderNumber: 1, createdAt: 1, servedAt: 1, completedAt: 1, customerName: 1, tableNumber: 1, paymentMethod: 1,
+        subtotal: 1, taxTotal: 1, discountAmount: 1, grandTotal: 1, orderSource: 1,
+        couponDiscount: 1, loyaltyDiscount: 1, paymentDiscount: 1, giftVoucherAmount: 1, walletAmount: 1 },
     ).sort({ createdAt: 1 }).lean();
 
     const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -131,15 +131,19 @@ router.get('/tally', async (req: AuthRequest, res: Response) => {
     };
 
     const rows = (orders as any[]).map(o => ({
-      date:        ddmmyyyy(o.createdAt),
+      date:        ddmmyyyy(o.createdAt),   // statutory basis: the day the order was created
       voucherNo:   o.orderNumber,
       party:       o.customerName || (o.tableNumber ? `Table ${o.tableNumber}` : 'Walk-in'),
       paymentMode: (o.paymentMethod || 'cash').toUpperCase(),
       subtotal:    +(o.subtotal || 0).toFixed(2),
       cgst:        +((o.taxTotal || 0) / 2).toFixed(2),
       sgst:        +((o.taxTotal || 0) / 2).toFixed(2),
-      discount:    +(o.discountAmount || 0).toFixed(2),
-      grandTotal:  +(o.grandTotal || 0).toFixed(2),
+      // Batch 2 (2D): a voucher balances — subtotal + CGST + SGST − discount = grandTotal (the
+      // SALE value). All discounts are included (coupon, loyalty, discount at payment were
+      // missing), and gift-voucher / wallet tenders are part of the sale value and shown apart.
+      discount:    +((o.discountAmount || 0) + (o.couponDiscount || 0) + (o.loyaltyDiscount || 0) + (o.paymentDiscount || 0)).toFixed(2),
+      grandTotal:  +((o.grandTotal || 0) + (o.giftVoucherAmount || 0) + (o.walletAmount || 0)).toFixed(2),
+      voucherTender: +((o.giftVoucherAmount || 0) + (o.walletAmount || 0)).toFixed(2),
       narration:   `${o.orderSource || 'dine-in'} - Table ${o.tableNumber || 'Walk-in'}`,
     }));
 
@@ -189,9 +193,7 @@ router.get('/gstr1-json', async (req: AuthRequest, res: Response) => {
     const [agg] = await Order.aggregate([
       {
         $match: {
-          hotelId,
-          status: 'completed',
-          createdAt: { $gte: fromDate, $lte: toDate },
+          ...statutoryMatch(hotelId, fromDate, toDate),
         },
       },
       { $unwind: '$items' },
@@ -564,9 +566,7 @@ router.get('/org-summary', async (req: AuthRequest, res: Response) => {
       Order.aggregate([
         {
           $match: {
-            hotelId: { $in: allHotelIds },
-            status: 'completed',
-            createdAt: { $gte: fromDate, $lte: toDate },
+            ...salesMatch(null as any, fromDate, toDate), hotelId: { $in: allHotelIds },
           },
         },
         {
@@ -642,9 +642,7 @@ router.get('/org-summary', async (req: AuthRequest, res: Response) => {
       const productRows = await Order.aggregate([
         {
           $match: {
-            hotelId: { $in: allHotelIds },
-            status:  'completed',
-            createdAt: { $gte: fromDate, $lte: toDate },
+            ...salesMatch(null as any, fromDate, toDate), hotelId: { $in: allHotelIds },
           },
         },
         { $unwind: '$items' },

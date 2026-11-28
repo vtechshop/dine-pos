@@ -285,7 +285,7 @@ export function BillingDrawer({ sessionId, openSessions, currencySymbol, onClose
     setReleasing(true);
     setActionError(null);
     try {
-      for (const o of releaseKitchenOrders) await cancelOrder(o._id);
+      for (const o of releaseKitchenOrders) await cancelOrder(o._id, 'Table released from the billing drawer');
       for (const gb of activeGuestBills) {
         try {
           await markGuestLeft(sessionId, gb.guest._id);

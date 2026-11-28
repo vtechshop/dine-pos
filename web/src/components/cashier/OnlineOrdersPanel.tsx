@@ -16,6 +16,7 @@ import {
 import type { OnlineOrder } from '../../api/aggregator';
 import { Spinner } from '../ui/Spinner';
 import { useSocket } from '../../context/SocketContext';
+import { formatMoney } from '../../utils/money';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ function todayStr() {
 }
 
 function fmtINR(n: number, sym = '₹') {
-  return `${sym}${Math.round(n).toLocaleString('en-IN')}`;
+  return formatMoney(sym, n);
 }
 
 function fmtTime(iso: string) {

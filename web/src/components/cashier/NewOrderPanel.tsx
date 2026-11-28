@@ -29,15 +29,15 @@ import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
 import { useCashierPermissions } from '../../hooks/useCashierPermissions';
 import type { Product, Category, Table } from '../../types';
 import type { ProductSalesRow } from '../../types/reports';
+import { formatMoney } from '../../utils/money';
+import { istDateString } from '../../utils/istDate';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // Show paise when the amount has them, so the screen matches the total that is saved
 // (₹493.50 is shown as ₹493.50, not rounded up to ₹494).
 function fmtINR(sym: string, n: number) {
-  const v = Math.round(n * 100) / 100;
-  const paise = Math.abs(v % 1) > 0.001;
-  return `${sym}${v.toLocaleString('en-IN', { minimumFractionDigits: paise ? 2 : 0, maximumFractionDigits: 2 })}`;
+  return formatMoney(sym, n);
 }
 
 type OrderType = 'dine-in' | 'takeaway' | 'delivery';
@@ -202,9 +202,13 @@ function ProductCard({
           <button
             type="button"
             onClick={() => onAdd(product)}
+            // Phase 5 · Batch 6 (P4-INV-03): a counted dish cannot go past its stock
+            disabled={typeof product.stock === 'number' && product.stock >= 0 && cartQty >= product.stock}
             aria-label={`Add one more ${product.name}`}
-            title={options ? 'Add another (choose size / add-ons)' : 'Add one more'}
-            className="flex h-[26px] w-7 items-center justify-center transition-colors hover:bg-coffee active:bg-action-press"
+            title={typeof product.stock === 'number' && product.stock >= 0 && cartQty >= product.stock
+              ? `Only ${product.stock} left`
+              : options ? 'Add another (choose size / add-ons)' : 'Add one more'}
+            className="flex h-[26px] w-7 items-center justify-center transition-colors hover:bg-coffee active:bg-action-press disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus size={13} />
           </button>
@@ -280,6 +284,7 @@ function CartRow({ item, onQty, onRemove, onNotes, sym, image }: {
           <button
             type="button"
             onClick={() => onQty(item.id, item.quantity - 1)}
+            aria-label={`Decrease quantity of ${item.productName}`}
             className="flex h-6 w-6 items-center justify-center rounded-md border border-border text-ink/60 hover:bg-mist"
           >
             <Minus size={11} />
@@ -288,6 +293,7 @@ function CartRow({ item, onQty, onRemove, onNotes, sym, image }: {
           <button
             type="button"
             onClick={() => onQty(item.id, item.quantity + 1)}
+            aria-label={`Increase quantity of ${item.productName}`}
             className="flex h-6 w-6 items-center justify-center rounded-md border border-border text-ink/60 hover:bg-mist"
           >
             <Plus size={11} />
@@ -298,6 +304,8 @@ function CartRow({ item, onQty, onRemove, onNotes, sym, image }: {
           <button
             type="button"
             onClick={() => onRemove(item.id)}
+            aria-label={`Delete ${item.productName} from the order`}
+            title="Delete from the order"
             className="rounded-md p-1 text-ink/35 hover:bg-red-50 hover:text-red-500"
           >
             <Trash2 size={12} />
@@ -453,13 +461,13 @@ function PaymentPanel({
             </div>
           ))}
           <div className={`flex items-center justify-between rounded-lg px-3 py-2 ${
-            Math.abs(splitDiff) < 0.5 ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'
+            Math.abs(splitDiff) < 0.005 ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'
           }`}>
             <span className="text-xs font-medium">
-              {Math.abs(splitDiff) < 0.5 ? 'Balanced' : splitDiff > 0 ? 'Over by' : 'Short by'}
+              {Math.abs(splitDiff) < 0.005 ? 'Balanced' : splitDiff > 0 ? 'Over by' : 'Short by'}
             </span>
-            <span className={`text-sm font-bold ${Math.abs(splitDiff) < 0.5 ? 'text-emerald-700' : 'text-amber-700'}`}>
-              {Math.abs(splitDiff) < 0.5 ? '✓' : fmtINR(sym, Math.abs(splitDiff))}
+            <span className={`text-sm font-bold ${Math.abs(splitDiff) < 0.005 ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {Math.abs(splitDiff) < 0.005 ? '✓' : fmtINR(sym, Math.abs(splitDiff))}
             </span>
           </div>
         </div>
@@ -614,6 +622,13 @@ export function NewOrderPanel() {
           : d.deliveryCharge,
       }));
     }
+    // Batch 3 (3B): restore the order notes of a held bill (they were lost on resume)
+    if (orderPrefill.notes) {
+      const n = orderPrefill.notes;
+      if (orderPrefill.orderType === 'dine-in') setDineIn(d => ({ ...d, notes: n }));
+      else if (orderPrefill.orderType === 'takeaway') setTakeAway(d => ({ ...d, notes: n }));
+      else if (orderPrefill.orderType === 'delivery') setDelivery(d => ({ ...d, notes: n }));
+    }
     // Restore discount, coupon, voucher, loyalty from held bill
     if (orderPrefill.discountAmount) setDiscount(String(orderPrefill.discountAmount));
     if (orderPrefill.couponCode)     setCouponInput(orderPrefill.couponCode);
@@ -626,7 +641,7 @@ export function NewOrderPanel() {
   const loadProducts = useCallback(async () => {
     let cancelled = false;
     setProdLoading(true);
-    const today = new Date().toISOString().split('T')[0];
+    const today = istDateString();
     const [catRes, prodRes, tableRes, topRes] = await Promise.allSettled([
       fetchCategories(),
       fetchProducts(),   // all dishes: out-of-stock ones show greyed and can be switched back on
@@ -800,6 +815,14 @@ export function NewOrderPanel() {
 
   function handleAddProduct(p: Product) {
     if (!p.isAvailable) return;
+    // Phase 5 · Batch 6 (P4-INV-03): not more than the counted stock in the bill
+    if (typeof p.stock === 'number' && p.stock >= 0) {
+      const inBill = cart.filter(i => i.productId === p._id).reduce((n, i) => n + i.quantity, 0);
+      if (inBill >= p.stock) {
+        setSubmitError(p.stock === 0 ? `${p.name} is sold out.` : `Only ${p.stock} ${p.name} left.`);
+        return;
+      }
+    }
     const hasVariants = (p.variants ?? []).length > 0;
     const hasModifiers = (p.modifierGroups ?? []).length > 0;
     if (!hasVariants && !hasModifiers) {
@@ -937,6 +960,13 @@ export function NewOrderPanel() {
   // pay=false is a KOT: the order goes to the kitchen and is paid later from Pending Bills.
   async function handleConfirmOrder(opts: { pay: boolean; print: boolean } = { pay: true, print: false }) {
     if (cart.length === 0) return;
+    // Phase 5 · Batch 5 (owner Decision 3): money is taken here only with an open shift. Checked
+    // before the order is created, so a refused payment does not leave an unpaid order behind.
+    const takesPayment = opts.pay && (payFirst || orderType !== 'dine-in');
+    if (takesPayment && shift?.status !== 'open') {
+      setSubmitError('Open a shift before taking payments. Go to the Shift tab, open a shift, then take the payment.');
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
 
@@ -962,6 +992,8 @@ export function NewOrderPanel() {
         quantity: i.quantity,
         price: i.price + (i.modifierTotal ?? 0),
         taxPercent: i.taxPercent,
+        // Batch 3: the chosen size. It was not sent, so the server billed the base price.
+        ...(i.variantId ? { variantId: i.variantId, variantName: i.variantName } : {}),
         selectedModifiers: (i.selectedModifiers ?? []).map(m => ({
           ...m,
           modifierTotal: m.modifierPrice * i.quantity,
@@ -1001,12 +1033,14 @@ export function NewOrderPanel() {
           customerName: dineIn.customerName || undefined,
           customerPhone: dineIn.phone || undefined,
           notes: dineIn.notes || undefined,
+          // Phase 5 · Batch 7: the Guests box was never sent, so the count was lost
+          guestCount: Number(dineIn.guestCount) >= 1 ? Math.floor(Number(dineIn.guestCount)) : undefined,
           isParcel: false,
         };
       } else if (orderType === 'takeaway') {
         orderSource = 'takeaway';
         const loyaltyDisc = loyaltyRedemption > 0 && loyaltyInfo?.config
-          ? Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))
+          ? Math.round(loyaltyRedemption * loyaltyInfo.config.pointValueInPaisa) / 100
           : 0;
         payload = {
           ...payload,
@@ -1025,7 +1059,7 @@ export function NewOrderPanel() {
           delivery.notes,
         ].filter(Boolean).join(' | ');
         const loyaltyDiscDel = loyaltyRedemption > 0 && loyaltyInfo?.config
-          ? Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))
+          ? Math.round(loyaltyRedemption * loyaltyInfo.config.pointValueInPaisa) / 100
           : 0;
         payload = {
           ...payload,
@@ -1041,7 +1075,9 @@ export function NewOrderPanel() {
       }
 
       pendingPayload = payload;
-      const created = await createOrder(payload);
+      // Batch 3: the server refuses the bill if a price changed since this screen was loaded.
+      // Not part of the queued copy: a bill saved offline has already been given to the customer.
+      const created = await createOrder({ ...payload, expectedSubtotal: subtotal });
 
       // Pay before kitchen: the server records the payment (payNow) and the order goes to the
       // kitchen paid; it is closed later when handed over / served. Otherwise takeaway and
@@ -1100,6 +1136,7 @@ export function NewOrderPanel() {
         }
       } else {
         setSubmitError(err instanceof Error ? err.message : 'Failed to place order');
+        if ((err as { code?: string } | null)?.code === 'PRICE_CHANGED') void loadProducts();
       }
     } finally {
       setSubmitting(false);
@@ -1108,7 +1145,7 @@ export function NewOrderPanel() {
 
   // ── Split / cash validation ────────────────────────────────────────────────
   const splitTotal = (parseFloat(splitCash) || 0) + (parseFloat(splitUpi) || 0) + (parseFloat(splitCard) || 0);
-  const splitOk = payMethod !== 'split' || Math.abs(splitTotal - grandTotal) < 0.5;
+  const splitOk = payMethod !== 'split' || Math.abs(splitTotal - grandTotal) < 0.005;   // to the paisa
   // Blank "cash received" means exact cash; a typed amount must cover the bill
   const cashOk  = payMethod !== 'cash'  || cashGiven.trim() === '' || (parseFloat(cashGiven) || 0) >= grandTotal;
   const activeCustomer = orderType === 'dine-in' ? dineIn : orderType === 'takeaway' ? takeAway : delivery;
@@ -1525,7 +1562,7 @@ export function NewOrderPanel() {
               ) : loyaltyInfo.redeemablePoints > 0 && loyaltyInfo.config ? (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[10px] text-ink/50">
-                    <span>Redeem {loyaltyRedemption} pts → {sym}{Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))} off</span>
+                    <span>Redeem {loyaltyRedemption} pts → {formatMoney(sym, Math.round(loyaltyRedemption * loyaltyInfo.config.pointValueInPaisa) / 100)} off</span>
                     <span>Max: {loyaltyInfo.redeemablePoints} pts</span>
                   </div>
                   <input
@@ -1542,7 +1579,7 @@ export function NewOrderPanel() {
                     <div className="flex items-center justify-between rounded-lg bg-brand/10 px-2 py-1">
                       <span className="text-[10px] font-medium text-brand">Loyalty discount applied</span>
                       <span className="text-[11px] font-bold text-brand">
-                        -{sym}{Math.round(loyaltyRedemption * (loyaltyInfo.config.pointValueInPaisa / 100))}
+                        -{formatMoney(sym, Math.round(loyaltyRedemption * loyaltyInfo.config.pointValueInPaisa) / 100)}
                       </span>
                     </div>
                   )}

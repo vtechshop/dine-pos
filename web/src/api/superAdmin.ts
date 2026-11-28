@@ -111,6 +111,10 @@ export interface Hotel {
     shift:  boolean;
     kiosk:  boolean;
     ai:     boolean;
+    // Modules off by default (Phase 5 · Batch 7, P4-SA-06: switchable from Super Admin)
+    supplyChain: boolean;
+    tally:       boolean;
+    multiBranch: boolean;
   };
 }
 

@@ -30,8 +30,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     }
     const bill = await HeldBill.create({
       hotelId:     new mongoose.Types.ObjectId(req.hotelId),
-      cashierId:   req.cashierId   ?? '',
-      cashierName: req.cashierName ?? '',
+      // Batch 3 (3B): an admin session has no cashierId, and the field is required — every bill an
+      // admin held failed to save (400) and stayed on that one device only. Record who held it.
+      cashierId:   req.cashierId   || (req.role === 'admin' ? 'admin' : req.role || 'staff'),
+      cashierName: req.cashierName ?? (req.role === 'admin' ? 'Admin' : ''),
       label:       label ?? '',
       items,
       metadata:    metadata ?? {},

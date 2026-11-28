@@ -239,6 +239,8 @@ export function LoginPage() {
                     <button
                       type="button"
                       onClick={() => setShowPwd(v => !v)}
+                      aria-label={showPwd ? 'Hide password' : 'Show password'}
+                      aria-pressed={showPwd}
                       className="absolute inset-y-0 right-0 flex items-center px-3 text-ink/40 hover:text-ink/60"
                       tabIndex={-1}
                     >
@@ -309,6 +311,8 @@ export function LoginPage() {
                     <button
                       type="button"
                       onClick={() => setShowPin(v => !v)}
+                      aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
+                      aria-pressed={showPin}
                       className="absolute inset-y-0 right-0 flex items-center px-3 text-ink/40 hover:text-ink/60"
                       tabIndex={-1}
                     >

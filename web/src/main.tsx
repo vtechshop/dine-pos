@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import { App } from './App';
 import { reloadForStaleChunk } from './utils/staleChunkReload';
+import { applyBootRedirect } from './utils/bootRoleGuard';
 
 // F-01: Fail fast if API URL still points to localhost in a production build.
 // Set VITE_API_URL and VITE_SOCKET_URL in .env.production before running vite build.
@@ -31,6 +32,9 @@ if (import.meta.env.PROD) {
 window.addEventListener('vite:preloadError', (event) => {
   if (reloadForStaleChunk()) event.preventDefault();
 });
+
+// Phase 5 · Batch 7: a waiter / Super Admin session starts in its own area (see bootRoleGuard.ts)
+applyBootRedirect();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

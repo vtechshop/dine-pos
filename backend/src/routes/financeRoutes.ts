@@ -5,7 +5,8 @@ import Expense from '../models/Expense';
 import WasteLog from '../models/WasteLog';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { sendError } from '../utils/sendError';
-import { PAID_ORDER, NET_TOTAL } from '../utils/paidOrder';
+import { salesMatch, netSales, istDay } from '../utils/financeDefinitions';
+import { NET_TOTAL } from '../utils/paidOrder';
 
 const router = Router();
 router.use(authMiddleware);
@@ -14,11 +15,11 @@ router.use(requireAdmin);
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function parseRange(from?: unknown, to?: unknown) {
-  const start = from ? new Date(String(from)) : new Date(Date.now() - 29 * 86_400_000);
-  const end   = to   ? new Date(String(to))   : new Date();
-  start.setHours(0, 0, 0, 0);
-  end.setHours(23, 59, 59, 999);
-  return { start, end };
+  // Batch 2 (2D): IST day boundaries like every other report (was the server's local midnight).
+  const ymd = (d: Date) => new Date(d.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  const fromStr = from ? String(from).slice(0, 10) : ymd(new Date(Date.now() - 29 * 86_400_000));
+  const toStr   = to   ? String(to).slice(0, 10)   : ymd(new Date());
+  return { start: istDay(fromStr), end: istDay(toStr, true) };
 }
 
 function round2(n: number) { return Math.round(n * 100) / 100; }
@@ -73,18 +74,12 @@ router.get('/dashboard', async (req: AuthRequest, res: Response) => {
     const { start, end } = parseRange(from, to);
     const hotelId = new mongoose.Types.ObjectId(req.hotelId);
 
-    const matchOrders: mongoose.FilterQuery<typeof Order> = {
-      hotelId,
-      status: { $ne: 'cancelled' }, ...PAID_ORDER,
-      createdAt: { $gte: start, $lte: end },
-    };
+    // Sales = paid orders (owner decision 27 Nov 2026), same as the reports (utils/financeDefinitions.ts).
+    const matchOrders = salesMatch(hotelId, start, end) as mongoose.FilterQuery<typeof Order>;
 
     const [revenueAgg, cogsAgg, expenseAgg, wasteAgg] = await Promise.all([
-      // Revenue + order count
-      Order.aggregate([
-        { $match: matchOrders },
-        { $group: { _id: null, revenue: { $sum: NET_TOTAL }, orders: { $sum: 1 } } },
-      ]),
+      // Revenue (net sales, = daily report totalSales) + order count
+      netSales(hotelId, start, end).then(s => [{ revenue: s.net, orders: s.orders }]),
 
       // COGS via recipe BOM × ingredient costPerUnit × qty sold
       Order.aggregate([
@@ -159,11 +154,8 @@ router.get('/menu-profitability', async (req: AuthRequest, res: Response) => {
     const lim      = Math.min(Math.max(1, parseInt(String(limit), 10) || 50), 200);
     const sk       = Math.max(0, parseInt(String(skip), 10) || 0);
 
-    const matchOrders: mongoose.FilterQuery<typeof Order> = {
-      hotelId,
-      status: { $ne: 'cancelled' }, ...PAID_ORDER,
-      createdAt: { $gte: start, $lte: end },
-    };
+    // Sales = paid orders (owner decision 27 Nov 2026), same as the reports (utils/financeDefinitions.ts).
+    const matchOrders = salesMatch(hotelId, start, end) as mongoose.FilterQuery<typeof Order>;
 
     // Mongo sort key mapping
     const mongoSortMap: Record<string, string> = {
@@ -320,11 +312,8 @@ router.get('/cogs-trend', async (req: AuthRequest, res: Response) => {
                   : gb === 'month' ? '%Y-%m'
                   :                  '%Y-%m-%d';
 
-    const matchOrders: mongoose.FilterQuery<typeof Order> = {
-      hotelId,
-      status: { $ne: 'cancelled' }, ...PAID_ORDER,
-      createdAt: { $gte: start, $lte: end },
-    };
+    // Sales = paid orders (owner decision 27 Nov 2026), same as the reports (utils/financeDefinitions.ts).
+    const matchOrders = salesMatch(hotelId, start, end) as mongoose.FilterQuery<typeof Order>;
 
     const [revenueTrend, cogsTrend] = await Promise.all([
       // Revenue per period

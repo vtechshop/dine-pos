@@ -23,6 +23,7 @@ export interface IOrderItem {
   total: number;
   hsnCode: string;
   discountAllocated: number;
+  notes?: string;
 }
 
 export interface IOrder extends Document {
@@ -43,6 +44,10 @@ export interface IOrder extends Document {
   transactionId: string;
   upiApp: string;
   paymentTime: Date | null;
+  amountSettled: number;      // Batch 2 ledger: sum of allocations (see utils/paymentLedger.ts)
+  ledger: boolean;            // Batch 2 ledger: true once a ledger entry exists for this order
+  paymentDiscount: number;    // discount given at payment time (already off grandTotal)
+  writeOffAmount: number;     // amount written off by a manager
   payments: Array<{
     mode: 'cash' | 'upi_intent' | 'upi_qr' | 'upi_collect' | 'card';
     amount: number;
@@ -55,12 +60,14 @@ export interface IOrder extends Document {
   customerPhone: string;
   tableNumber: string;
   notes: string;
+  guestCount?: number | null;   // dine-in covers entered at the POS (Phase 5 · Batch 7, P4-POS)
   servedBy: string;
   servedAt: Date | null;
   completedBy: string;
   completedAt: Date | null;
   cashierId: string;
   tipAmount: number;          // gratuity recorded at payment time (never affects grandTotal)
+  tipMethod?: string;         // Batch 3: 'cash' | 'upi' | 'card' — how the tip was paid (ledger 'tip' entry)
   // ── Table Session / Guest Billing (Architecture v1.1) ───────────────────
   // null for takeaway, aggregator, and hotels with tableSessions=false
   sessionId: mongoose.Types.ObjectId | null;
@@ -145,6 +152,8 @@ const OrderItemSchema: Schema = new Schema({
   },
   hsnCode:           { type: String, default: '' },
   discountAllocated: { type: Number, default: 0 },
+  // Batch 3: the note on this dish ("no onion"). The POS sent it, but it was not stored.
+  notes:             { type: String, default: '', maxlength: 200 },
 });
 
 const OrderSchema: Schema = new Schema(
@@ -190,7 +199,21 @@ const OrderSchema: Schema = new Schema(
     },
     transactionId: { type: String, default: '' },
     upiApp:        { type: String, default: '' },
+    // When the order became FULLY settled (paid / tendered / written off). Set once by the
+    // payment ledger (utils/paymentLedger.ts) and never overwritten (Batch 2). Each individual
+    // payment keeps its own time in the PaymentEntry ledger.
     paymentTime:   { type: Date,   default: null },
+    // ── Payment ledger (Batch 2, additive) ─────────────────────────────────
+    // Sum of ledger allocations to this order (payments, tenders, settlement discounts,
+    // write-offs). Outstanding = paymentTime ? 0 : grandTotal − amountSettled.
+    amountSettled:   { type: Number, default: 0, min: 0 },
+    // true once any ledger entry was recorded for this order; orders without it are legacy
+    // (paid before the ledger existed) and are reported through a read-only fallback.
+    ledger:          { type: Boolean, default: false },
+    // Discount given at payment time (PATCH /:id/payment additionalDiscount) — already taken
+    // off grandTotal; stored so reports can show it (was silently dropped before Batch 2).
+    paymentDiscount: { type: Number, default: 0, min: 0 },
+    writeOffAmount:  { type: Number, default: 0, min: 0 },
     payments: [{
       _id:           false,
       mode:          { type: String, enum: ['cash', 'upi_intent', 'upi_qr', 'upi_collect', 'card'], required: true },
@@ -222,6 +245,8 @@ const OrderSchema: Schema = new Schema(
       default: '',
       maxlength: [500, 'Notes cannot exceed 500 characters'],
     },
+    // Phase 5 · Batch 7: how many people the dine-in order is for. Optional; older orders have none.
+    guestCount: { type: Number, default: null, min: 1, max: 999 },
     orderSource: {
       type: String,
       enum: ['dine-in', 'takeaway', 'swiggy', 'zomato', 'qr', 'kiosk', 'waiter', 'admin'],
@@ -235,6 +260,7 @@ const OrderSchema: Schema = new Schema(
 
     // ── Tip (C-fix: field was handled in PATCH /payment but never persisted) ─
     tipAmount: { type: Number, default: 0, min: 0 },
+    tipMethod: { type: String, enum: ['', 'cash', 'upi', 'card'], default: '' },
 
     // ── Table Session / Guest Billing (Architecture v1.1) ─────────────────
     sessionId: { type: Schema.Types.ObjectId, ref: 'TableSession', default: null },
@@ -266,6 +292,12 @@ const OrderSchema: Schema = new Schema(
     refundedBy:   { type: String, default: '' },
     refundReason: { type: String, default: '' },
     refundAmount: { type: Number, default: 0 },
+
+    // ── Cancellation (Batch 3 · 3C, additive) ───────────────────────────────
+    // The reason the admin typed was thrown away; now kept with who and when.
+    cancelReason: { type: String, default: '', maxlength: 300 },
+    cancelledBy:  { type: String, default: '' },
+    cancelledAt:  { type: Date,   default: null },
 
     // ── Delivery / aggregator fields ──────────────────────────────────────
     platformOrderId:     { type: String, default: '' },

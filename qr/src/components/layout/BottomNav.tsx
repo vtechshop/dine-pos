@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { UtensilsCrossed, ClipboardList, Receipt } from 'lucide-react';
 import { useGuest } from '../../context/GuestContext.tsx';
 import { useMenu } from '../../context/MenuContext.tsx';
+import { qrPath } from '../../utils/qrLink.ts';
 
 export function BottomNav() {
   const { hasOrdered, guestToken } = useGuest();
@@ -14,7 +15,7 @@ export function BottomNav() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <NavLink
-        to="/"
+        to={qrPath('/')}
         end
         className={({ isActive }) =>
           `flex-1 flex flex-col items-center py-3 gap-0.5 text-[10px] font-semibold transition-colors ${
@@ -28,7 +29,7 @@ export function BottomNav() {
 
       {hasOrdered && (
         <NavLink
-          to="/orders"
+          to={qrPath('/orders')}
           className={({ isActive }) =>
             `flex-1 flex flex-col items-center py-3 gap-0.5 text-[10px] font-semibold transition-colors ${
               isActive ? 'text-[#E8380D]' : 'text-[#1C0800]/40'
@@ -42,7 +43,7 @@ export function BottomNav() {
 
       {tableSessions && !!guestToken && hasOrdered && (
         <NavLink
-          to="/bill"
+          to={qrPath('/bill')}
           className={({ isActive }) =>
             `flex-1 flex flex-col items-center py-3 gap-0.5 text-[10px] font-semibold transition-colors ${
               isActive ? 'text-[#E8380D]' : 'text-[#1C0800]/40'

@@ -10,6 +10,7 @@ import {
   type SANotification,
 } from '../../api/superAdmin';
 import { useSANotifications } from '../../context/SANotificationsContext';
+import { SAConfirm } from '../../components/ui/SAShared';
 
 // ── constants ──────────────────────────────────────────────────────────────────
 
@@ -194,6 +195,8 @@ export function BroadcastCenterPage() {
   const [savingMaint,  setSavingMaint]  = useState(false);
   const [maintSavedAt, setMaintSavedAt] = useState<number | null>(null);
   const [maintSaveErr, setMaintSaveErr] = useState<string | null>(null);
+  // Phase 5 · Batch 7 (P4-SA-01/02): global actions wait for "Yes" in this dialog
+  const [confirm, setConfirm] = useState<null | { kind: 'maint' } | { kind: 'send' } | { kind: 'delete'; n: SANotification }>(null);
 
   // ── composer state ───────────────────────────────────────────────────────────
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
@@ -259,6 +262,8 @@ export function BroadcastCenterPage() {
   }, [sentAt]);
 
   // ── derived ──────────────────────────────────────────────────────────────────
+  // P4-SA-07: the status shown is what the server has saved, not the unsaved toggle
+  const maintLive = config?.maintenanceMode ?? false;
   const maintDirty = config !== null && (
     maintMode !== config.maintenanceMode ||
     maintMsg  !== config.maintenanceMessage
@@ -290,6 +295,7 @@ export function BroadcastCenterPage() {
   }
 
   async function handleMaintSave() {
+    setConfirm(null);
     setSavingMaint(true);
     setMaintSaveErr(null);
     try {
@@ -310,6 +316,7 @@ export function BroadcastCenterPage() {
     const title   = bTitle.trim();
     const message = bMessage.trim();
     if (!title || !message) { setSendErr('Title and message are required'); return; }
+    setConfirm(null);
     setSending(true);
     setSendErr(null);
     try {
@@ -332,6 +339,7 @@ export function BroadcastCenterPage() {
   }
 
   async function handleDelete(id: string) {
+    setConfirm(null);
     setDeleting(prev => new Set([...prev, id]));
     setDeleteError(null);
     try {
@@ -351,6 +359,36 @@ export function BroadcastCenterPage() {
 
   return (
     <div className="space-y-6 p-6">
+      {confirm?.kind === 'maint' && (
+        <SAConfirm
+          title="Turn on Maintenance Mode?"
+          body={<>This blocks every hotel from logging in and using the app until you turn it off.</>}
+          confirmLabel="Yes, turn on for all hotels"
+          busy={savingMaint}
+          onConfirm={() => void handleMaintSave()}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+      {confirm?.kind === 'send' && (
+        <SAConfirm
+          title="Send this broadcast?"
+          body={<>&ldquo;{bTitle.trim()}&rdquo; will be shown to {hotelCount !== null ? `all ${hotelCount} active hotels` : 'every hotel'} straight away.</>}
+          confirmLabel="Yes, send to all hotels"
+          danger={false}
+          busy={sending}
+          onConfirm={() => void handleSend()}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+      {confirm?.kind === 'delete' && (
+        <SAConfirm
+          title="Delete this broadcast?"
+          body={<>&ldquo;{confirm.n.title}&rdquo; will disappear for every hotel. This cannot be undone.</>}
+          confirmLabel="Yes, delete"
+          onConfirm={() => void handleDelete(confirm.n._id)}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
 
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -372,8 +410,8 @@ export function BroadcastCenterPage() {
             </p>
             <p className="text-[10px] uppercase tracking-wide text-ink/40">Active</p>
           </div>
-          <div className={`text-center ${maintMode ? 'text-orange-600' : 'text-green-600'}`}>
-            <p className="text-xl font-bold">{cfgLoading ? '—' : maintMode ? 'ON' : 'OFF'}</p>
+          <div className={`text-center ${maintLive ? 'text-orange-600' : 'text-green-600'}`}>
+            <p className="text-xl font-bold">{cfgLoading ? '—' : maintLive ? 'ON' : 'OFF'}</p>
             <p className="text-[10px] uppercase tracking-wide text-ink/40">Maintenance</p>
           </div>
           {expiringSoon > 0 && (
@@ -387,20 +425,23 @@ export function BroadcastCenterPage() {
 
       {/* ── 1. Maintenance Control ── */}
       <section className={`rounded-xl border p-5 transition ${
-        maintMode ? 'border-orange-200 bg-orange-50' : 'border-border bg-canvas'
+        maintLive ? 'border-orange-200 bg-orange-50' : 'border-border bg-canvas'
       }`}>
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <Wrench size={15} className={maintMode ? 'text-orange-600' : 'text-ink/40'} />
+            <Wrench size={15} className={maintLive ? 'text-orange-600' : 'text-ink/40'} />
             <h2 className="text-sm font-semibold text-ink">Maintenance Mode</h2>
             {!cfgLoading && (
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                maintMode
+                maintLive
                   ? 'bg-orange-100 text-orange-700'
                   : 'bg-green-100 text-green-700'
               }`}>
-                {maintMode ? 'ACTIVE' : 'OPERATIONAL'}
+                {maintLive ? 'ACTIVE' : 'OPERATIONAL'}
               </span>
+            )}
+            {!cfgLoading && maintMode !== maintLive && (
+              <span className="text-[11px] text-ink/50">Not applied yet — turns {maintMode ? 'on' : 'off'} when you apply</span>
             )}
           </div>
           {cfgLoading ? (
@@ -443,7 +484,7 @@ export function BroadcastCenterPage() {
               <div className="mt-3 flex items-center gap-3">
                 {maintDirty && (
                   <button
-                    onClick={handleMaintSave}
+                    onClick={() => (maintMode && !maintLive ? setConfirm({ kind: 'maint' }) : void handleMaintSave())}
                     disabled={savingMaint}
                     className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-canvas hover:opacity-90 disabled:opacity-50"
                   >
@@ -583,7 +624,7 @@ export function BroadcastCenterPage() {
 
             <div className="flex gap-2 pt-1">
               <button
-                onClick={handleSend}
+                onClick={() => (bTitle.trim() && bMessage.trim() ? setConfirm({ kind: 'send' }) : void handleSend())}
                 disabled={sending}
                 className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-canvas hover:opacity-90 disabled:opacity-50"
               >
@@ -734,7 +775,7 @@ export function BroadcastCenterPage() {
                         <div className="flex flex-shrink-0 items-center gap-2">
                           <span className="text-xs text-ink/40">{timeAgo(n.createdAt)}</span>
                           <button
-                            onClick={() => handleDelete(n._id)}
+                            onClick={() => setConfirm({ kind: 'delete', n })}
                             disabled={isDel}
                             className="rounded-md p-1 text-ink/30 hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed"
                             title="Delete broadcast"

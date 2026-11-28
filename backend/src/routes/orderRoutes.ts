@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Order from '../models/Order';
 import Hotel from '../models/Hotel';
 import Product from '../models/Product';
+import { invalidateProductList } from '../utils/menuCache';
 import ModifierGroup from '../models/ModifierGroup';
 import DailyCounter from '../models/DailyCounter';
 import { nextCustomerId } from '../utils/customerId';
@@ -27,23 +28,48 @@ import { io } from '../server';
 import { sendError } from '../utils/sendError';
 import { normalizePhone } from '../utils/phoneUtils';
 import Payment from '../models/Payment';
+import PaymentEntry from '../models/PaymentEntry';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
-import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, redeemPoints, reverseEarnedPoints, resolveOrgLoyalty, earnOrgPoints, redeemOrgPoints, reverseOrgEarnedPoints, type OrgLoyaltyContext } from '../utils/loyaltyUtils';
+import { getLoyaltyConfig, calculateEarnedPoints, calculateRedeemValue, earnPoints, redeemPoints, reverseEarnedPoints, resolveOrgLoyalty, earnOrgPoints, redeemOrgPoints, reverseOrgEarnedPoints, type OrgLoyaltyContext } from '../utils/loyaltyUtils';
 import Coupon from '../models/Coupon';
 import CouponRedemption from '../models/CouponRedemption';
 import GiftVoucher from '../models/GiftVoucher';
 import WalletTransaction from '../models/WalletTransaction';
 import { resolveCoupon, CouponResult } from '../utils/couponUtils';
 import { isDueAtCounter } from '../utils/counterBilling';
+import { recordEntries, outstandingOf, moneyParts, ledgerMethod, r2, PAISE } from '../utils/paymentLedger';
+import { salesReport, salesMatch, istDay, todayIST, pendingPayments } from '../utils/financeDefinitions';
 import { isQuickServiceOrder } from '../utils/quickService';
+import { refuseWithoutShift, isCounterMethod, owesAtCounter } from '../utils/shiftGuard';
 import { payBeforeKitchenEnabled, isHeldForCounterPayment } from '../utils/payBeforeKitchen';
 import { pushDeliveryAvailability } from '../utils/deliveryAvailabilitySync';
-import { PAID_ORDER, NET_TOTAL, salesGroupFields, money } from '../utils/paidOrder';
+import { PAID_ORDER, NET_TOTAL } from '../utils/paidOrder';
 
 const router = Router();
 
 /** Payment methods the counter can take in person (online Razorpay is never counter-paid). */
 const COUNTER_PAY_METHODS = ['cash', 'upi', 'upi_intent', 'upi_qr', 'upi_collect', 'card', 'split'];
+
+/**
+ * Batch 3 (owner decision): a tip is money received but not part of the bill, sales or
+ * collections. It is recorded as its own ledger entry (type 'tip') when the bill is paid, once
+ * per order. Cash tips count in the cash drawer.
+ */
+async function recordTip(
+  hotelId: string, order: { _id: unknown; tipAmount?: number; tipMethod?: string; sessionId?: unknown; guestId?: unknown },
+  paidAt: Date, recordedBy: string, session?: mongoose.ClientSession,
+): Promise<void> {
+  const amount = r2(order.tipAmount);
+  if (!(amount > 0)) return;
+  const method = (['cash', 'upi', 'card'].includes(String(order.tipMethod)) ? order.tipMethod : 'cash') as 'cash' | 'upi' | 'card';
+  await recordEntries(hotelId, [{
+    type: 'tip', method, amount, paidAt, source: 'tip',
+    allocations: [{ orderId: order._id as any, amount }],
+    sessionId: order.sessionId as any, guestId: order.guestId as any,
+    reason: 'Tip (not part of the bill)', recordedBy,
+    idempotencyKey: `tip:${String(order._id)}`,
+  }], session ? { session } : {});
+}
 
 /** Tell kitchen screens and dashboards about an order that has entered the kitchen. */
 function emitNewOrder(hotelId: string, order: any): void {
@@ -143,7 +169,7 @@ function recalcOrderTotals(
 export async function validateAndEnrichItems(
   rawItems: any[],
   hotelId: string,
-): Promise<{ items: any[]; error: string | null }> {
+): Promise<{ items: any[]; error: string | null; code?: string; trackedStock?: Map<string, number> }> {
   // Collect distinct product IDs that have a ref
   const productIdStrings = [
     ...new Set(
@@ -203,12 +229,17 @@ export async function validateAndEnrichItems(
 
     // Resolve base price: variant if specified, else product price
     let basePrice: number = Number(product.price) || 0;
+    // Batch 3: the size stored on the line always comes from the product, never from the client.
+    let variantId = '';
+    let variantName = '';
     if (item.variantId && mongoose.isValidObjectId(item.variantId)) {
       const variant = (product.variants ?? []).find((v: any) => String(v._id) === String(item.variantId));
       if (!variant) {
         return { items: [], error: `Variant ${item.variantId} not found on product ${product.name}` };
       }
       basePrice = Number(variant.price) || 0;
+      variantId = String(variant._id);
+      variantName = String(variant.name ?? '');
     }
 
     // Validate + enrich each selectedModifier
@@ -260,11 +291,41 @@ export async function validateAndEnrichItems(
       taxPercent:        Number(product.taxPercent) || 0,
       hsnCode:           product.hsnCode || '',
       productName:       product.name,
+      variantId,
+      variantName,
       selectedModifiers: validatedModifiers,
+      notes:             String(item.notes ?? '').trim().slice(0, 200),
     });
   }
 
-  return { items: enriched, error: null };
+  // Phase 5 · Batch 6 (P4-INV-02 / -03): a dish that is sold out or switched off cannot be ordered,
+  // and a counted dish cannot be ordered beyond its stock (all lines of the dish together).
+  // Stock is "counted" when it is a number ≥ 0 (−1 / missing = not counted).
+  const wanted = new Map<string, number>();
+  for (const it of enriched) {
+    const id = String(it.product);
+    wanted.set(id, (wanted.get(id) ?? 0) + Math.max(0, Number(it.quantity) || 0));
+  }
+  const trackedStock = new Map<string, number>();
+  for (const [id, qty] of wanted) {
+    const p = productMap.get(id);
+    if (p.isAvailable === false) {
+      return { items: [], error: `${p.name} is sold out or switched off. Remove it from the bill.`, code: 'ITEM_UNAVAILABLE' };
+    }
+    if (typeof p.stock === 'number' && p.stock >= 0) {
+      if (qty > p.stock) {
+        return {
+          items: [], code: 'NOT_ENOUGH_STOCK',
+          error: p.stock === 0
+            ? `${p.name} is sold out. Remove it from the bill.`
+            : `Only ${p.stock} ${p.name} left — the bill has ${qty}. Change the quantity.`,
+        };
+      }
+      trackedStock.set(id, p.stock);
+    }
+  }
+
+  return { items: enriched, error: null, trackedStock };
 }
 
 // Helper: Generate order number like ORD-20260310-001 (per hotel)
@@ -290,78 +351,25 @@ const generateOrderNumber = async (hotelId: string, prefix = 'ORD'): Promise<str
   return `${prefix}-${dateStr}-${String(counter!.seq).padStart(3, '0')}`;
 };
 
-// Daily report — uses aggregation pipeline (single DB pass, faster than multiple reduce loops)
+// Daily report — one definition of Sales / Collections for every report (utils/financeDefinitions.ts).
+// Owner decision (27 Nov 2026): totalSales = PAID orders (completed, or paid ahead), net of refunds
+// and settlement discounts, by the IST day they were created. paymentBreakdown = collections (money
+// received on the day, split payments under their parts). grossSales / totalRefunds / refundedOrders /
+// cancelledOrders as on main.
 router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return res.status(400).json({ success: false, message: 'Invalid date format' });
-    const startOfDay = new Date(date); startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date); endOfDay.setHours(23, 59, 59, 999);
-
-    const [result] = await Order.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
-      { $group: { _id: null, ...salesGroupFields() } },
-    ]);
-
-    // Loyalty discounts applied at Guest level (session billing) are not reflected in
-    // Order.grandTotal. Subtract them so totalSales is net actual revenue.
-    const [[loyaltyAgg], cancelledOrders] = await Promise.all([
-      Guest.aggregate([
-        { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: 'billed', loyaltyDiscountAmount: { $gt: 0 }, billedAt: { $gte: startOfDay, $lte: endOfDay } } },
-        { $group: { _id: null, total: { $sum: '$loyaltyDiscountAmount' } } },
-      ]),
-      Order.countDocuments({ hotelId: new mongoose.Types.ObjectId(req.hotelId!), status: 'cancelled', createdAt: { $gte: startOfDay, $lte: endOfDay } }),
-    ]);
-    const sessionLoyaltyDiscount = loyaltyAgg?.total ?? 0;
-
-    const empty = {
-      totalSales: 0, grossSales: 0, totalRefunds: 0, refundedOrders: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0,
-      cashTotal: 0, upiTotal: 0, upiIntentTotal: 0, upiQrTotal: 0, upiCollectTotal: 0,
-      cardTotal: 0, splitTotal: 0,
-      dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0,
-      swiggyOrders: 0, swiggyTotal: 0, zomatoOrders: 0, zomatoTotal: 0,
-      qrOrders: 0, qrTotal: 0,
-    };
-    const r = result || empty;
-    const netSales = +(r.totalSales - sessionLoyaltyDiscount).toFixed(2);
-
-    res.json({
-      date: dateStr,
-      totalSales: netSales,
-      totalRevenue: netSales,
-      totalTax: r.totalTax,
-      totalDiscount: r.totalDiscount,
-      totalOrders: r.totalOrders,
-      parcelOrders: r.parcelOrders,
-      parcelRevenue: r.parcelRevenue,
-      cancelledOrders,
-      grossSales: money(r.grossSales),
-      totalRefunds: money(r.totalRefunds),
-      refundedOrders: r.refundedOrders,
-      paymentBreakdown: {
-        cash: money(r.cashTotal),
-        upi: money(r.upiTotal),
-        upi_intent: money(r.upiIntentTotal),
-        upi_qr: money(r.upiQrTotal),
-        upi_collect: money(r.upiCollectTotal),
-        card: money(r.cardTotal),
-        split: money(r.splitTotal),
-      },
-      sourceBreakdown: {
-        'dine-in':  { orders: r.dineInOrders,    revenue: r.dineInTotal },
-        takeaway:   { orders: r.takeawayOrders,  revenue: r.takeawayTotal },
-        swiggy:     { orders: r.swiggyOrders,    revenue: r.swiggyTotal },
-        zomato:     { orders: r.zomatoOrders,    revenue: r.zomatoTotal },
-        qr:         { orders: r.qrOrders,        revenue: r.qrTotal },
-      },
-    });
+    const dateStr = (req.query.date as string) || todayIST();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || isNaN(istDay(dateStr).getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid date format' });
+    }
+    const report = await salesReport(new mongoose.Types.ObjectId(req.hotelId!), istDay(dateStr), istDay(dateStr, true));
+    res.json({ date: dateStr, ...report });
   } catch (error) {
     sendError(res, 500, 'Server error', error);
   }
 });
 
-// Range report (weekly / monthly) — same shape as daily
+// Range report (weekly / monthly) — same shape and definitions as daily
 router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     // Both from and to are required — a range without explicit bounds is ambiguous
@@ -370,55 +378,11 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
     }
     const fromStr = req.query.from as string;
     const toStr   = req.query.to   as string;
-    const start   = new Date(fromStr); start.setHours(0, 0, 0, 0);
-    const end     = new Date(toStr);   end.setHours(23, 59, 59, 999);
-
-    const [result] = await Order.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: start, $lte: end } } },
-      { $group: { _id: null, ...salesGroupFields() } },
-    ]);
-
-    const [[rangeLoyaltyAgg], rangeCancelledOrders] = await Promise.all([
-      Guest.aggregate([
-        { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: 'billed', loyaltyDiscountAmount: { $gt: 0 }, billedAt: { $gte: start, $lte: end } } },
-        { $group: { _id: null, total: { $sum: '$loyaltyDiscountAmount' } } },
-      ]),
-      Order.countDocuments({ hotelId: new mongoose.Types.ObjectId(req.hotelId!), status: 'cancelled', createdAt: { $gte: start, $lte: end } }),
-    ]);
-    const rangeSessionLoyaltyDiscount = rangeLoyaltyAgg?.total ?? 0;
-
-    const empty = {
-      totalSales: 0, grossSales: 0, totalRefunds: 0, refundedOrders: 0, totalTax: 0, totalDiscount: 0, totalOrders: 0, parcelOrders: 0, parcelRevenue: 0,
-      cashTotal: 0, upiTotal: 0, upiIntentTotal: 0, upiQrTotal: 0, upiCollectTotal: 0,
-      cardTotal: 0, splitTotal: 0,
-      dineInOrders: 0, dineInTotal: 0, takeawayOrders: 0, takeawayTotal: 0,
-      swiggyOrders: 0, swiggyTotal: 0, zomatoOrders: 0, zomatoTotal: 0, qrOrders: 0, qrTotal: 0,
-    };
-    const r = result || empty;
-    const netRangeSales = +(r.totalSales - rangeSessionLoyaltyDiscount).toFixed(2);
-    res.json({
-      from: fromStr, to: toStr,
-      totalSales: netRangeSales, totalTax: r.totalTax, totalDiscount: r.totalDiscount,
-      totalOrders: r.totalOrders, parcelOrders: r.parcelOrders, parcelRevenue: r.parcelRevenue,
-      cancelledOrders: rangeCancelledOrders,
-      grossSales: money(r.grossSales), totalRefunds: money(r.totalRefunds), refundedOrders: r.refundedOrders,
-      paymentBreakdown: {
-        cash: money(r.cashTotal),
-        upi: money(r.upiTotal),
-        upi_intent: money(r.upiIntentTotal),
-        upi_qr: money(r.upiQrTotal),
-        upi_collect: money(r.upiCollectTotal),
-        card: money(r.cardTotal),
-        split: money(r.splitTotal),
-      },
-      sourceBreakdown: {
-        'dine-in':  { orders: r.dineInOrders,    revenue: r.dineInTotal },
-        takeaway:   { orders: r.takeawayOrders,  revenue: r.takeawayTotal },
-        swiggy:     { orders: r.swiggyOrders,    revenue: r.swiggyTotal },
-        zomato:     { orders: r.zomatoOrders,    revenue: r.zomatoTotal },
-        qr:         { orders: r.qrOrders,        revenue: r.qrTotal },
-      },
-    });
+    if (![fromStr, toStr].every(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(istDay(d).getTime()))) {
+      return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' });
+    }
+    const report = await salesReport(new mongoose.Types.ObjectId(req.hotelId!), istDay(fromStr), istDay(toStr, true));
+    res.json({ from: fromStr, to: toStr, ...report });
   } catch (error) {
     sendError(res, 500, 'Server error', error);
   }
@@ -427,13 +391,12 @@ router.get('/reports/range', authMiddleware, requireAdmin, async (req: AuthReque
 // Product-wise sales report for a date
 router.get('/reports/products', authMiddleware, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
-    const date = new Date(dateStr);
-    const startOfDay = new Date(date); startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay   = new Date(date); endOfDay.setHours(23, 59, 59, 999);
+    // Batch 2 (2D): products sold = SALES basis (served / completed on the day, IST day).
+    const dateStr = (req.query.date as string) || todayIST();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return res.status(400).json({ message: 'Invalid date format' });
 
     const results = await Order.aggregate([
-      { $match: { hotelId: new (require('mongoose').Types.ObjectId)(req.hotelId), status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+      { $match: { hotelId: new mongoose.Types.ObjectId(req.hotelId!), status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: istDay(dateStr), $lte: istDay(dateStr, true) } } },
       { $unwind: '$items' },
       { $group: {
         _id: '$items.productName',
@@ -455,6 +418,45 @@ router.get('/reports/products', authMiddleware, requireAdmin, async (req: AuthRe
 router.use(authMiddleware);
 router.use(requireActiveStaff);
 
+// ── Discount policy (Batch 3 · 3D) ────────────────────────────────────────────
+// The server already enforces who may discount (admin: any; cashier: up to the hotel's
+// maxCashierDiscountPercent, 0 = none) but the POS never knew it, so it showed "Not permitted"
+// even to admins and offered a discount field to cashiers who would then be refused.
+router.get('/discount-policy', requireCashierOrAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const hotel = await Hotel.findById(req.hotelId).select('maxCashierDiscountPercent').lean() as any;
+    const cap = Number(hotel?.maxCashierDiscountPercent) || 0;
+    const isAdmin = req.role === 'admin';
+    res.json({
+      role: req.role,
+      canDiscount: isAdmin || cap > 0,
+      maxPercent: isAdmin ? 100 : cap,
+      maxCashierDiscountPercent: cap,
+    });
+  } catch (error) {
+    sendError(res, 500, 'Server error', error);
+  }
+});
+
+// Admin sets the cashier discount limit (0–100 %, 0 = cashiers cannot discount). Audited.
+router.patch('/discount-policy', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const raw = Number(req.body?.maxCashierDiscountPercent);
+    if (!Number.isFinite(raw) || raw < 0 || raw > 100) {
+      return res.status(400).json({ message: 'maxCashierDiscountPercent must be a number from 0 to 100.' });
+    }
+    const cap = Math.round(raw * 100) / 100;
+    const before = await Hotel.findById(req.hotelId).select('maxCashierDiscountPercent').lean() as any;
+    await Hotel.updateOne({ _id: req.hotelId }, { $set: { maxCashierDiscountPercent: cap } });
+    logAudit(req, 'hotel.discount_policy', 'hotel', String(req.hotelId), {
+      before: Number(before?.maxCashierDiscountPercent) || 0, after: cap,
+    });
+    res.json({ maxCashierDiscountPercent: cap });
+  } catch (error) {
+    sendError(res, 500, 'Server error', error);
+  }
+});
+
 // GET /api/orders/kitchen — active orders for KDS (pending + preparing + ready), oldest first
 // 'ready' is included so the kitchen can see which orders are waiting for collection.
 // Waiter marks them 'served' via PATCH /:id/status.
@@ -465,7 +467,7 @@ router.get('/kitchen', requireKitchenOrAdmin, async (req: AuthRequest, res: Resp
       { orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1, status: 1, isParcel: 1,
         orderSource: 1, acceptedAt: 1, platformOrderId: 1, deliveryAddress: 1,
         createdAt: 1, 'items.product': 1, 'items.productName': 1, 'items.quantity': 1,
-        'items.selectedModifiers': 1 },
+        'items.selectedModifiers': 1, 'items.variantName': 1, 'items.notes': 1 },
     ).sort({ createdAt: 1 }).lean();
     res.json(orders);
   } catch (error) {
@@ -528,10 +530,25 @@ router.get('/cashier', requireCashierOrAdmin, async (req: AuthRequest, res: Resp
         orderNumber: 1, tableNumber: 1, customerName: 1, notes: 1, paymentTime: 1,
         status: 1, paymentMethod: 1, grandTotal: 1, subtotal: 1, taxTotal: 1, discountAmount: 1,
         orderSource: 1, isParcel: 1, createdAt: 1, completedBy: 1, completedAt: 1, cashierId: 1,
+        // Batch 3: what the payment dialog and the invoice need to show the real amount owed
+        couponDiscount: 1, loyaltyDiscount: 1, paymentDiscount: 1, giftVoucherAmount: 1, walletAmount: 1,
+        deliveryFee: 1, amountSettled: 1, redeemedPoints: 1, customerPhone: 1,
         'items.productName': 1, 'items.quantity': 1, 'items.price': 1, 'items.total': 1,
+        // Batch 3: the invoice shows the size, add-ons and note of each line
+        'items.variantName': 1, 'items.selectedModifiers': 1, 'items.notes': 1,
       }
     ).sort({ createdAt: -1 }).lean();
     res.json(orders);
+  } catch (error) {
+    sendError(res, 500, 'Server error', error);
+  }
+});
+
+// GET /orders/cashier/pending-summary — bills with money still owed (Batch 3). One server rule for
+// the admin and cashier dashboards; based on outstanding balances, not kitchen status.
+router.get('/cashier/pending-summary', requireCashierOrAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    res.json(await pendingPayments(new mongoose.Types.ObjectId(req.hotelId!)));
   } catch (error) {
     sendError(res, 500, 'Server error', error);
   }
@@ -687,6 +704,10 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       if (existing) return res.status(200).json(existing);
     }
 
+    // Phase 5 · Batch 5 (Decision 3): money taken at the counter needs an open shift.
+    if (req.body.payNow === true && (req.role === 'cashier' || req.role === 'admin')
+        && isCounterMethod(req.body.paymentMethod) && await refuseWithoutShift(res, req.hotelId!)) return;
+
     // ── Phase 4: Order Route Guard ────────────────────────────────────────────
     // When sessionId + guestId are both provided, validate the ownership chain:
     //   hotel → session open → guest active + belongs to this session.
@@ -694,6 +715,10 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     // Hotels without tableSessions simply have no sessions — validation returns null
     // naturally, so an explicit feature-flag check is not needed here.
     let linkedGuestId: mongoose.Types.ObjectId | null = null;
+    // Session the order belongs to. Set by the explicit sessionId/guestId path below and by
+    // the auto-session path (staff order with only a tableId), and written onto the order so
+    // the table bill, guest billing (Order.updateMany by guestId) and release checks see it.
+    let linkedSessionId: mongoose.Types.ObjectId | null = null;
 
     if (req.body.sessionId && req.body.guestId) {
       const { sessionId, guestId } = req.body;
@@ -715,6 +740,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       }
 
       linkedGuestId = linkedGuest._id as mongoose.Types.ObjectId;
+      linkedSessionId = linkedSession._id as mongoose.Types.ObjectId;
 
       // CustomerProfile find/create when phone + name provided and guest has no profile yet
       const { customerPhone, customerName } = req.body;
@@ -804,6 +830,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
 
           const defaultGuest = await findOrCreateDefaultGuest(session, req.hotelId!);
           linkedGuestId = defaultGuest._id as mongoose.Types.ObjectId;
+          linkedSessionId = session._id as mongoose.Types.ObjectId;
         }
       } catch (sessionErr: any) {
         if (sessionErr.httpStatus === 404) {
@@ -818,17 +845,29 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     }
 
     // ── Server-side price + modifier integrity check ─────────────────────────
-    const { items: validatedItems, error: itemError } = await validateAndEnrichItems(
+    const { items: validatedItems, error: itemError, code: itemCode, trackedStock } = await validateAndEnrichItems(
       req.body.items,
       req.hotelId!,
     );
     if (itemError) {
-      return res.status(422).json({ message: itemError });
+      return res.status(itemCode ? 409 : 422).json({ message: itemError, ...(itemCode ? { code: itemCode } : {}) });
     }
 
     // ── Server-side coupon resolution ─────────────────────────────────────────
     // Compute item totals first (needed for coupon minimum order check).
     const preCoupon     = recalcOrderTotals(validatedItems, 0, 0);
+    // Batch 3: the POS sends the subtotal the cashier sees. If a price changed since the dish was
+    // added, refuse before anything is recorded: the bill must never differ from the screen.
+    // Optional, so offline-queued bills and other clients are not affected.
+    if (req.body.expectedSubtotal != null) {
+      const shown = Number(req.body.expectedSubtotal);
+      if (!Number.isFinite(shown) || Math.abs(shown - preCoupon.subtotal) > PAISE) {
+        return res.status(409).json({
+          code: 'PRICE_CHANGED',
+          message: `Prices have changed since this bill was started (screen ₹${(Number.isFinite(shown) ? shown : 0).toFixed(2)}, current ₹${preCoupon.subtotal.toFixed(2)} before tax). Remove the changed dish and add it again.`,
+        });
+      }
+    }
     const orderTotal    = preCoupon.subtotal + preCoupon.taxTotal;
     let couponResult: CouponResult | null = null;
     try {
@@ -965,15 +1004,21 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       customerName:        b.customerName,
       customerPhone:       b.customerPhone,
       notes:               b.notes,
+      // Phase 5 · Batch 7: dine-in guest count from the POS (a whole number 1–999, else not stored)
+      guestCount:          b.orderSource === 'dine-in' && Number.isInteger(Number(b.guestCount)) && Number(b.guestCount) >= 1 && Number(b.guestCount) <= 999
+                             ? Number(b.guestCount) : null,
       orderSource:         b.orderSource,
       isParcel:            b.isParcel,
       paymentMethod:       b.paymentMethod,
       splitDetails:        b.splitDetails,
       tableId:             b.tableId,
-      sessionId:           b.sessionId,
+      // P4-TBL-01: the auto-session path resolves the session and guest on the server;
+      // without these the order was saved unlinked (bill ₹0, never marked paid by guest billing).
+      sessionId:           linkedSessionId ?? b.sessionId,
       // F-5: validate guestId format before storing — prevents malformed values from
       // breaking downstream queries that cast it to ObjectId.
-      guestId:             (b.guestId && mongoose.isValidObjectId(b.guestId)) ? b.guestId : undefined,
+      guestId:             linkedGuestId
+                             ?? ((b.guestId && mongoose.isValidObjectId(b.guestId)) ? b.guestId : undefined),
       offlineId:           b.offlineId ?? null,
       deliveryAddress:     b.deliveryAddress,
       platformOrderId:     b.platformOrderId,
@@ -1005,9 +1050,15 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     // kitchen already paid. Otherwise, if the hotel holds unpaid orders, park it in
     // 'payment_pending' (no kitchen list, no new_order, no KOT) until POST /:id/pay.
     const payNow = b.payNow === true && (req.role === 'cashier' || req.role === 'admin');
+    let payNowParts: ReturnType<typeof moneyParts> = null;
     if (payNow) {
       if (!COUNTER_PAY_METHODS.includes(String(b.paymentMethod))) {
         return res.status(400).json({ message: 'Choose Cash, UPI, Card or Split to take payment.' });
+      }
+      // Batch 2 (2B): the ledger parts must add up to the bill to the paisa.
+      payNowParts = moneyParts(String(b.paymentMethod), order.grandTotal, b.splitDetails);
+      if (!payNowParts || payNowParts.length === 0) {
+        return res.status(400).json({ message: `Split amounts must add up to the bill total (₹${Number(order.grandTotal).toFixed(2)}) exactly.` });
       }
       order.paymentTime = new Date();
     } else if (b.paymentMethod !== 'razorpay' && await payBeforeKitchenEnabled(req.hotelId!)) {
@@ -1020,11 +1071,19 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     // KOT print, guest total, stock-response read, and socket emit run AFTER
     // the transaction commits so they never see a rolled-back order.
     const stockItems = order.items.filter(i => i.product);
-    const stockBulkOps = stockItems.map(item => ({
+    // Phase 5 · Batch 6 (P4-INV-03): counted dishes are taken off stock only if enough is left
+    // (was: clamped at 0, so a second till could sell a plate that did not exist). One update per
+    // dish for all its lines; if any dish no longer has enough, the whole order is rolled back.
+    const stockWanted = new Map<string, number>();
+    for (const item of stockItems) {
+      const id = String(item.product);
+      if (trackedStock?.has(id)) stockWanted.set(id, (stockWanted.get(id) ?? 0) + item.quantity);
+    }
+    const stockBulkOps = [...stockWanted].map(([id, qty]) => ({
       updateOne: {
-        filter: { _id: item.product, hotelId: req.hotelId, stock: { $gt: 0 } },
+        filter: { _id: new mongoose.Types.ObjectId(id), hotelId: req.hotelId, stock: { $gte: qty } },
         update: [
-          { $set: { stock: { $max: [{ $subtract: ['$stock', item.quantity] }, 0] } } },
+          { $set: { stock: { $subtract: ['$stock', qty] } } },
           { $set: { isAvailable: { $gt: ['$stock', 0] } } },
         ],
       },
@@ -1036,6 +1095,11 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     const txSession = await mongoose.startSession();
     try {
       await txSession.withTransaction(async () => {
+        // Phase 5 · Batch 6: withTransaction re-runs this block after a write conflict (e.g. two tills
+        // selling the same counted dish). The first, aborted attempt left the order marked as saved,
+        // so the retry tried to UPDATE an order that was never committed (DocumentNotFoundError →
+        // "Invalid data"). Every attempt inserts it afresh.
+        order.isNew = true;
         // Atomically claim one coupon usage slot inside the transaction.
         // If the limit is exhausted by a concurrent order, the transaction aborts.
         if (couponResult) {
@@ -1178,8 +1242,13 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
         ingredientShortfalls = shortfalls;
         if (ingredientDeltas.size > 0) order.ingredientDeltas = ingredientDeltas;
         await order.save({ session: txSession });
-        if (stockItems.length > 0) {
-          await Product.bulkWrite(stockBulkOps as any, { session: txSession });
+        if (stockBulkOps.length > 0) {
+          const sw = await Product.bulkWrite(stockBulkOps as any, { session: txSession });
+          if (sw.matchedCount !== stockBulkOps.length) {
+            const e = new Error('A dish on this bill sold out while it was being placed. Refresh the menu and check the bill.');
+            (e as any).isStockError = true;
+            throw e;
+          }
         }
         // H2: loyalty redemption inside transaction — if it fails the whole order is rolled back
         // so the loyalty ledger and order discount are always consistent.
@@ -1237,6 +1306,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     }
 
     logger.info('Order saved', { orderId: String(order._id), orderNumber: order.orderNumber, hotelId: req.hotelId });
+    if (stockBulkOps.length > 0) invalidateProductList(req.hotelId!);   // Batch 6 (P4-INV-04)
 
     // ── Phase 7: Fire-and-forget KOT print ───────────────────────────────────
     // An order held for payment gets its KOT when it is paid (POST /:id/pay).
@@ -1252,6 +1322,20 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       sessionId:   order.sessionId,
       guestId:     linkedGuestId ?? undefined,
     }).catch(() => {});
+
+    // ── Batch 2 (2B): payment taken while placing the order → payment ledger ───
+    // After the order transaction committed. If this fails the order still carries paymentTime,
+    // and reports fall back to it (legacy rule), so the collection is never lost.
+    if (payNow && payNowParts && payNowParts.length) {
+      await recordEntries(req.hotelId!, payNowParts.map(p => ({
+        type: 'payment' as const, method: p.method, amount: p.amount, paidAt: order.paymentTime as Date, source: 'pay_now',
+        allocations: [{ orderId: order._id as any, amount: p.amount }],
+        sessionId: order.sessionId, guestId: linkedGuestId,
+        reference: String(b.transactionId ?? '').slice(0, 120),
+        recordedBy: req.cashierName || req.role || '',
+        idempotencyKey: `paynow:${order._id}:${p.method}`,
+      }))).catch(err => logger.error('[ledger] pay-now entry failed', { orderId: String(order._id), error: String(err) }));
+    }
 
     // ── Phase 4: Update guest running total ───────────────────────────────────
     // Only counter-payable orders add to what the guest owes (see counterBilling).
@@ -1304,6 +1388,9 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
     }
     if ((error as any).isWalletError) {
       return res.status(400).json({ message: error.message });
+    }
+    if ((error as any).isStockError) {
+      return res.status(409).json({ code: 'NOT_ENOUGH_STOCK', message: error.message });
     }
     logger.error('[POST /orders] Failed', { hotelId: req.hotelId, error: String(error), code: error.code, stack: error?.stack });
     if (isTemporaryDbError(error)) return sendError(res, 503, 'Could not save the order right now. Please retry.', error);
@@ -1382,6 +1469,37 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     // findOneAndUpdate is inside the transaction so an order cannot end up permanently
     // cancelled if the stock restoration write fails and the transaction rolls back.
     if (status === 'cancelled') {
+      // Batch 3 (3C): the reason is stored (it was discarded), and an order with money already
+      // received is not cancelled silently — the admin must confirm a counter refund
+      // (`refund: true`), which is recorded in the payment ledger per method. Online payments
+      // are refunded through the gateway refund instead.
+      const cancelReason = String(req.body.reason ?? req.body.cancelReason ?? '').trim().slice(0, 300);
+      const received = r2(Number((existing as any).amountSettled) || 0)
+        || ((existing as any).ledger ? 0 : (existing.paymentTime ? r2(existing.grandTotal) : 0));
+      let refundParts: Array<{ method: string; amount: number }> = [];
+      if (received > 0) {
+        const moneyEntries = await PaymentEntry.find({
+          hotelId: req.hotelId, type: 'payment', 'allocations.orderId': existing._id,
+          method: { $in: ['cash', 'upi', 'card', 'online'] },
+        }).lean();
+        const byMethod = new Map<string, number>();
+        for (const e of moneyEntries as any[]) {
+          const a = (e.allocations || []).filter((x: any) => String(x.orderId) === String(existing._id))
+            .reduce((t: number, x: any) => t + (Number(x.amount) || 0), 0);
+          byMethod.set(e.method, r2((byMethod.get(e.method) || 0) + a));
+        }
+        if (!(existing as any).ledger) byMethod.set(ledgerMethod(existing.paymentMethod), received);
+        refundParts = [...byMethod.entries()].filter(([, v]) => v > 0).map(([method, amount]) => ({ method, amount }));
+        if (refundParts.some(p => p.method === 'online')) {
+          return res.status(409).json({ code: 'PAID_ONLINE', message: 'This bill was paid online — refund the online payment first, then cancel.' });
+        }
+        if (req.body.refund !== true) {
+          return res.status(409).json({
+            code: 'PAID_ORDER', amountReceived: r2(refundParts.reduce((t, p) => t + p.amount, 0)),
+            message: `₹${received.toFixed(2)} was already received for this bill. Cancel only with a refund (confirm the refund to the customer).`,
+          });
+        }
+      }
       const bulkOps = existing.items.filter(i => i.product).map(item => ({
         updateOne: {
           filter: { _id: item.product, hotelId: req.hotelId, stock: { $gte: 0 } },
@@ -1395,7 +1513,10 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         await cancelTx.withTransaction(async () => {
           prevDoc = await Order.findOneAndUpdate(
             { _id: req.params.id, hotelId: req.hotelId, status: { $ne: 'cancelled' } },
-            { $set: { status: 'cancelled' } },
+            { $set: {
+                status: 'cancelled', cancelReason, cancelledAt: new Date(),
+                cancelledBy: String(req.cashierName || (req as any).adminId || req.role || ''),
+            } },
             { new: false, session: cancelTx },
           ) as typeof existing | null;
           if (!prevDoc) return; // already cancelled — no side-effects
@@ -1439,16 +1560,29 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       } finally {
         await cancelTx.endSession();
       }
+      if (prevDoc && bulkOps.length > 0) invalidateProductList(req.hotelId!);   // Batch 6 (P4-INV-04): stock is back
 
       if (prevDoc) {
         // Cancelling puts counted stock back (and the dish back on sale) — tell Swiggy / Zomato
         if (bulkOps.length > 0) {
           void pushDeliveryAvailability(req.hotelId!, existing.items.filter(i => i.product).map(i => String(i.product)));
         }
+        // Batch 3 (3C): the counter refund the admin confirmed — one ledger refund per method.
+        if (refundParts.length > 0) {
+          await recordEntries(req.hotelId!, refundParts.map(p => ({
+            type: 'refund' as const, method: p.method as any, amount: p.amount, paidAt: new Date(),
+            source: 'cancel_refund', allocations: [{ orderId: existing._id as any, amount: p.amount }],
+            sessionId: existing.sessionId, guestId: (existing as any).guestId,
+            reason: cancelReason || 'Order cancelled', recordedBy: req.cashierName || req.role || '',
+            idempotencyKey: `cancel-refund:${existing._id}:${p.method}`,
+          })));
+        }
         logAudit(req, 'order.cancelled', 'order', String(existing._id), {
           orderNumber: existing.orderNumber,
           prevStatus:  existing.status,
           grandTotal:  existing.grandTotal,
+          reason:      cancelReason,
+          refunded:    refundParts,
         });
 
         // Tally Direct Sync — fire-and-forget; failure NEVER rolls back the cancellation
@@ -1456,9 +1590,11 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
 
         // Undo only what this order added to the guest's amount due (prepaid /
         // unpaid online orders never added anything). Scoped to this hotel.
+        // Batch 3: only the UNPAID part — a part payment already came off the guest's due.
         if (existing.guestId && isDueAtCounter(existing)) {
+          const stillOwed = outstandingOf(existing as any);
           await Guest.updateOne({ _id: existing.guestId, hotelId: req.hotelId }, [
-            { $set: { totalAmount: { $max: [0, { $subtract: ['$totalAmount', existing.grandTotal] }] } } },
+            { $set: { totalAmount: { $max: [0, { $round: [{ $subtract: ['$totalAmount', stillOwed] }, 2] }] } } },
           ]);
         }
 
@@ -1472,7 +1608,8 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
 
             const cancelProfile = await CustomerProfile.findOne({
               hotelId: new mongoose.Types.ObjectId(req.hotelId),
-              phone:   customerPhone,
+              // Batch 3: profiles store the normalised phone, orders may hold it as typed.
+              phone:   { $in: [customerPhone, normalizePhone(customerPhone)].filter(Boolean) as string[] },
               status:  { $ne: 'merged' },
             }).select('_id orgCustomerId').lean();
             if (!cancelProfile) return;
@@ -1709,19 +1846,23 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       // M13: Razorpay orders must have a verified Payment record before completion.
       // Check BOTH the stored paymentMethod (e.g. QR orders already stored as 'razorpay')
       // AND the client-supplied paymentMethod — either triggers the guard.
+      let razorpayPmt: any = null;
       if (paymentMethod === 'razorpay' || existing.paymentMethod === 'razorpay') {
-        const razorpayPmt = await Payment.findOne({
+        razorpayPmt = await Payment.findOne({
           orderId: existing._id,
           hotelId: req.hotelId,
           status: 'success',
           gatewayType: { $in: ['razorpay', 'razorpay_link'] },
-        }).select('_id').lean();
+        }).select('_id amount updatedAt gatewayTransactionId').lean();
         if (!razorpayPmt) {
           return res.status(400).json({ message: 'Payment verification required before completing a Razorpay order.' });
         }
       }
 
       const VALID_PM = ['cash', 'upi', 'upi_intent', 'upi_qr', 'upi_collect', 'card', 'split', 'razorpay'];
+      // Batch 2 (2B): completing no longer stamps paymentTime (it overwrote the real payment
+      // time of /pay, payNow, QR and the webhook). Whatever is still owed is recorded below as
+      // a ledger payment, which sets paymentTime once the order is fully settled.
       // Paid at the counter earlier (payNow / POST /:id/pay): closing the order must not
       // record a second payment or change when and how it was paid.
       const alreadyPaid = !!existing.paymentTime;
@@ -1730,7 +1871,6 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
         completedBy: req.cashierName || req.cashierId || '',
         completedAt: new Date(),
         cashierId:   req.cashierId || '',
-        paymentTime: existing.paymentTime ?? new Date(),
       };
       if (!alreadyPaid && paymentMethod && VALID_PM.includes(paymentMethod)) {
         completionFields.paymentMethod = paymentMethod;
@@ -1739,17 +1879,38 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       if (!alreadyPaid && req.body.upiApp)        completionFields.upiApp        = req.body.upiApp;
       if (!alreadyPaid && req.body.payments)      completionFields.payments      = req.body.payments;
       if (!alreadyPaid && req.body.splitDetails) {
-        // M5 (status path): validate split totals match order total within ±₹1
-        // Mirrors the same check in PATCH /:id/payment to keep audit trail consistent.
+        // M5 (status path): split totals must match what is owed — to the paisa (Batch 2; was ±₹1).
         const sd = req.body.splitDetails as { cash?: number; upi?: number; card?: number };
-        const splitTotal = (Number(sd.cash) || 0) + (Number(sd.upi) || 0) + (Number(sd.card) || 0);
-        if (splitTotal > 0 && Math.abs(splitTotal - existing.grandTotal) > 1) {
+        const splitTotal = r2((Number(sd.cash) || 0) + (Number(sd.upi) || 0) + (Number(sd.card) || 0));
+        const owed = outstandingOf(existing as any);
+        if (splitTotal > 0 && Math.abs(splitTotal - owed) > PAISE) {
           return res.status(400).json({
-            message: `Split payment total (${splitTotal.toFixed(2)}) must equal order total (${existing.grandTotal.toFixed(2)})`,
+            message: `Split payment total (${splitTotal.toFixed(2)}) must equal the amount due (${owed.toFixed(2)})`,
           });
         }
-        completionFields.splitDetails = sd;
+        completionFields.splitDetails = { cash: r2(sd.cash), upi: r2(sd.upi), card: r2(sd.card) };
       }
+      // Batch 2 (2B): what is still owed is collected now — work out the ledger parts BEFORE
+      // completing, so an unusable split stops the completion instead of leaving it unrecorded.
+      const owedAtCompletion = outstandingOf(existing as any);
+      const completionMethod = (paymentMethod && VALID_PM.includes(paymentMethod)) ? paymentMethod : existing.paymentMethod;
+      let completionParts: ReturnType<typeof moneyParts> = [];
+      if (owedAtCompletion > 0 && completionMethod !== 'razorpay') {
+        completionParts = moneyParts(
+          completionMethod, owedAtCompletion,
+          (completionFields.splitDetails as any) ?? (existing as any).splitDetails,
+        );
+        if (!completionParts) {
+          return res.status(400).json({
+            message: `Split amounts must add up to the amount due (₹${owedAtCompletion.toFixed(2)}) before the bill can be closed.`,
+          });
+        }
+      }
+
+      // Phase 5 · Batch 5 (Decision 3): collecting what is owed (or a tip) at the counter needs an
+      // open shift. Completing an order that is already paid, or paid online, does not.
+      const takesCounterMoney = (completionParts?.length ?? 0) > 0 || (!razorpayPmt && Number((existing as any).tipAmount) > 0);
+      if (takesCounterMoney && await refuseWithoutShift(res, req.hotelId!)) return;
 
       const completableStatuses = isQuickService
         ? ['served', 'ready', 'pending']
@@ -1770,6 +1931,42 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
           message: `Cannot complete order from status '${current.status}'. Order must be 'ready' or 'served'.`,
         });
       }
+
+      // P4-TBL-01 (dine-in billing): an order closed here is paid, so it is no longer owed at
+      // the table — same rule as POST /:id/pay. prevDoc is the state before this (atomic)
+      // completion, so this runs once per order and never for orders already paid ahead
+      // (paid at the counter or online), which isDueAtCounter excludes.
+      const owedBefore = outstandingOf(prevDoc as any);
+      if (prevDoc.guestId && isDueAtCounter(prevDoc) && owedBefore > 0) {
+        await Guest.updateOne(
+          { _id: prevDoc.guestId, hotelId: req.hotelId },
+          [{ $set: { totalAmount: { $max: [0, { $round: [{ $subtract: ['$totalAmount', owedBefore] }, 2] }] } } }],
+        );
+      }
+
+      // Batch 2 (2B): record the money taken at completion (only what was still owed), or make
+      // sure a verified Razorpay payment is in the ledger (same key as QR verify / webhook).
+      const completedAtTime = (completionFields.completedAt as Date) ?? new Date();
+      if (razorpayPmt) {
+        await recordEntries(req.hotelId!, [{
+          type: 'payment', method: 'online', amount: r2((Number(razorpayPmt.amount) || 0) / 100),
+          paidAt: razorpayPmt.updatedAt ?? completedAtTime, source: 'gateway',
+          allocations: [{ orderId: prevDoc._id as any, amount: r2((Number(razorpayPmt.amount) || 0) / 100) }],
+          paymentId: razorpayPmt._id, reference: razorpayPmt.gatewayTransactionId ?? '',
+          sessionId: prevDoc.sessionId, guestId: (prevDoc as any).guestId,
+          recordedBy: 'gateway', idempotencyKey: `gw:${razorpayPmt._id}`,
+        }]);
+      } else if (owedBefore > 0 && completionParts && completionParts.length) {
+        await recordEntries(req.hotelId!, completionParts.map(p => ({
+          type: 'payment' as const, method: p.method, amount: p.amount, paidAt: completedAtTime, source: 'completion',
+          allocations: [{ orderId: prevDoc._id as any, amount: p.amount }],
+          sessionId: prevDoc.sessionId, guestId: (prevDoc as any).guestId,
+          reference: String(req.body.transactionId ?? '').slice(0, 120),
+          recordedBy: req.cashierName || req.role || '',
+          idempotencyKey: `complete:${prevDoc._id}:${p.method}`,
+        })));
+      }
+      if (!razorpayPmt) await recordTip(req.hotelId!, prevDoc as any, completedAtTime, req.cashierName || req.role || '');
 
       // This request won the atomic update — run side effects exactly once.
       const completedOrder = await Order.findById(req.params.id);
@@ -1831,15 +2028,18 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
 
             const earnProfile = await CustomerProfile.findOne({
               hotelId: new mongoose.Types.ObjectId(req.hotelId),
-              phone,
+              // Phase 5 · Batch 7 (P4-CATALOG-03): profiles store the normalised phone (+91…), the
+              // order holds it as typed — match both, as the cancel path already does.
+              phone:   { $in: [phone, normalizePhone(phone)].filter(Boolean) as string[] },
               status:  { $ne: 'merged' },
             }).select('_id loyaltyOptOut orgCustomerId').lean();
             if (!earnProfile) return;
 
-            // lifetimeSpend is incremented once per completed order (gated by claimedOrder above)
+            // lifetimeSpend and the visit are counted once per completed order (gated by claimedOrder
+            // above). Dine-in counts its visit per table session instead and never reaches here.
             await CustomerProfile.findByIdAndUpdate(
               (earnProfile as any)._id,
-              { $inc: { lifetimeSpend: existing.grandTotal }, $set: { lastVisitAt: new Date() } },
+              { $inc: { lifetimeSpend: existing.grandTotal, visitCount: 1 }, $set: { lastVisitAt: new Date() } },
             ).catch(() => {});
 
             // Determine if org-loyalty is active for this customer
@@ -1962,7 +2162,7 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
 // C3: replaces the admin-only PUT /:id for the specific fields cashiers need to update.
 // M5: validates that split payment amounts sum to grandTotal.
 router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res: Response) => {
-  const { paymentMethod, splitDetails, tipAmount, additionalDiscount } = req.body;
+  const { paymentMethod, splitDetails, tipAmount, additionalDiscount, redeemPoints: redeemRequest } = req.body;
   const VALID_PM = ['cash', 'upi', 'upi_intent', 'upi_qr', 'upi_collect', 'card', 'split', 'razorpay'];
 
   try {
@@ -1977,26 +2177,7 @@ router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res
     if (paymentMethod && VALID_PM.includes(paymentMethod)) {
       update.paymentMethod = paymentMethod;
     }
-    if (splitDetails && Array.isArray(splitDetails) && splitDetails.length > 0) {
-      // M5: reject if split amounts don't add up (within ±1 rupee for floating point)
-      const splitTotal = splitDetails.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
-      if (Math.abs(splitTotal - order.grandTotal) > 1) {
-        return res.status(400).json({
-          message: `Split payment total (${splitTotal.toFixed(2)}) must equal order total (${order.grandTotal.toFixed(2)})`,
-        });
-      }
-      update.splitDetails = splitDetails;
-    } else if (paymentMethod === 'split' && splitDetails && typeof splitDetails === 'object' && !Array.isArray(splitDetails)) {
-      // The web sends split parts as { cash, upi, card }, the shape Order.splitDetails
-      // stores. They were silently dropped before, so split bills closed from Pending
-      // Bills had no breakdown. The parts are what the counter collected (they can
-      // include a tip or round-off), so they are not checked against grandTotal here.
-      const sd = { cash: Number(splitDetails.cash) || 0, upi: Number(splitDetails.upi) || 0, card: Number(splitDetails.card) || 0 };
-      if (Object.values(sd).some(v => v < 0) || sd.cash + sd.upi + sd.card <= 0) {
-        return res.status(400).json({ message: 'Split amounts must be zero or more and add up to more than zero.' });
-      }
-      update.splitDetails = sd;
-    }
+    // (split is validated below, after any discount, against what will be owed)
     if (tipAmount != null) {
       const rawTip = Number(tipAmount);
       if (!isFinite(rawTip) || rawTip < 0) {
@@ -2010,6 +2191,14 @@ router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res
         });
       }
       update.tipAmount = rawTip;
+      // Batch 3: how the tip is paid — given by the dialog, else the payment method; a split
+      // covers the bill only, so its tip is taken on top in cash unless said otherwise.
+      const asked = String(req.body?.tipMethod ?? '');
+      const pm = String(paymentMethod || order.paymentMethod || '');
+      const fromPm = ledgerMethod(pm);
+      update.tipMethod = rawTip > 0
+        ? (['cash', 'upi', 'card'].includes(asked) ? asked : ['cash', 'upi', 'card'].includes(fromPm) ? fromPm : 'cash')
+        : '';
     }
     if (additionalDiscount != null && Number(additionalDiscount) > 0) {
       // RBAC: discount gate for additional post-order discount
@@ -2019,25 +2208,166 @@ router.patch('/:id/payment', requireCashierOrAdmin, async (req: AuthRequest, res
         if (cap2 === 0) {
           return res.status(403).json({ message: 'Only admins can apply discounts.' });
         }
-        const addPct = order.grandTotal > 0 ? (Number(additionalDiscount) / order.grandTotal * 100) : 0;
-        if (addPct > cap2) {
-          return res.status(403).json({ message: `Discount ${addPct.toFixed(1)}% exceeds cashier limit of ${cap2}%. Contact admin.` });
+        // Batch 3 (3D): the limit covers ALL discount on this bill (given at order + at payment),
+        // on the same base as the order-time check, so repeating small discounts cannot pass it.
+        const discountBase = Number(order.subtotal) || 0;
+        const totalDiscount = r2(
+          (Number(order.discountAmount) || 0) + (Number((order as any).paymentDiscount) || 0)
+          + Math.min(Number(additionalDiscount), order.grandTotal),
+        );
+        if (totalDiscount * 100 > discountBase * cap2 + 1e-6) {
+          const totalPct = discountBase > 0 ? (totalDiscount / discountBase * 100) : 100;
+          return res.status(403).json({ message: `Total discount on this bill (₹${totalDiscount.toFixed(2)}, ${totalPct.toFixed(1)}%) exceeds cashier limit of ${cap2}%. Contact admin.` });
         }
       }
-      const addDisc = Math.min(Number(additionalDiscount), order.grandTotal);
-      update.additionalDiscount = addDisc;
-      update.grandTotal = Math.max(0, Math.round((order.grandTotal - addDisc) * 100) / 100);
+      // Batch 2 (2B/2C): the discount must fit in what is still owed (a discount on money
+      // already received would need a refund), is stored (it used to be dropped silently —
+      // `additionalDiscount` is not a schema field), and comes off the guest's amount due.
+      const owedNow = outstandingOf(order as any);
+      const addDisc = r2(Math.min(Number(additionalDiscount), order.grandTotal));
+      if (addDisc > owedNow + PAISE) {
+        return res.status(409).json({
+          code: 'DISCOUNT_EXCEEDS_DUE',
+          message: `Discount (₹${addDisc.toFixed(2)}) is more than the amount still due (₹${owedNow.toFixed(2)}). Money already received would need a refund.`,
+        });
+      }
+      update.paymentDiscount = r2((Number((order as any).paymentDiscount) || 0) + addDisc);
+      update.grandTotal = r2(Math.max(0, order.grandTotal - addDisc));
     }
 
-    const updated = await Order.findOneAndUpdate(
-      { _id: req.params.id, hotelId: req.hotelId },
-      { $set: update },
-      { new: true },
-    );
-    if (!updated) return res.status(404).json({ message: 'Order not found' });
+    // Batch 3 (3D): loyalty points redeemed in the payment dialog (they were never sent, so the
+    // customer paid less at the counter than the bill said and kept the points). Only the bill's
+    // own customer, once per bill, within the loyalty limits on what is still owed.
+    let redemption: {
+      points: number; value: number; profileId: mongoose.Types.ObjectId;
+      orgCtx: OrgLoyaltyContext | null; cfg: Awaited<ReturnType<typeof getLoyaltyConfig>>;
+    } | null = null;
+    if (redeemRequest != null && Number(redeemRequest) !== 0) {
+      const points = Number(redeemRequest);
+      if (!Number.isInteger(points) || points < 0) {
+        return res.status(400).json({ code: 'BAD_POINTS', message: 'Points to redeem must be a whole number.' });
+      }
+      if ((Number((order as any).redeemedPoints) || 0) > 0) {
+        return res.status(409).json({ code: 'ALREADY_REDEEMED', message: 'Points have already been redeemed on this bill.' });
+      }
+      const billPhone = normalizePhone(order.customerPhone);
+      const profile = billPhone
+        ? await CustomerProfile.findOne({
+            hotelId: new mongoose.Types.ObjectId(req.hotelId), phone: billPhone,
+            status: 'active', loyaltyOptOut: { $ne: true },
+          }).select('_id orgCustomerId') as { _id: mongoose.Types.ObjectId; orgCustomerId?: mongoose.Types.ObjectId | null } | null
+        : null;
+      if (!profile) {
+        return res.status(409).json({ code: 'NOT_BILL_CUSTOMER', message: 'Only the customer on this bill can redeem points on it.' });
+      }
+      const orgCtx = await resolveOrgLoyalty(profile, req.hotelId!);
+      const cfg = orgCtx ? orgCtx.hqConfig : await getLoyaltyConfig(req.hotelId!);
+      if (!cfg.enabled) {
+        return res.status(409).json({ code: 'LOYALTY_OFF', message: 'Loyalty is not switched on.' });
+      }
+      if (points < cfg.minimumRedeemPoints) {
+        return res.status(400).json({ code: 'BELOW_MINIMUM', message: `At least ${cfg.minimumRedeemPoints} points must be redeemed.` });
+      }
+      const billBefore = Number(update.grandTotal ?? order.grandTotal);
+      const dueBefore = outstandingOf({ ...(order.toObject() as any), grandTotal: billBefore });
+      const value = calculateRedeemValue(points, cfg);
+      const maxValue = r2(dueBefore * Math.min(cfg.maximumRedeemPercent, 100) / 100);
+      if (value > maxValue) {
+        return res.status(400).json({ code: 'OVER_REDEEM_LIMIT', message: `Points worth ₹${value.toFixed(2)} are more than the ₹${maxValue.toFixed(2)} that can be redeemed on this bill.` });
+      }
+      update.redeemedPoints = points;
+      update.loyaltyDiscount = r2((Number((order as any).loyaltyDiscount) || 0) + value);
+      update.grandTotal = r2(Math.max(0, billBefore - value));
+      redemption = { points, value, profileId: profile._id, orgCtx, cfg };
+    }
+
+    // Split breakdown: the web POS sends an object { cash, upi, card }; the array form
+    // ([{ amount }]) is still accepted. It must equal what will be owed, to the paisa (Batch 2;
+    // the object form used to be dropped silently, so split bills lost their breakdown).
+    if (splitDetails && (Array.isArray(splitDetails) ? splitDetails.length > 0 : typeof splitDetails === 'object')) {
+      const owedAfter = outstandingOf({ ...(order.toObject() as any), grandTotal: update.grandTotal ?? order.grandTotal });
+      const splitTotal = Array.isArray(splitDetails)
+        ? r2(splitDetails.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0))
+        : r2((Number(splitDetails.cash) || 0) + (Number(splitDetails.upi) || 0) + (Number(splitDetails.card) || 0));
+      if (Math.abs(splitTotal - owedAfter) > PAISE) {
+        return res.status(400).json({
+          message: `Split payment total (${splitTotal.toFixed(2)}) must equal the amount due (${owedAfter.toFixed(2)})`,
+        });
+      }
+      update.splitDetails = Array.isArray(splitDetails)
+        ? splitDetails
+        : { cash: r2(splitDetails.cash), upi: r2(splitDetails.upi), card: r2(splitDetails.card) };
+    }
+
+    // Batch 3 (3D): a change to the bill only applies to the exact state it was checked against,
+    // so simultaneous discounts / redemptions cannot both pass the limit or stack.
+    const billChanges = update.grandTotal !== undefined;
+    const filter: Record<string, unknown> = { _id: req.params.id, hotelId: req.hotelId };
+    if (billChanges) {
+      filter.grandTotal = order.grandTotal;
+      filter.paymentTime = null;
+      filter.status = { $nin: ['completed', 'cancelled'] };
+      if (r2((order as any).amountSettled) > 0) filter.amountSettled = (order as any).amountSettled;
+      else filter.$or = [{ amountSettled: 0 }, { amountSettled: { $exists: false } }];
+    }
+    if (redemption) filter.redeemedPoints = { $not: { $gt: 0 } };
+
+    let updated: any = null;
+    if (redemption) {
+      // The bill change and the points deduction commit together or not at all.
+      const r = redemption;
+      const NOT_ENOUGH_POINTS = new Error('loyalty_redeem_refused');
+      const txn = await mongoose.startSession();
+      try {
+        await txn.withTransaction(async () => {
+          updated = await Order.findOneAndUpdate(filter, { $set: update }, { new: true, session: txn });
+          if (!updated) return;
+          const ctx = { orderId: String(order._id), createdBy: req.cashierName || req.role || 'system' };
+          try {
+            if (r.orgCtx) {
+              await redeemOrgPoints(
+                r.orgCtx.orgCustomer!._id as mongoose.Types.ObjectId,
+                r.orgCtx.orgCustomer!.orgHotelId.toString(),
+                req.hotelId!, r.profileId, r.points, r.cfg, ctx, txn,
+              );
+            } else {
+              await redeemPoints(r.profileId, req.hotelId!, r.points, r.cfg, ctx, txn);
+            }
+          } catch (e: any) {
+            if (/insufficient/i.test(String(e?.message))) throw NOT_ENOUGH_POINTS;
+            throw e;
+          }
+        });
+      } catch (e) {
+        if (e === NOT_ENOUGH_POINTS) {
+          return res.status(409).json({ code: 'NOT_ENOUGH_POINTS', message: 'The customer does not have enough points. Nothing was changed.' });
+        }
+        throw e;
+      } finally {
+        await txn.endSession();
+      }
+    } else {
+      updated = await Order.findOneAndUpdate(filter, { $set: update }, { new: true });
+    }
+    if (!updated) {
+      if (billChanges) {
+        return res.status(409).json({ code: 'ORDER_CHANGED', message: 'This bill changed while you were updating it. Refresh and try again.' });
+      }
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    // What came off the bill is no longer owed at the table either (see counterBilling).
+    const billReduction = billChanges ? r2(order.grandTotal - updated.grandTotal) : 0;
+    if (billReduction > 0 && order.guestId && isDueAtCounter(order as any)) {
+      await Guest.updateOne(
+        { _id: order.guestId, hotelId: req.hotelId },
+        [{ $set: { totalAmount: { $max: [0, { $round: [{ $subtract: ['$totalAmount', billReduction] }, 2] }] } } }],
+      );
+    }
 
     logAudit(req, 'order.payment_updated', 'order', String(updated._id), {
       paymentMethod, splitDetails: splitDetails?.length, tipAmount, additionalDiscount,
+      redeemedPoints: redemption?.points, loyaltyDiscount: redemption?.value,
     });
     res.json(updated);
   } catch (error) {
@@ -2060,6 +2390,8 @@ router.post('/:id/pay', requireCashierOrAdmin, async (req: AuthRequest, res: Res
     if (!COUNTER_PAY_METHODS.includes(paymentMethod)) {
       return res.status(400).json({ message: 'Choose Cash, UPI, Card or Split to take payment.' });
     }
+    // Phase 5 · Batch 5 (Decision 3): counter payments need an open shift
+    if (await refuseWithoutShift(res, req.hotelId!)) return;
 
     const order = await Order.findOne({ _id: req.params.id, hotelId: req.hotelId }).lean() as any;
     if (!order) return res.status(404).json({ message: 'Order not found' });
@@ -2073,45 +2405,85 @@ router.post('/:id/pay', requireCashierOrAdmin, async (req: AuthRequest, res: Res
       return res.status(409).json({ code: 'ONLINE_PAYMENT_PENDING', message: 'This is an online order waiting for its online payment.' });
     }
 
-    let splitDetails: { cash: number; upi: number; card: number } | undefined;
-    if (paymentMethod === 'split') {
-      const sd = req.body?.splitDetails ?? {};
-      splitDetails = { cash: Number(sd.cash) || 0, upi: Number(sd.upi) || 0, card: Number(sd.card) || 0 };
-      const total = splitDetails.cash + splitDetails.upi + splitDetails.card;
-      if (Object.values(splitDetails).some(v => v < 0) || Math.abs(total - order.grandTotal) > 1) {
-        return res.status(400).json({ message: `Split amounts must add up to the bill total (${Number(order.grandTotal).toFixed(2)}).` });
+    // Batch 2 (2B): every payment is a ledger entry with its own time. `amount` defaults to the
+    // whole balance due; a smaller amount records a part payment (owner-approved, API only).
+    // Split parts must add up to the amount to the paisa (was ±₹1).
+    const outstanding = outstandingOf(order);
+    const amount = req.body?.amount != null ? r2(req.body.amount) : outstanding;
+    if (!(amount > 0) || amount > outstanding + PAISE) {
+      return res.status(400).json({ code: 'BAD_AMOUNT', message: `Amount must be more than ₹0 and at most the balance due (₹${outstanding.toFixed(2)}).` });
+    }
+    const isFull = amount >= outstanding - PAISE;
+    const parts = moneyParts(paymentMethod, amount, req.body?.splitDetails);
+    if (!parts || parts.length === 0) {
+      return res.status(400).json({ message: `Split amounts must add up to the amount paid (₹${amount.toFixed(2)}) exactly.` });
+    }
+    const held = isHeldForCounterPayment(order);
+    if (held && !isFull) {
+      return res.status(400).json({ code: 'FULL_PAYMENT_REQUIRED', message: 'An order held for payment must be paid in full before it goes to the kitchen.' });
+    }
+    const reference = String(req.body?.reference ?? req.body?.transactionId ?? '').trim().slice(0, 120);
+    const settledBefore = r2(order.amountSettled);
+    const set: Record<string, unknown> = { ledger: true };
+    if (isFull) {
+      set.paymentMethod = paymentMethod;
+      if (paymentMethod === 'split') {
+        const sd = req.body?.splitDetails ?? {};
+        set.splitDetails = { cash: r2(sd.cash), upi: r2(sd.upi), card: r2(sd.card) };
       }
+      if (reference) set.transactionId = reference;
+      if (held) set.status = 'pending';
     }
 
-    const held = isHeldForCounterPayment(order);
-    const set: Record<string, unknown> = { paymentMethod, paymentTime: new Date() };
-    if (splitDetails) set.splitDetails = splitDetails;
-    if (held) set.status = 'pending';
-
-    // Conditional write: only one payment can win, and only from the state we checked.
-    const updated = await Order.findOneAndUpdate(
-      {
-        _id: req.params.id, hotelId: req.hotelId, paymentTime: null,
-        status: held ? 'payment_pending' : { $in: ['pending', 'preparing', 'ready', 'served'] },
-      },
-      { $set: set },
-      { new: true },
-    );
+    // Conditional write + ledger entries in one transaction: only one payment can win from the
+    // state we checked (paymentTime null and the same amountSettled), and it is recorded once.
+    const paidAt = new Date();
+    let updated: any = null;
+    const txn = await mongoose.startSession();
+    try {
+      await txn.withTransaction(async () => {
+        updated = await Order.findOneAndUpdate(
+          {
+            _id: req.params.id, hotelId: req.hotelId, paymentTime: null,
+            grandTotal: order.grandTotal,   // Batch 3: a discount landing now must not be overpaid
+            ...(settledBefore > 0
+              ? { amountSettled: order.amountSettled }
+              : { $or: [{ amountSettled: 0 }, { amountSettled: { $exists: false } }] }),
+            status: held ? 'payment_pending' : { $in: ['pending', 'preparing', 'ready', 'served'] },
+          },
+          { $set: set },
+          { new: true, session: txn },
+        );
+        if (!updated) return;
+        await recordEntries(req.hotelId!, parts.map(p => ({
+          type: 'payment' as const, method: p.method, amount: p.amount, paidAt, source: 'pay',
+          allocations: [{ orderId: order._id, amount: p.amount }],
+          sessionId: order.sessionId, guestId: order.guestId, reference,
+          recordedBy: req.cashierName || req.role || '',
+          idempotencyKey: `pay:${order._id}:${Math.round(settledBefore * 100)}:${p.method}`,
+        })), { session: txn });
+        await recordTip(req.hotelId!, updated, paidAt, req.cashierName || req.role || '', txn);
+        updated = await Order.findById(order._id).session(txn);
+      });
+    } finally {
+      await txn.endSession();
+    }
     if (!updated) {
       return res.status(409).json({ code: 'ORDER_CHANGED', message: 'This bill changed while you were paying. Refresh and try again.' });
     }
 
-    // A paid order is no longer owed at the table (see counterBilling). Orders that were
+    // What was paid is no longer owed at the table (see counterBilling). Orders that were
     // held never added to the guest total, so only kitchen orders need taking off.
     if (!held && order.guestId && isDueAtCounter(order)) {
       await Guest.updateOne(
         { _id: order.guestId, hotelId: req.hotelId },
-        [{ $set: { totalAmount: { $max: [0, { $subtract: ['$totalAmount', Number(order.grandTotal) || 0] }] } } }],
+        [{ $set: { totalAmount: { $max: [0, { $round: [{ $subtract: ['$totalAmount', amount] }, 2] }] } } }],
       );
     }
 
     logAudit(req, 'order.paid', 'order', String(updated._id), {
-      orderNumber: updated.orderNumber, paymentMethod, grandTotal: updated.grandTotal, releasedToKitchen: held,
+      orderNumber: updated.orderNumber, paymentMethod, amount, partial: !isFull,
+      grandTotal: updated.grandTotal, releasedToKitchen: held,
     });
 
     if (held) {
@@ -2142,8 +2514,9 @@ router.post('/:id/pay', requireCashierOrAdmin, async (req: AuthRequest, res: Res
 // wallet, voucher balances using the same path as order cancellation.
 router.post(
   '/:id/refund',
-  // resolveHotelStatus(hotelId) is a lookup function, not middleware: listed here it was
-  // called with `req`, rejected, never called next(), and every refund request hung.
+  // Batch 2 (2B): resolveHotelStatus(hotelId) is a lookup function, not middleware — in this
+  // chain it never called next(), so every refund request hung. authMiddleware (also applied
+  // router-wide) already resolves and enforces the hotel status.
   authMiddleware, requireAdmin,
   async (req: AuthRequest, res: Response) => {
     try {
@@ -2159,18 +2532,37 @@ router.post(
       // Accept `reason` (current) and `refundReason` (the name the old message asked for).
       const reason = String(req.body.reason || req.body.refundReason || '').trim();
       if (!reason) return res.status(400).json({ message: 'A refund reason is required (send it as `reason`).' });
+      // Batch 2 (2B): online payments are refunded through the gateway refund
+      // (POST /api/payments/:id/refund), which returns the money and records it; recording a
+      // second refund here could count the same refund twice.
+      if (order.paymentMethod === 'razorpay') {
+        return res.status(409).json({ code: 'USE_GATEWAY_REFUND', message: 'This bill was paid online — refund it from the online payment so the money is returned through the gateway.' });
+      }
       const requestedAmount = Number(req.body.refundAmount) || order.grandTotal;
-      const refundAmount    = Math.min(Math.max(0, requestedAmount), order.grandTotal);
+      const refundAmount    = r2(Math.min(Math.max(0, requestedAmount), order.grandTotal));
+      const refundedAt      = new Date();
 
-      await Order.findOneAndUpdate(
-        { _id: order._id, hotelId: req.hotelId },
+      // Batch 2 (2B): atomic claim — the "already refunded" check above was a separate read,
+      // so two simultaneous refunds could both be written.
+      const claimedRefund = await Order.findOneAndUpdate(
+        { _id: order._id, hotelId: req.hotelId, status: 'completed', refundedAt: null },
         { $set: {
-          refundedAt:   new Date(),
+          refundedAt,
           refundedBy:   String((req as any).cashierId || (req as any).adminId || ''),
           refundReason: reason,
           refundAmount,
         }},
       );
+      if (!claimedRefund) {
+        return res.status(409).json({ message: 'This order has already been refunded.' });
+      }
+      // The refund is its own ledger entry with its own time (reported apart from collections).
+      await recordEntries(req.hotelId!, [{
+        type: 'refund', method: ledgerMethod(order.paymentMethod), amount: refundAmount, paidAt: refundedAt,
+        source: 'order_refund', allocations: [{ orderId: order._id as any, amount: refundAmount }],
+        sessionId: order.sessionId, guestId: (order as any).guestId, reason,
+        recordedBy: req.cashierName || req.role || '', idempotencyKey: `order-refund:${order._id}`,
+      }]).catch(err => logger.error('[ledger] order refund not recorded', { orderId: String(order._id), error: String(err) }));
 
       logAudit(req, 'order.refunded', 'order', String(order._id), {
         orderNumber: order.orderNumber,

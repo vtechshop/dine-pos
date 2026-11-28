@@ -8,6 +8,7 @@ import { useOrderSocket } from '../hooks/useOrderSocket.ts';
 import { OrderStatusCard } from '../components/order/OrderStatusCard.tsx';
 import { BottomNav } from '../components/layout/BottomNav.tsx';
 import type { QrBill } from '../types/qr.ts';
+import { qrPath } from '../utils/qrLink.ts';
 
 const POLL_INTERVAL_MS = 15_000;
 
@@ -59,7 +60,7 @@ export function OrderStatusPage({ hotelId, tableNumber }: OrderStatusPageProps) 
         <p className="text-sm text-[#1C0800]/60 mb-6">
           Your order has been sent to the kitchen. A staff member will serve you shortly.
         </p>
-        <Link to="/" className="text-sm text-[#E8380D] font-medium">← Back to menu</Link>
+        <Link to={qrPath('/')} className="text-sm text-[#E8380D] font-medium">← Back to menu</Link>
       </div>
     );
   }
@@ -96,7 +97,7 @@ export function OrderStatusPage({ hotelId, tableNumber }: OrderStatusPageProps) 
           <h1 className="font-bold text-[#1C0800]">Your orders</h1>
           <p className="text-xs text-[#1C0800]/50">Table {tableNumber}</p>
         </div>
-        <Link to="/" className="text-xs text-[#E8380D] font-medium">Add more</Link>
+        <Link to={qrPath('/')} className="text-xs text-[#E8380D] font-medium">Add more</Link>
       </header>
 
       <div className="p-4">
@@ -112,7 +113,7 @@ export function OrderStatusPage({ hotelId, tableNumber }: OrderStatusPageProps) 
       {bill && !bill.isBilled && activeOrders.length > 0 && (
         <div className="px-4 pb-4">
           <Link
-            to="/bill"
+            to={qrPath('/bill')}
             className="block w-full py-3 text-center bg-[#1C0800] text-white rounded-xl font-semibold"
           >
             Request bill — {symbol}{bill.grandTotal.toFixed(2)}
