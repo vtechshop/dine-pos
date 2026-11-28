@@ -14,6 +14,7 @@ import { requireFeature } from '../middleware/requireFeature';
 import { sendError } from '../utils/sendError';
 import { logAudit } from '../utils/audit';
 import { logger } from '../utils/logger';
+import { addRefundToOrder } from '../utils/orderRefund';
 import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, reverseEarnedPoints } from '../utils/loyaltyUtils';
 import { recordGatewayPayment, recordEntries, r2 } from '../utils/paymentLedger';
 
@@ -536,6 +537,8 @@ router.post('/:id/refund', async (req: AuthRequest, res: Response) => {
         recordedBy: req.cashierName || req.role || '', idempotencyKey: `refund:${updated._id}:${actualRefundId}`,
       }]).catch(err => logger.error('[ledger] gateway refund not recorded', { paymentId: String(updated._id), error: String(err) }));
     }
+    // Show the refund on the order too, so sales reports subtract it.
+    await addRefundToOrder(updated.orderId, req.hotelId!, amountPaise);
 
     // Loyalty reversal — reverse earned points on full or partial refund.
     // Idempotent via loyaltyReversedAt. Only reverses if points were earned for this payment.

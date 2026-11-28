@@ -1,6 +1,8 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import { makeRateLimiter } from '../utils/rateLimiter';
+import { createPinAttemptStore, failClosedPinGuard } from '../utils/pinAttemptStore';
+import { ipKeyGenerator } from 'express-rate-limit';
 import Hotel from '../models/Hotel';
 import RefreshToken from '../models/RefreshToken';
 import Settings from '../models/Settings';
@@ -39,26 +41,59 @@ const loginLimiter = makeRateLimiter({
   message: { message: 'Too many login attempts. Please try again after 15 minutes.' },
 });
 
-// Staff PIN login — keyed by hotelId:employeeCode (not by IP) so tablets that
-// share a restaurant's public IP never burn each other's counter.
-// Kitchen route has no employeeCode so it keys by hotelId alone.
+// Staff PIN login: only wrong-credential (401) responses count.
+// Keys use the same normalized values as the login lookup, so input variants
+// cannot get a fresh counter. Kitchen ignores employeeCode entirely.
+const countOnlyWrongCredentials = {
+  skipSuccessfulRequests: true,
+  requestWasSuccessful: (_req: Request, res: Response) => res.statusCode !== 401,
+};
+
 const staffPinLimiter = makeRateLimiter({
+  store: createPinAttemptStore('rl:staff-pin:'),
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 5,
+  ...countOnlyWrongCredentials,
   skip: () => process.env.NODE_ENV === 'test',
   keyGenerator: (req) => {
     const { hotelId, employeeCode } = req.body || {};
-    // Normalise exactly like the lookups do (lower-case id, trimmed upper-case
-    // code) so " W01" / "w01" / "W01 " can't each get a fresh attempt budget.
-    const hid  = String(hotelId ?? '').trim().toLowerCase();
-    const code = String(employeeCode ?? '').trim().toUpperCase();
-    if (hid && code) return `pin:${hid}:${code}`;
-    if (hid) return `pin:${hid}`;
-    return req.ip || 'unknown';
+    if (!hotelId) return `pin-ip:${ipKeyGenerator(req.ip || 'unknown')}`;
+    const hotel = String(hotelId).toLowerCase();
+    const route = String(req.route?.path || '');
+    if (route === '/kitchen') return `pin:${hotel}:kitchen`;
+    return `pin:${hotel}:${route}:${String(employeeCode ?? '').trim().toUpperCase()}`;
   },
   validate: { keyGeneratorIpFallback: false },
-  message: { message: 'Too many PIN attempts. Please wait a moment and try again.' },
+  message: { message: 'Too many incorrect attempts. Please try again after 15 minutes.' },
 });
+
+// Limits one source guessing across many employee codes or hotels.
+const staffPinIpLimiter = makeRateLimiter({
+  store: createPinAttemptStore('rl:staff-pin-ip:'),
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  ...countOnlyWrongCredentials,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => `pin-source:${ipKeyGenerator(req.ip || 'unknown')}`,
+  message: { message: 'Too many incorrect attempts. Please try again after 15 minutes.' },
+});
+
+// Non-canonical hotelId values must not reach the limiter or database casting.
+const requireValidHotelId = (req: Request, res: Response, next: NextFunction) => {
+  const { hotelId } = req.body || {};
+  if (hotelId && (typeof hotelId !== 'string' || !/^[a-f\d]{24}$/i.test(hotelId))) {
+    return res.status(400).json({ message: 'Invalid Hotel ID or credentials' });
+  }
+  return next();
+};
+const staffLoginGuards = [
+  requireValidHotelId,
+  failClosedPinGuard(staffPinIpLimiter),
+  failClosedPinGuard(staffPinLimiter),
+];
+
+// Unknown codes cost the same bcrypt work as real ones (staff PINs use cost 12).
+const DUMMY_PIN_HASH = bcrypt.hash('unused-staff-pin-placeholder', 12);
 
 const router = Router();
 
@@ -263,7 +298,7 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/kitchen — validate kitchen PIN, return short-lived kitchen JWT
-router.post('/kitchen', staffPinLimiter, async (req: Request, res: Response) => {
+router.post('/kitchen', staffLoginGuards, async (req: Request, res: Response) => {
   const { hotelId, pin } = req.body;
   if (!hotelId || !pin) {
     return res.status(400).json({ message: 'Hotel ID and PIN required' });
@@ -290,7 +325,7 @@ router.post('/kitchen', staffPinLimiter, async (req: Request, res: Response) => 
 });
 
 // POST /api/auth/waiter — login with hotelId + employeeCode + PIN
-router.post('/waiter', staffPinLimiter, async (req: Request, res: Response) => {
+router.post('/waiter', staffLoginGuards, async (req: Request, res: Response) => {
   const { hotelId, employeeCode, pin } = req.body;
   if (!hotelId || !employeeCode || !pin) {
     return res.status(400).json({ message: 'Hotel ID, employee code and PIN required' });
@@ -305,15 +340,13 @@ router.post('/waiter', staffPinLimiter, async (req: Request, res: Response) => {
       hotelId,
       employeeCode: employeeCode.toString().trim().toUpperCase(),
     }).lean();
-    if (!waiter) {
-      return res.status(401).json({ message: 'Employee code not found' });
+    const waiterPinOk = await bcrypt.compare(pin.toString().trim(), (waiter as any)?.pin ?? await DUMMY_PIN_HASH);
+    if (!waiter || !waiterPinOk) {
+      if (waiter) logAuditRaw({ hotelId, action: 'waiter.login.failure', targetType: 'waiter', targetId: String((waiter as any)._id), metadata: { employeeCode, reason: 'wrong_pin' }, ip: req.ip });
+      return res.status(401).json({ message: 'Invalid employee code or PIN' });
     }
     if (!waiter.isActive) {
       return res.status(403).json({ message: 'Your account is inactive. Contact admin.' });
-    }
-    if (!await bcrypt.compare(pin.toString().trim(), (waiter as any).pin)) {
-      logAuditRaw({ hotelId, action: 'waiter.login.failure', targetType: 'waiter', targetId: String((waiter as any)._id), metadata: { employeeCode, reason: 'wrong_pin' }, ip: req.ip });
-      return res.status(401).json({ message: 'Incorrect PIN' });
     }
     logAuditRaw({ hotelId, action: 'waiter.login.success', targetType: 'waiter', targetId: String((waiter as any)._id), metadata: { employeeCode }, ip: req.ip });
     const token = generateWaiterToken(hotelId, String((waiter as any)._id), waiter.name);
@@ -332,7 +365,7 @@ router.post('/waiter', staffPinLimiter, async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/cashier — login with hotelId + employeeCode + PIN
-router.post('/cashier', staffPinLimiter, async (req: Request, res: Response) => {
+router.post('/cashier', staffLoginGuards, async (req: Request, res: Response) => {
   const { hotelId, employeeCode, pin } = req.body;
   if (!hotelId || !employeeCode || !pin) {
     return res.status(400).json({ message: 'Hotel ID, employee code and PIN required' });
@@ -347,15 +380,13 @@ router.post('/cashier', staffPinLimiter, async (req: Request, res: Response) => 
       hotelId,
       employeeCode: employeeCode.toString().trim().toUpperCase(),
     }).lean();
-    if (!cashier) {
-      return res.status(401).json({ message: 'Employee code not found' });
+    const cashierPinOk = await bcrypt.compare(pin.toString().trim(), (cashier as any)?.pin ?? await DUMMY_PIN_HASH);
+    if (!cashier || !cashierPinOk) {
+      if (cashier) logAuditRaw({ hotelId, action: 'cashier.login.failure', targetType: 'cashier', targetId: String((cashier as any)._id), metadata: { employeeCode, reason: 'wrong_pin' }, ip: req.ip });
+      return res.status(401).json({ message: 'Invalid employee code or PIN' });
     }
     if (!cashier.isActive) {
       return res.status(403).json({ message: 'Your account is inactive. Contact admin.' });
-    }
-    if (!await bcrypt.compare(pin.toString().trim(), (cashier as any).pin)) {
-      logAuditRaw({ hotelId, action: 'cashier.login.failure', targetType: 'cashier', targetId: String((cashier as any)._id), metadata: { employeeCode, reason: 'wrong_pin' }, ip: req.ip });
-      return res.status(401).json({ message: 'Incorrect PIN' });
     }
     logAuditRaw({ hotelId, action: 'cashier.login.success', targetType: 'cashier', targetId: String((cashier as any)._id), metadata: { employeeCode }, ip: req.ip });
     const token = generateCashierToken(hotelId, String((cashier as any)._id), cashier.name);

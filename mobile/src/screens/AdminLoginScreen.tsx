@@ -215,7 +215,7 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
 
         {/* Top banner */}
         <View style={[styles.topBanner, { paddingTop: Spacing.xl }]}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.replace('RoleSelect')}>
+          <TouchableOpacity testID="btn-back" style={styles.backBtn} onPress={() => navigation.replace('RoleSelect')}>
             <MaterialIcons name="arrow-back" size={22} color={Colors.white} />
           </TouchableOpacity>
           <Text style={styles.bannerTitle}>Admin Login</Text>
@@ -283,13 +283,13 @@ const AdminLoginScreen: React.FC<Props> = ({ navigation, route }) => {
             }
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.forgotRow} onPress={openForgot}>
+          <TouchableOpacity testID="btn-forgot" style={styles.forgotRow} onPress={openForgot}>
             <MaterialIcons name="help-outline" size={15} color={Colors.textMuted} />
             <Text style={styles.forgotText}>Forgot your password?</Text>
           </TouchableOpacity>
         </Animated.View>
 
-        <TouchableOpacity style={styles.registerRow} onPress={() => navigation.navigate('HotelRegister')}>
+        <TouchableOpacity testID="btn-register" style={styles.registerRow} onPress={() => navigation.navigate('HotelRegister')}>
           <Text style={styles.registerText}>New hotel? </Text>
           <Text style={[styles.registerText, { color: Colors.primary, fontWeight: '800' }]}>Register here →</Text>
         </TouchableOpacity>

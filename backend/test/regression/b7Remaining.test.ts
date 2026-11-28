@@ -22,7 +22,9 @@ const route = (file: string, marker: string) => {
 describe('Batch 7: Super Admin', () => {
   it('P4-SA-04: "Activate" puts a trial hotel back on its trial, a paid hotel back to active', () => {
     const r = route('superAdminRoutes.ts', "router.put('/hotels/:id/activate'");
-    expect(r).toMatch(/subscriptionType === 'trial' \? 'trial' : 'active'/);
+    expect(r).toMatch(/const restored = onTrial \? 'trial' : 'active'/);
+    // merged with main: a trial that has already ended is not re-activated (or made paid)
+    expect(r).toMatch(/TRIAL_ENDED/);
     expect(r).toMatch(/\{ status: restored \}/);
     expect(r).not.toMatch(/\{ status: 'active' \}, \{ new: true \}/);
   });

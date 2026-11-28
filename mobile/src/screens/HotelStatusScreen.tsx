@@ -244,7 +244,7 @@ const HotelStatusScreen: React.FC<Props> = ({ navigation, route }) => {
           <Text style={styles.supportBtnText}>Contact Support</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.logoutBtn} onPress={() => void logout()} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.logoutBtn} onPress={async () => { try { await logout(); } catch {} navigation.replace('RoleSelect'); }} activeOpacity={0.8}>
           <MaterialIcons name="logout" size={18} color={Colors.textSecondary} />
           <Text style={styles.logoutBtnText}>Back to Login</Text>
         </TouchableOpacity>

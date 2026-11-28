@@ -6,7 +6,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
-import { getSubscriptionInfo } from '../services/api';
+import { getSubscriptionInfo, getStoredHotelId, subscribeNow } from '../services/api';
 import { Colors, FontSize, Spacing, BorderRadius } from '../utils/constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -21,8 +21,10 @@ const SubscriptionExpiredScreen: React.FC<Props> = ({ navigation, route }) => {
   const { hotelName, expiredOn, subscriptionType } = route.params;
   const isTrial = !subscriptionType || subscriptionType === 'trial';
 
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshMsg,  setRefreshMsg]  = useState('');
+  const [refreshing,   setRefreshing]   = useState(false);
+  const [refreshMsg,   setRefreshMsg]   = useState('');
+  const [subscribing,  setSubscribing]  = useState(false);
+  const [subscribeErr, setSubscribeErr] = useState('');
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -38,6 +40,24 @@ const SubscriptionExpiredScreen: React.FC<Props> = ({ navigation, route }) => {
       setRefreshMsg('Could not connect. Check your internet connection.');
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const handleSubscribe = async () => {
+    setSubscribing(true);
+    setSubscribeErr('');
+    try {
+      const hotelId = await getStoredHotelId();
+      if (!hotelId) {
+        setSubscribeErr('Hotel ID not found. Please log in again.');
+        return;
+      }
+      const { checkoutUrl } = await subscribeNow(hotelId);
+      await Linking.openURL(checkoutUrl);
+    } catch (e: any) {
+      setSubscribeErr(e?.message || 'Failed to start subscription. Please try again.');
+    } finally {
+      setSubscribing(false);
     }
   };
 
@@ -102,10 +122,29 @@ const SubscriptionExpiredScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </View>
 
+        {/* Subscribe Now */}
+        <TouchableOpacity
+          style={[styles.subscribeBtn, subscribing && { opacity: 0.7 }]}
+          onPress={handleSubscribe}
+          disabled={subscribing}
+          activeOpacity={0.85}
+        >
+          {subscribing ? (
+            <ActivityIndicator size="small" color={Colors.primary} />
+          ) : (
+            <>
+              <MaterialIcons name="payment" size={22} color={Colors.primary} />
+              <Text style={styles.subscribeBtnText}>Subscribe Now</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        {subscribeErr ? <Text style={styles.subscribeErr}>{subscribeErr}</Text> : null}
+
         {/* Message */}
         <Text style={styles.message}>
-          To continue using Dine POS,{'\n'}please renew your subscription.{'\n'}
-          Contact our support team for assistance.
+          Tap <Text style={{ fontWeight: '800' }}>Subscribe Now</Text> to pay online and get instant access.{'\n'}
+          Or contact our support team for help.
         </Text>
 
         {/* Contact Buttons */}
@@ -151,7 +190,7 @@ const SubscriptionExpiredScreen: React.FC<Props> = ({ navigation, route }) => {
         </TouchableOpacity>
 
         <Text style={styles.hint}>
-          After your plan is renewed by an admin,{'\n'}tap Refresh to regain access.
+          After payment, tap Refresh Status to regain access immediately.
         </Text>
       </ScrollView>
     </View>
@@ -191,6 +230,15 @@ const styles = StyleSheet.create({
   refreshBtnText: { color: Colors.primary, fontSize: FontSize.md, fontWeight: '700' },
 
   hint: { color: 'rgba(255,255,255,0.55)', fontSize: FontSize.xs, textAlign: 'center', lineHeight: 18 },
+
+  subscribeBtn:     {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.white, borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.lg, width: '100%', marginBottom: Spacing.sm,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 4,
+  },
+  subscribeBtnText: { color: Colors.primary, fontSize: FontSize.lg, fontWeight: '800' },
+  subscribeErr:     { color: '#FFD6D6', fontSize: FontSize.sm, textAlign: 'center', marginBottom: Spacing.md },
 });
 
 export default SubscriptionExpiredScreen;

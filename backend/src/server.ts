@@ -15,6 +15,7 @@ import { makeRateLimiter } from './utils/rateLimiter';
 import { setIo } from './utils/ioRegistry';
 import connectDB from './config/database';
 import { connectRedis, getRedisClient, closeRedis, redisHealthCheck, registerSubClient } from './config/redis';
+import { connectPinLimiterRedis, closePinLimiterRedis } from './utils/pinAttemptStore';
 import { logger } from './utils/logger';
 import ChatMessage from './models/ChatMessage';
 import PrinterDevice from './models/PrinterDevice';
@@ -993,6 +994,7 @@ const shutdown = () => {
       stopOcrWorker();
       // 3. Close Redis
       await closeRedis();
+      await closePinLimiterRedis();
       // 3. Close MongoDB
       await mongoose.connection.close();
       logger.info('Shutdown complete');
@@ -1018,6 +1020,7 @@ process.on('SIGINT', shutdown);
     await connectDB();
 
     await connectRedis();
+    connectPinLimiterRedis();
 
     // Attach Redis adapter to Socket.IO if Redis is available.
     // duplicate() inherits lazyConnect:true from the parent, so we must

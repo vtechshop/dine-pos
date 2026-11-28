@@ -12,6 +12,7 @@ import {
   getCashierOrders, markOrderCompleteCashier, CashierOrder,
 } from '../services/api';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
+import { tableLabel } from '../utils/tableLabel';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'KitchenQueue'>;
 
@@ -108,7 +109,7 @@ const KitchenQueueScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const orderLabel = (order: CashierOrder) => {
-    if (order.tableNumber) return `Table ${order.tableNumber}`;
+    if (order.tableNumber) return tableLabel(order.tableNumber);
     if (order.isParcel)    return 'Takeaway';
     return 'Delivery';
   };

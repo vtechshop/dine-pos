@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Check, X, Copy, Eye, EyeOff, PauseCircle, PlayCircle, CalendarPlus, CreditCard, Sliders, Settings, FileText, Activity, Pencil, KeyRound } from 'lucide-react';
 import {
   getHotel, approveHotel, rejectHotel, suspendHotel, activateHotel, extendTrial, resetHotelPassword,
+  getStandardPrice, setHotelSaasPrice,
   updateFeatures, setPlan, setTrial, updateHotelSettings, updateHotelNote,
   type Hotel, type ApproveResponse, type HotelSettingsPayload,
 } from '../../api/superAdmin';
@@ -233,12 +234,21 @@ export function HotelDetailPage() {
   const [error,   setError]   = useState<string | null>(null);
 
   // Approve
-  const [showApprove,  setShowApprove]  = useState(false);
-  const [trialDays,    setTrialDays]    = useState(14);
-  const [features,     setFeatures]     = useState<Partial<Hotel['features']>>({});
-  const [approving,    setApproving]    = useState(false);
-  const [approveError, setApproveError] = useState<string | null>(null);
-  const [credentials,  setCredentials]  = useState<ApproveResponse['credentials'] | null>(null);
+  const [showApprove,    setShowApprove]    = useState(false);
+  const [trialDays,      setTrialDays]      = useState(14);
+  const [features,       setFeatures]       = useState<Partial<Hotel['features']>>({});
+  const [annualPriceStr, setAnnualPriceStr] = useState('');
+  const [approving,      setApproving]      = useState(false);
+  const [approveError,   setApproveError]   = useState<string | null>(null);
+  const [credentials,    setCredentials]    = useState<ApproveResponse['credentials'] | null>(null);
+  // Standard yearly price from the server; null = unknown, so the UI shows a neutral label.
+  const [standardPrice,  setStandardPrice]  = useState<number | null>(null);
+  // Approval succeeded but the custom price did not save (partial success).
+  const [pendingPrice,   setPendingPrice]   = useState<number | null>(null);
+  const [priceError,     setPriceError]     = useState<string | null>(null);
+  const [priceMessage,   setPriceMessage]   = useState<string | null>(null);
+  const [savingPrice,    setSavingPrice]    = useState(false);
+  const [savingAmount,   setSavingAmount]   = useState<number | null>(null);
 
   // Reject
   const [showReject,  setShowReject]  = useState(false);
@@ -303,20 +313,72 @@ export function HotelDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  useEffect(() => {
+    if (!showApprove || standardPrice !== null) return;
+    getStandardPrice()
+      .then(r => { if (Number.isFinite(r.annualPrice)) setStandardPrice(r.annualPrice); })
+      .catch(() => { /* keep the neutral "standard annual price" label */ });
+  }, [showApprove, standardPrice]);
+
+  // While an approval or custom-price save is in flight, or a price is still unsaved,
+  // ask before the tab is closed or reloaded: leaving then would drop the price save.
+  const priceSaveAtRisk = approving || savingPrice || pendingPrice !== null;
+  useEffect(() => {
+    if (!priceSaveAtRisk) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [priceSaveAtRisk]);
+
+  const standardLabel = standardPrice !== null
+    ? `the standard ₹${standardPrice.toLocaleString('en-IN')}/year`
+    : 'the standard annual price';
+
+  // Saves a custom price through the existing saas-price endpoint, which reuses
+  // the hotel's Razorpay plan when the price is unchanged.
+  async function saveCustomPrice(hotelId: string, price: number) {
+    setSavingPrice(true);
+    setSavingAmount(price);
+    setPriceError(null);
+    try {
+      await setHotelSaasPrice(hotelId, price);
+      setPendingPrice(null);
+      setPriceMessage(`Custom price ₹${price.toLocaleString('en-IN')}/year saved.`);
+    } catch (err) {
+      setPendingPrice(price);
+      setPriceError(err instanceof Error ? err.message : 'Could not save the custom price');
+    } finally {
+      setSavingPrice(false);
+    }
+  }
+
   async function handleApprove() {
     if (!id) return;
+    const priceNum = annualPriceStr.trim() === '' ? null : Number(annualPriceStr);
+    if (priceNum !== null && (!Number.isInteger(priceNum) || priceNum < 1000 || priceNum > 1_000_000)) {
+      setApproveError(`Custom price must be a whole number from ₹1,000 to ₹10,00,000. Leave it blank to use ${standardLabel}.`);
+      return;
+    }
     setApproving(true);
     setApproveError(null);
+    setPriceError(null);
+    setPriceMessage(null);
+    setPendingPrice(null);
+    let approved = false;
     try {
       const res = await approveHotel(id, { trialDays, features });
+      approved = true;
       setHotel(res.hotel);
       setCredentials(res.credentials);
       setShowApprove(false);
+      setAnnualPriceStr('');
     } catch (err) {
       setApproveError(err instanceof Error ? err.message : 'Approval failed');
     } finally {
       setApproving(false);
     }
+    // Only after a successful approval. A price failure never undoes the approval.
+    if (approved && priceNum !== null) await saveCustomPrice(id, priceNum);
   }
 
   async function handleReject() {
@@ -556,6 +618,39 @@ export function HotelDetailPage() {
 
       {/* Credentials box (shown immediately after approval) */}
       {credentials && <CredentialBox creds={credentials} />}
+
+      {/* Custom price result after approval */}
+      {priceMessage && (
+        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          {priceMessage}
+        </div>
+      )}
+      {savingPrice && pendingPrice === null && savingAmount !== null && (
+        <div className="mb-6 flex items-center gap-2 rounded-lg border border-border bg-mist px-4 py-3 text-sm text-ink/70">
+          <Spinner size="sm" />
+          Saving the custom price ₹{savingAmount.toLocaleString('en-IN')}/year. Keep this page open until it is saved.
+        </div>
+      )}
+      {pendingPrice !== null && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-semibold">
+            Hotel approved, but the custom price ₹{pendingPrice.toLocaleString('en-IN')}/year was not saved.
+          </p>
+          <p className="mt-1">
+            Until it is saved, this hotel will be charged {standardLabel}.
+            {priceError ? ` Reason: ${priceError}` : ''}
+            {' '}Save it here, or later in Subscriptions.
+          </p>
+          <button
+            onClick={() => { if (id) void saveCustomPrice(id, pendingPrice); }}
+            disabled={savingPrice}
+            className="mt-3 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:opacity-60"
+          >
+            {savingPrice && <Spinner size="sm" />}
+            {savingPrice ? 'Saving price…' : 'Try saving the price again'}
+          </button>
+        </div>
+      )}
 
       {/* New password after "Reset password" — shown once */}
       {newCreds && (
@@ -1038,6 +1133,25 @@ export function HotelDetailPage() {
               </div>
             </div>
 
+            <div className="mb-4">
+              <label className="mb-1.5 block text-sm font-medium text-ink/70">
+                Custom Annual Price (₹/year)
+              </label>
+              <input
+                type="number"
+                value={annualPriceStr}
+                onChange={e => setAnnualPriceStr(e.target.value)}
+                placeholder="e.g. 8000"
+                min={1000}
+                max={1000000}
+                step={1}
+                className="w-full rounded-lg border border-border bg-canvas px-3.5 py-2 text-sm text-ink placeholder-ink/40 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
+              />
+              <p className="mt-1 text-xs text-ink/40">
+                Optional. The hotel pays this every year, from its first subscription and at each renewal. Leave blank to use {standardLabel}. You can change it later in Subscriptions.
+              </p>
+            </div>
+
             <div className="mb-5">
               <p className="mb-2 text-sm font-medium text-ink/70">Feature Flags</p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -1066,6 +1180,12 @@ export function HotelDetailPage() {
               </div>
             )}
 
+            {approving && annualPriceStr.trim() !== '' && (
+              <p className="mb-3 text-xs text-ink/60">
+                Keep this page open. The custom price is saved right after the approval.
+              </p>
+            )}
+
             <div className="flex gap-3">
               <button
                 onClick={handleApprove}
@@ -1076,7 +1196,7 @@ export function HotelDetailPage() {
                 {approving ? 'Approving…' : 'Approve & Start Trial'}
               </button>
               <button
-                onClick={() => setShowApprove(false)}
+                onClick={() => { setShowApprove(false); setAnnualPriceStr(''); setApproveError(null); }}
                 className="rounded-lg border border-border px-4 py-2.5 text-sm text-ink/60 transition hover:bg-mist"
               >
                 Cancel

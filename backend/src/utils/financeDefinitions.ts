@@ -2,11 +2,11 @@
  * financeDefinitions.ts — ONE definition of the money figures for every report
  * (Phase 5 · Batch 2 · 2D; owner-approved rules, 2026-11-21).
  *
- *  SALES        orders that are served or completed (never cancelled), counted on the
- *               fulfilment day: servedAt, else completedAt (legacy fallback: createdAt).
- *               Sale value = grandTotal + gift-voucher + wallet tenders taken at order time
- *               (vouchers / wallet are tenders, not discounts). Net sales also subtract
- *               settlement discounts (loyalty / complimentary given when a table is billed).
+ *  SALES        PAID orders — completed, or paid ahead — never cancelled, counted on the day
+ *               they were created (owner decision 27 Nov 2026, the rule live on main; it
+ *               replaced the Batch 2 fulfilment basis). Sale value = grandTotal less any
+ *               refund (NET_TOTAL). Net sales also subtract settlement discounts (loyalty /
+ *               complimentary given when a table is billed).
  *  COLLECTIONS  money actually received (cash, UPI, card, online gateway), each payment on
  *               its own time — from the PaymentEntry ledger. Orders paid before the ledger
  *               existed are read through a fallback from their stored payment fields.
@@ -16,12 +16,14 @@
  *  ADVANCES     money held for orders not yet served / completed (as of now).
  *  RECEIVABLES  served / completed orders still owed (as of now); platform orders separate.
  *
- * GST / Tally / GSTR-1 use the SALES basis (owner decision; for CA validation).
+ * GST / Tally / GSTR-1 use statutoryMatch(): completed orders by creation day — unchanged from
+ * production until the accountant confirms the basis.
  * Day boundaries are IST (00:00–23:59:59.999 +05:30) regardless of the server time zone.
  */
 import mongoose from 'mongoose';
 import Order from '../models/Order';
 import PaymentEntry from '../models/PaymentEntry';
+import { PAID_ORDER, NET_TOTAL } from './paidOrder';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -40,24 +42,30 @@ export function todayIST(): string {
   return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-${String(ist.getUTCDate()).padStart(2, '0')}`;
 }
 
-/** $match for SALES fulfilled in [from, to]. */
+/**
+ * $match for SALES in [from, to].
+ * Owner decision (27 Nov 2026), replacing the Batch 2 fulfilment basis: a sale is a PAID order —
+ * completed, or paid ahead (paymentTime set) — never cancelled, counted on the day it was
+ * created. The same rule as utils/paidOrder.ts (PAID_ORDER), with IST day bounds from the caller.
+ */
 export function salesMatch(hotelId: mongoose.Types.ObjectId, from: Date, to: Date): Record<string, unknown> {
   return {
     hotelId,
-    status: { $in: SALE_STATUSES },
-    // an order is fulfilled after it is created; the lower bound only keeps the scan small
-    createdAt: { $lte: to, $gte: new Date(from.getTime() - 62 * DAY_MS) },
-    $or: [
-      { servedAt: { $gte: from, $lte: to } },
-      { servedAt: null, completedAt: { $gte: from, $lte: to } },
-      { servedAt: null, completedAt: null, createdAt: { $gte: from, $lte: to } },
-    ],
+    status: { $ne: 'cancelled' },
+    ...PAID_ORDER,
+    createdAt: { $gte: from, $lte: to },
   };
 }
-/** Sale value of an order (aggregation expression). */
-export const saleValueExpr = {
-  $add: ['$grandTotal', { $ifNull: ['$giftVoucherAmount', 0] }, { $ifNull: ['$walletAmount', 0] }],
-};
+/**
+ * $match for GST / Tally / GSTR-1 in [from, to]: completed orders on the day they were created —
+ * the basis these statutory reports use in production today, kept unchanged until the
+ * accountant confirms the reporting basis.
+ */
+export function statutoryMatch(hotelId: mongoose.Types.ObjectId, from: Date, to: Date): Record<string, unknown> {
+  return { hotelId, status: 'completed', createdAt: { $gte: from, $lte: to } };
+}
+/** Sale value of an order (aggregation expression): the bill less any refund (as NET_TOTAL). */
+export const saleValueExpr = NET_TOTAL;
 /** Discounts inside an order (manual, coupon, loyalty at order time, discount at payment). */
 export const orderDiscountExpr = {
   $add: [
@@ -273,6 +281,9 @@ export async function salesReport(hotelId: mongoose.Types.ObjectId, from: Date, 
       gross: { $sum: saleValueExpr }, tax: { $sum: '$taxTotal' }, discount: { $sum: orderDiscountExpr },
       voucherAtOrder: { $sum: { $ifNull: ['$giftVoucherAmount', 0] } }, walletAtOrder: { $sum: { $ifNull: ['$walletAmount', 0] } },
       orders: { $sum: 1 },
+      // as main's reports: the bills before refunds, and the refunds taken off them
+      billGross: { $sum: '$grandTotal' }, refundSum: { $sum: { $ifNull: ['$refundAmount', 0] } },
+      refundedOrders: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$refundAmount', 0] }, 0] }, 1, 0] } },
       parcelOrders: { $sum: { $cond: ['$isParcel', 1, 0] } }, parcelRevenue: { $sum: { $cond: ['$isParcel', saleValueExpr, 0] } },
       dineInOrders: sourceCount('dine-in'), dineInTotal: sourceSum('dine-in'),
       takeawayOrders: sourceCount('takeaway'), takeawayTotal: sourceSum('takeaway'),
@@ -305,6 +316,9 @@ export async function salesReport(hotelId: mongoose.Types.ObjectId, from: Date, 
     parcelOrders: s?.parcelOrders ?? 0,
     parcelRevenue: r2(s?.parcelRevenue),
     cancelledOrders,
+    grossSales:     r2(s?.billGross),
+    totalRefunds:   r2(s?.refundSum),
+    refundedOrders: s?.refundedOrders ?? 0,
     // Collections by method (money received in the period). UPI sub-types are not tracked
     // separately in the ledger; split payments appear under their parts.
     paymentBreakdown: { cash: c.cash, upi: c.upi, upi_intent: 0, upi_qr: 0, upi_collect: 0, card: c.card, split: 0, online: c.online, other: c.other },
@@ -326,7 +340,7 @@ export async function salesReport(hotelId: mongoose.Types.ObjectId, from: Date, 
     advances: position.advances,
     receivables: position.receivables,
     definitions: {
-      sales: 'Served or completed orders on the day they were served / completed (net of settlement discounts).',
+      sales: 'Paid orders (completed, or paid ahead) on the day they were created, net of refunds and settlement discounts.',
       collections: 'Money received (cash, UPI, card, online) on the time each payment was taken.',
       advances: 'Money held now for orders not yet served or completed.',
       receivables: 'Money still owed now on served or completed orders (platform orders shown separately).',

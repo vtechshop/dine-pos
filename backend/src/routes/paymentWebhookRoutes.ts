@@ -12,6 +12,7 @@ import { getLoyaltyConfig, calculateEarnedPoints, earnPoints, reverseEarnedPoint
 import { io } from '../server';
 import { scheduleKOTPrint } from '../utils/printUtils';
 import { recordGatewayPayment, recordEntries, r2 } from '../utils/paymentLedger';
+import { addRefundToOrder } from '../utils/orderRefund';
 
 const router = Router();
 
@@ -299,7 +300,8 @@ async function handleRazorpayEvent(event: Record<string, unknown>, eventType: st
       if (!pay) return;
 
       // Idempotency: only add the refund entry once per refundId.
-      if (refundId && !pay.refunds.some(r => r.refundId === refundId)) {
+      const isNewRefund = !!refundId && !pay.refunds.some(r => r.refundId === refundId);
+      if (isNewRefund) {
         pay.refunds.push({
           refundId,
           amount:                 refundAmt,
@@ -316,6 +318,8 @@ async function handleRazorpayEvent(event: Record<string, unknown>, eventType: st
       }
       pay.webhookData = event;
       await pay.save();
+      // Show the refund on the order too, so sales reports subtract it (once per refundId).
+      if (isNewRefund) await addRefundToOrder(pay.orderId, hotelId, refundAmt);
       logger.info(`[Webhook] refund.processed → ${pay.internalTransactionId}, refundId: ${refundId}`);
 
       // Batch 2 (2B): refund → payment ledger (same key as the refund route: recorded once).

@@ -22,6 +22,7 @@ import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import UnreadBadge from '../components/UnreadBadge';
 import KitchenStockModal from '../components/KitchenStockModal';
 import { Colors, FontSize, Spacing, BorderRadius, Shadows } from '../utils/constants';
+import { tableLabel } from '../utils/tableLabel';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'KitchenDisplay'>;
 
@@ -318,7 +319,7 @@ const KitchenDisplayScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.tokenText}>#{token}</Text>
           </View>
           <View style={{ flex: 1, marginLeft: Spacing.md }}>
-            {order.tableNumber ? <Text style={styles.tableLabel}>Table {order.tableNumber}</Text> : null}
+            {order.tableNumber ? <Text style={styles.tableLabel} numberOfLines={1}>{tableLabel(order.tableNumber)}</Text> : null}
             {order.customerName ? <Text style={styles.customerLabel} numberOfLines={1}>{order.customerName}</Text> : null}
           </View>
           <View style={[styles.timeBadge, urgent && styles.timeBadgeUrgent]}>

@@ -155,4 +155,15 @@ if (dbVersion < 2) {
   db.execSync('PRAGMA user_version = 2');
 }
 
+if (dbVersion < 3) {
+  // v3: clean up stale rows left by v2 migration.
+  // Migration v2 added hotel_id='' (DEFAULT '') to all existing rows in
+  // local_products and local_categories. saveProducts/saveCategories DELETE by
+  // the real hotelId, so those '' rows were never removed — causing a UNIQUE
+  // constraint failure on every INSERT (id PRIMARY KEY already existed with '').
+  try { db.execSync("DELETE FROM local_products WHERE hotel_id = ''"); } catch {}
+  try { db.execSync("DELETE FROM local_categories WHERE hotel_id = ''"); } catch {}
+  db.execSync('PRAGMA user_version = 3');
+}
+
 export { db };

@@ -9,6 +9,10 @@ export interface SalesReport {
   parcelOrders: number;
   parcelRevenue: number;
   cancelledOrders?: number;
+  /** Bill totals before refunds (totalSales is net of refunds). */
+  grossSales?: number;
+  totalRefunds?: number;
+  refundedOrders?: number;
   paymentBreakdown: {
     cash: number;
     upi: number;

@@ -43,6 +43,7 @@ import { isQuickServiceOrder } from '../utils/quickService';
 import { refuseWithoutShift, isCounterMethod, owesAtCounter } from '../utils/shiftGuard';
 import { payBeforeKitchenEnabled, isHeldForCounterPayment } from '../utils/payBeforeKitchen';
 import { pushDeliveryAvailability } from '../utils/deliveryAvailabilitySync';
+import { PAID_ORDER, NET_TOTAL } from '../utils/paidOrder';
 
 const router = Router();
 
@@ -329,6 +330,16 @@ export async function validateAndEnrichItems(
 
 // Helper: Generate order number like ORD-20260310-001 (per hotel)
 // Uses an atomic MongoDB $inc counter — no race condition under concurrent tablets.
+
+// Database/infrastructure failures (Atlas blip, write conflict, timeout) are temporary:
+// answer 503 so the mobile offline queue retries the bill. Every other unexpected error
+// keeps the old 400, which the queue treats as permanent.
+function isTemporaryDbError(error: any): boolean {
+  const name = String(error?.name ?? '');
+  return name.startsWith('Mongo') || (Array.isArray(error?.errorLabels) && error.errorLabels.includes('TransientTransactionError'))
+    || (typeof error?.hasErrorLabel === 'function' && error.hasErrorLabel('TransientTransactionError'));
+}
+
 const generateOrderNumber = async (hotelId: string, prefix = 'ORD'): Promise<string> => {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const key = `${prefix}-${dateStr}-${hotelId}`;
@@ -340,9 +351,11 @@ const generateOrderNumber = async (hotelId: string, prefix = 'ORD'): Promise<str
   return `${prefix}-${dateStr}-${String(counter!.seq).padStart(3, '0')}`;
 };
 
-// Daily report — Phase 5 · Batch 2 (2D): one definition of Sales / Collections for every report
-// (utils/financeDefinitions.ts). totalSales = net sales (served / completed on the day);
-// paymentBreakdown = collections (money received on the day). IST day boundaries.
+// Daily report — one definition of Sales / Collections for every report (utils/financeDefinitions.ts).
+// Owner decision (27 Nov 2026): totalSales = PAID orders (completed, or paid ahead), net of refunds
+// and settlement discounts, by the IST day they were created. paymentBreakdown = collections (money
+// received on the day, split payments under their parts). grossSales / totalRefunds / refundedOrders /
+// cancelledOrders as on main.
 router.get('/reports/daily', authMiddleware, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const dateStr = (req.query.date as string) || todayIST();
@@ -383,7 +396,7 @@ router.get('/reports/products', authMiddleware, requireAdmin, async (req: AuthRe
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return res.status(400).json({ message: 'Invalid date format' });
 
     const results = await Order.aggregate([
-      { $match: salesMatch(new mongoose.Types.ObjectId(req.hotelId!), istDay(dateStr), istDay(dateStr, true)) },
+      { $match: { hotelId: new mongoose.Types.ObjectId(req.hotelId!), status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: istDay(dateStr), $lte: istDay(dateStr, true) } } },
       { $unwind: '$items' },
       { $group: {
         _id: '$items.productName',
@@ -562,8 +575,20 @@ router.get('/', requireAdmin, async (req: AuthRequest, res: Response) => {
       to.setHours(23, 59, 59, 999);
       filter.createdAt = { $gte: from, $lte: to };
     }
-    if (req.query.status) filter.status = req.query.status;
-    if (req.query.source) filter.orderSource = req.query.source;
+    // Only plain strings (or repeated ?status=a&status=b) may reach the filter.
+    // sanitizeRequest strips "$" keys, so ?status[$ne]=x arrives as {} and used to 500.
+    const isStrOrStrList = (v: unknown) =>
+      typeof v === 'string' || (Array.isArray(v) && v.every(x => typeof x === 'string'));
+    if (req.query.status) {
+      const s = req.query.status;
+      if (!isStrOrStrList(s)) return res.status(400).json({ message: 'Invalid status filter' });
+      filter.status = Array.isArray(s) ? { $in: s } : s;
+    }
+    if (req.query.source) {
+      const s = req.query.source;
+      if (!isStrOrStrList(s)) return res.status(400).json({ message: 'Invalid source filter' });
+      filter.orderSource = Array.isArray(s) ? { $in: s } : s;
+    }
 
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 20), 200);
@@ -599,7 +624,7 @@ router.get('/customers', requireAdmin, async (req: AuthRequest, res: Response) =
   try {
     const match: any = {
       hotelId: new mongoose.Types.ObjectId(req.hotelId),
-      status: { $ne: 'cancelled' },
+      status: { $ne: 'cancelled' }, ...PAID_ORDER,
       customerPhone: { $nin: ['', null] },
     };
 
@@ -622,7 +647,7 @@ router.get('/customers', requireAdmin, async (req: AuthRequest, res: Response) =
         _id: '$customerPhone',
         customerName:   { $first: '$customerName' },
         totalOrders:    { $sum: 1 },
-        totalSpent:     { $sum: '$grandTotal' },
+        totalSpent:     { $sum: NET_TOTAL },
         lastOrderDate:  { $max: '$createdAt' },
         firstOrderDate: { $min: '$createdAt' },
       }},
@@ -1368,6 +1393,7 @@ router.post('/', requireWaiterOrCashierOrAdmin, async (req: AuthRequest, res: Re
       return res.status(409).json({ code: 'NOT_ENOUGH_STOCK', message: error.message });
     }
     logger.error('[POST /orders] Failed', { hotelId: req.hotelId, error: String(error), code: error.code, stack: error?.stack });
+    if (isTemporaryDbError(error)) return sendError(res, 503, 'Could not save the order right now. Please retry.', error);
     sendError(res, 400, 'Invalid data', error);
   }
 });
@@ -1837,19 +1863,22 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       // Batch 2 (2B): completing no longer stamps paymentTime (it overwrote the real payment
       // time of /pay, payNow, QR and the webhook). Whatever is still owed is recorded below as
       // a ledger payment, which sets paymentTime once the order is fully settled.
+      // Paid at the counter earlier (payNow / POST /:id/pay): closing the order must not
+      // record a second payment or change when and how it was paid.
+      const alreadyPaid = !!existing.paymentTime;
       const completionFields: Record<string, unknown> = {
         status:      'completed',
         completedBy: req.cashierName || req.cashierId || '',
         completedAt: new Date(),
         cashierId:   req.cashierId || '',
       };
-      if (paymentMethod && VALID_PM.includes(paymentMethod)) {
+      if (!alreadyPaid && paymentMethod && VALID_PM.includes(paymentMethod)) {
         completionFields.paymentMethod = paymentMethod;
       }
-      if (req.body.transactionId) completionFields.transactionId = req.body.transactionId;
-      if (req.body.upiApp)        completionFields.upiApp        = req.body.upiApp;
-      if (req.body.payments)      completionFields.payments      = req.body.payments;
-      if (req.body.splitDetails) {
+      if (!alreadyPaid && req.body.transactionId) completionFields.transactionId = req.body.transactionId;
+      if (!alreadyPaid && req.body.upiApp)        completionFields.upiApp        = req.body.upiApp;
+      if (!alreadyPaid && req.body.payments)      completionFields.payments      = req.body.payments;
+      if (!alreadyPaid && req.body.splitDetails) {
         // M5 (status path): split totals must match what is owed — to the paisa (Batch 2; was ±₹1).
         const sd = req.body.splitDetails as { cash?: number; upi?: number; card?: number };
         const splitTotal = r2((Number(sd.cash) || 0) + (Number(sd.upi) || 0) + (Number(sd.card) || 0));
@@ -2124,6 +2153,7 @@ router.put('/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
     if (!order) return res.status(404).json({ message: 'Order not found' });
     res.json(order);
   } catch (error) {
+    if (isTemporaryDbError(error)) return sendError(res, 503, 'Could not save the order right now. Please retry.', error);
     sendError(res, 400, 'Invalid data', error);
   }
 });
@@ -2499,8 +2529,9 @@ router.post(
         return res.status(409).json({ message: 'This order has already been refunded.' });
       }
 
-      const reason = String(req.body.reason || '').trim();
-      if (!reason) return res.status(400).json({ message: 'refundReason is required.' });
+      // Accept `reason` (current) and `refundReason` (the name the old message asked for).
+      const reason = String(req.body.reason || req.body.refundReason || '').trim();
+      if (!reason) return res.status(400).json({ message: 'A refund reason is required (send it as `reason`).' });
       // Batch 2 (2B): online payments are refunded through the gateway refund
       // (POST /api/payments/:id/refund), which returns the money and records it; recording a
       // second refund here could count the same refund twice.

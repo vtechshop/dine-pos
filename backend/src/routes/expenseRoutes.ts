@@ -72,8 +72,8 @@ router.get('/pnl', async (req: AuthRequest, res: Response) => {
     const hotelObjId = new mongoose.Types.ObjectId(req.hotelId);
 
     const [revenueResult, expenseResult] = await Promise.all([
-      // Batch 2 (2D): revenue = net sales, the same figure as the daily report (served /
-      // completed orders on the fulfilment day; utils/financeDefinitions.ts).
+      // Revenue = net sales, the same figure as the daily report: paid orders (owner decision
+      // 27 Nov 2026), net of refunds and settlement discounts (utils/financeDefinitions.ts).
       netSales(hotelObjId, start, end).then(s => [{ revenue: s.net, orders: s.orders }]),
       Expense.aggregate([
         { $match: { hotelId: hotelObjId, date: { $gte: start, $lte: end } } },

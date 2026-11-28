@@ -287,24 +287,40 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         // Create order, then confirm payment. KOT only fires on payment success.
         const payload = pendingOrderRef.current;
         if (!payload) throw new Error('Order data missing. Go back and retry.');
-        const created = await createOrder({ ...payload, paymentMethod: method } as Parameters<typeof createOrder>[0]);
-        try {
-          completedOrder = await completeOrderWithDetails(created._id, method, details);
-        } catch (payErr) {
-          // Payment confirmation failed — cancel the just-created order so it does not orphan
-          cancelOrderAdmin(created._id).catch(() => {});
-          throw payErr;
-        }
-        // Order successfully created — UPI pending record is no longer needed
-        clearPendingUpiPayment();
-        // Fire promo deductions fire-and-forget — non-blocking, non-fatal
-        // NOTE: coupon usageCount is now incremented atomically inside order creation; no call needed here.
-        // NOTE: gift voucher is now deducted atomically inside order creation via giftVoucherCode; no call needed here.
-        if (promos) {
-          if (promos.walletCustomerId && promos.walletAmount) {
+        // Only takeaway / counter parcel orders can be closed straight from 'pending' (server rule).
+        // Dine-in, Swiggy, Zomato and QR orders still go through the kitchen, so the payment is
+        // recorded with the order (payNow) and the order is closed later when served.
+        const p = payload as { orderSource?: string; isParcel?: boolean };
+        const quickService = p.orderSource === 'takeaway' || (p.orderSource === 'admin' && p.isParcel === true);
+        if (quickService) {
+          const created = await createOrder({ ...payload, paymentMethod: method } as Parameters<typeof createOrder>[0]);
+          try {
+            completedOrder = await completeOrderWithDetails(created._id, method, details);
+          } catch (payErr) {
+            // Payment confirmation failed — cancel the just-created order so it does not orphan
+            cancelOrderAdmin(created._id).catch(() => {});
+            throw payErr;
+          }
+          if (promos?.walletCustomerId && promos.walletAmount) {
+            deductWallet(promos.walletCustomerId, promos.walletAmount, created._id).catch(() => {});
+          }
+        } else {
+          const created = await createOrder({
+            ...payload,
+            paymentMethod: method,
+            payNow: true,
+            ...(details.splitDetails ? { splitDetails: details.splitDetails } : {}),
+          } as Parameters<typeof createOrder>[0]);
+          completedOrder = created;
+          if (promos?.walletCustomerId && promos.walletAmount) {
             deductWallet(promos.walletCustomerId, promos.walletAmount, created._id).catch(() => {});
           }
         }
+        // Order successfully created — UPI pending record is no longer needed
+        clearPendingUpiPayment();
+        // Wallet deduction runs above, fire-and-forget, once the order exists.
+        // NOTE: coupon usageCount is now incremented atomically inside order creation; no call needed here.
+        // NOTE: gift voucher is now deducted atomically inside order creation via giftVoucherCode; no call needed here.
       } else {
         // Cashier completing an existing order — capture return value so receipt prints
         completedOrder = await completeOrderPayment(orderId!, method, details);

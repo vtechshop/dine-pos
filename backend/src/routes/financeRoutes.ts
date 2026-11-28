@@ -6,6 +6,7 @@ import WasteLog from '../models/WasteLog';
 import { authMiddleware, requireAdmin, AuthRequest } from '../middleware/auth';
 import { sendError } from '../utils/sendError';
 import { salesMatch, netSales, istDay } from '../utils/financeDefinitions';
+import { NET_TOTAL } from '../utils/paidOrder';
 
 const router = Router();
 router.use(authMiddleware);
@@ -73,7 +74,7 @@ router.get('/dashboard', async (req: AuthRequest, res: Response) => {
     const { start, end } = parseRange(from, to);
     const hotelId = new mongoose.Types.ObjectId(req.hotelId);
 
-    // Batch 2 (2D): SALES basis (served / completed on the fulfilment day), same as the reports.
+    // Sales = paid orders (owner decision 27 Nov 2026), same as the reports (utils/financeDefinitions.ts).
     const matchOrders = salesMatch(hotelId, start, end) as mongoose.FilterQuery<typeof Order>;
 
     const [revenueAgg, cogsAgg, expenseAgg, wasteAgg] = await Promise.all([
@@ -153,7 +154,7 @@ router.get('/menu-profitability', async (req: AuthRequest, res: Response) => {
     const lim      = Math.min(Math.max(1, parseInt(String(limit), 10) || 50), 200);
     const sk       = Math.max(0, parseInt(String(skip), 10) || 0);
 
-    // Batch 2 (2D): SALES basis, same as the reports (utils/financeDefinitions.ts).
+    // Sales = paid orders (owner decision 27 Nov 2026), same as the reports (utils/financeDefinitions.ts).
     const matchOrders = salesMatch(hotelId, start, end) as mongoose.FilterQuery<typeof Order>;
 
     // Mongo sort key mapping
@@ -311,7 +312,7 @@ router.get('/cogs-trend', async (req: AuthRequest, res: Response) => {
                   : gb === 'month' ? '%Y-%m'
                   :                  '%Y-%m-%d';
 
-    // Batch 2 (2D): SALES basis, same as the reports (utils/financeDefinitions.ts).
+    // Sales = paid orders (owner decision 27 Nov 2026), same as the reports (utils/financeDefinitions.ts).
     const matchOrders = salesMatch(hotelId, start, end) as mongoose.FilterQuery<typeof Order>;
 
     const [revenueTrend, cogsTrend] = await Promise.all([
@@ -320,7 +321,7 @@ router.get('/cogs-trend', async (req: AuthRequest, res: Response) => {
         { $match: matchOrders },
         { $group: {
           _id:     { $dateToString: { format: dateFmt, date: '$createdAt' } },
-          revenue: { $sum: '$grandTotal' },
+          revenue: { $sum: NET_TOTAL },
           orders:  { $sum: 1 },
         }},
         { $sort: { _id: 1 } },

@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform, Vibration } from 'react-native';
+import { tableLabel } from './tableLabel';
 
 const ORDER_EVENT_TYPES = new Set([
   'new_order', 'new_delivery_order', 'order_preparing', 'order_ready',
@@ -125,7 +126,7 @@ export const notifyNewOrder = async (
 ): Promise<void> => {
   Vibration.vibrate([0, 200, 100, 300]);
   try {
-    const table = tableNumber ? `Table ${tableNumber}` : 'Walk-in';
+    const table = tableNumber ? tableLabel(tableNumber) : 'Walk-in';
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🍽 New Order!',
@@ -155,7 +156,7 @@ export const notifyNewKitchenOrder = async (): Promise<void> => {
 
 export const notifyOrderPreparing = async (tableNumber: string, orderNumber: string): Promise<void> => {
   try {
-    const label = tableNumber ? `Table ${tableNumber}` : `Order ${orderNumber}`;
+    const label = tableNumber ? tableLabel(tableNumber) : `Order ${orderNumber}`;
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '👨‍🍳 Preparing',
@@ -169,7 +170,7 @@ export const notifyOrderPreparing = async (tableNumber: string, orderNumber: str
 
 export const notifyOrderReady = async (tableNumber: string, orderNumber: string): Promise<void> => {
   try {
-    const label = tableNumber ? `Table ${tableNumber}` : `Order ${orderNumber}`;
+    const label = tableNumber ? tableLabel(tableNumber) : `Order ${orderNumber}`;
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '✅ Order Ready!',

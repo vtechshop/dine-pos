@@ -406,6 +406,8 @@ Thank you for dining with us! 🍽️`;
         isParcel:        isParcelOff,
         orderSource,
         localTimestamp:  new Date().toISOString(),
+        // Cash/card was collected at the counter: record it paid when the order is created on sync
+        payNow:          true,
       };
 
       const resetCart = () => {
@@ -1624,7 +1626,7 @@ const styles = StyleSheet.create({
   cartTitle: { color: Colors.text, fontSize: FontSize.lg, fontWeight: '800' },
 
   // Source selector
-  sourceScroll: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  sourceScroll: { flexGrow: 0, borderBottomWidth: 1, borderBottomColor: Colors.border },
   sourceScrollContent: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, flexDirection: 'row', alignItems: 'center' },
   sourceBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,

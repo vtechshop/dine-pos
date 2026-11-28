@@ -34,6 +34,8 @@ import { istDateString } from '../../utils/istDate';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Show paise when the amount has them, so the screen matches the total that is saved
+// (₹493.50 is shown as ₹493.50, not rounded up to ₹494).
 function fmtINR(sym: string, n: number) {
   return formatMoney(sym, n);
 }

@@ -30,13 +30,13 @@ router.post('/open', requireCashierOrAdmin, async (req: AuthRequest, res: Respon
       });
     }
 
-    // M1: cashierId and cashierName come from the verified JWT, never from req.body.
-    // Batch 3: a hotel admin has no cashier id — the shift is opened as "Admin" (it was a 500).
-    const isAdmin     = req.role === 'admin';
-    const cashierId   = req.cashierId   || (isAdmin ? 'admin' : '');
-    const cashierName = req.cashierName || (isAdmin ? 'Admin' : '');
+    // M1: cashierId and cashierName come from the verified JWT, never from req.body
+    // A hotel admin's token has no cashier identity; record the shift as the admin's.
+    const byAdmin     = req.role === 'admin' && !req.cashierId;
+    const cashierId   = req.cashierId   || (byAdmin ? 'admin' : '');
+    const cashierName = req.cashierName || (byAdmin ? 'Hotel Admin' : '');
     if (!cashierId || !cashierName) {
-      return res.status(400).json({ message: 'Sign in as a cashier to open a shift.' });
+      return res.status(400).json({ message: 'Could not tell who is opening the shift. Sign in again and retry.' });
     }
 
     const shift = await Shift.create({
@@ -232,8 +232,12 @@ router.post('/:id/close', requireCashierOrAdmin, async (req: AuthRequest, res: R
       return res.status(400).json({ message: 'Shift is already closed.' });
     }
 
-    // FIX 1: non-admin staff may only close their own shift
-    if (shift.cashierId.toString() !== (req.cashierId ?? '').toString() && req.role !== 'admin') {
+    // FIX 1: non-admin staff may only close their own shift. A shift the hotel admin opened
+    // (cashierId 'admin') can be closed by a cashier taking over the counter; otherwise the
+    // cashier could neither close it nor open their own (one open shift per hotel).
+    const adminOpened = shift.cashierId.toString() === 'admin';
+    if (shift.cashierId.toString() !== (req.cashierId ?? '').toString() && req.role !== 'admin'
+        && !(adminOpened && req.role === 'cashier')) {
       await session.abortTransaction();
       return res.status(403).json({ message: 'You can only close your own shift.' });
     }
@@ -271,6 +275,8 @@ router.post('/:id/close', requireCashierOrAdmin, async (req: AuthRequest, res: R
     await session.commitTransaction();
 
     logAudit(req, 'shift.closed', 'shift', String(shift._id), {
+      openedBy: shift.cashierName,
+      closedBy: req.cashierName || (req.role === 'admin' ? 'Hotel Admin' : ''),
       actualCash: actual,
       expectedCash: expected,
       difference: shift.difference,

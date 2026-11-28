@@ -95,6 +95,7 @@ const CashierLoginScreen: React.FC<Props> = ({ navigation }) => {
             <View style={[styles.inputRow, { marginBottom: Spacing.md }]}>
               <MaterialIcons name="badge" size={20} color={Colors.textMuted} />
               <TextInput
+                testID="input-employee-code"
                 style={styles.input}
                 placeholder="e.g. C001"
                 placeholderTextColor={Colors.textMuted}
@@ -111,6 +112,7 @@ const CashierLoginScreen: React.FC<Props> = ({ navigation }) => {
             <View style={[styles.inputRow, { marginBottom: Spacing.sm }]}>
               <MaterialIcons name="lock-outline" size={20} color={Colors.textMuted} />
               <TextInput
+                testID="input-pin"
                 ref={pinRef}
                 style={[styles.input, { letterSpacing: 6 }]}
                 placeholder="• • • •"
@@ -130,7 +132,7 @@ const CashierLoginScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             {!!error && (
-              <View style={styles.errorRow}>
+              <View testID="text-error" style={styles.errorRow}>
                 <MaterialIcons name="error-outline" size={14} color={Colors.danger} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>

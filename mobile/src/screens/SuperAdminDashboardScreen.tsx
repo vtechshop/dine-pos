@@ -264,6 +264,8 @@ const SuperAdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
       ]);
       setStats(statsData);
       setHotels(hotelsResult.hotels);
+      // Keep an open hotel detail in step with the refreshed list (e.g. new trial end after Extend Trial)
+      setSelectedHotel(prev => prev ? (hotelsResult.hotels.find((h: Hotel) => h._id === prev._id) ?? prev) : prev);
       setHotelPage(1);
       setHotelTotalPages(hotelsResult.pages);
       setTickets(ticketsData);

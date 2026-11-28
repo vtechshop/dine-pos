@@ -18,6 +18,28 @@ describe('Orders — QR Self-Order', () => {
     const cat = await createCategory(adminToken);
     const prod = await createProduct(adminToken, cat.id);
     testProductId = prod.id;
+
+    // Razorpay QR orders need an active gateway. globalSetup creates one, but
+    // payment-release.test.ts deletes hotel A's Razorpay configs, so when it runs
+    // first these tests got 402 NO_PAYMENT_GATEWAY. Ensure one is active here.
+    const list = await api.get('/api/payment-gateway-configs').set(authHeaders(adminToken));
+    const rzp = (Array.isArray(list.body) ? list.body : [])
+      .find((c: any) => c.gatewayType === 'razorpay' && !c.isDeleted);
+    if (rzp && !rzp.isActive) {
+      await api.patch(`/api/payment-gateway-configs/${rzp._id}/toggle`).set(authHeaders(adminToken));
+    } else if (!rzp) {
+      const gw = await api.post('/api/payment-gateway-configs').set(authHeaders(adminToken)).send({
+        gatewayType:   'razorpay',
+        displayName:   'CI Test Gateway (qr-order)',
+        apiKey:        'rzp_test_CI_QRORDER_0001',
+        apiSecret:     'ci_qrorder_api_secret_0001',
+        webhookSecret: 'ci_qrorder_webhook_secret1',
+        environment:   'sandbox',
+      });
+      if (gw.body?._id) {
+        await api.patch(`/api/payment-gateway-configs/${gw.body._id}/toggle`).set(authHeaders(adminToken));
+      }
+    }
   });
 
   function qrItems() {

@@ -41,6 +41,7 @@ if (!process.env.SUPER_ADMIN_JWT_SECRET || process.env.SUPER_ADMIN_JWT_SECRET.le
 }
 
 import saAggregatorRoutes from './saAggregatorRoutes';
+import { PAID_ORDER, NET_TOTAL } from '../utils/paidOrder';
 const router = Router();
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
@@ -411,13 +412,19 @@ router.put('/hotels/:id/suspend', superAdminAuth, async (req: Request, res: Resp
 router.put('/hotels/:id/activate', superAdminAuth, async (req: Request, res: Response) => {
   try {
     if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid hotel ID' });
-    const preCheck = await Hotel.findById(req.params.id).select('status adminId subscriptionType').lean();
+    const preCheck = await Hotel.findById(req.params.id).select('status adminId subscriptionType trialEndDate').lean();
     if (!preCheck) return res.status(404).json({ message: 'Hotel not found' });
     if (!preCheck.adminId) return res.status(409).json({ message: 'Hotel has no credentials. Approve it first.' });
     if (preCheck.status === 'active') return res.status(409).json({ message: 'Hotel is already active' });
-    // Phase 5 · Batch 7 (P4-SA-04): a hotel on a trial goes back to its trial; "active" means a paid plan.
-    // The trial / plan end dates are unchanged (an ended trial still expires as before).
-    const restored = (preCheck as any).subscriptionType === 'trial' ? 'trial' : 'active';
+    // Phase 5 · Batch 7 (P4-SA-04) + main: a hotel on a trial goes back to its trial ("active" means a
+    // paid plan), so trial reminders and the Trial list keep working. A trial that has already ended
+    // cannot be re-activated as a trial (it would expire at once) and is not turned into a paid hotel
+    // either: Super Admin extends the trial or chooses a plan.
+    const onTrial = (preCheck as any).subscriptionType === 'trial';
+    if (onTrial && !((preCheck as any).trialEndDate && new Date((preCheck as any).trialEndDate) > new Date())) {
+      return res.status(409).json({ code: 'TRIAL_ENDED', message: 'This hotel\'s trial has ended. Extend the trial or choose a plan to restore access.' });
+    }
+    const restored = onTrial ? 'trial' : 'active';
     if (preCheck.status === restored) return res.status(409).json({ message: `Hotel is already ${restored}` });
     const hotel = await Hotel.findByIdAndUpdate(
       req.params.id, { status: restored }, { new: true }
@@ -791,15 +798,20 @@ router.put('/hotels/:id/saas-price', superAdminAuth, async (req: Request, res: R
     }
 
     const priceNum = Number(price);
-    if (!Number.isFinite(priceNum) || priceNum < 1000 || priceNum > 1_000_000) {
-      return res.status(400).json({ message: 'price must be a number between 1000 and 1000000 (INR)' });
+    if (!Number.isInteger(priceNum) || priceNum < 1000 || priceNum > 1_000_000) {
+      return res.status(400).json({ message: 'Price must be a whole number of rupees from 1,000 to 10,00,000.' });
     }
 
     // Only create a new Razorpay Plan if price differs from current custom price
     let planId = hotel.rzpCustomPlanId;
     if (!planId || hotel.saasAnnualPrice !== priceNum) {
       const label = `DinePOS SaaS — ₹${priceNum}/year (${(hotel as any).hotelName})`;
-      planId = await createRazorpayPlan(priceNum, label);
+      try {
+        planId = await createRazorpayPlan(priceNum, label);
+      } catch (e) {
+        logger.error('[SA] Razorpay plan create failed', { hotelId: req.params.id, err: String(e) });
+        return res.status(502).json({ message: 'Razorpay could not create a plan for this price, so the price was not saved. Try again in a moment.' });
+      }
     }
 
     await Hotel.findByIdAndUpdate(req.params.id, {
@@ -808,17 +820,23 @@ router.put('/hotels/:id/saas-price', superAdminAuth, async (req: Request, res: R
     });
 
     // Update active subscription to new plan for next billing cycle
+    let subscriptionUpdated: boolean | null = null; // null: no active subscription to move
     if (hotel.rzpSubscriptionId && hotel.rzpSubscriptionStatus === 'active') {
       try {
         await updateSubscriptionPlan(hotel.rzpSubscriptionId, planId);
+        subscriptionUpdated = true;
       } catch (e) {
+        subscriptionUpdated = false;
         logger.warn('[SA] Failed to update Razorpay sub to custom plan — price saved, sub not updated', { hotelId: req.params.id, err: String(e) });
       }
     }
 
-    logAuditRaw({ actorRole: 'superadmin', action: 'hotel.saas_price_set', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: { price: priceNum, planId } });
+    logAuditRaw({ actorRole: 'superadmin', action: 'hotel.saas_price_set', hotelId: req.params.id, targetType: 'hotel', targetId: req.params.id, metadata: { price: priceNum, planId, subscriptionUpdated } });
     return res.json({
-      message: `Custom annual price ₹${priceNum} set. Applies from next renewal cycle.`,
+      message: subscriptionUpdated === false
+        ? `Custom price ₹${priceNum}/year saved, but the active Razorpay subscription could not be moved to it, so the next renewal may still charge the old price. Save the same price again to retry.`
+        : `Custom annual price ₹${priceNum} set. Applies from next renewal cycle.`,
+      subscriptionUpdated,
       annualPrice: priceNum,
       rzpCustomPlanId: planId,
       effectiveFrom: 'next renewal cycle',
@@ -901,8 +919,8 @@ router.get('/branch-revenue', superAdminAuth, async (req: Request, res: Response
 
     const activeHotels = await Hotel.find({ status: { $in: ['active', 'trial'] } }).select('_id hotelName city').lean();
     const revenueByHotel = await Order.aggregate([
-      { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: start, $lte: end } } },
-      { $group: { _id: '$hotelId', revenue: { $sum: '$grandTotal' }, orders: { $sum: 1 }, avgOrder: { $avg: '$grandTotal' } } },
+      { $match: { status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: start, $lte: end } } },
+      { $group: { _id: '$hotelId', revenue: { $sum: NET_TOTAL }, orders: { $sum: 1 }, avgOrder: { $avg: NET_TOTAL } } },
     ]);
     const revenueMap = new Map(revenueByHotel.map((r: any) => [r._id.toString(), r]));
     const branches = activeHotels.map((h: any) => {
@@ -924,7 +942,7 @@ router.get('/analytics', superAdminAuth, async (req: Request, res: Response) => 
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999);
 
-    const matchFilter: any = { status: { $ne: 'cancelled' }, createdAt: { $gte: todayStart, $lte: todayEnd } };
+    const matchFilter: any = { status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: todayStart, $lte: todayEnd } };
     if (hotelId) {
       const mongoose = await import('mongoose');
       if (mongoose.default.Types.ObjectId.isValid(hotelId)) {
@@ -935,7 +953,7 @@ router.get('/analytics', superAdminAuth, async (req: Request, res: Response) => 
     const [orderStats, deviceStats] = await Promise.all([
       Order.aggregate([
         { $match: matchFilter },
-        { $group: { _id: '$hotelId', ordersToday: { $sum: 1 }, revenueToday: { $sum: '$grandTotal' } } },
+        { $group: { _id: '$hotelId', ordersToday: { $sum: 1 }, revenueToday: { $sum: NET_TOTAL } } },
       ]),
       Device.aggregate([
         // L-3: $match before $group so the query hits the hotelId index
@@ -1217,13 +1235,13 @@ router.get('/dashboard', superAdminAuth, async (_req: Request, res: Response) =>
       Hotel.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
 
       Order.aggregate([
-        { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: todayStart } } },
-        { $group: { _id: null, total: { $sum: '$grandTotal' } } },
+        { $match: { status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: todayStart } } },
+        { $group: { _id: null, total: { $sum: NET_TOTAL } } },
       ]),
 
       Order.aggregate([
-        { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: monthStart } } },
-        { $group: { _id: null, total: { $sum: '$grandTotal' } } },
+        { $match: { status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: monthStart } } },
+        { $group: { _id: null, total: { $sum: NET_TOTAL } } },
       ]),
 
       Device.countDocuments({ isActive: true }),
@@ -1625,11 +1643,11 @@ router.get('/dashboard/top-hotels', superAdminAuth, async (req: Request, res: Re
 
     // Revenue or orders — aggregate from Order collection
     const valueExpr = by === 'revenue'
-      ? { $sum: '$grandTotal' }
+      ? { $sum: NET_TOTAL }
       : { $sum: 1 };
 
     const results = await Order.aggregate([
-      { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: startDate } } },
+      { $match: { status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: startDate } } },
       { $group: { _id: '$hotelId', value: valueExpr } },
       { $sort: { value: -1 } },
       { $limit: limit },
@@ -1921,7 +1939,7 @@ router.get('/analytics/revenue', superAdminAuth, async (req: Request, res: Respo
 
     const [dailyRev, totalOrders, totalRevenue] = await Promise.all([
       Order.aggregate([
-        { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: from } } },
+        { $match: { status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: from } } },
         {
           $group: {
             _id: {
@@ -1929,16 +1947,16 @@ router.get('/analytics/revenue', superAdminAuth, async (req: Request, res: Respo
               m: { $month: '$createdAt' },
               d: { $dayOfMonth: '$createdAt' },
             },
-            revenue: { $sum: '$grandTotal' },
+            revenue: { $sum: NET_TOTAL },
             orders:  { $sum: 1 },
           },
         },
         { $sort: { '_id.y': 1, '_id.m': 1, '_id.d': 1 } },
       ]),
-      Order.countDocuments({ status: { $ne: 'cancelled' }, createdAt: { $gte: from } }),
+      Order.countDocuments({ status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: from } }),
       Order.aggregate([
-        { $match: { status: { $ne: 'cancelled' }, createdAt: { $gte: from } } },
-        { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+        { $match: { status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: from } } },
+        { $group: { _id: null, total: { $sum: NET_TOTAL }, count: { $sum: 1 } } },
       ]),
     ]);
 
@@ -1990,7 +2008,7 @@ router.get('/analytics/completed-trends', superAdminAuth, async (_req: Request, 
             m: { $month:      '$createdAt' },
             d: { $dayOfMonth: '$createdAt' },
           },
-          revenue: { $sum: '$grandTotal' },
+          revenue: { $sum: NET_TOTAL },
           orders:  { $sum: 1 },
         },
       },

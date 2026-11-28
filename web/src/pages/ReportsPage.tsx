@@ -61,7 +61,7 @@ import { ApiError } from '../api/client';
 import { Spinner } from '../components/ui/Spinner';
 import { useSettings } from '../context/SettingsContext';
 import { CHART_COLORS } from '../theme/palette';
-import { isSale, fulfilledAt, saleValue } from '../utils/salesDefinitions';
+import { isSale, saleTime, saleValue } from '../utils/salesDefinitions';
 import { formatMoney } from '../utils/money';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -422,11 +422,11 @@ export function ReportsPage() {
             orders: 0,
             revenue: 0,
           }));
-          // Batch 2 (2D): hourly SALES — served / completed orders on the hour they were served /
-          // completed (was every order incl. cancelled and unpaid, on the hour it was created).
+          // Hourly SALES — paid orders (owner decision 27 Nov 2026) on the hour they were created,
+          // net of refunds (utils/salesDefinitions.ts).
           for (const o of ordersForHourly.orders) {
             if (!isSale(o as any)) continue;
-            const h = fulfilledAt(o as any).getHours();
+            const h = saleTime(o as any).getHours();
             buckets[h].orders++;
             buckets[h].revenue = Math.round((buckets[h].revenue + saleValue(o as any)) * 100) / 100;
           }
@@ -705,11 +705,11 @@ export function ReportsPage() {
     const pb = sales.paymentBreakdown;
     downloadCSV(`sales-${from}-${to}.csv`, [
       'Period', 'Sales', 'Orders', 'Tax', 'Discount',
-      'Cash', 'UPI', 'UPI Intent', 'UPI QR', 'UPI Collect', 'Card', 'Split', 'Parcel Orders', 'Parcel Revenue',
+      'Cash', 'UPI', 'UPI Intent', 'UPI QR', 'UPI Collect', 'Card', 'Split (not itemised)', 'Refunds', 'Parcel Orders', 'Parcel Revenue',
     ], [[
       [isSingleDay ? from : `${from} to ${to}`,
        sales.totalSales, sales.totalOrders, sales.totalTax, sales.totalDiscount,
-       pb.cash, pb.upi, pb.upi_intent ?? 0, pb.upi_qr ?? 0, pb.upi_collect ?? 0, pb.card, pb.split,
+       pb.cash, pb.upi, pb.upi_intent ?? 0, pb.upi_qr ?? 0, pb.upi_collect ?? 0, pb.card, pb.split, sales.totalRefunds ?? 0,
        sales.parcelOrders, sales.parcelRevenue],
     ]]);
   }, [sales, from, to, isSingleDay]);
@@ -986,7 +986,9 @@ export function ReportsPage() {
                   <KPICard
                     label="Total Sales"
                     value={fmtCur(sales.totalSales, sym)}
-                    sub={`${sales.totalOrders} orders`}
+                    sub={sales.totalRefunds
+                      ? `${sales.totalOrders} orders · ${fmtCur(sales.totalRefunds, sym)} refunded`
+                      : `${sales.totalOrders} orders`}
                     accent
                     stripe="border-l-brand"
                   />
@@ -1035,7 +1037,9 @@ export function ReportsPage() {
                         ...(sales.paymentBreakdown.upi_qr      ? [{ label: 'UPI QR',      value: sales.paymentBreakdown.upi_qr      }] : []),
                         ...(sales.paymentBreakdown.upi_collect  ? [{ label: 'UPI Collect', value: sales.paymentBreakdown.upi_collect  }] : []),
                         { label: 'Card',       value: sales.paymentBreakdown.card  },
-                        { label: 'Split',      value: sales.paymentBreakdown.split },
+                        // Split bills are counted under Cash/UPI/Card when their parts are known;
+                        // this row is only split bills settled per guest or table.
+                        ...(sales.paymentBreakdown.split ? [{ label: 'Split (not itemised)', value: sales.paymentBreakdown.split }] : []),
                       ]}
                     />
                   </Card>

@@ -241,6 +241,7 @@ export function CashierPage() {
   const navigate = useNavigate();
   const { activeTab, setActiveTab, heldBills, shift, cart, selectedShiftId } = useCashier();
   const { settings } = useSettings();
+  const aggregatorOn = settings?.features?.aggregator === true;
   const { logout, hotelId, role } = useAuth();
   // Admins reach this billing screen via New Order; their own top bar already has
   // search, notifications and the Swiggy / Zomato pills, so only billing tools show here.
@@ -304,11 +305,17 @@ export function CashierPage() {
   const loadHeader = useCallback(async () => {
     let cancelled = false;
     const [platRes, prtRes] = await Promise.allSettled([
-      fetchPlatformStatus(),     // Swiggy / Zomato on/off — fails (hidden) when the hotel has no aggregator feature
+      // Swiggy / Zomato on/off — only hotels with the aggregator feature (otherwise 403)
+      aggregatorOn ? fetchPlatformStatus() : Promise.resolve<PlatformStatusItem[]>([]),
       fetchPrinterDevices(),
     ]);
     if (!cancelled) {
-      if (platRes.status === 'fulfilled') { setPlatforms(platRes.value); setOnlineOrdersEnabled(true); }
+      if (platRes.status === 'fulfilled') {
+        setPlatforms(platRes.value);
+        // merged with main: no call is made when the plan has no Swiggy / Zomato — say "not enabled"
+        // once the hotel's features are known (null = still loading)
+        setOnlineOrdersEnabled(aggregatorOn ? true : (settings?.features ? false : null));
+      }
       else if (platRes.reason instanceof ApiError && (platRes.reason.status === 403 || platRes.reason.status === 404)) {
         setPlatforms([]);
         setOnlineOrdersEnabled(false);
@@ -317,7 +324,7 @@ export function CashierPage() {
       setNowMs(Date.now());
     }
     return () => { cancelled = true; };
-  }, []);
+  }, [aggregatorOn, settings?.features]);
 
   useEffect(() => {
     void loadHeader();

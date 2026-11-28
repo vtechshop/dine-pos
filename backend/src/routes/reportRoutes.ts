@@ -15,7 +15,8 @@ import mongoose from 'mongoose';
 import { sendError } from '../utils/sendError';
 import { isValidDateParam } from '../utils/dateParam';
 import { logger } from '../utils/logger';
-import { salesMatch } from '../utils/financeDefinitions';
+import { salesMatch, statutoryMatch } from '../utils/financeDefinitions';
+import { PAID_ORDER } from '../utils/paidOrder';
 
 const router = Router();
 router.use(authMiddleware);
@@ -55,7 +56,7 @@ router.get('/gst', async (req: AuthRequest, res: Response) => {
     const rows = await Order.aggregate([
       {
         $match: {
-          ...salesMatch(hotelId, fromDate, toDate),
+          ...statutoryMatch(hotelId, fromDate, toDate),
         },
       },
       { $unwind: '$items' },
@@ -117,7 +118,7 @@ router.get('/tally', async (req: AuthRequest, res: Response) => {
     if (fromDate.getTime() < maxFromMs) fromDate = new Date(maxFromMs);
 
     const orders = await Order.find(
-      salesMatch(hotelId, fromDate, toDate),
+      statutoryMatch(hotelId, fromDate, toDate),
       { orderNumber: 1, createdAt: 1, servedAt: 1, completedAt: 1, customerName: 1, tableNumber: 1, paymentMethod: 1,
         subtotal: 1, taxTotal: 1, discountAmount: 1, grandTotal: 1, orderSource: 1,
         couponDiscount: 1, loyaltyDiscount: 1, paymentDiscount: 1, giftVoucherAmount: 1, walletAmount: 1 },
@@ -130,7 +131,7 @@ router.get('/tally', async (req: AuthRequest, res: Response) => {
     };
 
     const rows = (orders as any[]).map(o => ({
-      date:        ddmmyyyy((o as any).servedAt ?? (o as any).completedAt ?? o.createdAt),   // sales (fulfilment) date
+      date:        ddmmyyyy(o.createdAt),   // statutory basis: the day the order was created
       voucherNo:   o.orderNumber,
       party:       o.customerName || (o.tableNumber ? `Table ${o.tableNumber}` : 'Walk-in'),
       paymentMode: (o.paymentMethod || 'cash').toUpperCase(),
@@ -192,7 +193,7 @@ router.get('/gstr1-json', async (req: AuthRequest, res: Response) => {
     const [agg] = await Order.aggregate([
       {
         $match: {
-          ...salesMatch(hotelId, fromDate, toDate),
+          ...statutoryMatch(hotelId, fromDate, toDate),
         },
       },
       { $unwind: '$items' },
@@ -308,7 +309,7 @@ router.get('/modifiers', async (req: AuthRequest, res: Response) => {
     const [topModifiers, groupRevenue] = await Promise.all([
       // Top modifier options by quantity and revenue
       Order.aggregate([
-        { $match: salesMatch(hotelId, fromDate, toDate) },
+        { $match: { hotelId, status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: fromDate, $lte: toDate } } },
         { $unwind: '$items' },
         { $unwind: '$items.selectedModifiers' },
         {
@@ -336,7 +337,7 @@ router.get('/modifiers', async (req: AuthRequest, res: Response) => {
 
       // Revenue by modifier group
       Order.aggregate([
-        { $match: salesMatch(hotelId, fromDate, toDate) },
+        { $match: { hotelId, status: { $ne: 'cancelled' }, ...PAID_ORDER, createdAt: { $gte: fromDate, $lte: toDate } } },
         { $unwind: '$items' },
         { $unwind: '$items.selectedModifiers' },
         {

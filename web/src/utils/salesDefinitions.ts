@@ -1,27 +1,27 @@
-// Mirrors backend/src/utils/financeDefinitions.ts (Phase 5 · Batch 2, owner-approved rules):
-// SALES = served or completed orders, on the time they were served / completed, valued at
-// grandTotal + gift-voucher + wallet tenders. Cancelled and unserved (incl. unpaid) orders are
-// not sales. Money received is reported separately as collections (server reports).
+// Mirrors backend/src/utils/financeDefinitions.ts. Owner decision (27 Nov 2026, the rule live on main;
+// it replaced the Batch 2 fulfilment basis): SALES = PAID orders — completed, or paid ahead
+// (paymentTime set) — never cancelled, on the time they were created, valued at the bill less any
+// refund. Money received is reported separately as collections (server reports).
 
 interface SaleLike {
   status?: string | null;
   grandTotal?: number | null;
-  giftVoucherAmount?: number | null;
-  walletAmount?: number | null;
-  servedAt?: string | Date | null;
-  completedAt?: string | Date | null;
+  refundAmount?: number | null;
+  paymentTime?: string | Date | null;
   createdAt?: string | Date | null;
 }
 
 export function isSale(o: SaleLike): boolean {
-  return o.status === 'served' || o.status === 'completed';
+  if (o.status === 'cancelled') return false;
+  return o.status === 'completed' || !!o.paymentTime;
 }
 
-/** When the sale happened: served, else completed, else (old orders) created. */
-export function fulfilledAt(o: SaleLike): Date {
-  return new Date((o.servedAt ?? o.completedAt ?? o.createdAt) as string | Date);
+/** When the sale counts: the time the order was created. */
+export function saleTime(o: SaleLike): Date {
+  return new Date(o.createdAt as string | Date);
 }
 
+/** Sale value: the bill less any refund, to the paisa. */
 export function saleValue(o: SaleLike): number {
-  return Math.round(((Number(o.grandTotal) || 0) + (Number(o.giftVoucherAmount) || 0) + (Number(o.walletAmount) || 0)) * 100) / 100;
+  return Math.round(((Number(o.grandTotal) || 0) - (Number(o.refundAmount) || 0)) * 100) / 100;
 }

@@ -24,13 +24,13 @@ router.post('/', authMiddleware, requireAdmin, async (req: AuthRequest, res: Res
     }
 
     // Use create() so Mongoose fully validates and casts each document
-    const meals     = await Category.create({ hotelId, name: 'Meals',          icon: 'restaurant',           color: '#FF6B35', sortOrder: 1, isActive: true, isDeleted: false });
-    const biryani   = await Category.create({ hotelId, name: 'Biryani',        icon: 'lunch-dining',         color: '#E91E63', sortOrder: 2, isActive: true, isDeleted: false });
-    const starters  = await Category.create({ hotelId, name: 'Starters',       icon: 'local-fire-department',color: '#FF5722', sortOrder: 3, isActive: true, isDeleted: false });
-    const drinks    = await Category.create({ hotelId, name: 'Drinks',         icon: 'local-cafe',           color: '#4CAF50', sortOrder: 4, isActive: true, isDeleted: false });
-    const snacks    = await Category.create({ hotelId, name: 'Snacks',         icon: 'fastfood',             color: '#FF9800', sortOrder: 5, isActive: true, isDeleted: false });
-    const desserts  = await Category.create({ hotelId, name: 'Desserts',       icon: 'cake',                 color: '#9C27B0', sortOrder: 6, isActive: true, isDeleted: false });
-    const juices    = await Category.create({ hotelId, name: 'Juice & Shakes', icon: 'local-bar',            color: '#00BCD4', sortOrder: 7, isActive: true, isDeleted: false });
+    const meals     = await Category.create({ hotelId, name: 'Meals',          icon: '🍽️', color: '#FF6B35', sortOrder: 1, isActive: true, isDeleted: false });
+    const biryani   = await Category.create({ hotelId, name: 'Biryani',        icon: '🍛', color: '#E91E63', sortOrder: 2, isActive: true, isDeleted: false });
+    const starters  = await Category.create({ hotelId, name: 'Starters',       icon: '🍗', color: '#FF5722', sortOrder: 3, isActive: true, isDeleted: false });
+    const drinks    = await Category.create({ hotelId, name: 'Drinks',         icon: '☕', color: '#4CAF50', sortOrder: 4, isActive: true, isDeleted: false });
+    const snacks    = await Category.create({ hotelId, name: 'Snacks',         icon: '🍔', color: '#FF9800', sortOrder: 5, isActive: true, isDeleted: false });
+    const desserts  = await Category.create({ hotelId, name: 'Desserts',       icon: '🍰', color: '#9C27B0', sortOrder: 6, isActive: true, isDeleted: false });
+    const juices    = await Category.create({ hotelId, name: 'Juice & Shakes', icon: '🥤', color: '#00BCD4', sortOrder: 7, isActive: true, isDeleted: false });
 
     const base = { hotelId, taxPercent: 5, isAvailable: true, isDeleted: false, stock: -1 };
 

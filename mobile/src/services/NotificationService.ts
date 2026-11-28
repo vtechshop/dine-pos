@@ -1,6 +1,7 @@
 import { AppState, Vibration } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import type { ToastEvent, ToastSeverity } from '../context/GlobalToastContext';
+import { tableLabel } from '../utils/tableLabel';
 
 export type NotifEventType =
   | 'new_order'
@@ -132,7 +133,7 @@ class NotificationService {
 export const NotificationSvc = new NotificationService();
 
 export function orderLabel(tableNumber?: string, orderNumber?: string): string {
-  if (tableNumber) return `Table ${tableNumber}`;
+  if (tableNumber) return tableLabel(tableNumber);
   if (orderNumber) return `Order ${orderNumber}`;
   return 'An order';
 }

@@ -15,17 +15,21 @@ import { useBadgeCount, BADGE_KEYS } from '../hooks/useBadgeCount';
 import { printReceipt, printKOT } from '../utils/receipt';
 import { useSettings } from '../context/SettingsContext';
 import { setupNotifications, notifyNewOrder } from '../utils/notifications';
+import { tableLabel } from '../utils/tableLabel';
 
 type OrderStatus = Order['status'];
 type OrderSource = NonNullable<Order['orderSource']>;
 
-const SOURCE_CONFIG: Record<OrderSource, { label: string; emoji: string; color: string }> = {
+// Keyed by string: the server also sends 'waiter' and 'admin' (an unknown key must never crash a card)
+const SOURCE_CONFIG: Record<string, { label: string; emoji: string; color: string }> = {
   'dine-in':  { label: 'Dine-in',  emoji: '🍴', color: Colors.primary },
   takeaway:   { label: 'Takeaway', emoji: '🥡', color: Colors.warning },
   swiggy:     { label: 'Swiggy',   emoji: '🛵', color: '#FC8019' },
   zomato:     { label: 'Zomato',   emoji: '🍕', color: '#E23744' },
   qr:         { label: 'QR',       emoji: '📲', color: Colors.upi },
   kiosk:      { label: 'Kiosk',   emoji: '🖥️', color: Colors.textSecondary },
+  waiter:     { label: 'Waiter',   emoji: '🧑‍🍳', color: Colors.primary },
+  admin:      { label: 'Counter',  emoji: '🧾', color: Colors.textSecondary },
 };
 
 const SOURCE_FILTER_OPTIONS = [
@@ -37,7 +41,8 @@ const SOURCE_FILTER_OPTIONS = [
   { key: 'qr',        emoji: '📲',  label: 'QR' },
 ];
 
-const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bg: string; icon: string }> = {
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
+  payment_pending: { label: 'Awaiting Payment', color: Colors.warning, bg: Colors.warningBg, icon: 'payment' },
   pending:   { label: 'Pending',   color: Colors.warning,       bg: Colors.warningBg,       icon: 'hourglass-empty' },
   preparing: { label: 'Preparing', color: Colors.statusPreparing, bg: Colors.statusPreparingBg, icon: 'restaurant' },
   ready:     { label: 'Ready',     color: Colors.success,       bg: Colors.successBg,       icon: 'check-circle' },
@@ -271,7 +276,7 @@ const OrdersScreen: React.FC = () => {
   // ── Order Card ──────────────────────────────────────────────────────────────
   const renderCard = useCallback(({ item }: { item: Order }) => {
     const { date, time } = fmt(item.createdAt);
-    const cfg = STATUS_CONFIG[item.status];
+    const cfg = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.pending;
     const isNew = highlightedIds.has(item._id);
     return (
       <TouchableOpacity
@@ -284,7 +289,7 @@ const OrdersScreen: React.FC = () => {
             <Text style={styles.orderNum}>#{item.orderNumber}</Text>
             {(item.tableNumber || item.customerName) ? (
               <Text style={styles.cardMeta} numberOfLines={1}>
-                {item.tableNumber ? `Table ${item.tableNumber}` : item.customerName}
+                {item.tableNumber ? tableLabel(item.tableNumber) : item.customerName}
               </Text>
             ) : null}
           </View>
@@ -300,6 +305,7 @@ const OrdersScreen: React.FC = () => {
           </View>
           {item.orderSource && item.orderSource !== 'dine-in' && (() => {
             const src = SOURCE_CONFIG[item.orderSource];
+            if (!src) return null;
             return (
               <View style={[styles.sourceBadge, { backgroundColor: src.color + '22', borderColor: src.color + '50' }]}>
                 <Text style={styles.sourceBadgeEmoji}>{src.emoji}</Text>
@@ -322,7 +328,7 @@ const OrdersScreen: React.FC = () => {
   const renderModal = () => {
     if (!selected) return null;
     const { date, time } = fmt(selected.createdAt);
-    const cfg = STATUS_CONFIG[selected.status];
+    const cfg = STATUS_CONFIG[selected.status] ?? STATUS_CONFIG.pending;
     const nextStatus = NEXT_STATUS[selected.status];
     const nextLabel  = NEXT_LABEL[selected.status];
 
@@ -348,7 +354,7 @@ const OrdersScreen: React.FC = () => {
                 <MaterialIcons name={cfg.icon as any} size={20} color={cfg.color} />
                 <Text style={[styles.statusRowText, { color: cfg.color }]}>{cfg.label}</Text>
                 {selected.tableNumber ? (
-                  <Text style={styles.tableTag}>Table {selected.tableNumber}</Text>
+                  <Text style={styles.tableTag}>{tableLabel(selected.tableNumber)}</Text>
                 ) : null}
                 {selected.isParcel ? <Text style={styles.tableTag}>📦 Parcel</Text> : null}
               </View>

@@ -70,7 +70,7 @@ const CustomerCartScreen: React.FC = () => {
   const isTablet = width >= 600;
 
   const cur = settings.currencySymbol || '₹';
-  const fmt = (n: number) => `${cur}${n.toFixed(0)}`;
+  const fmt = (n: number) => `${cur}${n.toFixed(2)}`;
   const buildUpiUrl = (amount: number, ref: string) => {
     const pa = encodeURIComponent(activeGateway?.upiId || settings.upiId || '');
     const pn = encodeURIComponent(settings.hotelName || 'Restaurant');
@@ -402,16 +402,16 @@ const CustomerCartScreen: React.FC = () => {
   const handleWhatsApp = () => {
     if (!placedOrder) return;
     const itemLines = placedOrder.items
-      .map(i => `• ${i.product.name} x${i.quantity} — ${cur}${i.total.toFixed(0)}`)
+      .map(i => `• ${i.product.name} x${i.quantity} — ${cur}${i.total.toFixed(2)}`)
       .join('\n');
     const msg = `🍽 *Order Confirmed!*\n\n` +
       `Order: ${placedOrder.orderNumber}\n` +
       `Token: #${placedOrder.token}\n` +
       (placedOrder.tableNumber ? `Table: ${placedOrder.tableNumber}\n` : '') +
       `\n*Items:*\n${itemLines}\n\n` +
-      `Subtotal: ${cur}${placedOrder.subtotal.toFixed(0)}\n` +
-      `Tax: ${cur}${placedOrder.taxTotal.toFixed(0)}\n` +
-      `*Total: ${cur}${placedOrder.grandTotal.toFixed(0)}*\n\n` +
+      `Subtotal: ${cur}${placedOrder.subtotal.toFixed(2)}\n` +
+      `Tax: ${cur}${placedOrder.taxTotal.toFixed(2)}\n` +
+      `*Total: ${cur}${placedOrder.grandTotal.toFixed(2)}*\n\n` +
       `View bill: ${billUrl}`;
     const phone = placedOrder.customerPhone.replace(/\D/g, '');
     const url = phone
@@ -436,7 +436,7 @@ const CustomerCartScreen: React.FC = () => {
             +{m.modifierOptionName}{m.modifierPrice > 0 ? ` (${cur}${m.modifierPrice})` : ''}
           </Text>
         ))}
-        <Text style={styles.itemPrice}>{cur}{((item.effectivePrice + item.modifierTotal) * item.quantity).toFixed(0)}</Text>
+        <Text style={styles.itemPrice}>{cur}{((item.effectivePrice + item.modifierTotal) * item.quantity).toFixed(2)}</Text>
       </View>
       <View style={styles.qtyRow}>
         <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item.cartLineId)}>
@@ -523,7 +523,7 @@ const CustomerCartScreen: React.FC = () => {
                   {item.variantName ? `${item.product.name} (${item.variantName})` : item.product.name}
                 </Text>
                 <Text style={styles.billItemQty}>x{item.quantity}</Text>
-                <Text style={styles.billItemAmt}>{cur}{item.total.toFixed(0)}</Text>
+                <Text style={styles.billItemAmt}>{cur}{item.total.toFixed(2)}</Text>
               </View>
             ))}
             <View style={styles.billDivider} />

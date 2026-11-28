@@ -67,6 +67,7 @@ describe('Batch 3 follow-up: one drawer figure for a shift', () => {
 
   it('a hotel admin can open a shift (no cashier id is no longer a server error)', () => {
     const src = fs.readFileSync(path.join(__dirname, '../../src/routes/shiftRoutes.ts'), 'utf8');
-    expect(src).toMatch(/req\.cashierId\s+\|\| \(isAdmin \? 'admin' : ''\)/);
+    // merged with main (27 Nov 2026): an admin without a cashier identity opens the shift as 'admin'
+    expect(src).toMatch(/req\.cashierId\s+\|\| \(byAdmin \? 'admin' : ''\)/);
   });
 });
